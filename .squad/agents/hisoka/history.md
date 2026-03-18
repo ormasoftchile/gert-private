@@ -59,3 +59,34 @@
   6. Save & validation (warnings allow, errors block)
   7. Round-trip safety (idempotent YAML)
 - **Success criteria:** All phases complete without data loss, round-trip preserves structure, save button behaves correctly
+
+### 2026-03-18 Automated Test Suites Created: Graph Transform + Editor Round-Trip
+
+**Files delivered:**
+1. `vscode/src/views/treeToGraph.test.ts` — 37 tests, all passing
+2. `vscode/src/views/runbookEditorPanel.test.ts` — 34 tests, all passing
+
+**treeToGraph.test.ts coverage (37 tests):**
+- **Basic topology (5):** empty tree, single step, linear sequence, edge integrity, label fallback
+- **Branching (5):** decision nodes, edge labels, join nodes, nested branches, empty branch arms
+- **Iterate blocks (4):** back-edges, nested step chaining, metadata preservation, empty iterate
+- **Execution state (6):** state mapping (passed/running/failed/skipped/pending), default pending, taken-path edges, iterate state
+- **Determinism (4):** stable node IDs, stable edge sets, stable layout positions, stable node order
+- **Edge cases (8):** 5-level nesting, 10+ branches, special characters, missing IDs, mixed iterate+branch, coordinate validity, dimension positivity, edge ID uniqueness
+- **Structural invariants (4):** exactly one start/end, no incoming to start, no outgoing from end, full reachability from start
+
+**runbookEditorPanel.test.ts coverage (34 tests):**
+- **Round-trip fidelity (5):** simple, branching, iterate, nested, governance fields
+- **Structural mutations (7):** edit title, add step, remove step, edit branch condition, edit iterate config, add inside branch, add inside iterate
+- **Schema parity (3):** v0 round-trip, v1 round-trip, apiVersion preservation
+- **Tree navigation (6):** root access, branch access, nested step access, iterate step access, invalid path graceful, deep nested path
+- **Data integrity edge cases (7):** empty tree, bare step, empty branch steps, empty iterate, special chars, type preservation, multi-edit
+- **Idempotency (6):** all 6 fixtures parse→stringify→parse→stringify stable
+
+**Known gaps and risks flagged (not blocking, tracked):**
+1. `handleBranches()` references `state.posX` in empty-branch code path — variable scoping looks suspect (potential runtime error if first branch is empty). Current tests pass because existing code handles it, but code review should verify.
+2. Empty branch arms don't get edges back to join node — orphaned path in graph topology. Tests verify the node exists but the graph has an unreachable join for empty arms.
+3. No VS Code webview integration tests — private methods on RunbookEditorPanel can't be tested without webview mocking or extracting a testable data layer. Tests cover the contract (YAML fidelity) but not the message handler dispatch.
+4. No `.runbook.yaml` fixtures exist in the repo — all tests use inline YAML strings. If real runbook fixtures are added later, tests should be extended to use them.
+
+**Decision:** Tests are contract-level, implementation-independent. They will catch regressions from Kurapika's graph enhancements and Gon's editor changes regardless of internal refactoring.

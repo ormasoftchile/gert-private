@@ -1,6 +1,90 @@
 
 ## Sessions
 
+### 2026-03-18: Wire branchResolved/iteratePassEnd events + Pan/Zoom
+
+**Requested by:** Cristián Ormazábal Ortega
+
+**Task 1 — branchResolved + iteratePassEnd event wiring:**
+- ✅ Added `branchIndex` and `parentStepId` fields to `GraphEdge` interface in `treeToGraph.ts`
+- ✅ Set `branchIndex` and `parentStepId` on all conditional edges during layout (both populated and empty branches)
+- ✅ Added `branchResolutions` Map (`parentStepId → branchIndex → taken`) and `iteratePassInfoMap` Map (`iterateStepId → {pass, max, converged}`) to RunbookPanel state
+- ✅ Updated `event/branchResolved` handler: stores resolution data per parent+branch, triggers re-render
+- ✅ Updated `event/iteratePassEnd` handler: stores pass info per iterate block, triggers re-render
+- ✅ In `renderGraphSvg()`: post-processes workflow edges to override `taken` from branchResolutions (solid blue = taken, dashed gray = untaken)
+- ✅ In `renderGraphSvg()`: iterate nodes now render a badge pill ("Pass 2/5" or "Converged") when pass info is available, with green for converged and blue for in-progress
+
+**Task 2 — Pan/Zoom for large runbooks:**
+- ✅ Wrapped SVG content in a `<g id="graph-transform">` element for transform application
+- ✅ Added zoom control bar (−, %, +, ⊙ reset) positioned top-right of graph area
+- ✅ Mouse wheel zoom: scale 0.3–3.0 range, zooms toward cursor position
+- ✅ Click-and-drag panning via translate on the transform group (skips node clicks and zoom controls)
+- ✅ Zoom/pan state persisted via `vscode.getState()`/`setState()` — survives re-renders during execution
+- ✅ Applied to BOTH `runbookPanel.ts` (execution viewer) AND `runbookEditorPanel.ts` (editor)
+- ✅ Zero TypeScript errors
+
+**Files Modified:**
+- `vscode/src/views/treeToGraph.ts` — GraphEdge interface + conditional edge metadata
+- `vscode/src/views/runbookPanel.ts` — event handlers, state tracking, graph rendering, pan/zoom
+- `vscode/src/views/runbookEditorPanel.ts` — SVG wrapper + pan/zoom script
+
+---
+
+### 2026-03-18: Graph Visual Bug Fixes (Post-Live-Test)
+
+**Requested by:** Cristián Ormazábal Ortega — feedback from first live test of service-health-branching graph view.
+
+**Completed:**
+- ✅ **Wider nodes**: NODE_W 180→240, ITER_W 180→240 — step titles no longer truncated into gibberish
+- ✅ **Longer labels**: Step truncation 20→28 chars, iterate 18→26 chars — readable titles
+- ✅ **Compact vertical spacing**: GAP_Y 80→55 — tighter, less wasted whitespace
+- ✅ **More branch separation**: GAP_X 60→80 — prevents horizontal node overlap on branches
+- ✅ **Invisible join nodes**: Join height from 24px pill → 4px thin line (2px rendered), opacity 0.4 — no more mystery circles at graph bottom
+- ✅ **Readable dim branches**: Min opacity for pending/skipped raised from 0.4/0.45 → 0.55 — untaken branch labels now legible
+- ✅ **Better edge convergence**: Bezier control points factor in horizontal distance (`dx * 0.3`) — prevents edge crossings when branches reconverge to join node
+- ✅ Zero TypeScript errors, clean build
+
+**Files Modified:**
+- `vscode/src/views/treeToGraph.ts` — layout constants + join node height
+- `vscode/src/views/runbookPanel.ts` — SVG rendering (truncation, join shape, opacity, bezier curves)
+
+---
+
+### 2026-03-18: Production-Quality Execution Viewer Graph
+
+**Completed:**
+- ✅ Rewrote `treeToGraph.ts` layout algorithm: top-to-bottom flow, recursive sub-layout positioning, proper branch fan-out with centered children and join reconvergence
+- ✅ Rewrote `renderGraphSvg()` in `runbookPanel.ts`: production SVG with drop shadows, bezier curves, arrowhead markers, node type icons, VS Code theme tokens, running pulse animation, hover highlights
+- ✅ Node shapes: start=green circle, end=red bullseye, step=180×60 rounded rect with icon + title + type subtitle, condition=diamond, join=pill, iterate=rounded rect with loop icon
+- ✅ Edge routing: cubic bezier from bottom-of-source to top-of-target; back-edges routed around right side with distinct dotted style + flow animation
+- ✅ Edge styles: solid=sequential, dashed=conditional with label, dotted+animated=back-edge(loop)
+- ✅ Color scheme: all colors via `var(--vscode-*)` tokens for dark/light mode; status: running=blue glow, passed=green, failed=red, skipped=dim gray, pending=outline only
+- ✅ Edge labels: background pill behind text for readability, truncated at 28 chars
+- ✅ SVG viewBox responsive to content with padding
+- ✅ Tree ↔ Graph toggle preserved and working
+- ✅ Zero TypeScript errors
+
+**Architecture Decisions:**
+1. **Recursive sub-layout model**: Each `layoutNode()` returns a bounding box `{topId, bottomId, width, height}` placed relative to (0,0). Parent stacks children vertically and offsets branch columns side-by-side. This naturally handles any nesting depth.
+2. **offsetNodes()**: Final positioning pass shifts sets of node IDs by (dx, dy) — avoids re-traversing the tree structure.
+3. **SVG `<defs>`**: Shared arrowhead markers, drop-shadow filter, and pulse glow filter defined once.
+4. **CSS-in-SVG**: `<style>` block inside the SVG for hover, pulse animation, and dash-flow animation — no external dependencies.
+5. **Back-edge routing**: Right-side bulge via cubic bezier prevents overlap with forward edges.
+
+**Key File Paths:**
+- `vscode/src/views/treeToGraph.ts` — layout engine (top-to-bottom hierarchical)
+- `vscode/src/views/runbookPanel.ts` — `renderGraphSvg()` and `truncLabel()` methods
+
+## Learnings
+
+- SVG `<style>` blocks with `@keyframes` work inside VS Code webview — no need for external CSS.
+- `var(--vscode-charts-green)` etc. are reliable for theming in both light and dark modes.
+- Diamond shapes for conditions must use `<polygon>` not rotated `<rect>` to avoid hit-test issues.
+- Back-edge routing needs explicit right-side offset to stay visually separate from forward edges.
+- Recursive layout with bounding boxes scales cleanly to deep nesting without BFS layer assignment.
+
+---
+
 ### 2026-03-18: Workflow Graph Visualization POC (Execution Viewer)
 
 **Completed:**

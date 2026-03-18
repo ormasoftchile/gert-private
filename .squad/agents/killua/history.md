@@ -32,3 +32,29 @@
 - **Read-only fields**: APIVersion, (mostly) Step.ID, Meta.Source. Governance rules shadow editable fields at runtime.
 
 **Outcome**: Produced SCHEMA_CLARIFICATION.md (authoritative Go-backed doc) with TreeNode spec, complete YAML examples (branches + iterates), path notation, field locations, and validation rules. Ready for Kurapika's form redesign.
+
+## Execution Path Events (2026-03-18)
+
+**Task**: Add `event/branchResolved` and `event/iteratePassEnd` to the Go serve layer for frontend execution viewer annotation.
+
+**Changes**:
+- **`event/branchResolved`** — emitted once per branch condition evaluation at all 3 branch evaluation sites in `ext/serve/pkg/serve/serve.go`:
+  1. `handleTreeNext` pending manual phase2 (line ~928)
+  2. `executeTreeStep` branch-type routing nodes (line ~1330)
+  3. `executeTreeStep` regular step post-outcome branch evaluation (line ~1474)
+  - Payload: `{parentStepId, branchIndex, condition, taken}`
+  - Emits for each branch evaluated (stops after first `taken=true`, matching existing `break` semantics).
+
+- **`event/iteratePassEnd`** — emitted at the end of every iterate pass (before convergence/advance decision) at both watchpoint handlers:
+  1. Convergence-mode watchpoint handler (line ~975)
+  2. List-mode over-watchpoint handler (line ~1019)
+  - Payload: `{iterateStepId, pass (1-based), max, converged}`
+  - Uses synthetic `nodeID` (format `iterate-<stepIdx>`) threaded through watchpoint structs for correlation.
+
+- **Watchpoint struct changes**: Added `nodeID string` field to `iterateWatchpoint` and `iterateOverWatchpoint`. Updated `pushIteratePass` and `pushIterateOverPass` signatures to accept `nodeID`.
+
+- **VS Code extension wiring**:
+  - Added `BranchResolvedEvent` and `IteratePassEndEvent` interfaces to `vscode/src/serve/client.ts`.
+  - Added `event/branchResolved` and `event/iteratePassEnd` case handlers to `runbookPanel.ts` `handleEvent` switch, following existing event dispatch pattern (console.log + updateWebview). No SVG/render changes.
+
+**Patterns followed**: Existing `sendEvent` notification pattern (zero-cost JSON-RPC when no listener). All events additive — no changes to existing event shapes, engine behavior, or execution semantics.

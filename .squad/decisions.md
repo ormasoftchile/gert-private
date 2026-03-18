@@ -132,6 +132,111 @@
 **What:** Approved MVP for manual testing. All 6 blockers verified fixed: iterate blocks visible, step types correct, branch conditions mapped to Branch object, form rendering context-aware, YAML round-trip safe.
 **Why:** Editor data model now correctly aligns with Go schema.
 
+### 2026-03-18: Visualization adapts to host environment
+
+**By:** Cristián Ormazábal Ortega (via Copilot)  
+**Status:** Directive  
+
+**What:** Run visualizations (tree view, workflow graph) must be host-environment-dependent. VS Code and web can support full graph/SVG rendering with multiple view modes. A TUI version must restrict to tree-based layout only. The visualization layer should be designed with an adapter pattern — not hardcoded to a single rendering surface.
+
+**Why:** gert targets multiple surfaces (VS Code extension, web, TUI). The rendering engine needs a clean abstraction boundary so each host picks the best visualization it can support.
+
+---
+
+### 2026-03-18: Authoring editor graph integration (Phase B)
+
+**By:** Gon (Lead Architect)  
+**Status:** Implemented  
+
+**What:**
+1. Graph as view, tree as truth — SVG graph derived from `TreeNode[]` via `treeToWorkflow()`. All mutations operate on tree model.
+2. stepId-based click mapping via `buildStepIdToPathMap()`, decoupled from treeToGraph internals.
+3. Selection type determined by node content, not path shape.
+4. Structural coloring (step-type-based) in authoring context, not execution coloring.
+
+**Why:** Branches and iterate blocks must survive edit→save→reload. Graph and form track same `selectedNodePath`. Kurapika can enhance `treeToGraph.ts` independently.
+
+**Risks:** Shallow branch traversal may show incomplete graphs for complex runbooks. Iterate nodes without `id` fields won't be clickable (acceptable for MVP).
+
+---
+
+### 2026-03-18: Test suite strategy for graph + editor contracts
+
+**By:** Hisoka (QA Reviewer)  
+**Status:** Implemented  
+
+**What:** Two automated test suites (71 total tests, all passing): `treeToWorkflow()` transformation contract (37 tests) and editor YAML round-trip fidelity contract (34 tests). Implementation-independent — tests inputs/outputs, not internals.
+
+**Why:** Kurapika and Gon both modifying graph/editor code simultaneously. Contract tests prevent invisible regressions.
+
+**Constraints:** Tests must not break on treeToGraph or editor panel internal refactors. Jest with ts-jest.
+
+**Risks accepted:** No webview integration tests this sprint. Inline fixtures only. Empty branch arm orphaned path flagged for Kurapika.
+
+---
+
+### 2026-03-18: Execution path event design
+
+**By:** Killua (Backend Engineer)  
+**Status:** Implemented  
+
+**What:** Two new additive JSON-RPC events:
+1. `event/branchResolved` — per branch condition evaluation: `{parentStepId, branchIndex, condition, taken}`.
+2. `event/iteratePassEnd` — per iterate pass completion: `{iterateStepId, pass, max, converged}` with synthetic `iterate-<stepIdx>` IDs.
+
+**Why:** Frontend needs per-branch and per-pass granularity for graph annotation. Synthetic IDs avoid schema changes. Zero-cost when no UI listener active. Purely additive — no engine behavior changes.
+
+---
+
+### 2026-03-18: Execution viewer graph — production layout & rendering
+
+**By:** Kurapika (Frontend Engineer)  
+**Status:** Implemented  
+
+**What:** Production-quality top-to-bottom recursive bounding-box layout replacing POC left-to-right BFS. Themed SVG rendering with VS Code CSS custom properties, distinct node shapes per type, zero runtime dependencies.
+
+**Why:** Users running incident response runbooks need at-a-glance flow understanding. Full rewrite of `treeToGraph.ts` layout and `runbookPanel.ts` `renderGraphSvg()`.
+
+---
+
+### 2026-03-18: Graph rendering — visual readability defaults
+
+**By:** Kurapika (Frontend Engineer)  
+**Status:** Applied  
+
+**What:** Node width 240px (was 180) with 28-char truncation. Join nodes invisible (4px, 0.4 opacity). Minimum untaken branch opacity 0.55. Bezier convergence adds `dx * 0.3` to control points.
+
+**Why:** Live test on `service-health-branching` revealed overlapping labels, confusing join nodes, unreadable dim branches, and crossing edges.
+
+---
+
+### 2026-03-18: Editor graph click fix, vizAdapter abstraction, comment-preserving save
+
+**By:** Gon (Lead Architect)  
+**Status:** Implemented  
+
+**What:**
+1. Fixed iterate graph nodes not responding to clicks — missing `.id` on in-editor iterate blocks broke stepId→path mapping. Fix assigns IDs on creation and backfills synthetic IDs in `buildStepIdToPathMap()`.
+2. Created `vizAdapter.ts` with `VizAdapter` interface, `VizHost` type, and `createVizAdapter()` factory. Graph adapter wraps `treeToWorkflow` + SVG. TUI adapter renders indented text tree.
+3. Save handler now uses `YAML.parseDocument()` for comment-preserving AST round-trips via `doc.set()`.
+
+**Why:** Click→form is the primary navigation contract. Host-adaptive viz fulfills the user directive for multi-surface rendering. Comment preservation fulfills Killua's compatibility decision (2026-03-17) for non-destructive normalization.
+
+---
+
+### 2026-03-18: Governance display contract via JSON-RPC
+
+**By:** Leorio (Integrations Engineer)  
+**Status:** Implemented  
+
+**What:** `governance/evaluate` read-only JSON-RPC endpoint in `ext/serve`. Takes runbook path, evaluates governance policy per step without executing, returns structured assessment. TypeScript interfaces in `vscode/src/serve/governance.ts`. Client method `governanceEvaluate()` wired in `client.ts`.
+
+**Why:** Visual editor needs inline governance info (risk badges, approval gates, redaction indicators, policy violations) without running the runbook. Decoupled from execution per "backend read APIs for editor metadata" decision (Killua, 2026-03-17).
+
+**Key choices:** Walk-all-nodes (badges every visible node), merged governance sources (single call), no execution side effects (safe on every open/save), arrays default to `[]` not `null`.
+
+---
+
 ## Governance
 
 - All meaningful changes require team consensus

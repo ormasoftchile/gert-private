@@ -1,6 +1,34 @@
 
 ## Sessions
 
+### 2026-03-18: Drag-to-reorder + Host-adaptive viz abstraction
+
+**Requested by:** Cristián Ormazábal Ortega
+
+**Task 1 — Drag-to-reorder steps in editor graph:**
+- ✅ Added mousedown/mousemove/mouseup handlers on `.ed-node` elements of type step
+- ✅ Ghost node (translucent clone at cursor) shown during drag
+- ✅ Drop indicator (glowing horizontal line) appears between sibling nodes
+- ✅ On drop, posts `reorder-steps` message with `{ path, fromIndex, toIndex }`
+- ✅ Extension handler splices the step from fromIndex to toIndex in the parent steps array, re-renders
+- ✅ Only step nodes are draggable — condition/iterate/start/end nodes are excluded
+- ✅ Same-parent only — no cross-branch or cross-iterate dragging
+- ✅ Drag attributes (`data-node-type`, `data-parent-path`, `data-sibling-index`) emitted on all graph nodes
+
+**Task 2 — Host-adaptive visualization abstraction:**
+- ✅ Updated `vizAdapter.ts` with expanded `VizAdapter` interface: `renderWorkflow(graph, options)`, `supportsInteraction()`, `maxComplexity`
+- ✅ Expanded `VizOptions`: added `theme`, `stepStates`, `branchResolutions`, `iteratePasses`, `zoom` fields
+- ✅ `SvgVizAdapter` (exported): full SVG graph rendering, all interactions supported, maxComplexity=200
+- ✅ `TextVizAdapter` (exported): Unicode box-drawing tree output from graph edges, no interactivity, maxComplexity=50
+- ✅ Factory function `createVizAdapter(host)` preserved for host selection
+- ✅ Zero TypeScript errors, clean build
+
+**Files Modified:**
+- `vscode/src/views/runbookEditorPanel.ts` — drag CSS, drag script, reorder handler, drag attributes on SVG nodes
+- `vscode/src/views/vizAdapter.ts` — expanded interface, renamed/exported adapters, added supportsInteraction + maxComplexity
+
+---
+
 ### 2026-03-18: Zoom spec compliance fix (max 2.0 + fit-to-container default)
 
 **Requested by:** Cristián Ormazábal Ortega

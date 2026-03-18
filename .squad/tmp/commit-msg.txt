@@ -1,10 +1,11 @@
-squad(scribe): final-feature-sprint session — orchestration logs, decisions merge
+squad(scribe): ux-enhancement-sprint session — orchestration logs, session log, decisions merge
 
-- Orchestration logs for Kurapika (drag-to-reorder + vizAdapter) and Gon (invoke chain viz + YAML comment preservation)
-- Session log: 2026-03-18-final-feature-sprint.md
-- Merged 4 decision inbox entries into decisions.md:
-  - gon-condition-builder-patterns
-  - hisoka-missing-testdata-fixtures
-  - killua-schema-bundle-and-tool-catalog-v2
-  - kurapika-zoom-spec
-- Cleared decision inbox
+- Orchestration logs for Kurapika, Gon, Killua, Hisoka (ux-enhancement-sprint)
+- Session log: 2026-03-18-ux-enhancement-sprint.md
+- Created decisions/decisions.md — merged 5 inbox entries (D-001 through D-005):
+  - coordinator-editor-ux-directives (user directives)
+  - gon-chain-visualization (invoke chain model)
+  - gon-n8n-logicapps-research (feature research)
+  - gon-yaml-comment-preservation (deep-merge serialization)
+  - kurapika-drag-reorder-same-parent (same-parent constraint)
+- Moved merged inbox files to .squad/tmp/

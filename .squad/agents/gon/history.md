@@ -130,6 +130,54 @@
 - `vscode/src/views/runbookEditorPanel.ts` — iterate ID assignment, buildStepIdToPathMap robustness, comment-preserving save, originalSource tracking
 - `vscode/src/views/vizAdapter.ts` — new file, host-adaptive visualization abstraction
 
+## 2026-03-18 Phase D — Chain Visualization & YAML Comment Preservation
+
+### Task 1: Chain Visualization for Invoke Steps (runbookPanel.ts)
+
+**Problem:** The execution viewer's graph only rendered the active chain entry's tree. When runbooks used `invoke` to call child runbooks, there was no visual chain navigation.
+
+**Solution — three additions:**
+
+1. **Chain breadcrumb** above the graph: `parent-tsg › child-tsg › [current]`. Clicking a crumb switches the graph to that chain entry. Renders only when `chainHistory.length > 0`. New state variable `viewingChainIndex` (null = current, number = chain history index).
+
+2. **Enhanced invoke nodes** in the graph: invoke step nodes now show the target runbook name (`↗ dns-check`), use a distinctive blue stroke, and display a "View child ↗" badge when the child has been executed. Badge click navigates to the child's chain entry graph.
+
+3. **Parent minimap** in bottom-left when viewing a child: faded thumbnail SVG of the parent graph with invoke steps highlighted in blue. Click navigates to the parent. Renders via `renderParentMinimap()` using `treeToWorkflow` at ~30% scale.
+
+**Key design decisions:**
+- `viewingChainIndex` resets to null on restart and chain-to-runbook transitions
+- `renderGraphSvg()` selects tree/states/stepDetails from chain history or current based on `viewingChainIndex`
+- `findChildChainIndex()` maps invoke step ID → next chain entry index
+- Branch resolutions only applied when viewing current (not chain history)
+
+### Task 2: YAML Comments/Formatting Preservation (runbookEditorPanel.ts)
+
+**Problem:** The editor's save flow used `doc.set(key, doc.createNode(value))` for each top-level key, which created fresh AST nodes and lost all inline comments and formatting.
+
+**Solution — deep merge instead of full replacement:**
+
+1. **Persistent YAML document:** Store `yamlDoc: YAML.Document` on load via `parseDocument()`. Re-parse after each save.
+
+2. **`serializeWithComments()`**: Entry point for both save and preview-diff. Parses `originalSource` into a fresh document, deep-merges the edited JS object into it, handles key additions/removals.
+
+3. **`deepMergeNode(doc, existing, value)`**: Recursive merge that:
+   - **Scalars:** If value unchanged, returns original node (preserves comment). If changed, creates new scalar and copies comment.
+   - **Maps:** Recurses per key. Adds new keys, removes deleted keys. Preserves ordering for unchanged keys.
+   - **Sequences:** Positional merge up to shorter length, splices excess, appends new items.
+   - **Type mismatch:** Falls back to `createNode()`.
+
+4. **Fallback:** If round-trip fails, shows warning and falls back to `YAML.stringify()`.
+
+### Learnings
+
+- **Deep merge > full replacement for YAML preservation.** The previous `doc.set(key, doc.createNode(value))` approach loses all inline comments because `createNode()` builds from plain JS objects. Walking the AST in parallel with the JS object preserves everything unchanged.
+- **Chain navigation is view-only state.** `viewingChainIndex` doesn't affect execution — it only selects which tree/states to render. This keeps it safe to add without touching the execution flow.
+- **Minimap rendering reuses `treeToWorkflow`.** No separate layout pass needed — same function at reduced scale gives a coherent thumbnail.
+
+### Files Modified
+- `vscode/src/views/runbookPanel.ts` — chain breadcrumb, chain navigation, invoke node enhancement, parent minimap
+- `vscode/src/views/runbookEditorPanel.ts` — deep merge YAML serialization, persistent yamlDoc
+
 ## 2026-03-18 Phase D — Graph Click Navigation Fix & Condition Builder
 
 ### Task 1: Graph Node Click → Form Navigation Fix

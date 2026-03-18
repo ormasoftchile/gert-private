@@ -1,0 +1,39 @@
+{
+  "agents": {
+    "gon": {
+      "persistent_name": "Gon",
+      "universe": "Hunter x Hunter",
+      "created_at": "2026-03-17T00:00:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "killua": {
+      "persistent_name": "Killua",
+      "universe": "Hunter x Hunter",
+      "created_at": "2026-03-17T00:00:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "kurapika": {
+      "persistent_name": "Kurapika",
+      "universe": "Hunter x Hunter",
+      "created_at": "2026-03-17T00:00:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "leorio": {
+      "persistent_name": "Leorio",
+      "universe": "Hunter x Hunter",
+      "created_at": "2026-03-17T00:00:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "hisoka": {
+      "persistent_name": "Hisoka",
+      "universe": "Hunter x Hunter",
+      "created_at": "2026-03-17T00:00:00Z",
+      "legacy_named": false,
+      "status": "active"
+    }
+  }
+}

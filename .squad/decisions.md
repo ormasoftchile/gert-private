@@ -267,6 +267,56 @@
 
 ---
 
+### 2026-03-18: Branch condition builder expression patterns
+
+**By:** Gon (Lead Architect)
+**Status:** Proposed
+
+**What:** The branch condition builder generates Go template expressions using a fixed set of patterns: `{{ contains .var "value" }}`, `{{ eq .var "value" }}`, `{{ regexMatch "pattern" .var }}`, `{{ gt .var value }}` / `{{ lt .var value }}`, and their negations. Unrecognized patterns fall through to raw expression editing (Advanced mode).
+
+**Why:** These patterns cover the most common branch conditions observed in example runbooks. The Go template function names match the Sprig library used by the gert engine. Power users can always toggle to Advanced mode for arbitrary expressions.
+
+**Impact:** If the engine's template function set changes, the builder patterns must be updated. UX may want visual indicators when a condition can't be parsed. Round-trip test coverage should include builder-generated → save → reload → parse cycle.
+
+---
+
+### 2026-03-18: Missing testdata fixtures block 28 Go tests
+
+**By:** Hisoka (QA Reviewer)
+**Status:** Flagged
+
+**What:** Go test run across `pkg/...` reveals 28 test failures in 5 packages caused by missing `testdata/` directory. Additionally, 11 iterate tests in `pkg/engine` fail with `unknown step type: ""` due to fixtures missing the `type` field.
+
+**Why:** CI pipeline (`go test ./pkg/...`) will report failures on every run. Cannot distinguish new regressions from known fixture gaps.
+
+**Recommendation:** Add `testdata/` fixtures or skip dependent tests with `t.Skip()`. Update engine iterate test fixtures to include a valid `type` field. Consider splitting CI into core tests (passing) and integration tests (fixture-dependent).
+
+---
+
+### 2026-03-18: Schema bundle endpoint and tool catalog array format (v2)
+
+**By:** Killua (Backend Engineer)
+**Status:** Implemented
+
+**What:** `schema/bundle` generates all three JSON schemas from Go structs at runtime (no static files). `tools/list` returns actions as an array `[{name, description, args}]` instead of a map. `exec/dryRun` returns a `steps` array with `{id, type, title, dependencies}` plus a separate `warnings` array.
+
+**Why:** Runtime schema generation guarantees schemas match Go types (no drift). Array format for actions is natural for frontend rendering. Steps + dependencies array enables graph rendering without tree parsing. Splitting warnings from errors lets UI differentiate non-blocking issues.
+
+**Impact:** Frontend consumers should use array-format actions from `tools/list`. `tools/detail` is an alias for `tools/get`. `schema/bundle` is stateless and callable before any execution session.
+
+---
+
+### 2026-03-18: Zoom range and default behavior
+
+**By:** Kurapika (Frontend Engineer)
+**Status:** Applied
+
+**What:** Graph pan/zoom uses 0.3–2.0 range (not 3.0), default zoom fits SVG to container width, reset returns to fit-to-width.
+
+**Why:** Max 2.0 keeps text legible at extreme zoom. Fit-to-container means large runbooks (15+ nodes) are immediately visible without manual zoom-out. Fixed 1.0 default cut off wide graphs requiring immediate user interaction.
+
+---
+
 ## Governance
 
 - All meaningful changes require team consensus

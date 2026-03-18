@@ -1,8 +1,10 @@
-squad: full-feature-sprint orchestration + session log + decision merge
+squad(scribe): final-feature-sprint session — orchestration logs, decisions merge
 
-- Orchestration logs for Kurapika, Gon, Killua, Hisoka (full-feature-sprint)
-- Session log for 2026-03-18 full-feature-sprint
-- Merged 2 inbox decisions into decisions.md:
-  - coordinator-no-external-temp (user directive)
-  - killua-editor-backend-apis (stateless read-only endpoints)
+- Orchestration logs for Kurapika (drag-to-reorder + vizAdapter) and Gon (invoke chain viz + YAML comment preservation)
+- Session log: 2026-03-18-final-feature-sprint.md
+- Merged 4 decision inbox entries into decisions.md:
+  - gon-condition-builder-patterns
+  - hisoka-missing-testdata-fixtures
+  - killua-schema-bundle-and-tool-catalog-v2
+  - kurapika-zoom-spec
 - Cleared decision inbox

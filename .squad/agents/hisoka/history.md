@@ -90,3 +90,32 @@
 4. No `.runbook.yaml` fixtures exist in the repo — all tests use inline YAML strings. If real runbook fixtures are added later, tests should be extended to use them.
 
 **Decision:** Tests are contract-level, implementation-independent. They will catch regressions from Kurapika's graph enhancements and Gon's editor changes regardless of internal refactoring.
+
+### 2026-03-18 SVG Rendering Integration Tests Extended
+
+**Deliverables:**
+1. **renderGraph.test.ts extended** — 16 new SVG element type assertions added (total: 65 tests, all passing):
+   - `<circle>` for start/end/join nodes (both execution and editor views)
+   - `<rect rx="10">` for step nodes, `<rect rx="12">` for iterate nodes
+   - `<polygon>` for condition/decision diamonds
+   - `<path>` bezier curves for edges
+   - `<text>` elements for edge labels with correct font sizes
+   - Editor iterate dashed stroke-dasharray verified
+   - Node labels verified as `<text>` with class="node-label"
+
+2. **CI pipeline created** — `.github/workflows/vscode-ci.yml`:
+   - Two parallel jobs: `vscode-build-test` (Node 20, npm ci/compile/test) and `go-build-test` (Go, build binary, test pkg + ext/serve)
+   - Triggers on push to main and PRs
+   - Caches node_modules via setup-node and Go modules via setup-go
+
+3. **Go test verification completed:**
+   - `pkg/assertions` ✅, `pkg/contract` ✅, `pkg/diagram` ✅, `pkg/governance` ✅, `pkg/providers` ✅, `pkg/testing` ✅
+   - `ext/serve/pkg/serve` ✅
+   - **FAILURES (pre-existing, not new regressions):**
+     - `pkg/engine` — 11 iterate tests fail: `unknown step type: ""` (empty step type in test fixtures). `TestStepDelayCancellation` also fails. Appears to be a missing step type mapping, not caused by serve events.
+     - `pkg/schema` — 7 tests fail: missing `testdata/` fixtures (path `../../testdata/valid/` not found)
+     - `pkg/inputs` — 1 test fails: missing `testdata/tools/mock-input-provider.go`
+     - `pkg/replay` — 1 test fails: missing `testdata/scenarios/minimal-scenario.yaml`
+     - `pkg/tools` — 8 tests fail: missing `testdata/tools/` fixtures (mock servers, kubectl.tool.yaml)
+
+**Assessment:** All failures are pre-existing — missing test fixtures and iterate step type mapping issue. Zero regressions from recent serve events or graph work. The testdata directory appears to not exist in the repo; these tests likely worked in a different workspace layout or were authored against planned fixtures.

@@ -1,6 +1,23 @@
 
 ## Sessions
 
+### 2026-03-18: Zoom spec compliance fix (max 2.0 + fit-to-container default)
+
+**Requested by:** Cristián Ormazábal Ortega
+
+**Completed:**
+- ✅ Changed max zoom from 3.0 → 2.0 in both `runbookPanel.ts` and `runbookEditorPanel.ts` (wheel handler + zoom-in button)
+- ✅ Default zoom now fits SVG content to container width instead of fixed 1.0 scale — calculates `containerWidth / svgWidth` clamped to [0.3, 2.0]
+- ✅ Zoom reset button (⊙) now resets to fit-to-container scale instead of fixed 1.0
+- ✅ Applied to BOTH execution viewer and editor Flow Map
+- ✅ Zero TypeScript errors, clean build
+
+**Files Modified:**
+- `vscode/src/views/runbookPanel.ts` — zoom init, wheel handler, button handlers
+- `vscode/src/views/runbookEditorPanel.ts` — same
+
+---
+
 ### 2026-03-18: Wire branchResolved/iteratePassEnd events + Pan/Zoom
 
 **Requested by:** Cristián Ormazábal Ortega

@@ -82,3 +82,32 @@
 **Compile verification**: Both `go build` (exit 0) and `npm run compile` + `tsc --noEmit` (exit 0) pass clean.
 
 **Patterns followed**: All endpoints are read-only/stateless — they do not create engines, modify server state, or call `saveSession()`. Tool discovery reuses existing `schema.DiscoverProject + FallbackProject` and `project.ResolveToolRef` paths. Same dispatch/switch pattern as existing methods.
+
+## Tool Catalog, Schema Bundle & Dry-Run Enhancements (2026-03-18)
+
+**Task**: Refine tool catalog API, add schema bundle endpoint, and enrich dry-run response for visual editor form generation.
+
+**Changes**:
+
+1. **`tools/list` response format fix** — Changed `actions` from keyed map to array with `name` field per element: `[{name, description, args}]`. Matches the task spec and is easier for frontend dropdown rendering.
+
+2. **`tools/detail` dispatch** — Added as alias to `handleToolsGet` (same handler). Both `tools/get` and `tools/detail` now work for requesting full single-tool definitions.
+
+3. **`schema/bundle` endpoint (new)** — Returns `{runbook, tool, project}` where each is a generated JSON Schema from Go structs via `schema.GenerateJSONSchema()`, `schema.GenerateToolJSONSchema()`, and new `schema.GenerateProjectJSONSchema()`. No params required.
+
+4. **`GenerateProjectJSONSchema()` (new in `pkg/schema/export.go`)** — Generates Draft 2020-12 JSON Schema from the `Project` struct, matching the pattern of the existing runbook/tool schema generators.
+
+5. **`exec/dryRun` response enrichment** — Added two new fields:
+   - `steps`: flat array of `{id, type, title, dependencies}` per step. Dependencies inferred from `when` expressions and tool arg template references containing `.steps.<id>` patterns.
+   - `warnings`: array of non-error validation findings (`{phase, path, message}`), separated from `errors`.
+
+6. **`extractDependencies` helper** — Scans step `when` expressions and tool arg values for `.steps.<id>` references to build the dependency graph.
+
+**TypeScript client updates**:
+- `ToolActionInfo` now includes `name: string` field.
+- `ToolInfo.actions` changed from `Record<string, ToolActionInfo>` to `ToolActionInfo[]`.
+- Added `DryRunStep` interface, `SchemaBundle` interface.
+- `DryRunResult` extended with `steps: DryRunStep[]` and `warnings` array.
+- Added methods: `schemaBundle()`, `toolsDetail(name, cwd?)`.
+
+**Compile verification**: Both `go build -o gert.exe ./cmd/gert/` (exit 0) and `tsc --noEmit` (exit 0) pass clean.

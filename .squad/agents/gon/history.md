@@ -129,3 +129,44 @@
 ### Files Modified
 - `vscode/src/views/runbookEditorPanel.ts` — iterate ID assignment, buildStepIdToPathMap robustness, comment-preserving save, originalSource tracking
 - `vscode/src/views/vizAdapter.ts` — new file, host-adaptive visualization abstraction
+
+## 2026-03-18 Phase D — Graph Click Navigation Fix & Condition Builder
+
+### Task 1: Graph Node Click → Form Navigation Fix
+
+#### Bug Found & Fixed
+- **Iterate ID mismatch on first render.** `renderGraphSVG()` called `treeToWorkflow()` before `buildStepIdToPathMap()`. Since `treeToWorkflow` generates ephemeral IDs for iterate nodes without IDs (`iterate-_gN`), and `buildStepIdToPathMap` assigns persistent IDs (`iterate_path_N`), the path map lookup failed for iterate nodes on the first render. Fix: swap call order so `buildStepIdToPathMap` runs first (assigns stable IDs), then `treeToWorkflow` reads them.
+
+#### Click Handler Improvements
+- Replaced per-element `querySelectorAll('[data-graph-path]').forEach(addEventListener)` with **event delegation** on `#graph-container`. Single listener uses `e.target.closest('.ed-node[data-graph-path]')` to find the clicked node.
+- Background click detection improved: any click not on `.ed-node` or zoom controls navigates to home. Previously relied on `e.target === svgCanvas`, which missed clicks on the `<g id="graph-transform">` wrapper.
+- Start/End nodes correctly navigate to Runbook Home (path `[]`).
+
+### Task 2: Structured Branch Condition Builder
+
+#### Implementation
+- **Variable dropdown** populated from `getAvailableVariables()` — collects `meta.vars` keys, `meta.inputs` keys, and all `step.capture` keys from the tree.
+- **Operator dropdown** with 7 operators: contains, not_contains, equals, not_equals, matches (regex), gt, lt.
+- **Value input** for comparison value.
+- **Live preview** shows the generated Go template expression.
+- **Advanced toggle** switches between visual builder and raw textarea for power users.
+- **Condition parsing** on load: regex-based best-effort parse of common Go template patterns (`contains`, `not`, `eq`, `ne`, `regexMatch`, `gt`, `lt`). Handles both `.varname` and `.captures.varname` patterns.
+- Unparseable conditions default to Advanced mode with raw textarea visible.
+- Toggling back from Advanced mode attempts to re-parse the expression into builder fields.
+
+#### Expression generation patterns
+- `contains` → `{{ contains .var "value" }}`
+- `not_contains` → `{{ not (contains .var "value") }}`
+- `equals` → `{{ eq .var "value" }}`
+- `not_equals` → `{{ ne .var "value" }}`
+- `matches` → `{{ regexMatch "pattern" .var }}`
+- `gt` → `{{ gt .var value }}`
+- `lt` → `{{ lt .var value }}`
+
+### Learnings
+- **Call order matters for side-effecting ID assignment.** `buildStepIdToPathMap` mutates tree nodes (adds iterate IDs) — it must run before any read-only consumer like `treeToWorkflow`.
+- **Event delegation is strictly better for SVG click handling in webviews.** Eliminates issues with dynamic DOM, deeply nested SVG groups, and `pointer-events:none` children.
+- **Variable collection as a flat set is sufficient for builder MVP.** Strict ordering (only variables captured before the branch point) is a Phase 2 refinement.
+
+### Files Modified
+- `vscode/src/views/runbookEditorPanel.ts` — graph click fix, event delegation, `getAvailableVariables()`, structured branch condition builder

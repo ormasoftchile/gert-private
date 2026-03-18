@@ -58,3 +58,27 @@
   - Added `event/branchResolved` and `event/iteratePassEnd` case handlers to `runbookPanel.ts` `handleEvent` switch, following existing event dispatch pattern (console.log + updateWebview). No SVG/render changes.
 
 **Patterns followed**: Existing `sendEvent` notification pattern (zero-cost JSON-RPC when no listener). All events additive — no changes to existing event shapes, engine behavior, or execution semantics.
+
+## Editor Backend APIs: Tool Catalog, Dry-Run, Schema Fields (2026-03-18)
+
+**Task**: Add six new JSON-RPC endpoints to `ext/serve/pkg/serve/serve.go` and wire them into `vscode/src/serve/client.ts` for the visual editor's form generation and preview features.
+
+**Endpoints added (Go)**:
+
+1. **`tools/list`** — Discovers project root via `schema.DiscoverProject`, scans the `tools/` directory for `*.tool.yaml` files, loads each with `schema.LoadToolFile`, returns array of `{name, version, description, actions}` with arg schemas per action. Accepts optional `cwd` param.
+
+2. **`tools/get`** — Takes `{name, cwd?}`, resolves via `project.ResolveToolRef`, returns the full `ToolDefinition` as JSON (apiVersion, meta, transport, governance, actions with full arg/capture/governance detail).
+
+3. **`exec/dryRun`** — Takes same params as `exec/start`. Runs `schema.ValidateFile` for 3-phase validation, flattens tree for step count, collects `tools:` as tool dependencies, scans `meta.governance.rules` for approval/deny rules and `deny_env_vars`. Returns `{valid, errors[], tree, stepCount, toolDeps[], governanceWarnings[]}`. Does NOT create an engine or execute anything.
+
+4. **`schema/stepFields`** — Returns hardcoded field definitions per step type: `tool`, `manual`, `assert`, `end`, `extension`, `cli`, `invoke`. Each includes the relevant YAML fields for that step type. No params required.
+
+5. **`schema/toolArgs`** — Takes `{tool, action, cwd?}`, resolves tool via project, loads definition, returns `{args: {name: {type, required, description?, default?, enum?, redact?}}}` for the specified action.
+
+**TypeScript client wiring**:
+- Added interfaces: `ToolArgInfo`, `ToolActionInfo`, `ToolInfo`, `ToolDefinition`, `DryRunResult`.
+- Added methods: `toolsList(cwd?)`, `toolsGet(name, cwd?)`, `execDryRun(params)`, `schemaStepFields()`, `schemaToolArgs(tool, action, cwd?)`.
+
+**Compile verification**: Both `go build` (exit 0) and `npm run compile` + `tsc --noEmit` (exit 0) pass clean.
+
+**Patterns followed**: All endpoints are read-only/stateless — they do not create engines, modify server state, or call `saveSession()`. Tool discovery reuses existing `schema.DiscoverProject + FallbackProject` and `project.ResolveToolRef` paths. Same dispatch/switch pattern as existing methods.

@@ -1,0 +1,8 @@
+squad: full-feature-sprint orchestration + session log + decision merge
+
+- Orchestration logs for Kurapika, Gon, Killua, Hisoka (full-feature-sprint)
+- Session log for 2026-03-18 full-feature-sprint
+- Merged 2 inbox decisions into decisions.md:
+  - coordinator-no-external-temp (user directive)
+  - killua-editor-backend-apis (stateless read-only endpoints)
+- Cleared decision inbox

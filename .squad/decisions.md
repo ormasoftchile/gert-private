@@ -199,6 +199,36 @@
 
 ---
 
+### 2026-03-18: User directive — no temp files outside workspace
+
+**By:** Cristián Ormazábal Ortega (via Copilot)  
+**Status:** Directive  
+
+**What:** Never create temporary files outside the working directory. All temp/scratch files must stay within the project workspace folder.
+
+**Why:** User directive — keeps the filesystem clean and all artifacts discoverable within the repo.
+
+---
+
+### 2026-03-18: Editor backend APIs are stateless read-only endpoints
+
+**By:** Killua (Backend Engineer)  
+**Status:** Implemented  
+
+**What:** Added six JSON-RPC endpoints (`tools/list`, `tools/get`, `exec/dryRun`, `schema/stepFields`, `schema/toolArgs`) to the serve layer. All are stateless and read-only — they do not create engines, modify server state, or touch execution sessions.
+
+**Why:** The visual editor needs tool catalog data, argument schemas, and dry-run validation to drive dynamic form rendering and preflight checks. These must come from the Go backend (source of truth for schema, tool parsing, and governance rules) rather than being hardcoded in TypeScript.
+
+**Key constraints:**
+- Tool discovery uses existing `schema.DiscoverProject` + `project.ResolveToolRef` — no new resolution logic.
+- `exec/dryRun` validates with the full 3-phase pipeline but never instantiates an engine or executor.
+- `schema/stepFields` returns step-type field definitions derived from Go struct tags — if schema structs change, this endpoint must be updated.
+- All endpoints accept optional `cwd` to support multi-root workspace scenarios.
+
+**Impact:** Kurapika can replace hardcoded field lists with `schema/stepFields` and `schema/toolArgs` calls. Gon's editor architecture can use `tools/list` for the tool picker and `exec/dryRun` for save-time validation. Hisoka can gate on `exec/dryRun` governance warnings for reviewer checks.
+
+---
+
 ### 2026-03-18: Graph rendering — visual readability defaults
 
 **By:** Kurapika (Frontend Engineer)  

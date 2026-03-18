@@ -51,6 +51,87 @@
 **Why:**
 - The editor path introduces a second schema-validation and serialization surface. Without explicit gates, regressions can bypass CLI/runtime safety guarantees.
 
+### 2026-03-18: Visual paradigm references — n8n and Logic Apps Designer
+**By:** ormasoftchile (via Copilot)
+**What:** Preferred design references for the visual editor are n8n and Azure Logic Apps Designer.
+**Why:** User confirmed affinity after reviewing workflow UI references. These two guide visual language, interaction patterns, and UX decisions for the workflow view.
+
+### 2026-03-18: Workflow graph as optional alternative view
+**By:** ormasoftchile (via Copilot)
+**What:** The execution viewer (RunbookPanel) supports both the current tree view AND a new workflow graph view. Users toggle between them; neither replaces the other.
+**Why:** Preserves existing behavior while introducing the workflow paradigm as a discoverable alternative. Reduces adoption friction.
+
+### 2026-03-18: Workflow graph direction confirmed
+**By:** ormasoftchile (via Copilot)
+**What:** Workflow graph view for runbook execution is confirmed as the right direction. Current SVG prototype is directionally correct — polish and iteration should follow.
+**Why:** User explicitly confirmed: "this is the way."
+
+### 2026-03-18: Workflow view is the default for both authoring and execution
+**By:** ormasoftchile (via Copilot)
+**What:** Both the authoring experience (RunbookEditorPanel) and the execution experience (RunbookPanel) should be workflow-graph-first. A tree view adds little value over editing YAML directly.
+**Why:** The visual tool's value proposition is showing the workflow — conditions, branching paths, sequence — not the document structure.
+
+### 2026-03-18: Form-first + synchronized tree map dual-panel design
+**By:** Gon (Lead Architect)
+**What:** Editor uses a dual-panel hybrid model: left panel (60%) form-based authoring, right panel (40%) synchronized read-only flow map. Top bar with validation/governance badge, save, preview diff, cancel.
+**Why:** Kurapika's Phase 1 MVP flattened branch/conditional structures; this design preserves runbook structure while remaining form-first for business users.
+
+### 2026-03-18: Workflow-first visual paradigm architecture
+**By:** Gon (Lead Architect)
+**What:** Tree data already carries all topology info needed for graph derivation (client-side transform). Two additive backend events needed for execution annotation: `event/branchResolved` and `event/iteratePassEnd`.
+**Why:** No new data shape required for static topology. Execution path annotation needs minimal additive Go events, zero-cost if UI not listening.
+
+### 2026-03-18: Safety guards for non-linear runbook editing
+**By:** Killua (Backend Engineer)
+**What:** Block add/remove/reorder operations when branches or iterates are present. Allow metadata-only editing when tree has complex structures. Accept YAML reformatting as MVP limitation.
+**Why:** Non-linear structures are incompatible with linear step extraction/rebuild pattern; safety guards prevent data loss.
+
+### 2026-03-18: TreeNode structure authority (Go schema is canonical)
+**By:** Killua (Backend Engineer)
+**What:** Go schema is the authority. TreeNode = {step?, iterate?, branches?}. Branches are structural containers, NOT a step type. Step.Branches (legacy) should not be used.
+**Why:** TypeScript form was treating branch as a step type, causing schema mismatch. Clarification unblocks correct form design.
+
+### 2026-03-18: Phase 1 visual runbook editor MVP
+**By:** Kurapika (Frontend Engineer)
+**What:** Implemented Phase 1 MVP with YAML as single source of truth, simplified flat tree model, form-first UI, client-side message passing. Limitation: does not preserve branch/routing structure.
+**Why:** Fastest path to value for linear runbooks; branch preservation deferred to Phase 2.
+
+### 2026-03-18: Tree-based runbook editor MVP (Phase 2)
+**By:** Kurapika (Frontend Engineer)
+**What:** Rebuilt runbookEditorPanel.ts with tree-based architecture preserving branches, iterates, conditionals. 2-column dual-panel layout with path-based navigation and round-trip safe serialization.
+**Why:** Phase 1 flattened structures; tree-based model aligns with Go schema and preserves all runbook structure.
+
+### 2026-03-18: UI specification for runbook visual editor
+**By:** Kurapika (Frontend Engineer)
+**What:** Defined 2-column adaptive grid layout (60% form / 40% tree), header toolbar with validation badge, governance summary, step navigator, and responsive breakpoint behavior.
+**Why:** Provides concrete interaction design spec for the editor implementation.
+
+### 2026-03-18: Add-step handler bugs fixed
+**By:** Kurapika (Frontend Engineer)
+**What:** Fixed 3 critical bugs: iterate node detection in getSelectionType(), double-appended 'steps' in branch path construction, missing iterate path prefix in add-step handler.
+**Why:** Bugs prevented step insertion into branch and iterate nodes.
+
+### 2026-03-18: Schema alignment fix applied — all Hisoka blockers resolved
+**By:** Kurapika (Frontend Engineer)
+**What:** All 6 Hisoka blockers fixed. Data model corrected (TreeNode with optional step/iterate/branches), form rendering is context-aware, selectedStepPath renamed to selectedNodePath.
+**Why:** Resolves structural data loss vectors identified in QA review.
+
+### 2026-03-18: Workflow graph view POC implemented
+**By:** Kurapika (Frontend Engineer)
+**What:** Implemented toggleable SVG workflow graph visualization in RunbookPanel. New treeToGraph.ts module with deterministic hierarchical layout. Nodes typed (step, condition, join, iterate, start, end), edges classified (sequential, conditional, back-edge), execution path highlighted green.
+**Why:** Delivers the confirmed workflow-first visual paradigm for the execution viewer.
+
+### 2026-03-18T16:32:00Z: MVP editor rejection — 6 critical blockers (SUPERSEDED)
+**By:** Hisoka (QA Reviewer)
+**What:** Rejected MVP due to 6 blockers: invisible iterate blocks, step types include structural types, branch condition maps to wrong object, unmapped fields, unsafe save, missing validation.
+**Why:** Structural data loss vectors in TypeScript UI model vs Go schema.
+**Status:** SUPERSEDED by Hisoka's subsequent approval after all blockers were fixed.
+
+### 2026-03-18T21:15:00Z: MVP editor approved — all blockers fixed
+**By:** Hisoka (QA Reviewer)
+**What:** Approved MVP for manual testing. All 6 blockers verified fixed: iterate blocks visible, step types correct, branch conditions mapped to Branch object, form rendering context-aware, YAML round-trip safe.
+**Why:** Editor data model now correctly aligns with Go schema.
+
 ## Governance
 
 - All meaningful changes require team consensus

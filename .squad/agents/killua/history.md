@@ -75,6 +75,39 @@
 
 5. **`schema/toolArgs`** — Takes `{tool, action, cwd?}`, resolves tool via project, loads definition, returns `{args: {name: {type, required, description?, default?, enum?, redact?}}}` for the specified action.
 
+## Per-step Retry, Parallel Iterate, Error Branches (2026-03-18)
+
+**Task**: Add three engine features — per-step retry with backoff, parallel iterate (concurrency), and `_error` branches.
+
+**Changes**:
+
+### Task 1: Per-step retry with backoff
+- **Schema**: Added `RetryConfig` struct (`max`, `interval`, `backoff`) and `Retry *RetryConfig` field on `Step` in `pkg/schema/schema.go`.
+- **Engine**: New `executeStepWithRetry()` method in `pkg/engine/engine.go`. Wraps `executeStep` with retry loop: parses interval, applies linear or exponential backoff, emits `event/stepRetrying` with `{stepId, attempt, maxAttempts, nextInterval}`. Respects context cancellation during wait.
+- **Validation**: `pkg/schema/validate.go` validates retry config: max >= 0, backoff must be "linear" or "exponential", interval must be parseable as Go duration.
+- **JSON Schema**: Auto-generated via `scripts/gen-schema.go` — `RetryConfig` def and `retry` ref on Step.
+
+### Task 2: Parallel iterate (concurrency)
+- **Schema**: Added `Concurrency int` to `IterateBlock` in `pkg/schema/schema.go` (minimum=1 in jsonschema tag).
+- **Engine**: Implemented full iterate execution in `runTree` — was completely missing before (tests were failing).
+  - `runIterate()` dispatches to convergence or list mode.
+  - `runIterateConvergence()` — max+until loop with outcome-aware early termination.
+  - `runIterateList()` — sequential over/as iteration. Delegates to parallel when `concurrency > 1`.
+  - `runIterateListParallel()` — bounded concurrency via semaphore channel. Each goroutine gets a scoped engine clone (`cloneForIteration`) with its own vars/captures copy. Captures merge back in declaration order (deterministic).
+  - `iterateHasApproval()` — recursive check forces concurrency=1 when any step has approval requirements.
+  - Convergence mode (`until`) stays sequential by design (order-dependent).
+  - Emits `event/iterateParallel`, `event/iteratePassStart`, `event/iteratePassEnd` for UI.
+- **JSON Schema**: Auto-generated — `concurrency` on IterateBlock with minimum=1.
+
+### Task 3: Error branches
+- **Schema**: `condition: "_error"` is a reserved branch condition. No new struct needed — uses existing `Branch.Condition`.
+- **Engine**: After step failure in `runTree`, checks for `_error` branch via `findErrorBranch()`. If found, sets `{{ .error }}` variable with the failure message and executes the error branch. `continue_on_fail` still applies if no `_error` branch exists. Normal (success) branch evaluation skips `_error` branches.
+- **Validation**: Warns if `_error` branch exists without non-error condition branches. Errors if `_error` is used on iterate blocks.
+
+**Tests**: All pre-existing iterate tests now pass (9/9 — were all failing before). Pre-existing `TestStepDelayCancellation` and testdata-path tool tests remain failing (unrelated).
+
+**Build**: `go build -o gert.exe ./cmd/gert/` succeeds. Schemas regenerated via `go run scripts/gen-schema.go`.
+
 **TypeScript client wiring**:
 - Added interfaces: `ToolArgInfo`, `ToolActionInfo`, `ToolInfo`, `ToolDefinition`, `DryRunResult`.
 - Added methods: `toolsList(cwd?)`, `toolsGet(name, cwd?)`, `execDryRun(params)`, `schemaStepFields()`, `schemaToolArgs(tool, action, cwd?)`.
@@ -111,3 +144,18 @@
 - Added methods: `schemaBundle()`, `toolsDetail(name, cwd?)`.
 
 **Compile verification**: Both `go build -o gert.exe ./cmd/gert/` (exit 0) and `tsc --noEmit` (exit 0) pass clean.
+
+## event/invokeStarted with Child Tree Data (2026-03-18)
+
+**Task**: Enrich the `event/invokeStarted` event with child runbook tree data, and add `parentStepId` to all child step events.
+
+**Changes (Go — `ext/serve/pkg/serve/serve.go`)**:
+- **`enterInvoke`**: Moved `event/invokeStarted` emission to after child runbook load/validation. Enriched payload: `{parentStepId, childRunbook, childTree, childSteps}` — `childTree` uses `resolveTreeForDisplay()` (same format as `exec/start` tree), `childSteps` uses `buildStepSummaries(flattenTreeSteps())` (same flat format as `exec/start` steps).
+- **`currentInvokeParentStepID()` helper**: Returns the `invokeStepID` from the top of the invoke stack. Used by all child event emission sites.
+- **All 7 `invokeChild: true` sites**: Added `parentStepId` field alongside `invokeChild` — covers `event/stepStarted` (tree step start), `event/stepCompleted` (5 paths: manual success, manual error, executeTreeStep error, executeTreeStep success, outcome-in-invoke x2).
+
+**Changes (TypeScript)**:
+- **`vscode/src/serve/client.ts`**: Added `InvokeStartedEvent` interface with `parentStepId`, `childRunbook`, `childTree`, `childSteps`.
+- **`vscode/src/views/runbookPanel.ts`**: Import `InvokeStartedEvent`. Existing `event/invokeStarted` handler at line 387 already consumes the new payload shape (stores in `invokeChildren` map, initializes child step states).
+
+**Compile verification**: `go build -o gert.exe ./cmd/gert/` (exit 0) and `npm run compile` (0 errors, 0 warnings) pass clean.

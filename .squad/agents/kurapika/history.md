@@ -1,6 +1,83 @@
 
 ## Sessions
 
+### 2026-03-18: Automated anomaly detection for recording system
+
+**Requested by:** Cristián Ormazábal Ortega
+
+**Completed:**
+- ✅ Inline anomaly detection after every state snapshot in `updateWebview()` — cross-references graph node states vs `stepStates` map with prefix-stripping ID resolution
+- ✅ State regression detection: flags steps that go from "passed" back to "pending"
+- ✅ Render gap detection: flags when state changed but no graph_snapshot followed within 500ms
+- ✅ Orphan event detection: flags events referencing step IDs absent from all graph snapshots (with prefix fallback)
+- ✅ Frozen graph detection: flags when `invokeStarted` fires but node count doesn't change across consecutive graph snapshots
+- ✅ Anomaly entries pushed to `recordingLog` as `type: 'anomaly'` with count and details
+- ✅ `writeRecording()` now also writes `recording-summary.json` alongside the JSONL
+- ✅ Summary includes: runId, totalEvents, duration, stepsExecuted, finalStates, categorized anomalies (stateSync, renderGaps, orphanEvents, frozenGraph, stateRegressions), unreachedNodes, and human-readable timeline
+- ✅ Timeline extracts significant events: step start/complete, branch resolved, invoke started/completed, outcome reached, run completed
+- ✅ Long render gaps (>2s with events in between) detected in summary post-processing
+- ✅ `gert.viewRecording` command registered in `package.json` and `extension.ts`
+- ✅ Command opens file picker for `.jsonl` files, reads recording + summary, displays formatted report in an Output Channel
+- ✅ Report shows: header, run metadata, final states, anomalies (red-flagged with categories), unreached nodes, full timeline
+- ✅ Falls back to raw JSONL parsing if summary file is missing
+- ✅ Recording save notification now includes anomaly count when > 0
+- ✅ Zero TypeScript errors, clean build
+
+**Files Modified:**
+- `vscode/src/views/runbookPanel.ts` — inline anomaly detection in `updateWebview()`, `buildRecordingSummary()` method, updated `writeRecording()` to emit summary JSON
+- `vscode/src/extension.ts` — `gert.viewRecording` command with Output Channel viewer
+- `vscode/package.json` — registered `gert.viewRecording` command
+
+### 2026-03-18: Debug recording mode for execution viewer
+
+**Requested by:** Cristián Ormazábal Ortega
+
+**Completed:**
+- ✅ Added `recording: boolean` and `recordingLog: any[]` state to `RunbookPanel`
+- ✅ Record toggle button (🔴 Rec / ⏹ Stop) in Workflow Map header, with pulsing red dot indicator when active
+- ✅ All JSON-RPC events captured at the top of `handleEvent()` before the switch
+- ✅ All webview user actions captured at the top of `handleWebviewMessage()` before the switch
+- ✅ State snapshots appended after every `updateWebview()` render (stepStates, branchResolutions, invokeChildren, captures, outcomeResult, etc.)
+- ✅ Graph structure snapshots in `renderGraphSvg()` (node positions, states, counts — not full SVG string)
+- ✅ Click target capture via `document.addEventListener('click')` in webview script — posts `recording-click` messages with tag, class, stepId, coordinates
+- ✅ `recording-click` messages handled in extension and appended to recording log
+- ✅ Recording auto-stops on `event/runCompleted` and `event/outcomeReached` (non-chained), writes log to disk
+- ✅ Manual stop via ⏹ button writes log immediately
+- ✅ Output: JSONL format at `{runBaseDir}/recording.jsonl`; fallback to `.runbook/runs/debug/recording.jsonl` if no runBaseDir
+- ✅ Notification shown with event count and file path on save
+- ✅ CSS `pulse-rec` animation for the recording indicator dot
+- ✅ Works in both tree and graph view modes
+- ✅ Zero TypeScript errors, clean build
+
+**Files Modified:**
+- `vscode/src/views/runbookPanel.ts` — recording state, event/action/state/graph capture, UI toggle, click listener, JSONL writer
+
+
+### 2026-03-18: Inline child runbook steps into parent graph during invoke execution
+
+**Requested by:** Cristián Ormazábal Ortega
+
+**Completed:**
+- ✅ Added `mergeInvokeChildren()` and helpers to `treeToGraph.ts` — walks parent tree, replaces invoke nodes with header + prefixed child tree nodes
+- ✅ Child step IDs prefixed with parent invoke step ID (e.g. `mitigation_1::check_long_running_txn`) to avoid collisions
+- ✅ Added `invokeChildren: Map<string, InvokeChildData>` state to `RunbookPanel`
+- ✅ Handler for `event/invokeStarted` — stores child tree data, initializes child step states as pending, triggers re-render
+- ✅ Updated `event/stepStarted` and `event/stepCompleted` handlers to also set prefixed child step states for graph rendering
+- ✅ Updated `event/stepSkipped` handler to propagate skipped state to prefixed child IDs
+- ✅ `renderGraphSvg()` calls `mergeInvokeChildren()` before layout, so child steps render as real nodes in the flow
+- ✅ Child node visual treatment: thin 3px left blue accent border + subtle blue-tinted background (`rgba(0,120,212,0.06)`)
+- ✅ Invoke header node shows child runbook name as subtitle when children are inlined
+- ✅ "View child ↗" badge hidden when children are already inlined in the graph
+- ✅ Click handling: prefixed child step IDs mapped back to original IDs for detail panel lookup
+- ✅ `invokeChildren` map cleared during restart and chain-to-child transitions
+- ✅ Zero TypeScript errors, clean build
+
+**Files Modified:**
+- `vscode/src/views/treeToGraph.ts` — added `InvokeChildData` interface, `mergeInvokeChildren()`, `mergeWalk()`, `prefixChildTree()`, `prefixNode()` functions
+- `vscode/src/views/runbookPanel.ts` — `invokeChildren` state, `event/invokeStarted` handler, prefixed state propagation in step events, merged tree in `renderGraphSvg()`, child node visuals, click ID mapping, reset on restart/chain
+
+---
+
 ### 2026-03-18: Drag-to-reorder + Host-adaptive viz abstraction
 
 **Requested by:** Cristián Ormazábal Ortega
@@ -404,6 +481,53 @@
 **Round-Trip Verification (Passes):**
 - Load service-health-from-readme.runbook.yaml:
   - ✅ Tree shows step 0 (resolve_dns) with 2 branches visible
+
+---
+
+### 2026-03-18: Layout flexibility + YAML↔Visual toggle + Autocomplete + Step I/O + Insert points
+
+**Requested by:** Cristián Ormazábal Ortega
+
+**Task 1 — Layout flexibility + YAML↔Visual toggle + Play button:**
+- ✅ Added `gert.editorLayout` setting (`"form-left"` default, `"form-right"`) to `package.json` contributes.configuration
+- ✅ `renderUI()` reads the setting and swaps CSS grid column order (`order: 1/2`) + column widths
+- ✅ Tab bar at top: `[Visual] [YAML] [▶ Run]` with active state highlighting
+- ✅ YAML tab: full-screen monospace textarea with line numbers (synced scroll), supports read/write editing
+- ✅ Visual tab: existing form + graph layout (default)
+- ✅ ▶ Run button: executes `gert.runTsg` on the current file
+- ✅ Tab state persisted in panel — `activeTab` property on `RunbookEditorPanel`
+- ✅ YAML→Visual: re-parses YAML into model on tab switch
+- ✅ Visual→YAML: serializes current model to YAML with comment preservation
+
+**Task 2 — Expression autocomplete for all {{ }} fields:**
+- ✅ Scope-aware `computeAvailableVarsAtPath(path)` method walks tree collecting meta.vars, meta.inputs, and capture outputs from PRIOR steps only
+- ✅ `getAvailableVariables()` still available for global use (condition builder)
+- ✅ Autocomplete dropdown in webview: triggers on `{{ .` or `{{ ` in any expression field (step-*, branch-*, iterate-*, builder-value, meta-description)
+- ✅ Shows variables (𝑥 icon) and Sprig functions (ƒ icon) — contains, hasPrefix, hasSuffix, upper, lower, default, trim, eq, ne, gt, lt, not, and, or, regexMatch, replace, split, join, len
+- ✅ Keyboard navigation: ArrowUp/Down to select, Enter/Tab to insert, Escape to dismiss
+- ✅ Click to insert — inserts `.varName ` or `funcName ` at cursor position
+- ✅ Partial filtering: typing characters after `{{ .` narrows suggestions
+
+**Task 3 — Per-step I/O detail panel in execution viewer:**
+- ✅ Collapsible `<details>` panel titled "Step I/O Details" appended to `renderBrowsedStepContent()` for passed/failed steps
+- ✅ Shows: Resolved args (tool args or command), Output (stdout, truncated at 1000 chars), Stderr (truncated at 500), Captures, Exit code (green=0, red=non-zero), Duration, Error message
+- ✅ Data sourced from `stepDetails` Map, `stepErrors` Map, and tree node data
+- ✅ Collapsed by default — user clicks to expand, no layout shift
+
+**Task 4 — "+" insert points on graph edges:**
+- ✅ "+" circle buttons rendered at midpoint of sequential edges (not conditional, not back-edge, not start/end/join/condition)
+- ✅ Each button carries `data-parent-path` and `data-insert-index` attributes
+- ✅ Click handler posts `insert-step-at` message with `{ parentPath, index }`
+- ✅ Extension handler splices a new step at the correct index in the parent steps array
+- ✅ Buttons excluded from pan drag detection (`e.target.closest('.edge-insert-btn')`)
+- ✅ Hover effect: circle fills blue, text turns white
+
+**Files Modified:**
+- `vscode/package.json` — added `gert.editorLayout` setting
+- `vscode/src/views/runbookEditorPanel.ts` — tab bar, YAML view, layout flexibility, autocomplete, insert buttons, new message handlers
+- `vscode/src/views/runbookPanel.ts` — per-step I/O detail panel in execution viewer
+
+**Build:** ✅ Zero TypeScript errors, clean compile (971.2kb)
   - ✅ Each branch shows condition + child step (check_http / dns_not_resolved)
   - ✅ Branch steps fully editable via form
 - Save + Reload:

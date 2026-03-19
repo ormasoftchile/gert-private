@@ -119,3 +119,30 @@
      - `pkg/tools` — 8 tests fail: missing `testdata/tools/` fixtures (mock servers, kubectl.tool.yaml)
 
 **Assessment:** All failures are pre-existing — missing test fixtures and iterate step type mapping issue. Zero regressions from recent serve events or graph work. The testdata directory appears to not exist in the repo; these tests likely worked in a different workspace layout or were authored against planned fixtures.
+
+### 2026-03-18 Query Syntax Highlighting: Review & Implementation
+
+**Task:** Add syntax highlighting for SQL/KQL query expressions in both YAML source view (TextMate grammars) and visual editor (webview form fields).
+
+**Part 1 — TextMate Grammar Extensions:**
+- Extended `runbook-injection.json` with:
+  - Pattern to tag `query`, `command`, `expression`, `filter` field keys as `entity.name.tag.query.gert`
+  - Begin/end rule for block scalars (`|` / `>`) after query fields with repository rules for SQL keywords, KQL pipe+operator, strings, comments, template vars
+- Updated `package.json` grammar contribution to declare `embeddedLanguages` mapping
+- `kusto-sql-block.injection.json` already solid — no changes needed
+
+**Part 2 — Visual Editor Syntax Highlighting:**
+- CSS overlay pattern: transparent textarea + highlight overlay div with theme-token colors
+- JS tokenizer in webview: splits into comments, strings, pipes, words, numbers with CSS classes
+- Detection heuristic: field name, class, or value-based keyword matching
+- `renderToolInputFields()` extracts query fields from tool inputs into individual highlighted textareas
+- `update-step-query-input` message handler for live model updates without full re-render
+
+**Part 3 — Grammar Verification:**
+- Both grammar JSON files validated as structurally correct
+- No orphaned rules, no missing repository references, no malformed regex patterns
+- `package.json` grammar contributions correctly configured
+
+**Build:** `npm run compile` passes (949.5kb bundle).
+
+**Verdict:** APPROVE — All three parts implemented and verified.

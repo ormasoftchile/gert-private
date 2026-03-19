@@ -218,3 +218,36 @@
 
 ### Files Modified
 - `vscode/src/views/runbookEditorPanel.ts` — graph click fix, event delegation, `getAvailableVariables()`, structured branch condition builder
+
+## 2026-03-18 Phase E — Peek YAML, Tool Catalog, Scenario Browser
+
+### Task 1: Peek YAML (Context Menu on Graph Nodes)
+- Right-click any graph node in the editor → context menu with "Peek YAML".
+- Click → modal overlay shows the YAML fragment for just that node, stringified with `YAML.stringify()`.
+- Copy button with clipboard API. Dismiss via click-outside or Escape.
+- Implementation: `contextmenu` event handler on `#graph-container` with event delegation. Custom positioned menu div. `peek-yaml` message → host extracts node at path → `peek-yaml-result` message back to webview.
+
+### Task 2: Searchable Tool Catalog Panel
+- New file: `vscode/src/views/toolCatalogPanel.ts`.
+- Command: `gert.showToolCatalog` registered in `package.json` and `extension.ts`.
+- Data source: tries `GertClient.toolsList()` via JSON-RPC first (5s timeout), falls back to scanning `tools/*.tool.yaml` files.
+- Search bar filters tools by name/description in real time.
+- Each tool rendered as a card: name, version, description, action count.
+- Click action header → expands to show args table (name, type, description, required indicator).
+- "Insert Step" button generates a YAML snippet for the action and copies to clipboard.
+
+### Task 3: Scenario Browser in Editor
+- `discoverScenarios()` scans `scenarios/{runbook-name}/{scenario}/inputs.yaml`, also checks `gert.yaml` `paths.scenarios`.
+- `renderScenarioSection()` renders a list of discovered scenarios with name, input summary, and Run button.
+- "New Scenario" button prompts for kebab-case name, creates directory + empty `inputs.yaml`, opens it in a side editor.
+
+### Key Decisions
+- **Peek YAML uses webview-side modal, not VS Code native quickpick.** Allows syntax-highlighted display and copy button without losing webview context.
+- **Tool catalog tries JSON-RPC first with timeout, not conditional.** Avoids needing to detect whether gert serve is running — just try and fall back.
+- **Scenario browser is part of Runbook Home, not a separate tab.** Keeps the UI lightweight per spec.
+
+### Files Modified
+- `vscode/src/views/runbookEditorPanel.ts` — peek YAML context menu + handler, scenario browser
+- `vscode/src/views/toolCatalogPanel.ts` — new file, searchable tool catalog webview panel
+- `vscode/src/extension.ts` — registered `gert.showToolCatalog` command
+- `vscode/package.json` — added `gert.showToolCatalog` command entry

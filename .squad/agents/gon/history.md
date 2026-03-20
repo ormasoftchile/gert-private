@@ -8,6 +8,7 @@
 ## Learnings
 
 - Team seeded to explore a visual runbook editor for business users.
+- (2026-03-19) Deliverable #9: Refactored `TextVizAdapter.renderWorkflow()` to delegate to `renderTreeAsText()` + `extractConnectors()` when `VizOptions.tree` is provided. Graph-based BFS fallback retained for backward compat. SVG adapter untouched.
 - Existing VS Code extension already has a mature run webview surface and JSON-RPC client, making a side-by-side visual editor in the same extension the fastest MVP path.
 - Extensibility pressure points are dynamic tool/provider resolution and project-aware package references, so the editor model should be AST + schema metadata, not static forms.
 - Recommendation drafted: hybrid visual editor with YAML source of truth, schema-driven inspector, and plugin-like step cards resolved from tool/provider definitions.

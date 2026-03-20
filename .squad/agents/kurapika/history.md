@@ -1,6 +1,51 @@
 
 ## Sessions
 
+### 2026-03-19: Fix nested invoke prefix mismatch + golden test CRLF parser
+
+**Requested by:** Cristián Ormazábal Ortega
+
+**Completed:**
+- ✅ Bug 2 (CRLF): Added `.replace(/\r\n/g, '\n')` in `parseGolden()` before splitting lines — golden file markers now match correctly on Windows
+- ✅ Bug 1 (nested invoke prefix): Added `resolveInvokePrefix()` helper to `snapshotStateMachine.ts` — searches `stepStates` for fully-qualified keys ending with `::parentStepId` that have running/passed state
+- ✅ Applied `resolveInvokePrefix` to all 4 event handlers that use `parentStepId`: `event/invokeStarted`, `event/stepStarted`, `event/stepCompleted`, `event/stepSkipped`
+- ✅ `event/invokeStarted` now registers `invokeChildren` with both raw and FQ key so `mergeWalk` direct lookups work alongside prefix-stripping fallback
+- ✅ Regenerated golden file — old golden was stale (never actually tested due to CRLF bug) and missed post-branch sequential nodes in GRAPH view
+- ✅ Golden test passes: 2/2 tests (replay matches + invariants hold at every event)
+- ✅ All 198 real tests pass (2 pre-existing failures in `validate.test.ts` — unrelated)
+- ✅ Zero TypeScript errors, clean build
+
+**Files Modified:**
+- `vscode/src/views/snapshotStateMachine.ts` — `resolveInvokePrefix()` helper, FQ prefix resolution in 4 event handlers, dual-key `invokeChildren` registration
+- `vscode/src/views/snapshotReplay.ts` — CRLF normalization in `parseGolden()`
+- `vscode/src/views/__fixtures__/geodr0002-failover/expected.golden` — regenerated to include post-branch sequential nodes now visible in graph
+
+## Learnings
+- Golden files that were never actually tested (0+0 = PASS) are a silent trap — always verify golden parsers can produce >0 entries before trusting green
+- Nested invoke prefix resolution is a single-source concern: every event handler that touches `parentStepId` must resolve through the same FQ lookup, not just `invokeStarted`
+
+### 2026-03-19: Rewrite runbookPanel.ts to use snapshotStateMachine.applyEvent() as single source of truth
+
+**Requested by:** Cristián Ormazábal Ortega
+
+**Completed:**
+- ✅ Added `snapshotState: SnapshotState` field to `RunbookPanel`, initialized via `initialState(tree)`
+- ✅ Replaced all event handler state logic (`event/stepStarted`, `event/stepCompleted`, `event/stepSkipped`, `event/invokeStarted`, `event/outcomeReached`, `event/runCompleted`, `event/branchResolved`, `event/iteratePassEnd`) with `applyEvent()` calls — UI-only side effects preserved
+- ✅ Converted `stepStates`, `invokeChildren`, `branchResolutions` from private fields to getters delegating to `this.snapshotState`
+- ✅ Updated `renderGraphSvg()` to use `this.snapshotState.finished` for `isFinished` (with `isChainView` fallback)
+- ✅ Updated initialization paths: `create()`, `restart`, and `chainToRunbook` all use `initialState(tree)` 
+- ✅ Deleted dead code: `setStepState()`, `buildRuntimeIdMapping()`, `initChildStepStates()`, `runtimeToGraphIds` field, `initTreeStates()` free function
+- ✅ Zero TypeScript errors, clean build (`npm run compile`)
+- ✅ All 198 real tests pass (2 pre-existing failures in `validate.test.ts` from empty fixture dirs — unrelated)
+
+**Files Modified:**
+- `vscode/src/views/runbookPanel.ts` — full state delegation to `applyEvent()`, getter pattern, dead code removal
+
+## Learnings
+- The getter pattern (`get stepStates()`) is the cleanest approach when many read sites exist — avoids a massive find-and-replace while keeping type compatibility
+- `applyEvent` is pure (returns new state), so storing `this.snapshotState = applyEvent(...)` in each handler is the correct integration pattern
+- The `runtimeToGraphIds` cross-pollination bug was the exact kind of divergence this refactor eliminates — the state machine handles prefix logic correctly without maintaining a separate mapping
+
 ### 2026-03-18: Automated anomaly detection for recording system
 
 **Requested by:** Cristián Ormazábal Ortega
@@ -617,3 +662,6 @@
 - Schema-driven dynamic sections should come from runbook and tool JSON schemas plus discovered tool definitions, using discriminated editors by step type and tool transport/action metadata.
 - Governance visibility must be first-class in authoring: inline risk badges, deny/approval warnings, and preflight validation lanes (structural/semantic/domain) mapped to precise field paths.
 - Cross-agent dependency noted: UX should consume backend schema/catalog/diagnostic endpoints (Killua), surface policy controls aligned with Azure/tool governance constraints (Leorio), and expose QA-defined release checks in-editor before save (Hisoka).
+- **End-node placement on finished runs:** Never use Y-position to determine "last executed step" — use edge-walk depth from start. The full branch fan-out layout makes Y-positions unreliable. Walk the taken path only (edges through executed + structural nodes), then prune trailing non-executed successors. Untaken branch nodes survive because they're never successors of the last executed step.
+- **Graph post-layout surgery pattern:** `omitEnd: true` prevents end node in layout → dead-join removal strips orphan joins → finished-run cleanup prunes trailing nodes → fresh end node placed below last executed step. Order matters — each phase depends on the previous.
+- **Dead code:** `pruneUntakenBranches()` was a failed approach that tried to reshape the tree before layout. Removed — graph-level post-layout surgery is the correct strategy.

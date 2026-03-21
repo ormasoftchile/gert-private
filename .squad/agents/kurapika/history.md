@@ -1,6 +1,65 @@
 
 ## Sessions
 
+### 2026-03-21: Delay UX verification audit — confirmed correct, Extension Host reload required
+
+**Requested by:** ormasoftchile
+
+**Finding:**
+Full audit of delay UX flow confirms the implementation is correct across all execution paths. The compiled bundle contains all delay code. The issue is that the Extension Host was not reloaded after compilation — VS Code runs the bundle loaded at activation time, not the on-disk file.
+
+**Verified paths:**
+- ✅ `event/stepStarted` handler sets `delayInfo` from `msg.params.delay` (serve layer includes it at line 1275 of serve.go) with `findStepInTree` fallback
+- ✅ `event/stepDelaying` handler reconfirms delayInfo
+- ✅ `event/stepCompleted` handler clears delayInfo only for matching stepId
+- ✅ Rendering: both `processing=true` and `processing=false` paths render the delay indicator
+- ✅ Go serve layer sends stepStarted+stepDelaying BEFORE timer block — events reach client during the 5s delay window
+- ✅ Auto-advance: `nextInFlight` guard prevents double-advance; 5s server-side delay blocks execNext response
+- ✅ Event coalescing: 5-second gap between stepDelaying and stepCompleted prevents coalescing
+- ✅ Compiled bundle verified: contains delay-active CSS, pulse-delay animation, event/stepDelaying handler
+
+**Changes:**
+- Added diagnostic logging: stepStarted now logs `delay:` field value; new log `delay indicator set from stepStarted:` when delayInfo is populated
+- Recompiled bundle (esbuild)
+
+**Files Modified:**
+- `vscode/src/views/runbookPanel.ts` — added delay diagnostic console.logs in event/stepStarted handler
+
+## Learnings
+- VS Code Extension Host runs the bundle loaded at activation time. Recompiling without reloading the Extension Host ("Developer: Reload Window") has no effect — this is the #1 false-negative for UI feature verification
+- The Go serve layer's unbuffered os.Stdout writes ensure stepStarted and stepDelaying events reach the client before the delay timer blocks, preventing event coalescing with stepCompleted
+
+### 2026-03-20: Fix step delay indicator not visible in webview
+
+**Requested by:** ormasoftchile
+
+**Root Cause:**
+The `event/stepDelaying` handler correctly set `this.delayInfo` and called `updateWebview()`, but the delay indicator was invisible because:
+1. `event/stepStarted` rendered the step detail FIRST (without delay info), and `event/stepDelaying` arrived in the same readline tick — both HTML assignments happened before the webview could paint, so only the timing of the LAST write mattered
+2. When both `event/stepDelaying` and `event/stepCompleted` arrived in the same data chunk (coalesced by pipe buffering), delayInfo was set and immediately cleared in one tick — the indicator never rendered
+3. Even when visible, the delay indicator rendered BELOW the running spinner as a secondary element, easy to miss
+
+**Fix:**
+- In `event/stepStarted`: proactively set `this.delayInfo` by looking up the step's `delay` field in the tree data (via `findStepInTree`). This ensures the delay indicator is present in the FIRST `updateWebview()` call, before `event/stepDelaying` arrives
+- Clear previous step's delayInfo at the start of `event/stepStarted` to prevent stale indicators
+- In the detail rendering: show the delay indicator INSTEAD of the generic running spinner when delay is active (exclusive, not stacked). Delay gets a distinct warm-yellow background (`delay-active` class) and pulsing ⏳ badge
+- In the processing indicator: also show delay info if `delayInfo` is set, so delay is visible even during the `processing=true` state before events arrive
+- Added CSS: `.executing-indicator.delay-active` with yellow tint, `.delay-badge` with `pulse-delay` animation
+
+**Completed:**
+- ✅ Delay indicator now appears immediately when a step with `delay` starts (from tree data, not just events)
+- ✅ Prominent visual with warm-yellow border/background and pulsing hourglass
+- ✅ Shows in BOTH processing state and active step detail state
+- ✅ Properly cleared when step completes
+- ✅ Zero TypeScript errors, clean build (`npx tsc --noEmit`)
+
+**Files Modified:**
+- `vscode/src/views/runbookPanel.ts` — proactive delay from tree in stepStarted handler, exclusive delay/spinner rendering, delay-aware processing indicator, CSS for delay-active state
+
+## Learnings
+- Event coalescing in readline/pipe IO means you can't rely on intermediate event renders being visible — state that must be seen should be derived from already-available data (tree structure) rather than waiting for a separate event
+- Exclusive indicator rendering (delay OR spinner, not both) makes the delay state unmissable instead of being buried as a secondary element
+
 ### 2026-03-20: Build configurable minimap for graph view + remove bird's eye zoom
 
 **Requested by:** Cristián Ormazábal Ortega
@@ -722,4 +781,5 @@ For all three event handlers, gate the raw `p.stepId` write behind `else` — wh
 - Cross-agent dependency noted: UX should consume backend schema/catalog/diagnostic endpoints (Killua), surface policy controls aligned with Azure/tool governance constraints (Leorio), and expose QA-defined release checks in-editor before save (Hisoka).
 - **End-node placement on finished runs:** Never use Y-position to determine "last executed step" — use edge-walk depth from start. The full branch fan-out layout makes Y-positions unreliable. Walk the taken path only (edges through executed + structural nodes), then prune trailing non-executed successors. Untaken branch nodes survive because they're never successors of the last executed step.
 - **Graph post-layout surgery pattern:** `omitEnd: true` prevents end node in layout → dead-join removal strips orphan joins → finished-run cleanup prunes trailing nodes → fresh end node placed below last executed step. Order matters — each phase depends on the previous.
+- **Delay event handling pattern:** `event/stepDelaying` fires BEFORE the engine blocks on the timer, carrying `{stepId, delay}`. Store it as `delayInfo` on the panel, render a ⏳ indicator on the active step, and clear it when `event/stepCompleted` arrives for that stepId. Follows the same log → state → updateWebview() pattern as branchResolved/iteratePassEnd.
 - **Dead code:** `pruneUntakenBranches()` was a failed approach that tried to reshape the tree before layout. Removed — graph-level post-layout surgery is the correct strategy.

@@ -159,3 +159,29 @@
 - **`vscode/src/views/runbookPanel.ts`**: Import `InvokeStartedEvent`. Existing `event/invokeStarted` handler at line 387 already consumes the new payload shape (stores in `invokeChildren` map, initializes child step states).
 
 **Compile verification**: `go build -o gert.exe ./cmd/gert/` (exit 0) and `npm run compile` (0 errors, 0 warnings) pass clean.
+
+## Step Delay User Feedback (2026-03-20)
+
+**Task**: Add console output and structured event emission to `applyStepDelay` in `pkg/engine/engine.go`.
+
+**Problem**: `applyStepDelay` silently slept with zero user feedback — no console output, no event for VS Code extension or JSONL trace.
+
+**Changes**:
+- **`pkg/engine/engine.go`** (`applyStepDelay`): Added `fmt.Printf("  ⏳ Waiting %s...\n", delay)` and `e.emit("event/stepDelaying", ...)` with `{stepId, delay}` payload, placed before the timer wait. Follows `stepRetrying` pattern exactly.
+- **`pkg/engine/delay_example_test.go`**: Extended `TestExampleSingleStepTimeoutRunbookAppliesDelay` to register an `OnEvent` listener, assert exactly 1 `event/stepDelaying` event fires with correct `stepId` and `delay` values.
+
+**Pattern**: Engine feedback events follow `fmt.Printf` + `e.emit()` paired pattern (console for humans, structured event for tooling). Event names use `event/step<Verb>ing` convention.
+
+## Serve-Layer stepDelaying Event (2026-03-20)
+
+**Task**: Wire `event/stepDelaying` through the JSON-RPC serve layer so VS Code extension receives it.
+
+**Problem**: The engine's `e.emit("event/stepDelaying")` uses the engine's `OnEvent` callback, which the serve layer never wires up. The serve layer has its own event system via `s.sendEvent()` (JSON-RPC notifications). Engine events go nowhere when running via VS Code.
+
+**Changes**:
+- **`ext/serve/pkg/serve/serve.go`**: Added `event/stepDelaying` emission via `s.sendEvent` in both execution paths:
+  1. **Flat-mode** (`handleExecNext`): After `event/stepStarted`, before `s.engine.ExecuteStep()`. Checks `step.Delay`, parses duration, emits if valid and > 0.
+  2. **Tree-mode** (`executeTreeStep`): After the branch-type block, before `s.engine.ExecuteTreeStep()`. Same logic.
+- Payload: `{stepId, delay}` — matches engine event shape.
+
+**Pattern learned**: Engine events (`e.emit`) and serve events (`s.sendEvent`) are **independent systems**. Any engine event that needs to reach the VS Code extension must ALSO be emitted in the serve layer via `s.sendEvent()` at the corresponding execution point. The serve layer is the JSON-RPC bridge — engine callbacks are not connected in serve mode.

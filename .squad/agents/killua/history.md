@@ -7,6 +7,7 @@
 
 ## Learnings
 
+- **Invoke state propagation (2026-03-21):** The Go engine (`executeInvokeStep`) and serve layer correctly propagate invoke-child step state using `invokeChild: true` + `parentStepId` on events. The `snapshotStateMachine.ts` correctly stores these with fully-qualified keys (`parentStepId::childStepId`). However, the detail pane in `runbookPanel.ts` strips the `::` prefix when looking up state (`this.stepStates.get(bareId)`), causing child steps to show "pending" even when completed. The graph renderer works correctly because `treeOps.ts` merges child trees with FQ-prefixed IDs. Key insight: any UI code that resolves invoke-child state must use the FQ key from `viewingStepId`, not the stripped base ID.
 - Primary backend focus: runbook engine, schema handling, and extensible providers/tools.
 - Visual editor can stay YAML-canonical by reusing strict/flexible loaders in pkg/schema (Load/decodeRunbookFlexible) and project-aware compat resolvers (ResolveToolPathCompat, ResolveRunbookPathCompat).
 - Existing serve JSON-RPC already exposes execution/session surfaces; adding read-only metadata endpoints there is the lowest-risk path to drive UI generation without touching engine execution semantics.

@@ -252,3 +252,39 @@
 - `vscode/src/views/toolCatalogPanel.ts` — new file, searchable tool catalog webview panel
 - `vscode/src/extension.ts` — registered `gert.showToolCatalog` command
 - `vscode/package.json` — added `gert.showToolCatalog` command entry
+
+## 2026-03-20 Bug Fixes — Invoke Boundary Labels & Click→Prose Navigation
+
+### Bug 1: Boundary Container Labels Wrong/Confusing
+
+**Root cause:** The invoke group computation in `renderGraphSvg()` iterated ALL graph nodes with `::` in their IDs. This incorrectly included internal graph artifacts:
+- **Condition diamond nodes** — IDs like `cond-invoke_net::check_dns-_g5` (the condition ID inherits `::` from the prefixed step ID it belongs to)
+- **Pass-through nodes** — IDs like `pass-cond-invoke_net::...-1-_g6`
+
+These artifact IDs were split on `::` and treated as invoke child groups, creating spurious containers with labels like `cond-invoke_net` or `pass-cond-invoke_net`.
+
+**Fix:**
+1. Added `if (/^(cond|pass)-/.test(node.id)) continue;` filter to skip internal graph artifacts from the invoke group loop.
+2. Added fallback loop that progressively strips `::` prefixes when looking up `invokeChildren` for the label (mirrors `mergeWalk` in treeOps.ts).
+
+### Bug 2: Click→Prose Navigation Broken
+
+**Root cause (two-part):**
+
+**(a) Prefix stripping discarded navigation context.** The `viewStep` handler stripped `::` prefixes from invoke child IDs: `invoke_net::check_dns` → `check_dns`. The prose tree (from the UNMERGED tree) only contains parent runbook steps. No section matched the stripped child ID → no `section.active` → auto-scroll found nothing → prose stays at the top.
+
+**(b) Auto-scroll timing.** The IIFE ran synchronously before layout was guaranteed in VS Code webviews after a full `html` setter replacement.
+
+**Fix:**
+1. `viewStep` handler stores the full raw ID (no `::` stripping).
+2. `renderStepAsProse()` checks: exact match, unprefixed base match, AND parent invoke prefix match.
+3. `getHtml()` computes `viewingBaseId` (stripped) for right-panel step detail lookup.
+4. Chain history lookup also tries stripped IDs.
+5. Auto-scroll wrapped in `requestAnimationFrame`.
+
+### Verification
+- `npm run compile` — clean build
+- 198/198 views tests pass
+
+### Files Modified
+- `vscode/src/views/runbookPanel.ts` — all fixes

@@ -1,6 +1,64 @@
 
 ## Sessions
 
+### 2026-03-20: Build configurable minimap for graph view + remove bird's eye zoom
+
+**Requested by:** Cristián Ormazábal Ortega
+
+**Completed:**
+- ✅ **Removed bird's eye zoom** — deleted ~120 lines: all birdEye state variables, animateTo(), showViewportIndicator(), removeViewportIndicator(), cancelBirdEye(), keydown/keyup/mousemove/mouseenter/mouseleave/blur event handlers. Cleaned up the mousedown guard that referenced birdEyeActive
+- ✅ **Canvas 2D minimap** — renders colored rectangles for nodes (blue=passed, red=failed, bright blue=running with pulse, gray=pending/skipped), blue circle for start, red circle for end, diamond for conditions, thin gray lines for edges
+- ✅ **Viewport indicator** — semi-transparent blue rectangle showing the currently visible region of the main graph, updates on every pan/zoom
+- ✅ **Click to jump** — clicking anywhere on the minimap centers the main graph on that point
+- ✅ **Drag viewport** — dragging on the minimap pans the main graph in real time
+- ✅ **Three visibility modes** via `gert.graph.minimap` setting: "visible" (always shown), "ctrl" (show on Ctrl hold with keydown/keyup/blur), "disabled" (never rendered)
+- ✅ **Vertical position** via `gert.graph.minimapPosition`: "top" or "bottom" (default)
+- ✅ **Horizontal position** via `gert.graph.minimapPanel`: "left", "center" (default), "right"
+- ✅ **Aspect-ratio aware sizing** — minimap canvas dimensions computed proportional to graph aspect ratio (max 200x140, min 100x80)
+- ✅ **Graph view only** — minimap lives inside renderGraphSvg(), never renders in tree view
+- ✅ **DisplayConfig wired** — minimap/minimapPosition/minimapPanel fields added to DisplayConfig interface and readDisplaySettings()
+- ✅ **VS Code settings** — 3 new settings in package.json contributes.configuration
+- ✅ **Did NOT modify** treeToGraph.ts, treeOps.ts, or snapshotStateMachine.ts
+- ✅ Zero TypeScript errors, clean build (`npm run compile`)
+- ✅ All 198 real tests pass (2 pre-existing failures in `validate.test.ts` — unrelated)
+
+**Files Modified:**
+- `vscode/src/views/runbookPanel.ts` — removed bird's eye zoom block, added minimap canvas HTML generation + webview script for Canvas 2D rendering, click-to-jump, drag-viewport, Ctrl-to-show
+- `vscode/src/serve/client.ts` — added minimap, minimapPosition, minimapPanel to DisplayConfig interface
+- `vscode/package.json` — added gert.graph.minimap, gert.graph.minimapPosition, gert.graph.minimapPanel settings
+
+## Learnings
+- Canvas 2D is the right rendering choice for a minimap overlay: zero DOM overhead, trivially fast even for 200+ nodes, and viewport indicator updates at frame rate without SVG attribute manipulation
+- Serializing node data as HTML data attributes (data-nodes, data-edges with JSON) keeps the webview script self-contained — no postMessage round-trips needed for minimap rendering
+- The applyTransform override pattern (wrapping the outer IIFE's function) cleanly hooks minimap repaint into every pan/zoom event without modifying the original function
+
+### 2026-03-20: Fix invoke child raw-key collision corrupting parent step states
+
+**Requested by:** Cristián Ormazábal Ortega
+
+**Root Cause:**
+In `snapshotStateMachine.ts`, the `event/stepStarted`, `event/stepCompleted`, and `event/stepSkipped` handlers unconditionally wrote `p.stepId` (the raw, unprefixed child step ID) to `stepStates`, even for invoke children. This polluted the map with raw keys like `check_health: running`. If a parent step happened to share the same ID as a child step, the raw key overwrote the parent's 'pending' state with the child's active state — making parent steps after an invoke render as bright/active instead of dimmed.
+
+**Fix:**
+For all three event handlers, gate the raw `p.stepId` write behind `else` — when `invokeChild && parentStepId` is present, only write the fully-qualified key (`fqPrefix::stepId`). The raw key is never needed: the merged tree uses FQ-prefixed IDs for child nodes, and `resolveState()` in `treeToGraph.ts` looks up by exact ID.
+
+**Completed:**
+- ✅ `event/stepStarted`: moved `next.set(p.stepId, 'running')` into else-branch; invoke children only write FQ key
+- ✅ `event/stepCompleted`: moved `next.set(p.stepId, p.status)` into else-branch; invoke children only write FQ key
+- ✅ `event/stepSkipped`: moved `next.set(p.stepId, 'skipped')` into else-branch (parentStepId check); orphan fallback stays in else
+- ✅ Updated 2 test assertions in `snapshotStateMachine.test.ts` — raw child keys are now correctly absent
+- ✅ Golden snapshot test passes (incident-triage fixture unchanged — no regressions)
+- ✅ All 198 real tests pass (2 pre-existing failures in `validate.test.ts` — unrelated)
+- ✅ Zero TypeScript errors, clean build
+
+**Files Modified:**
+- `vscode/src/views/snapshotStateMachine.ts` — gated raw stepId writes for invoke children in 3 event handlers
+- `vscode/src/views/snapshotStateMachine.test.ts` — updated 2 assertions to expect raw key is NOT set
+
+## Learnings
+- Invoke child events set BOTH the raw and FQ-prefixed stepId in the state map. The raw key is never looked up by the graph renderer (which uses FQ-prefixed IDs from the merged tree), but it silently corrupts any parent step sharing the same ID — a latent collision bug
+- The fix is to never write the raw key for invoke children: the if/else gate ensures only parent steps write the raw key
+
 ### 2026-03-19: Fix nested invoke prefix mismatch + golden test CRLF parser
 
 **Requested by:** Cristián Ormazábal Ortega

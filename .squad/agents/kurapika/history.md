@@ -812,3 +812,30 @@ For all three event handlers, gate the raw `p.stepId` write behind `else` — wh
 ## Learnings
 - DisplayConfig is the single gateway for all UI feature flags — add new fields there + readDisplaySettings() + helper method, then gate HTML generation. Pattern scales well.
 - Delay badge positioning: SVG badges near node borders must sit fully inside the stroke rect (accounting for stroke-width + border-radius) to avoid visual clipping. A 14px inward margin (`h - 22` vs `h - 8`) keeps the badge clear of a 2px stroke with 10px border-radius.
+
+### 2026-03-23: Annotation UI for execution graph — badges, Notes tab, run-level banner
+
+**Requested by:** Cristián
+
+**Completed:**
+- ✅ Created `vscode/src/views/annotations.ts` — Annotation interface, countAnnotationsByStep, getStepAnnotations, getRunAnnotations utility functions
+- ✅ Added `annotationCounts` parameter to `renderExecutionGraphSvg()` in `renderGraph.ts` — annotation pill badges on step and iterate nodes (💬 + count), positioned in top-right corner, shifted left when branch badge is present
+- ✅ Added annotation badges to `renderGraphSvg()` in `runbookPanel.ts` — same badge treatment on both step/branch-step and iterate nodes in the panel's own graph renderer
+- ✅ Added Notes section in step detail panel — shows list of annotation cards (author, timestamp, content, tags), tag chip selector (observation/decision/escalation/action-item/root-cause), textarea + Save button
+- ✅ Added run-level notes banner above the SVG graph (HTML, not SVG) — collapsible, shows run-scoped annotations with same input pattern, hidden when 0 run annotations
+- ✅ Added `addAnnotation` message handler in webview switch — calls `run/annotate` RPC, reloads annotations, re-renders
+- ✅ Added `loadAnnotations()` method — calls `run/annotations` RPC
+- ✅ Added `call()` public method to GertClient for generic JSON-RPC endpoints
+- ✅ Delegated event listeners for all annotation UI: tag chip toggle, save button, run-notes banner toggle — NO inline handlers (CSP safe)
+- ✅ Zero TypeScript errors, clean build (`npx tsc --noEmit` + `npm run compile`)
+
+**Files Modified:**
+- `vscode/src/views/annotations.ts` — NEW: Annotation type + utility functions
+- `vscode/src/views/renderGraph.ts` — annotationCounts param + badge SVG on step/iterate nodes
+- `vscode/src/views/runbookPanel.ts` — import annotations, annotations state, renderStepNotesSection, renderRunNotesBanner, addAnnotation handler, annCounts wiring into graph
+- `vscode/src/serve/client.ts` — public call() method
+
+## Learnings
+- Template literal nesting: `${expr > 9 ? 32 : 26}` works inside backtick strings, but `${nx + w - ${expr}}` does NOT — the inner `${}` creates a syntax error. Pre-compute the value into a variable.
+- Annotation badge positioning follows the same pattern as branchBadgeSvg: top-right corner of the node rect, shifted left when another badge is present. The emoji + count layout uses two `<text>` elements at fixed offsets.
+- The GertClient `request()` method is private; adding a public `call()` wrapper is the cleanest way to expose generic RPC without duplicating the request infrastructure.

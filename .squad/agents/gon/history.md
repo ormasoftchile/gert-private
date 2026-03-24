@@ -84,6 +84,17 @@
 - **`updateIterateAtPath()` same fragile pattern.** Simplified to match.
 - **`add-step` handler computed wrong parent path for nested steps.** For a step at `[0, 'branches', 1, 'steps', 0]`, it appended 'steps' to an already-correct steps array path, yielding `[..., 'steps', 'steps']`. Fixed to use `getNodeAtPath` on the sliced parent path directly.
 
+### 2026-03-23 Annotations Visual UX Research
+
+- Studied 14 platforms (n8n, Azure Logic Apps, GitHub Actions, Prefect, Dagster, Buildkite, Temporal, FireHydrant/incident.io, Shoreline, Jupyter/Colab, Figma, Google Docs, Miro/FigJam, Linear/Notion) specifically for their **visual annotation patterns on graphs**.
+- Identified 6 visual pattern categories: Badge+Panel, Inline Expansion, Margin Comments, Overlay Pins, Top Banner, Timeline Interleave.
+- **Prefect's artifact badges on DAG nodes** are the closest analog to what gert needs for step-level annotations.
+- **Buildkite's top banner** is the best model for run-level annotations.
+- **Figma's comment pins** are the best spatial interaction model but don't work well on dense graphs.
+- **Key decision:** Badge+Panel hybrid — small `💬 N` pill on node top-right corner, reading/writing in the existing step detail panel with a new "Notes" tab, run-level notes as a collapsible HTML banner above the SVG.
+- **Critical constraint:** NEVER expand annotations inline on the SVG — it breaks layout stability.
+- Implementation fits cleanly into existing patterns: `branchBadgeSvg` for badge rendering, delegated `.ann-badge` click handler, step detail panel for reading/writing.
+
 ### Graph Visualization (replaces tree renderer)
 - Imported `treeToWorkflow` from `./treeToGraph` (Kurapika's module, read-only for me).
 - `renderGraphSVG()` replaces `renderTree()` in the right panel. Uses `treeToWorkflow()` for layout, swaps x/y to get top-to-bottom flow, renders inline SVG.
@@ -97,6 +108,16 @@
 - `add-branch` handler: calls existing `addBranchAtPath()` on selected step.
 - `add-iterate` handler: creates iterate TreeNode as sibling in parent steps array.
 - Action button handler simplified: passes `data-action` directly as command (no hardcoded if/else chain).
+
+### 2026-03-23 Annotations Industry Research
+
+- Surveyed 15 platforms: PagerDuty/Jeli, Opsgenie, Rundeck, Shoreline, Temporal, Prefect, Dagster, GitHub Actions, Azure Logic Apps, AWS Step Functions, Airplane, FireHydrant/incident.io/Rootly, Jupyter, Buildkite, Honeycomb.
+- **Key finding:** Industry splits into timeline-centric (incident tools) and artifact-centric (orchestrators). No platform covers all 8 dimensions (step-level, run-level, during-exec, post-exec, append-only, human notes, file-based, typed).
+- **Best models for gert:** GitHub Actions step summaries (per-step Markdown sidecar file), FireHydrant/incident.io (source-tagged timeline entries), Shoreline (interleaved narrative cells).
+- **Recommendation:** `annotations.jsonl` sidecar file in run directory. JSONL format (matches trace.jsonl). Structured envelope (id, timestamp, author, scope, step_id, tags, supersedes, source) with freeform Markdown body.
+- **Core tradeoffs resolved:** Sidecar over embedded (separation of concerns), append-only with supersedes for corrections (audit trail), both step-level and run-level scope, both during and post-execution.
+- **Phase plan:** P1 = CLI annotate + VS Code panel, P2 = live annotation via JSON-RPC, P3 = postmortem export and Slack integration.
+- Full research document at `.squad/design/annotations-industry-research.md`.
 
 ### Key Decisions
 - **Graph is view-only, mutations go through TreeNode[].** Matches my proposal constraint — no separate edge list, no round-trip risk.

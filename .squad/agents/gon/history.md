@@ -345,3 +345,30 @@ These artifact IDs were split on `::` and treated as invoke child groups, creati
 
 ### Files Modified
 - `vscode/src/views/runbookPanel.ts` — all fixes
+
+## 2026-03-25 Resilience Layer Proposal — Architectural Critique
+
+### Learnings
+
+- **The current engine is 80% durable already.** Step-boundary snapshots, append-only JSONL trace, run directory layout, and RunManifest are the right primitives. The missing 20% is: tree position in checkpoints, run status field, trace-based recovery, and serve-layer resume support.
+
+- **SQLite is wrong for GERT.** The filesystem layout is already durable, inspectable (`cat`, `jq`), and portable (zip a directory). SQLite adds CGo dependency, opaque storage, and schema migration burden while solving no problem the filesystem doesn't already solve. A lightweight `.runbook/index.jsonl` gives fast cross-run queries without the cost.
+
+- **Trace should be the canonical recovery source, not snapshots.** Snapshots are a fast-forward optimization. If a crash happens between trace write and snapshot write, trace has the truth. Recovery = load latest snapshot + replay subsequent trace events. This eliminates the trace-snapshot consistency problem entirely.
+
+- **Tree position in checkpoints is the hard problem.** `CurrentStepIndex` only works for flat `Steps[]`. Tree execution needs a path like `[node_0, branches[1], steps[2]]`. Trace events (`branchTaken`, `iteratePassEnd`) already record the decisions needed to reconstruct path on resume.
+
+- **The serve layer gap is critical.** Any resilience design that ignores VS Code session recovery (treeCursor, pendingManual, invokeStack) is solving half the problem. Serve state should be derivable from RunState + trace, not independently persisted.
+
+- **6 storage interfaces is over-engineering.** PlanStore (no plan concept exists), LeaseManager (single-process, no contention), WaitStore (waits are synchronous channel blocks), and ArtifactStore (it's `os.MkdirAll`) are unnecessary. Two interfaces suffice: `RunStore` and `RunIndex`.
+
+- **Reconciliation is "ask the human."** For a single-user local CLI, the only ambiguous case is "step started but no completion trace." Resolution: show the operator, offer Retry/Skip/Abort. No automated reconciliation pipeline needed.
+
+- **5 run states, not 11.** `created`, `running`, `paused`, `completed`, `failed`. Add `interrupted` only when crash recovery ships. States like `recovering`, `reconciliation_required`, `resume_blocked` are transient internal states, not persisted statuses.
+
+- **Step recovery contracts are a UX burden with no enforcement.** Asking SRE runbook authors to classify idempotency and choose recovery modes is the wrong question. Default: all steps unsafe to retry. Manual decision on resume. Add `safe_to_retry` annotation later if real-world usage demands it.
+
+- **Phasing: checkpoint correctness (1-2d) → manual resume (2-3d) → persistence modes (1d) → smart recovery (later).** The 80/20 feature is "resume from last checkpoint with manual decision on interrupted step."
+
+### Deliverable
+- Full critique at `.squad/design/resilience-layer-critique.md`

@@ -186,3 +186,36 @@
 - Payload: `{stepId, delay}` — matches engine event shape.
 
 **Pattern learned**: Engine events (`e.emit`) and serve events (`s.sendEvent`) are **independent systems**. Any engine event that needs to reach the VS Code extension must ALSO be emitted in the serve layer via `s.sendEvent()` at the corresponding execution point. The serve layer is the JSON-RPC bridge — engine callbacks are not connected in serve mode.
+
+## HTTP Transport for Web Clients (2026-04-05)
+
+**Task**: Add `gert serve --http` to expose the JSON-RPC API over HTTP + WebSocket for browser clients.
+
+**Implementation**:
+- **New transport layer** (`serve_http.go`): Wraps existing `Server` with HTTP/WebSocket capabilities. Zero duplication of business logic — purely a transport adapter.
+- **Dual-mode operation**: `gert serve` (stdio, unchanged) vs `gert serve --http --port N` (HTTP). Flag-controlled via cobra command.
+- **Three endpoints**:
+  1. `POST /rpc` — Synchronous JSON-RPC requests. Temporarily swaps `Server.writer` with `responseWriter` to capture responses, distinguishes responses (has `id`) from events (has `method`).
+  2. `GET /ws` — WebSocket for event streaming. All connected clients receive broadcasts via `broadcastWriter`.
+  3. `GET /health` — Simple health check (`{"status":"ok"}`).
+- **Response routing strategy**: Messages with `id` (responses) go to HTTP body, messages with `method` (events) go to WebSocket broadcast. Avoids dual-delivery of events.
+- **CORS**: Middleware allows all `localhost` and `127.0.0.1` origins (any port) for local dev servers.
+- **Graceful shutdown**: Signal handler (SIGINT/SIGTERM) with 5-second timeout for in-flight requests.
+- **Dependency**: Added `github.com/gorilla/websocket@v1.5.1` (de facto standard, stable).
+
+**Key patterns**:
+- **Writer swapping**: The serve layer uses `Server.writer` as the output channel. HTTP mode temporarily replaces it per-request to capture responses, then restores. Broadcast mode uses a persistent `broadcastWriter` that multicasts to WebSocket clients.
+- **No struct changes to Server**: Existing `Server` struct untouched — HTTP layer is an external wrapper (`HTTPServer`) that composes `Server`.
+- **Event vs Response distinction**: Parse outgoing JSON to check for `id` (response) or `method` (event). Responses return to HTTP caller, events broadcast to WebSocket.
+
+**Testing**:
+- Build: `go build ./...` passes clean (no compilation errors).
+- Smoke: Server starts on `:7777`, `/health` returns 200 + `{"status":"ok"}`.
+- JSON-RPC: `POST /rpc` with `schema/stepFields` returns correct multi-step field definitions.
+- Flags: `gert serve --help` shows `--http` and `--port` with correct defaults.
+
+**Documentation**:
+- `web/README.md`: Quickstart, endpoint reference (HTTP + WebSocket), example curl/JS code, CORS notes, logging/shutdown.
+- Decision doc: `.squad/decisions/inbox/killua-http-transport.md` with context, architecture, alternatives, impact.
+
+**Outcome**: Web clients can now connect to `http://localhost:7777` and use the same JSON-RPC API as the VS Code extension. Stdio mode remains unchanged (backward compatible). Ready for frontend integration.

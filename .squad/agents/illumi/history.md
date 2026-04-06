@@ -12,6 +12,78 @@
 
 <!-- Illumi appends learnings here during work sessions -->
 
+### 2025-01-23: Web Scaffold and ToolCatalog MVP Implementation
+
+**Task:** Create `web/` directory scaffold with Vite + TypeScript and port ToolCatalogPanel to browser-native implementation.
+
+**What I Learned:**
+
+1. **Vite scaffolding approach:** Used manual `npm init` instead of `npm create vite` due to interactive prompts in non-interactive mode. Direct npm package installation and manual config files proved more reliable for automated workflows.
+
+2. **TypeScript strict mode catches unused vars:** Had to remove unused imports (`ToolArgInfo`) and unused instance variables (`currentTab`) to pass `tsc` compilation. The strict linting rules enforce clean code — no dead weight.
+
+3. **WebSocket connection lifecycle:** The browser WebSocket API is simpler than Node's `ws` library. No need for explicit `readyState` polling — just `onopen`, `onmessage`, `onerror`, `onclose` callbacks. Promise-based connection initialization makes async/await usage clean in the client constructor.
+
+4. **Fetch vs stdio transport:** Replacing child process stdio with `fetch()` POST requests was straightforward — both are async promise-based. The key difference is error handling: HTTP failures throw on `response.ok === false`, while stdio process errors come through stderr. Web version needs explicit HTTP status checks.
+
+5. **Clipboard API requires HTTPS or localhost:** `navigator.clipboard.writeText()` works on `localhost` but would fail on `http://` in production. Future deployment needs HTTPS or must fall back to `document.execCommand('copy')` for older browsers. Added error handling to show "❌ Copy failed" if clipboard write is blocked.
+
+6. **CSS custom properties for VS Code theming:** Ported VS Code's CSS variable names (`--vscode-foreground`, `--vscode-panel-border`, etc.) directly to the web app. This gives visual parity with the extension AND allows future theme switching by just swapping the `:root` variable values. Dark theme is hardcoded for MVP; light theme could be added with a class toggle.
+
+7. **HTML escaping is critical for XSS prevention:** Since we're generating HTML strings (not React), must manually escape all user data. Created `escapeHtml()` and `escapeAttr()` utility functions. Tool names, descriptions, and YAML snippets all flow through escaping before insertion into DOM. This prevents injection attacks if a malicious `.tool.yaml` file contains `<script>` tags.
+
+8. **Test IDs as first-class citizens:** Added `data-testid` attributes proactively for Knov's Playwright tests. This is better than relying on class names or element structure, which might change during UI refactoring. Test IDs are a contract between frontend and QA.
+
+9. **Graceful degradation pattern:** The app shows a helpful error message when the server is offline instead of a cryptic network error. This reduces support burden — users know exactly what to do (start `gert serve --http --port 7777`). Error states are part of the UX, not an afterthought.
+
+10. **Vite proxy config is dev-only:** The proxy in `vite.config.ts` only works during `npm run dev`. For production builds, the static files in `dist/` must be served by a reverse proxy (nginx, caddy) or the gert server itself. This means Killua's HTTP server should eventually serve the static frontend files at `/` in addition to `/rpc` and `/ws`.
+
+**Key Decisions Made:**
+
+- **No React framework:** Stayed consistent with VS Code extension pattern (string-based HTML generation)
+- **TypeScript strict mode:** Enforced for type safety and cleaner code
+- **Vite over webpack:** Faster builds, simpler config, better DX
+- **Manual HTML escaping:** Required due to string concatenation approach
+- **Proxy-based development:** Vite dev server proxies `/rpc` and `/ws` to avoid CORS issues during local dev
+
+**Portability Insights:**
+
+- ToolCatalogPanel was indeed 95% portable as estimated
+- Main changes: Removed `vscode.*` API calls, replaced webview HTML injection with direct DOM manipulation
+- Shared types (`ToolInfo`, `ToolActionInfo`, etc.) copied verbatim from VS Code client
+- YAML parsing with same `yaml` npm package — zero translation needed
+
+**Files Created:**
+
+```
+web/
+  index.html                — App shell with tab nav
+  vite.config.ts            — Vite config with proxy
+  tsconfig.json             — TypeScript config (strict mode)
+  package.json              — Dependencies and scripts
+  README.md                 — Updated with web app guide
+  src/
+    main.ts                 — Entry point, tab routing
+    api/client.ts           — GertWebClient (HTTP + WebSocket)
+    views/toolCatalog.ts    — ToolCatalog view (ported)
+.squad/decisions/inbox/illumi-web-scaffold.md — Decision document
+```
+
+**Build Validation:**
+
+✅ `npm install` — All deps installed (Vite, TypeScript, YAML)  
+✅ `npm run build` — TypeScript + Vite build succeeded with zero errors  
+✅ Output: `dist/` with static files (3.85 KB HTML, 58.46 KB JS bundle)  
+
+**Next Steps:**
+
+1. **Integration test:** Wait for Killua to implement HTTP server endpoints, then test live connection
+2. **Error handling refinement:** Test what happens when server returns malformed JSON, empty tool list, network timeout
+3. **Phase 2 prep:** Study RunbookPanel for porting (execution viewer with live state updates)
+4. **Shared logic extraction:** Identify pure modules to copy from VS Code extension to `src/shared/`
+
+---
+
 ### 2025-01-23: Initial Web Portability Analysis
 
 **Task:** Analyze VS Code extension frontend for web portability and recommend tech stack.

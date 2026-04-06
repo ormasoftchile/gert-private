@@ -435,3 +435,29 @@ cd web && npm run test:e2e
 
 <!-- Knov appends learnings here during work sessions -->
 
+
+## Learnings — Autonomous Screenshot Session (2026-04-06)
+
+**Task:** Demonstrate that Knov can take screenshots without user involvement.
+
+### Key Findings
+
+1. **Screenshot workflow fully works end-to-end:**
+   - `npx playwright test tests/specs/knov-screenshot.spec.ts --project=chromium` with the existing `playwright.config.ts` `webServer` config starts both gert (port 7778) and Vite (port 5173) automatically.
+   - `page.screenshot({ path, fullPage: true })` saves images anywhere in the repo tree.
+   - Screenshots saved to `.squad/screenshots/knov-before.png` and `knov-after.png`.
+
+2. **Before state is clean:** The runner idle state shows the path input placeholder and "Enter a runbook path above and click Run" hint — exactly as designed.
+
+3. **After state reveals three UI bugs in the network-health-check runbook run:**
+   - **Unrendered template literals in step labels:** WORKFLOW MAP and RUNBOOK INSTRUCTIONS panel display raw Go/Liquid template strings (`{{ .target }}`, `{{ .primary_host }}`, `{{ .dns_server }}`). These should show resolved values (e.g., `github.com`) but display as raw mustache expressions.
+   - **`<no value>` leaks into Step 14 (Network Health Summary):** The left-panel instructions list shows `<no value>` below the step title — a Go template rendering error escaping into the frontend.
+   - **Raw template code in OUTPUT panel:** The right OUTPUT pane shows literal Go template source `{{ .dns_report }}){{ .target }}: {{ if contains .dns_result "Address" }}OK{{ else }}FAIL{{ end }}\n` as if the template was never evaluated before being streamed to the client.
+
+4. **`/tmp` is forbidden in this environment:** Screenshot paths must be inside the repo tree. `.squad/screenshots/` is the established convention.
+
+5. **One-off specs must not live in `tests/specs/`** — they get picked up by the default Playwright glob. Use a dedicated subdirectory or delete after use.
+
+**References:**
+- Decision document: `.squad/decisions/inbox/knov-screenshot-workflow.md`
+- Screenshots: `.squad/screenshots/knov-before.png`, `.squad/screenshots/knov-after.png`

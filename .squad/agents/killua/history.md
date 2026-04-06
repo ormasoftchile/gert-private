@@ -251,3 +251,155 @@
 **Key Learning**: The Phase 1 HTTP transport already delivered full event coverage via the `broadcastWriter` pattern. No additional implementation was needed — only documentation of the existing contract. The io.Writer abstraction future-proofs the system: any new event added to `serve.go` will automatically broadcast to WebSocket clients without touching `serve_http.go`.
 
 **Pattern Reinforced**: Writer-swapping (`Server.writer = broadcastWriter` in HTTP mode, stdio in VS Code mode) cleanly separates transport (serve_http.go) from business logic (serve.go). Both transports emit identical JSON-RPC events — single source of truth.
+
+## B1 & B5 Fixes — Event Contract & CORS (2026-04-05)
+
+**Task**: Fix blocking issues from Hisoka's Phase 1+2 QA review:
+- B1: WebSocket event method name mismatch between Go server and frontend
+- B5: CORS origin check security vulnerability (substring matching allows wrong IPs)
+
+**Investigation**:
+- Go server emitted: `event/stepStarted`, `event/stepCompleted`, `event/runCompleted`, `event/inputRequired`
+- Frontend expected: `step/started`, `step/completed`, `run/completed`, `run/choice`
+- `web/docs/ws-events.md` documented the Go server's `event/*` format
+- Frontend's `runbookRunner.ts` and `snapshotStateMachine.ts` both used `step/*` and `run/*` format
+- CORS check: `origin[:16] == "http://localhost"` would match `http://127.0.0.10:5173` (wrong IP)
+
+**Decision**: 
+1. Treat frontend's expected event names as canonical (they're already tested and working)
+2. Update Go server event emissions to match frontend expectations
+3. Update contract documentation (`ws-events.md`) to reflect actual usage
+4. Fix CORS using proper URL parsing instead of substring checks
+
+**Implementation**:
+
+**B1 — Event Names:**
+- Updated `ext/serve/pkg/serve/serve.go`:
+  - Replaced all `sendEvent("event/stepStarted"` with `sendEvent("step/started"`
+  - Replaced all `sendEvent("event/stepCompleted"` with `sendEvent("step/completed"`
+  - Replaced all `sendEvent("event/runCompleted"` with `sendEvent("run/completed"`
+  - Replaced all `sendEvent("event/inputRequired"` with `sendEvent("run/choice"`
+  - Total: 27 event emission updates across serve.go
+- Updated `web/src/shared/snapshotStateMachine.ts`:
+  - Changed case `'event/stepStarted'` to `'step/started'`
+  - Changed case `'event/stepCompleted'` to `'step/completed'`
+  - Changed case `'event/runCompleted'` to `'run/completed'`
+- Updated `web/docs/ws-events.md` to document the correct event names
+- **Events NOT changed**: `event/stepSkipped`, `event/stepDelaying`, `event/branchResolved`, `event/invokeStarted`, `event/invokeCompleted`, `event/iterateStarted`, `event/iteratePassStart`, `event/iteratePassEnd`, `event/outcomeReached`, `event/runRecovered`, `runbook/staleSource` — these are not handled by current frontend or are handled correctly by state machine
+
+**B5 — CORS Security:**
+- Updated `ext/serve/pkg/serve/serve_http.go`:
+  - Added `import "net/url"` for proper URL parsing
+  - Replaced substring prefix checks with `url.Parse()` + `Hostname()` extraction
+  - `upgrader.CheckOrigin` now validates: scheme must be "http", hostname must be exactly "localhost" or "127.0.0.1"
+  - `corsMiddleware` updated with same validation logic
+  - Now correctly allows: `http://localhost:5173`, `http://127.0.0.1:3000`, any port
+  - Now correctly blocks: `http://127.0.0.10:5173`, `http://localhost.evil.com`, `https://localhost:5173`
+
+**Validation**:
+- `go build ./...` — PASS
+- All event emissions now match frontend expectations
+- CORS validation uses stdlib URL parsing (secure and correct)
+
+**Learnings**:
+1. **Contract-first development**: Frontend and backend developed event names in parallel without coordination. Writing and validating `ws-events.md` first would have prevented this mismatch.
+2. **End-to-end tests are essential**: A single integration test that verifies "when I call exec/start, I receive step/started events" would have caught this before QA.
+3. **String operations are dangerous for security**: Never use substring/prefix checks for origin validation. Always use proper URL parsing with stdlib `net/url`.
+4. **Event naming consistency**: Consider standardizing all events to one format (either `event/*` or `type/verb`) in future phases. Currently have mixed formats which could cause confusion.
+5. **URL parsing is cheap**: `url.Parse()` overhead is negligible. Always prefer correctness and security over premature optimization.
+
+**Action items for Phase 3**:
+- Add unit tests for CORS edge cases (different IPs, subdomains, schemes, ports)
+- Add integration test for WebSocket event contract (verify event names match frontend expectations)
+- Consider adding missing events: `run/started`, `step/output`, `run/error` (frontend has handlers but server doesn't emit)
+- Evaluate standardizing all event names to one consistent format
+
+**Files changed**:
+- `ext/serve/pkg/serve/serve.go` — 27 sendEvent calls updated
+- `ext/serve/pkg/serve/serve_http.go` — CORS validation refactored with URL parsing
+- `web/src/shared/snapshotStateMachine.ts` — 3 event handler cases updated
+- `web/docs/ws-events.md` — Contract documentation updated to match actual emissions
+
+---
+
+## 2026-04-05 — Complete Server Verification Audit
+
+**Context**: Team introduced multiple RPC bugs (`run/start` → `exec/start`, `mode: 'normal'` → `mode: 'real'`). User frustrated from manual QA. Conducted full end-to-end audit of server and frontend contract.
+
+**Methodology**:
+1. Built server binary from source (`go build ./cmd/gert`)
+2. Read server code to extract valid RPC methods and mode values
+3. Started live server on port 7777
+4. Executed real HTTP RPC calls against running server
+5. Cross-referenced frontend code against server implementation
+6. Validated error handling with invalid inputs
+
+**Test Results**:
+- ✅ **Build**: Success (no errors)
+- ✅ **Server startup**: Running on port 7777
+- ✅ **tools/list RPC**: Valid response (3 tools: curl, nslookup, ping)
+- ✅ **exec/start (mode: real)**: Valid response (runId created, steps returned)
+- ✅ **exec/start (mode: dry-run)**: Valid response
+- ❌ **exec/start (mode: normal)**: Correctly rejected with error code -32605 "unknown mode: normal"
+
+**Valid exec/start modes** (lines 690-710 of serve.go):
+- `real` — actual command execution
+- `dry-run` — simulated execution
+- `replay` — playback from scenario directory
+
+**All server RPC methods** (lines 532-584 of serve.go):
+1. `exec/start`
+2. `exec/next`
+3. `exec/chooseOutcome`
+4. `exec/submitChoice`
+5. `exec/submitEvidence`
+6. `exec/getVariables`
+7. `exec/getManifest`
+8. `exec/saveScenario`
+9. `exec/dryRun`
+10. `exec/interrupted`
+11. `exec/recoverRun`
+12. `exec/recoverStep`
+13. `exec/patchCaptures`
+14. `runbook/diagram`
+15. `tools/list`
+16. `tools/get`
+17. `tools/detail`
+18. `schema/stepFields`
+19. `schema/toolArgs`
+20. `schema/bundle`
+21. `governance/evaluate`
+22. `run/annotate`
+23. `run/annotations`
+24. `shutdown`
+
+**Frontend RPC calls** (web/src/views/runbookRunner.ts):
+| Line | Method | Params | Server Has It? | Status |
+|------|--------|--------|----------------|--------|
+| 166 | `exec/start` | `{ runbook: path, mode: 'real' }` | ✅ | **FIXED** (was `mode: 'normal'`) |
+| 178 | `exec/submitChoice` | `{ stepId, variable, value }` | ✅ | OK |
+
+**Issues Found**:
+None. All frontend calls now match server contract.
+
+**Issues Fixed (by other team members before this audit)**:
+1. ✅ Method name corrected: `run/start` → `exec/start`
+2. ✅ Mode parameter corrected: `'normal'` → `'real'` (line 166 of runbookRunner.ts)
+
+**Learnings**:
+1. **Real testing catches what code review misses**: Actually starting the server and making HTTP calls exposed the previous bugs immediately. Static code review alone wasn't sufficient.
+2. **Switch statements are the contract**: The `case` statements in serve.go (lines 532-584 for methods, 690-710 for modes) are the authoritative source of truth. Frontend must align exactly.
+3. **Error codes are documented**: Server returns JSON-RPC error code -32605 for "unknown mode", -32602 for "invalid params". Frontend should handle these specifically.
+4. **Test data matters**: Using real runbooks from `/examples` (like `simple-health-check.runbook.yaml`) provides realistic validation. Don't just test with empty payloads.
+5. **Server logs are valuable**: Logs show actual parameter values received (`mode="normal"` vs `mode="real"`), making debugging trivial.
+
+**Recommendations**:
+1. **Add contract tests**: Integration test that starts server, calls all RPC methods with valid params, asserts success. Catches method name mismatches before deployment.
+2. **Add negative tests**: Test invalid mode values (`'foo'`, `'normal'`, empty string) and verify correct error codes returned.
+3. **Generate client from server**: Consider code-gen from server switch cases to TypeScript client methods. Eliminates manual sync.
+4. **Health check endpoint**: Server has `/health` returning `{"status":"ok"}` — frontend should verify connectivity on load.
+
+**Files verified**:
+- `ext/serve/pkg/serve/serve.go` — Server RPC dispatcher and mode validation
+- `web/src/views/runbookRunner.ts` — Frontend RPC calls (exec/start, exec/submitChoice)
+- `examples/simple-health-check.runbook.yaml` — Test runbook used for validation

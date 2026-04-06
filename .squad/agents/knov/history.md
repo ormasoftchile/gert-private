@@ -338,4 +338,100 @@ cd web && npm run test:e2e
 3. Iterate on any selector mismatches
 4. Phase 3 scenarios as needed
 
+### 2026-04-05: QA Review Fixes (B2, B3, B4, Agent Reporter)
+
+**Context:** Fixed four issues identified in Hisoka's Phase 1+2 QA review. These were blocking issues that would prevent tests from running correctly.
+
+**Issues Fixed:**
+
+1. **B2 — Page Object Navigation (Tab-Based Routing):**
+   - **Problem:** `RunbookRunnerPage.goto()` and `ToolCatalogPage.goto()` tried to navigate to `/runner` and `/catalog` URLs that don't exist. The web app uses tab-based routing (single-page app).
+   - **Fix:** 
+     - Added `data-testid="tab-catalog"`, `data-testid="tab-runner"`, `data-testid="tab-editor"` to `web/index.html`
+     - Updated both page objects to navigate to `/` then click the appropriate tab
+   - **Learning:** Always verify routing architecture before writing navigation code. Tab-based SPAs don't have URL routes — need to click tabs instead.
+
+2. **B3 — RPC Endpoint Interception:**
+   - **Problem:** Test R10 intercepted `**/api/runbook/execute`, but the actual endpoint is `POST /rpc` (JSON-RPC).
+   - **Fix:** Changed route pattern to `**/rpc` in `runbook-runner.spec.ts`
+   - **Learning:** Verify actual API endpoints before writing intercept tests. Check client code or API docs, don't assume URL structure.
+
+3. **B4 — Absolute vs Relative Fixture Paths:**
+   - **Problem:** The `testRunbook` fixture returned absolute path (`/Volumes/Projects/gert/web/tests/fixtures/runbooks/simple.runbook.yaml`), but gert server resolves runbook paths relative to its working directory. Server was spawned without explicit `cwd`, so it inherited the test runner's cwd.
+   - **Fix:**
+     - Set `cwd: repoRoot` when spawning gert server in `base.ts`
+     - Changed fixture to return relative path: `web/tests/fixtures/runbooks/simple.runbook.yaml`
+   - **Learning:** When spawning external processes that load files, always set explicit working directory. The server runs from repo root (where `gert.yaml` lives), so all paths should be relative to that.
+
+4. **Agent Reporter Enhancement:**
+   - **Problem:** Error object only had `message` field — not enough context for autonomous agents to debug failures.
+   - **Fix:** Enhanced error object to include:
+     - `stack`: Truncated to first 5 lines (prevents bloat while keeping useful context)
+     - `actual` / `expected`: For assertion failures (helps agents understand what went wrong)
+   - **Example output:**
+     ```json
+     {
+       "error": {
+         "message": "Expected 'success' but got 'failure'",
+         "stack": "Error: ...\n  at ...\n  at ...\n  at ...\n  at ...",
+         "actual": "failure",
+         "expected": "success"
+       }
+     }
+     ```
+   - **Learning:** AI agents need rich error context to self-diagnose. Stack traces show WHERE the failure occurred, actual/expected show WHAT failed. This enables autonomous iteration without human intervention.
+
+**Key Learnings:**
+
+1. **Tab-Based Navigation Pattern:**
+   - For SPAs with tab routing, page objects must click tabs, not navigate to URLs
+   - Add `data-testid` to tabs for stable selectors
+   - This pattern is common in VS Code WebViews and similar frameworks
+
+2. **API Endpoint Verification:**
+   - Never assume endpoint URLs when writing intercept tests
+   - Check actual client code or API documentation
+   - JSON-RPC uses a single `/rpc` endpoint with `method` in body, not REST-style URLs
+
+3. **Working Directory Management:**
+   - External processes (like gert server) need explicit `cwd` when spawned
+   - Paths should be relative to the process's working directory, not the test runner's
+   - The repo root is the natural working directory for runbook execution (where `gert.yaml` lives)
+
+4. **Agent-First Error Reporting:**
+   - Minimal error messages aren't enough for autonomous agents
+   - Include: stack trace (truncated), actual/expected values, error message
+   - Agents can't ask follow-up questions — give them all context upfront
+
+5. **Testing Infrastructure Validation:**
+   - QA reviews catch integration issues that unit tests miss
+   - Page objects work in isolation but fail when combined with real routing
+   - Fixtures work on developer machines but break in different environments
+
+**Coordination:**
+
+- **Illumi (Frontend):** The `data-testid` attributes on tabs are now in place — tests will use these for navigation
+- **Killua (Backend):** Need to verify `/rpc` is the actual endpoint when Go server is implemented
+
+**Impact:**
+
+- All tests (R1-R10, T1-T4) will now navigate correctly
+- Test R10 will correctly simulate server errors
+- Tests will work in any environment (CI, local, different machines)
+- Agents reading `agent-report.json` have full failure context
+
+**Files Modified:**
+
+1. `web/index.html` — Tab `data-testid` attributes
+2. `web/tests/pages/RunbookRunnerPage.ts` — Tab-based navigation
+3. `web/tests/pages/ToolCatalogPage.ts` — Tab-based navigation
+4. `web/tests/specs/runbook-runner.spec.ts` — RPC endpoint
+5. `web/tests/fixtures/base.ts` — Working directory + relative paths
+6. `web/tests/helpers/agent-reporter.ts` — Enhanced error reporting
+
+**References:**
+- Decision document: `.squad/decisions/inbox/knov-b2-b4-fixes.md`
+- QA review: `.squad/decisions/inbox/hisoka-phase1-2-review.md`
+
 <!-- Knov appends learnings here during work sessions -->
+

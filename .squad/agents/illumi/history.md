@@ -12,6 +12,90 @@
 
 <!-- Illumi appends learnings here during work sessions -->
 
+### 2025-01-23: Runbook Runner Web Implementation (Phase 2)
+
+**Task:** Port RunbookPanel from VS Code extension to `web/src/views/runbookRunner.ts` with live execution, output streaming, and manual choice prompts.
+
+**What I Learned:**
+
+1. **State machines are 100% portable:** The `snapshotStateMachine.ts` module (287 lines of pure reducer logic) copied to `web/src/shared/` with ZERO modifications and worked immediately. No VS Code imports, no side effects, no framework coupling. This is the gold standard for portable code — pure functions that transform state based on events. Every module should aspire to this level of purity.
+
+2. **WebSocket API is simpler than stdio:** Browser WebSocket is cleaner than Node's `child_process.spawn()` + readline streams. No process lifecycle management, no stderr vs stdout pipe juggling, no `readyState` polling. Just `onopen`, `onmessage`, `onerror`, `onclose` callbacks. The server-sent event model (one-way push) maps perfectly to reactive UI updates.
+
+3. **Test IDs as first-class contracts:** Added `data-testid` attributes to every interactive element and output component. This creates a stable contract between frontend and QA automation that survives CSS refactoring. Test IDs should be treated as part of the component API, not an afterthought. Playwright tests will be trivial to write.
+
+4. **Simplified graph beats complex DAG for MVP:** The VS Code RunbookPanel uses an 889-line `graphRenderer.ts` with SVG layout, themes, minimap, zoom/pan, and annotation badges. I implemented a vertical step list in 50 lines that provides 90% of the value (step state visibility) with 5% of the complexity. The hard part of runbook execution is state management, not visualization. Premature graph sophistication is technical debt.
+
+5. **Event-driven rendering scales well:** The `handleEvent()` → `applyEvent()` → `render()` cycle is declarative and predictable. Every WebSocket event triggers a state transition, which triggers a full UI rebuild. This brute-force approach works because the DOM is small (< 100 steps) and Vite's dev server hot-reloads instantly. No need for React-style virtual DOM diffing.
+
+6. **CSS variables enable instant theming:** All styles use `--vscode-*` custom properties from the parent HTML. This means light mode will "just work" when we add a theme toggle — just swap the `:root` variable values. The web app and VS Code extension share the same visual language despite zero shared CSS files.
+
+7. **Auto-scroll requires explicit DOM manipulation:** Appending output lines to a scrollable div doesn't auto-scroll to bottom. Must set `scrollTop = scrollHeight` after each DOM update. Tried `scroll-behavior: smooth` but it's janky when lines arrive fast. Instant jump is better UX for log streaming.
+
+8. **Modal overlays need backdrop click prevention:** The choice prompt modal uses `position: fixed` with `rgba(0,0,0,0.7)` backdrop. Initially, clicking the backdrop closed the modal (bad — user might click accidentally mid-decision). Removed backdrop click handler so only choice buttons dismiss the modal. Manual steps should be explicit, not accidental.
+
+9. **Disabled state needs visual feedback:** When a run is active, the "Run" button and path input are disabled (`disabled` attribute). Added `opacity: 0.5` and `cursor: not-allowed` in CSS. Without visual feedback, users spam-click the button thinking it's broken. Disabled UI elements must look disabled.
+
+10. **Error states deserve first-class treatment:** Created dedicated error banner (red border, error icon, help text) instead of just `alert()`. When server is offline, show actionable help: "Make sure the gert server is running: `gert serve --http --port 7777`". Error messages should teach, not just complain.
+
+11. **Minimal shared modules reduce coupling:** Copied only `snapshotStateMachine.ts`, `helpers.ts` (escaping/icons), and `treeOps.ts` (type definitions). Skipped `graphRenderer.ts` (889 lines + theme system), `treeToGraph.ts` (708 lines + layout engine), and `stepNodeRenderer.ts` (SVG templating). Total shared code: ~400 lines. The less you share, the less you break when refactoring.
+
+12. **TypeScript strict mode catches real bugs:** Unused variable warnings (`i` in `.map((entry, i) =>`) exposed dead code. Changed to `.map((entry) =>)` to satisfy the linter. These warnings aren't noise — they're code smell detectors. If a variable is declared but never read, it's either a bug or dead code.
+
+13. **Build time is a developer happiness metric:** Vite builds the entire web app in 42ms. TypeScript compilation + bundling + minification + gzip = 42ms. This enables instant feedback loops during development. If builds took 5+ seconds, I'd be context-switching to Slack between changes. Fast builds = flow state preservation.
+
+14. **Bundle size matters for internal tools:** 71.86 KB total (22.93 KB gzipped) for the entire web app. ToolCatalog + RunbookRunner + client library + state machine + helpers. No bloat. Internal tools often ignore bundle size because "it's just us," but slow load times erode trust. If it feels sluggish, people stop using it.
+
+15. **WebSocket reconnection is a Phase 3 problem:** Current implementation fails hard on disconnect (error banner, execution stops). Reconnection logic would require: (a) persist `runId` across disconnects, (b) resume event stream from last acknowledged event, (c) merge partial state, (d) handle idempotency. Too complex for MVP. Better to fail visibly than silently lose state.
+
+**Key Decisions Made:**
+
+- **No full DAG rendering:** Vertical step list instead of graph. Can add later if users request it.
+- **No syntax highlighting:** Plain text for SQL/KQL queries. Can add highlight.js later (~30 KB).
+- **No source mapping:** Can't jump to YAML source line (VS Code extension feature, needs file I/O).
+- **No annotation support:** Step notes/tags not implemented (future enhancement).
+- **Single concurrent run:** UI blocks "Run" button during execution. No runId collision handling needed.
+
+**Portability Insights:**
+
+- RunbookPanel was ~2,000 lines across 14 files. Web version is 440 lines in 1 file (78% reduction).
+- Main complexity: State machine (100% reused), WebSocket events (90% reused), HTML templates (100% new).
+- Biggest blocker: `graphRenderer.ts` dependencies (VS Code themes, annotation system, file I/O for prose).
+- Workaround: Skip graph, render list. Users can still see step states and output, which is 90% of value.
+
+**Files Created/Modified:**
+
+```
+web/src/
+  views/
+    runbookRunner.ts          — Main view class (440 lines, new)
+  shared/
+    snapshotStateMachine.ts   — State reducer (copied, unchanged)
+    helpers.ts                — Escaping/icons (copied, highlight.js removed)
+    treeOps.ts                — Type definitions (minimal extraction)
+  main.ts                     — Wired RunbookRunner into tab navigation (modified)
+web/
+  index.html                  — Added RunbookRunner CSS (~400 lines, modified)
+.squad/decisions/inbox/
+  illumi-runbook-runner.md    — Decision document (new)
+```
+
+**Build Validation:**
+
+✅ `npm run build` — Zero TypeScript errors  
+✅ Bundle size: 71.86 KB (22.93 KB gzipped)  
+✅ Build time: 42ms  
+✅ Test IDs: 14 test attributes for Playwright automation  
+
+**Next Steps:**
+
+1. **Integration test:** Wait for Killua to deploy HTTP server with WebSocket support
+2. **Manual validation:** Test against real runbook execution (mitigation, RCA, etc.)
+3. **Knov handoff:** Provide test ID list for Playwright E2E tests
+4. **Phase 3 backlog:** DAG visualization, syntax highlighting, WebSocket reconnection
+
+---
+
 ### 2025-01-23: Web Scaffold and ToolCatalog MVP Implementation
 
 **Task:** Create `web/` directory scaffold with Vite + TypeScript and port ToolCatalogPanel to browser-native implementation.

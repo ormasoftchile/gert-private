@@ -219,3 +219,35 @@
 - Decision doc: `.squad/decisions/inbox/killua-http-transport.md` with context, architecture, alternatives, impact.
 
 **Outcome**: Web clients can now connect to `http://localhost:7777` and use the same JSON-RPC API as the VS Code extension. Stdio mode remains unchanged (backward compatible). Ready for frontend integration.
+
+## WebSocket Event Contract Audit (2026-04-05)
+
+**Task**: Audit and extend WebSocket event broadcasting for RunbookPanel execution viewer (Phase 2 of HTTP transport).
+
+**Audit Results**:
+- **18 distinct events** emitted by serve layer via `s.sendEvent()`: stepStarted, stepCompleted, stepSkipped, stepDelaying, branchResolved, invokeStarted, invokeCompleted, iterateStarted/Pass/PassStart/PassEnd/Converged/Failed, inputRequired, outcomeReached, runCompleted, runRecovered, runbook/staleSource.
+- **All events automatically broadcast** via `broadcastWriter` (io.Writer implementation set as `Server.writer` in HTTP mode).
+- **Zero gaps found** — every event the VS Code extension (`eventHandlers.ts`) expects is already being broadcast.
+
+**Architecture Pattern**:
+- **Writer-based broadcasting** — `broadcastWriter.Write()` intercepts all `s.send()` output and multicasts to WebSocket clients.
+- **Zero event-specific code** — the io.Writer abstraction means all future events automatically broadcast without maintenance.
+- **Transport-agnostic events** — same JSON-RPC notification shapes in stdio (VS Code) and HTTP (web) modes.
+- **Response vs Event routing** — messages with `id` return to HTTP caller, messages with `method` broadcast to WebSocket.
+
+**Deliverables**:
+1. **`web/docs/ws-events.md`** — Complete event contract with 18 event types, full JSON payloads, field descriptions, sequence diagram, usage examples, ordering guarantees. Authoritative contract for Illumi (frontend) and Knov (test).
+2. **`.squad/decisions/inbox/killua-ws-events.md`** — Decision doc with audit findings, coverage analysis, architecture benefits, no-code-change conclusion.
+
+**Event Categories Documented**:
+- Run Lifecycle (runCompleted, runRecovered)
+- Step Lifecycle (stepStarted, stepCompleted, stepSkipped, stepDelaying)
+- Branch & Conditions (branchResolved, outcomeReached)
+- Invoke/Sub-Runbooks (invokeStarted, invokeCompleted with childTree/childSteps)
+- Iterate/Loops (iterateStarted, iteratePass, iteratePassStart/End, iterateConverged/Failed)
+- Interactive (inputRequired for manual steps)
+- Metadata (runbook/staleSource)
+
+**Key Learning**: The Phase 1 HTTP transport already delivered full event coverage via the `broadcastWriter` pattern. No additional implementation was needed — only documentation of the existing contract. The io.Writer abstraction future-proofs the system: any new event added to `serve.go` will automatically broadcast to WebSocket clients without touching `serve_http.go`.
+
+**Pattern Reinforced**: Writer-swapping (`Server.writer = broadcastWriter` in HTTP mode, stdio in VS Code mode) cleanly separates transport (serve_http.go) from business logic (serve.go). Both transports emit identical JSON-RPC events — single source of truth.

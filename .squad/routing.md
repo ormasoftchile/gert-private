@@ -12,6 +12,8 @@ How to decide who handles what.
 | Azure + enterprise integrations | Leorio | Azure actions, C# adapters, auth/integration boundaries |
 | Code review | Hisoka | Review PRs, check quality, suggest improvements |
 | Testing | Hisoka | Write tests, find edge cases, verify fixes |
+| Web application frontend | Illumi | React/TS web app, component library, web build pipeline |
+| Playwright / E2E tests | Knov | Playwright test suite, page objects, CI integration, autonomous verification loop |
 | Scope & priorities | Gon | What to build next, trade-offs, decisions |
 | Async issue work (bugs, tests, small features) | @copilot 🤖 | Well-defined tasks matching capability profile |
 | Session logging | Scribe | Automatic — never needs routing |

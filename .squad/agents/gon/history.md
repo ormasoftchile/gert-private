@@ -372,3 +372,65 @@ These artifact IDs were split on `::` and treated as invoke child groups, creati
 
 ### Deliverable
 - Full critique at `.squad/design/resilience-layer-critique.md`
+
+---
+
+## 2026-03-24 Web Application Feasibility Analysis
+
+### Context
+
+Assessed feasibility of adding a standalone web application to gert that exposes the same UX as the VS Code extension (runbook runner, editor, tool catalog) — browser-native, no VS Code required. Key driver: enable Playwright E2E testing so AI agents can autonomously verify UI changes without human review.
+
+### Architecture Findings
+
+**Current infrastructure is highly reusable:**
+
+1. **JSON-RPC API completeness.** `ext/serve/pkg/serve/serve.go` already exposes 25+ endpoints covering execution, tools, schema, governance, and annotations. The dispatch table (lines 530-590) shows mature coverage. No new endpoints needed for Phase 1.
+
+2. **Transport gap only.** The server reads from `bufio.Scanner(stdin)` — adding HTTP transport (`gert serve --http :port`) is the only Go change needed. Same handlers, different I/O wrapper.
+
+3. **TypeScript views are extractable.** RunbookPanel (4000+ lines), RunbookEditorPanel (2500+ lines), and ToolCatalogPanel (300 lines) in `vscode/src/views/` have VS Code dependencies but the core logic (state machine, graph rendering, YAML handling) is isolatable.
+
+4. **Graph rendering is already decoupled.** `treeToGraph.ts` and `graphRenderer.ts` have zero VS Code imports. `vizAdapter.ts` was explicitly designed for host portability (vscode/web/tui).
+
+5. **Event streaming model.** Current client expects server-push events (`stepStarted`, `branchResolved`, etc.). WebSocket provides parity with stdio semantics. SSE is fallback option.
+
+### Key Risks Identified
+
+1. **VS Code API coupling.** ~11 files have `vscode.*` calls. Mitigation: `HostAdapter` interface abstracting file ops, settings, dialogs.
+
+2. **File system access.** Browser can't directly read `.runbook.yaml`. Options: File System Access API (Chrome 86+), server-mediated reads, or upload/download workflow.
+
+3. **Concurrent sessions.** If user has VS Code and web open, runs can conflict. Recommendation: one run per server instance, don't solve multi-session yet.
+
+### Phased Plan Summary
+
+| Phase | Duration | Deliverable |
+|-------|----------|-------------|
+| **1: MVP** | 2-3 weeks | HTTP transport + React shell + RunbookRunner view + one Playwright test |
+| **2: Test Infra** | 1-2 weeks | Page Object Model, CI integration, dev server script, core test suite |
+| **3: Feature Parity** | 3-4 weeks | RunbookEditor + ToolCatalog views + HostAdapter abstraction |
+| **4: Shared Lib** | 2 weeks | Monorepo workspace, extract shared components |
+
+### Team Assignments
+
+- **Illumi (Web Frontend):** Web shell, React views, data-testid coordination
+- **Knov (Playwright):** Test infrastructure, CI integration, Page Objects
+- **Killua (Backend):** HTTP transport, server-side file access
+- **Kurapika (VS Code):** HostAdapter design, logic extraction review
+- **Hisoka (QA):** Test strategy, regression verification
+
+### Explicit Scope Boundaries
+
+NOT doing: hosted deployment, authentication, mobile-responsive, offline mode, VS Code replacement, TUI implementation.
+
+### Key Decisions Proposed
+
+1. **Repo structure:** New `web/` directory for React app, new `shared/` for VS Code–free TypeScript
+2. **Transport:** WebSocket for events (parity with stdio), HTTP POST for requests
+3. **MVP surface:** RunbookRunner first (most mature, most visual impact)
+4. **Component sharing:** Fork-and-adapt until Phase 4, then extract shared package
+
+### Deliverable
+
+Feasibility plan at `.squad/decisions/inbox/gon-web-feasibility-plan.md`

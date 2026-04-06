@@ -390,6 +390,83 @@
 
 ---
 
+### 2026-04-06T02:47:54Z: Web application feasibility and phased delivery
+
+**By:** Gon (Lead Architect)  
+**Status:** Proposed
+
+**What:** Add a standalone web application to gert in 4 phased deliverables: (1) HTTP transport + RunbookRunner MVP, (2) Playwright test infrastructure, (3) RunbookEditor + ToolCatalog views, (4) optional shared component library. Estimated 6-8 weeks to full feature parity.
+
+**Why:** The existing JSON-RPC API, mature TypeScript view components, and host-adaptive visualization layer (`vizAdapter.ts`) make web porting highly feasible. Enables AI agents to autonomously verify UI changes via Playwright E2E (critical business goal). Phased approach de-risks and validates architecture early before committing full build.
+
+**Key decisions:**
+- Fork view components to `web/` directory (avoid tight coupling); share only pure business logic (state machine, graph rendering, helpers)
+- HTTP transport + WebSocket for event streaming (mirrors stdio semantics)
+- Playwright for E2E verification with agent-friendly structured JSON output
+- Team assignments: Illumi (web shell + views), Killua (HTTP transport), Knov (Playwright), Hisoka (QA strategy)
+- Risks accepted: code duplication until Phase 4, HTTP attack surface (localhost-only mitigates), WebSocket complexity
+
+**Impact:** Unblocks web-native use cases. Enables broader runbook adoption. Establishes autonomous agent verification loop. Does not replace VS Code extension (additive). Web app runs localhost-only in Phase 1 (multi-tenant deployment out of scope).
+
+---
+
+### 2026-04-06T02:47:54Z: VS Code extension component portability assessment
+
+**By:** Illumi (Web Frontend Engineer)  
+**Status:** Analysis Complete
+
+**What:** Inventoried all 3 WebView panels (~4,800 lines TypeScript). Assessed VS Code API dependencies, identified reusable core, and estimated effort per component. ToolCatalogPanel is 95% portable; RunbookPanel 70%; RunbookEditorPanel 40%.
+
+**Why:** Determines feasibility and effort for web port. Identifies critical blockers (file I/O, workspace management) requiring new server APIs. Confirms core business logic (state machine, graph rendering, helpers) is 100% reusable.
+
+**Key blockers for web:**
+- File operations → Server API endpoints needed (`GET /api/files`, `POST /api/files`)
+- Workspace management → Server API (`GET /api/workspace`)
+- Dialogs/input → Replace with HTML forms
+- Command execution → Direct API calls
+
+**Reusable modules (100% portable):**
+- `snapshotStateMachine.ts` (287 lines)
+- `treeToGraph.ts` (708 lines)
+- `graphRenderer.ts` (889 lines)
+
+**Tech stack recommendation:** Vite + TypeScript + Web Components (no React initially, leverage existing HTML generation pattern). HTTP client via `fetch()` + WebSocket.
+
+**Impact:** Unblocks Phase 1 porting. Requires server extension work (Killua). Component extraction and refactoring work is straightforward (8-12 days per major view).
+
+---
+
+### 2026-04-06T02:47:54Z: Playwright testing strategy for autonomous agent verification
+
+**By:** Knov (Playwright Specialist)  
+**Status:** Proposed
+
+**What:** Comprehensive Playwright architecture with 15 core test scenarios, Page Object Model pattern, fast persistent test fixtures (sub-5-second startup), and structured JSON output format enabling AI agents to autonomously verify UI changes without human intervention.
+
+**Why:** Enables primary business goal (agent self-verification). Fast feedback loop (<5 min) unblocks rapid iteration. Flakiness mitigation (explicit state waiters, streaming indicators, graph-ready signals) ensures reliable CI gating.
+
+**Key design principles:**
+- Agent-first output (structured JSON with pass/fail verdict)
+- Page Object Model for maintainability
+- `data-testid` discipline for stable selectors
+- Explicit async waiters (no `waitForTimeout()`)
+- Deterministic test data (fixture-based)
+
+**15 core scenarios:**
+- Runner: linear execution, tool invocation, branching, iterates, graph rendering, error handling (R1-R10)
+- Editor: YAML round-trip, real-time sync, metadata editing (E1-E3)
+- Catalog: tool discovery, detail drill-down (C1-C2)
+
+**Autonomous dev loop:** Agent makes change → `npm run test:e2e --grep "..."` → read `test-results/agent-report.json` → interpret PASS/FAIL.
+
+**CI integration:** GitHub Actions workflow runs after go-build-test succeeds (parallel to vscode-build-test). Headless Chrome, artifact capture on failure.
+
+**Implementation timeline:** 4 weeks (foundation, runner tests, editor/catalog tests, CI hardening).
+
+**Impact:** Agents can verify UI changes autonomously. Establishes fast feedback loop. Test suite becomes living documentation of expected behavior. Enables confident refactoring and feature additions.
+
+---
+
 ## Governance
 
 - All meaningful changes require team consensus

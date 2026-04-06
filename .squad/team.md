@@ -17,6 +17,8 @@
 | Kurapika | Frontend Engineer (TypeScript) | `.squad/agents/kurapika/charter.md` | ✅ Active |
 | Leorio | Integrations Engineer (C#/Azure) | `.squad/agents/leorio/charter.md` | ✅ Active |
 | Hisoka | QA Reviewer | `.squad/agents/hisoka/charter.md` | ✅ Active |
+| Illumi | Web Frontend Engineer | `.squad/agents/illumi/charter.md` | ✅ Active |
+| Knov | Playwright & E2E Testing Specialist | `.squad/agents/knov/charter.md` | ✅ Active |
 | Scribe | Session Logger | `.squad/agents/scribe/charter.md` | 📋 Silent |
 | Ralph | Work Monitor | — | 🔄 Monitor |
 

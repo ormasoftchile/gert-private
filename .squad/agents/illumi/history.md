@@ -149,3 +149,28 @@ On `simple-health-check`, the result had `outcomeCode: "healthy"` and `outcomeSt
 The distinction between `outcomeState` (category: resolved/escalated/needs_rca) and `outcomeCode` (specific: healthy/degraded/critical) is critical for outcome determination. Always check state (category) before code (specificity).
 
 
+
+---
+
+### 2026-04-06: Runbook Runner Rebuild (Graph + Prose + Inputs)
+
+**Task:** Rebuild the web RunbookRunner to match the VS Code reference (graph, prose, inputs, active step panel).
+
+**What I delivered:**
+- Copied VS Code graph engine (`treeToGraph`, `renderGraph`, `graphTheme`) into `web/src/shared` with hardcoded color fallbacks.
+- Ported prose rendering (`classifyStepsForProse`, `renderRunbookAsHTML`, `renderProseMarkdown`) and added active-step syncing.
+- Replaced workflow map with SVG execution graph, pan/zoom support, node click navigation, and in-place state sync.
+- Added `schema/runbook` preflight + user input collection, plus submitted input summary in the active step panel.
+- Rebuilt the active step panel with 7 state modes, outcome banners, manual controls, and step detail blocks.
+- Implemented partial re-render architecture: active panel render, prose highlight, graph node state sync.
+- Extended web client RPCs (`schemaRunbook`, `chooseOutcome`, `submitChoice`) and updated Playwright specs for new UI behavior.
+
+**Tests:**
+- `npm run build`
+- `npx playwright test --project=chromium` (26 passed, 2 skipped)
+- `npx playwright test .squad/screenshots/specs/all-examples.spec.ts --project=chromium` (13 passed)
+
+**Artifacts:**
+- New screenshot: `.squad/screenshots/examples/service-health-branching-new.png`
+
+**Status:** COMPLETE

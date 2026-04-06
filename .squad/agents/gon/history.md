@@ -434,3 +434,26 @@ NOT doing: hosted deployment, authentication, mobile-responsive, offline mode, V
 ### Deliverable
 
 Feasibility plan at `.squad/decisions/inbox/gon-web-feasibility-plan.md`
+## 2026-04-06: Web RunbookRunner Audit & Specification
+
+**Task:** Read all VS Code runbookPanel source files, identify gaps in web RunbookRunner, produce implementation specification.
+
+**Findings:**
+- Web RunbookRunner was scaffolded as a skeleton, never ported VS Code rendering logic
+- Side-by-side comparison of `service-health-branching.runbook.yaml` revealed four concrete gaps:
+  1. **Prose Panel:** VS Code renders structured phases (Background, Triage, Mitigation, Escalation) with step-level highlighting; web renders flat numbered list
+  2. **Workflow Map:** VS Code renders SVG DAG with execution state colors, node shapes, bezier edges; web renders flat `<div>` list
+  3. **Input Collection:** VS Code has pre-run modal for `meta.inputs`; web has none
+  4. **Active Step Panel:** VS Code shows full context (type, instructions, query, tool, outcomes, I/O, notes); web shows minimal Next/Mark-Complete buttons
+
+**Specification Produced:**
+- `gon-web-port-spec.md` — 28KB document specifying exact VS Code functions to port:
+  - Gap 1: Port `classifyStepsForProse()` + `renderRunbookAsHTML()` from `prose.ts`
+  - Gap 2: Port `treeToGraph.ts` + `renderGraph.ts` + `graphTheme.ts` (full graph engine)
+  - Gap 3: Implement `schema/runbook` backend endpoint (Killua task) + form UI
+  - Gap 4: Expand active step panel to show full context with manual controls
+
+**Implementation Assignment:** Illumi (Web Frontend Engineer) + Killua (Backend Engineer)
+
+**Status:** ✅ Ready for implementation. Spec forwarded to team.
+

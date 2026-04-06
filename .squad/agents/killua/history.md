@@ -462,3 +462,34 @@ Error: RPC exec/next failed: Unexpected non-whitespace character after JSON at p
 
 **Key Insight:**
 The backend now has a clear invariant: `executeTreeStep` must not call `sendResult` when the caller will continue processing (either in an invoke context or in the auto-advance loop). The `suppressResult` parameter makes this explicit at every call site, preventing future regressions.
+
+## 2026-04-06: Web Preflight Contract — schema/runbook RPC Endpoint
+
+**Task:** Implement backend RPC endpoint for web input collection form preflight.
+
+**Requirement:** Web frontend needs to discover runbook inputs (name, type, required, description) before calling `exec/start`, so it can display an input collection form without running the runbook.
+
+**Design:**
+- Endpoint: `schema/runbook` (HTTP POST `/rpc` or WebSocket)
+- Request: `{"method": "schema/runbook", "params": {"runbook": "path/to/foo.runbook.yaml", "cwd": "/optional/dir"}}`
+- Response: Returns `kind`, `description`, `title`, and `inputs` array with schema for each `from: 'user'` input
+
+**Implementation:**
+- Added `schema/runbook` method to JSON-RPC server in `serve.go`
+- Calls `LoadRunbookFlexible()` to parse runbook YAML
+- Filters `meta.inputs` for `from: 'user'` entries only
+- Returns structured schema: name, type (string/number/bool), required flag, description
+- Error handling: File not found (−32603), parse errors with diagnostics
+
+**Files Changed:**
+- `ext/serve/pkg/serve/serve.go` — Added schema/runbook RPC method
+
+**Commits:**
+- `fc30ff1` — feat: add schema/runbook RPC endpoint for web input preflight
+
+**Verified:**
+- Endpoint testable via HTTP POST to `/rpc`
+- Web frontend can now call `schema/runbook` before `exec/start` to populate input form
+
+**Status:** ✅ Live and ready. Web frontend can now discover and collect user inputs without executing the runbook.
+

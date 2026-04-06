@@ -1,7 +1,7 @@
 # Squad Decisions
 
-**Last updated:** 2026-04-06T14:11:04Z
-**Total decisions:**       14
+**Last updated:** 2026-04-06T16:13:23Z
+**Total decisions:**       17
 
 ---
 
@@ -2085,4 +2085,286 @@ Knov will use the following workflow for all visual verification tasks:
 - `knov-after.png`: `.squad/screenshots/knov-after.png`
 
 ---
+
+
+---
+
+# 2026-04-06: Web Port Spec — RunbookRunner Four Gap Remediation
+
+**By:** Gon (Lead Architect)  
+**Date:** 2026-04-06  
+**Requested by:** ormasoftchile  
+**Assignee:** Illumi (Web Frontend Engineer)  
+**Status:** ✅ Implemented (commit 9fd43f6)
+
+## Context
+
+The web app `RunbookRunner` (`web/src/views/runbookRunner.ts`) was scaffolded as a skeleton and never properly ported the VS Code `RunbookPanel` rendering logic. A side-by-side comparison of `service-health-branching.runbook.yaml` reveals four concrete gaps:
+
+| Gap | VS Code | Web App |
+|-----|---------|---------|
+| Prose Panel | Structured phases (Background, Triage, Mitigation, Escalation) with step-level highlighting | Flat numbered list |
+| Workflow Map | SVG DAG with execution state colors, node shapes, bezier edges | Flat `<div>` list |
+| Input Collection | Pre-run modal for `meta.inputs`, collapsible in-run display | None |
+| Active Step Panel | Full context-aware detail: type, instructions, query, tool, outcomes, I/O, notes | Minimal Next/Mark-Complete only |
+
+## Decision
+
+Rebuild web RunbookRunner to achieve VS Code parity. Port graph engine, prose rendering, input preflight, and active step detail panel from VS Code reference implementation. Implement via three-step wave: specification audit (Gon) → backend contract (Killua) → frontend implementation (Illumi).
+
+## Specification Highlights
+
+### Gap 1: Prose Panel
+- VS Code source: `prose.ts:renderRunbookAsHTML()`
+- Produces: Structured narrative grouped by phases (Background, Triage, Mitigation, Escalation)
+- Each phase: H2 header + step sections with title, query (if exec), instructions, outcome recommendations
+- Active step: Highlighted with `.active` class for visual feedback
+- Port approach: Extract `classifyStepsForProse()` and `renderRunbookAsHTML()` logic
+
+### Gap 2: Workflow Map (Graph)
+- VS Code source: `graphRenderer.ts` + `treeToGraph.ts`
+- Renders: SVG DAG with nodes (step type icons), edges (bezier curves), execution state colors
+- State visualization: pending (gray), running (blue), passed (green), failed (red), skipped (orange)
+- Port approach: Copy graph engine files, replace `var(--vscode-*)` CSS with static colors, add pan/zoom
+
+### Gap 3: Input Collection
+- Requirement: Pre-run form for `from: 'user'` inputs from `meta.inputs`
+- Backend contract: New `schema/runbook` RPC endpoint returns user inputs schema
+- Frontend: Form UI with validation (required fields, type checking), submit before `exec/start`
+
+### Gap 4: Active Step Panel
+- Extend from minimal (Next/Mark-Complete buttons) to full context display
+- Show: Step type, title, ID, instructions, query, tool name, outcomes (success/failure/skipped), output, captures, manual controls
+
+## Files Changed (Implementation)
+
+- `web/src/views/runbookRunner.ts` — Main component rebuild (192 tool calls)
+  - Graph engine integration (treeToGraph, renderGraph, graph theme)
+  - Prose rendering (phases, step highlighting, markdown)
+  - Input preflight (schema/runbook call + form submission)
+  - Active step panel expansion (context display, manual controls)
+
+- `web/src/shared/treeToGraph.ts` — Ported from VS Code
+- `web/src/shared/renderGraph.ts` — Ported from VS Code
+- `web/src/shared/themes/graphTheme.ts` — Ported from VS Code
+- `web/src/styles/runbookRunner.css` — Added prose-instructions styling
+
+## Commits
+
+- `9fd43f6` — feat: port VS Code runbook panel to web (graph, prose, inputs, active step)
+
+## Outcome
+
+✅ Complete. Web RunbookRunner now feature-parity with VS Code reference. All 4 gaps closed:
+1. Prose: Structured narrative with phases and step highlights
+2. Graph: SVG DAG with execution state visualization
+3. Input: Pre-run form for user variables
+4. Active Step: Full context panel with outputs and manual controls
+
+All 12 Playwright tests pass (~5.5s). UI responsive and production-ready.
+
+---
+
+# 2026-04-06: schema/runbook RPC Endpoint Contract
+
+**By:** Killua (Backend Engineer, Go)  
+**Date:** 2026-04-06  
+**Status:** ✅ Implemented (commit fc30ff1)
+
+## Context
+
+The web frontend needs to display an input collection form before calling `exec/start`. It must know what inputs the runbook requires (type, required, description) without executing the runbook. This requires a new RPC endpoint that returns runbook schema metadata.
+
+## Decision
+
+Implement `schema/runbook` JSON-RPC endpoint in the serve layer to return runbook input schema and metadata (kind, description, title). Transport: HTTP POST `/rpc` and WebSocket.
+
+## Endpoint Contract
+
+**Method:** `schema/runbook`
+
+### Request
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "schema/runbook",
+  "params": {
+    "runbook": "path/to/foo.runbook.yaml",
+    "cwd": "/optional/working/directory"
+  }
+}
+```
+
+### Response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "kind": "runbook",
+    "description": "Network health check runbook",
+    "title": "Network Health Check",
+    "inputs": [
+      {
+        "name": "primary_host",
+        "type": "string",
+        "required": true,
+        "description": "Primary host to diagnose"
+      }
+    ]
+  }
+}
+```
+
+## Implementation Details
+
+1. **File Handling:**
+   - Accepts `runbook` path (absolute or relative to `cwd`)
+   - Supports project-relative paths via optional `cwd` parameter
+   - Returns error if file not found
+
+2. **Schema Extraction:**
+   - Calls `LoadRunbookFlexible()` to parse runbook YAML
+   - Filters `meta.inputs` for `from: 'user'` entries only
+   - Extracts: type (string/number/bool), required flag, description
+
+3. **Metadata:**
+   - Returns `kind` ("runbook"), `description`, `title` from runbook metadata
+
+4. **Error Handling:**
+   - File not found: `{"code": -32603, "message": "runbook not found"}`
+   - Parse error: Returns parse diagnostics
+
+## Files Changed
+
+- `ext/serve/pkg/serve/serve.go` — Added schema/runbook RPC method
+
+## Commits
+
+- `fc30ff1` — feat: add schema/runbook RPC endpoint for web input preflight
+
+## Outcome
+
+✅ Endpoint live and testable. Web frontend can now call `schema/runbook` to populate input collection form before `exec/start`.
+
+---
+
+# 2026-04-06: Web RunbookRunner Rebuild (VS Code Parity)
+
+**By:** Illumi (Web Frontend Engineer)  
+**Date:** 2026-04-06  
+**Status:** ✅ Implemented (commit 9fd43f6)
+
+## Context
+
+The web RunbookRunner diverged from the VS Code runbook panel in four critical areas:
+1. Prose rendering: flat step list vs. structured narrative phases
+2. Execution graph: flat div list vs. SVG DAG with visual state
+3. Input collection: missing pre-run form UI
+4. Active step panel: minimal (Next/Mark-Complete) vs. full context display
+
+This caused incorrect display of complex runbooks like `service-health-branching.runbook.yaml` and poor operator UX.
+
+## Decision
+
+Rebuild `web/src/views/runbookRunner.ts` and port the VS Code rendering logic to achieve feature parity. Include proper DAG graph renderer, prose sections, input preflight, and full active step panel with outcome banners and manual controls. Use partial re-rendering for live updates to maintain UI responsiveness.
+
+## Implementation Summary
+
+### 1. Graph Engine Port
+
+**Copied VS Code files into `web/src/shared/`:**
+- `treeToGraph.ts` — Converts runbook tree to execution graph (nodes + edges)
+- `renderGraph.ts` — SVG DAG renderer with pan/zoom, node styling, bezier edges
+- `themes/graphTheme.ts` — Color palette for step states (pending, running, passed, failed, skipped)
+
+**Changes:**
+- Replaced `var(--vscode-*)` CSS variables with static color fallbacks
+- Added SVG canvas to workflow map panel
+- Integrated with execution state tracking from `exec/start` and `exec/next` events
+
+### 2. Prose Rendering
+
+**Ported from VS Code:**
+- `classifyStepsForProse()` — Groups steps into narrative phases (Background, Triage, Mitigation, Escalation)
+- `renderRunbookAsHTML()` → `renderStepsAsProse()` — Renders structured prose with phase headers and step highlights
+- `renderProseMarkdown()` — Converts runbook instructions to markdown with formatting
+
+**Features:**
+- Phase structure: Background (intro), Triage (diagnostic steps), Mitigation (action steps), Escalation (manual/approval)
+- Active step highlighting: Current executing step highlighted in prose panel
+- Line preservation: Added `.prose-instructions` CSS class with `white-space: pre-wrap; word-break: break-word`
+- Live sync: `syncProseActiveStep(stepId)` for highlighting without full rerender
+
+### 3. Input Collection Preflight
+
+**Implementation:**
+- Called `schema/runbook` RPC on component mount to discover user inputs
+- Built form UI for `from: 'user'` inputs with validation
+  - Required fields: enforced with error messages
+  - Type checking: string/number/bool with appropriate input types
+  - Submit button enables only when all required fields populated
+- Stored submitted values in component state
+- Passed vars to `exec/start` call
+
+**UX:**
+- Pre-run form displayed as modal before runbook execution starts
+- Form values persisted across session (in memory)
+- Submitted values displayed in active step panel for operator reference
+
+### 4. Active Step Panel Rebuild
+
+**Extended from minimal to full context display:**
+- **Step metadata:** Type (tool/manual/assert/cli), title, ID
+- **Instructions:** Full text with line wrapping and markdown formatting
+- **Execution context:** Query (for cli/tool steps), tool name (for tool steps)
+- **Outcomes:** Banners for success/failure/skipped with code and description text
+- **Output:** Rendered captured tool output with formatting preservation
+- **Captures:** Display captured variables from step execution
+- **Manual controls:**
+  - Mark Complete button (for manual/approval steps)
+  - Run Again button (to restart execution from current step)
+- **Submitted vars:** Display user-provided input values for reference
+
+**Outcome Mapping Priority:**
+- Primary: `outcomeState` (resolved, escalated, etc.)
+- Fallback: `outcomeCode` (success, failure)
+- Display: Maps to user-friendly status (success/failure/skipped)
+
+### 5. Testing
+
+**Playwright Coverage:**
+- R1–R12: Core functionality tests
+- R13–R14: Intentionally skipped for MVP
+- Execution: ~5.5 seconds for full suite
+- Tests verify:
+  - Prose rendering (phases, step highlights)
+  - Graph rendering (nodes, edges, state colors)
+  - Input collection (form submission, var passing)
+  - Active step panel (context display, manual controls, outcome rendering)
+  - Execution progression (state transitions, panel updates)
+
+## Files Changed
+
+- `web/src/views/runbookRunner.ts` (main rebuild, 192 tool calls)
+- `web/src/shared/treeToGraph.ts` (ported from VS Code)
+- `web/src/shared/renderGraph.ts` (ported from VS Code)
+- `web/src/shared/themes/graphTheme.ts` (ported from VS Code)
+- `web/src/styles/runbookRunner.css` (added prose-instructions styling)
+
+## Commits
+
+- `9fd43f6` — feat: port VS Code runbook panel to web (graph, prose, inputs, active step)
+
+## Outcome
+
+✅ Complete. Web RunbookRunner now feature-parity with VS Code reference implementation. All gaps closed:
+
+1. ✅ Prose panel: Structured narrative with phases (Background, Triage, Mitigation, Escalation) and step highlights
+2. ✅ Workflow graph: SVG DAG with execution state visualization (pending/running/passed/failed/skipped)
+3. ✅ Input collection: Pre-run form for user variables with validation
+4. ✅ Active step panel: Full context display (type, instructions, query, tool, outcomes, output, captures, manual controls)
+
+All 12 Playwright tests passing (~5.5s execution). UI responsive and production-ready.
 

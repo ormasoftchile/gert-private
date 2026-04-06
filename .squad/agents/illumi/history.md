@@ -94,5 +94,58 @@
 - Comprehensive audit report in `.squad/decisions/inbox/illumi-frontend-audit.md`
 - This history entry
 
+**Deliverables:**
+- Comprehensive audit report in `.squad/decisions/inbox/illumi-frontend-audit.md`
+- This history entry
+
 **Status:** COMPLETE — No fixes needed, frontend is fully aligned
+
+---
+
+### 2026-04-06: Bug Sweep Frontend Fixes — Prose Rendering & Outcome Mapping
+
+**Task**: Fix frontend rendering bugs found during comprehensive example runbook sweep.
+
+**Bug D — Prose Panel Spill (renderStepsAsProse)**
+
+**Root Cause**: Multi-line instruction text (captured HTTP response headers, multi-line captured outputs) rendered as `<p>` elements without whitespace preservation. `white-space: normal` (default) collapsed all newlines into spaces, creating unreadable wall of text.
+
+**Discovery**: Only visible in `simple-health-check.runbook.yaml` (has multi-line captured content). Previous narrow testing scope (only `network-health-check`) missed this bug.
+
+**Fix Implementation** (`web/src/views/runbookRunner.ts`):
+- Added `.prose-instructions` CSS class with `white-space: pre-wrap; word-break: break-word`
+- Applied class to all `<p>` elements in `renderStepsAsProse()` 
+- Preserved line structure while allowing long lines to wrap gracefully
+
+**Bug E — False "Failed" Outcome**
+
+**Root Cause**: `advanceExecution()` checked execution result fields in wrong priority order:
+```
+result.outcomeCode || result.outcome?.state || result.outcomeState
+```
+On `simple-health-check`, the result had `outcomeCode: "healthy"` and `outcomeState: "resolved"`. 
+- Checked `outcomeCode` ("healthy") first → matched 
+- "healthy" not in success/failure patterns → returned as-is
+- `mapOutcomeCategory("healthy")` → returned raw "healthy" 
+- `renderCompletionState()` saw non-success → rendered ❌ Failed banner
+
+**Fix Implementation** (`web/src/views/runbookRunner.ts`):
+- Swapped priority: `outcomeState` (category) checked BEFORE `outcomeCode` (specific code)
+- Now correctly reads `outcomeState: "resolved"` → maps to success → renders ✅ Success
+- Commit: 94c0f99
+
+**Additional Fixes** (commit 94c0f99):
+- Fixed "Run Again" button restart logic
+- Updated frontend template var sanitizer
+- Created `.squad/screenshots/specs/all-examples.spec.ts` to enforce comprehensive testing
+
+**Test Results:**
+- All 13 example runbooks pass post-fix
+- `simple-health-check` now shows success ✅
+- No regressions in other runbooks
+- Full Playwright suite: 26/26 passing
+
+**Key Learning:**
+The distinction between `outcomeState` (category: resolved/escalated/needs_rca) and `outcomeCode` (specific: healthy/degraded/critical) is critical for outcome determination. Always check state (category) before code (specificity).
+
 

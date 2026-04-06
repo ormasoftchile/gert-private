@@ -403,3 +403,62 @@ None. All frontend calls now match server contract.
 - `ext/serve/pkg/serve/serve.go` — Server RPC dispatcher and mode validation
 - `web/src/views/runbookRunner.ts` — Frontend RPC calls (exec/start, exec/submitChoice)
 - `examples/simple-health-check.runbook.yaml` — Test runbook used for validation
+
+---
+
+## 2026-04-06 — Fix: Malformed JSON for invoke-type exec/next steps
+
+**Bug**: Running `edge-case-branch.runbook.yaml` crashed with:
+```
+Error: RPC exec/next failed: Unexpected non-whitespace character after JSON at position 272 (line 2 column 1)
+```
+
+**Root cause**: The `handleTreeNext` auto-advance loop calls `executeTreeStep` for routing manual steps (those with branches but no outcomes — `hasOnlyBranchOutcome=true`). `executeTreeStep` unconditionally called `sendResult` at its end (guarded only by `len(s.invokeStack) > 0`). This sent one JSON-RPC response for the routing step, then the loop continued and sent a *second* response for the next step (e.g. the invoke child's first manual step). Two concatenated JSON objects caused the parse failure.
+
+**Fix**: Added a variadic `suppressResult ...bool` parameter to `executeTreeStep`. The auto-advance call site at line 1930 passes `true`, suppressing the redundant `sendResult`. The guarding condition at the end of `executeTreeStep` was updated to check `autoAdvance || len(s.invokeStack) > 0`.
+
+**Files changed**: `ext/serve/pkg/serve/serve.go`
+
+**Verified**: `go build ./cmd/gert/`, `go test ./ext/serve/pkg/serve/...` (pass), `npx playwright test` (26 pass, 2 skipped).
+
+## Learnings
+
+- **Auto-advance loop and executeTreeStep must share result-send responsibility**: Any code path where `executeTreeStep` is called as an intermediate step (either inside an invoke or inside the auto-advance loop) must suppress its final `sendResult`. The guard was only checking invoke context, not the auto-advance context.
+- **Double sendResult produces concatenated JSON objects**: JSON-RPC over stdio is newline-delimited. Two objects written without a clear framing boundary cause a client-side parse error at the position where the second `{` begins.
+- **Look at stdout redirect patterns as a smell**: The codebase already had `os.Stdout = os.Stderr` guards before engine execution — a similar "one writer per request" discipline is needed for `sendResult` calls.
+
+## 2026-04-06 — Bug Sweep Orchestration: Template Resolution & Double-Send Fixes
+
+**Context**: Led team through comprehensive example runbook sweep. Identified 2 backend bugs requiring Go fixes.
+
+**Bug 1 — Unresolved Template Variables:**
+- `buildStepSummaries` returned raw Go template strings (`{{ .dns_server }}`, `{{ .primary_host }}`) in step titles sent by `exec/start`
+- Frontend had no way to resolve them at display time
+- Variables with defaults (like `dns_server = "8.8.8.8"`) were never resolved
+- Unresolvable variables (prompt inputs, iterate-scoped) couldn't be resolved at exec/start time
+
+**Fix 1 Implementation:**
+- Added `resolveStepSummaries(*Server)` method calling `s.resolve(st.Title)` for each step
+- Replaced all 6 callers of `buildStepSummaries` with new method
+- Backend now resolves what CAN be resolved at exec/start time
+- Combined with frontend sanitizer (`sanitizeTitle()`) for remaining unresolvable vars
+- Also added filter in `ResolveTemplatePublic` to strip `<no value>` substrings (commit 5eca8a8)
+
+**Bug 2 — Double JSON Response (already documented above):**
+- Auto-advance loop calling `executeTreeStep` for routing steps followed by loop step processing
+- Two `sendResult` calls → concatenated JSON objects → parse failure
+- Added `suppressResult` parameter to avoid double-send (commit 4f8f192)
+
+**Commits Delivered:**
+- 5eca8a8 — Template resolution at exec/start, `<no value>` filtering
+- 4f8f192 — Suppress double-sendResult in auto-advance context
+
+**Verification:**
+- Backend template resolution: All step titles resolved where possible
+- Frontend sanitizer: Edge cases handled gracefully  
+- Double-send fix: edge-case-branch runbook now completes successfully
+- All 26/26 Playwright tests passing
+- All 13 example runbooks green
+
+**Key Insight:**
+The backend now has a clear invariant: `executeTreeStep` must not call `sendResult` when the caller will continue processing (either in an invoke context or in the auto-advance loop). The `suppressResult` parameter makes this explicit at every call site, preventing future regressions.

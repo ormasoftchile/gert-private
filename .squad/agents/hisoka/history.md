@@ -221,3 +221,54 @@ Agent report provides PASS/FAIL verdict, per-test status, and screenshot paths. 
 **Final Results:** 12 passed, 0 failed, 2 skipped (intentionally: server-error and search-filter require stopping the gert server mid-test).
 
 **Key Architectural Discovery:** The gert HTTP server has a fundamental event delivery design issue. During RPC calls, `s.writer` is replaced with a response buffer that drops events. The fix forwards events to WebSocket broadcast, but this is a band-aid. A proper fix would separate the event channel from the RPC response channel at the architecture level.
+
+### 2026-04-07: Full Example Runbook Sweep + Bug Fixes
+
+**Context:** User reported two bugs on `simple-health-check.runbook.yaml` immediately after use. Team had only been testing `network-health-check.runbook.yaml` — coverage was dangerously narrow.
+
+**Bugs Found & Fixed (Illumi):**
+
+1. **Bug 1 — Prose spill**: `renderStepsAsProse()` in `runbookRunner.ts` rendered resolved instructions (including multi-line captured HTTP headers) as `<p>` without whitespace preservation. Fixed by adding `.prose-instructions` CSS class with `white-space: pre-wrap; word-break: break-word`.
+
+2. **Bug 2 — False "Failed" outcome**: `advanceExecution()` read `result.outcomeCode` ("healthy") before `result.outcomeState` ("resolved"). Since "healthy" isn't in the success pattern list, `mapOutcomeCategory` returned it as-is and `renderCompletionState` showed ❌. Fixed by swapping priority: `outcomeState` checked before `outcomeCode`.
+
+**Full 13-runbook sweep (Knov):**
+- 10/13 clean (success or expected custom outcome)
+- `incident-triage`: "failure" via escalated — expected (first choice triggers escalated path)
+- `multi-region-rollout`: `needs_rca` — expected custom outcome
+- `edge-case-branch`: ❌ malformed JSON from backend during sub-runbook chained invoke — new bug for Killua
+
+**Spec file created:** `.squad/screenshots/specs/all-examples.spec.ts` — tests all 13 non-Windows, non-nested runbooks.
+
+**Key learnings:**
+- QA scope must cover ALL examples, not just one "canonical" runbook
+- `outcomeCode` (specific) vs `outcomeState` (category) distinction is a recurring gotcha — document it
+- Frontend rendering of resolved Go template vars needs CSS whitespace handling whenever multi-line values can be embedded
+
+### 2026-04-06: Bug Sweep Orchestration & Triage Lead
+
+**Session Summary:** Led comprehensive bug sweep across all 13 example runbooks. Deployed parallel team (Knov, Killua, Illumi) to identify and fix visual rendering and backend template bugs.
+
+**Team Dispatch:**
+- Knov: Screenshot verification workflow (autonomous captures, before/after analysis)
+- Killua: Backend template resolution and JSON response fixes  
+- Illumi: Frontend rendering, CSS, and outcome mapping fixes
+
+**Bugs Found & Triaged:**
+1. **Bug A (High)** — Raw Go template code in OUTPUT panel (backend streaming)
+2. **Bug B (Medium)** — Unresolved template variables in step labels (frontend + backend resolution)
+3. **Bug C (Low)** — `<no value>` escaping in instructions (template evaluation filter)
+4. **Bug D (Medium)** — Prose panel spill, multi-line collapse (CSS whitespace preservation)
+5. **Bug E (Critical)** — False "Failed" outcome on healthy runs (outcome priority mapping)
+
+**Commits coordinated:**
+- 5eca8a8 — Backend template resolution, frontend sanitizers
+- 94c0f99 — CSS prose fix, outcome mapping priority swap, all-examples spec  
+- 4f8f192 — Double-sendResult fix in invoke branch routing
+
+**Final Verification:**
+- 26/26 Playwright E2E tests passing
+- All 13 example runbooks tested and passing
+- Screenshot verification confirmed all visual bugs fixed
+
+**Key Decision Established:** All 13 non-Windows, non-chained runbooks must be tested on each significant change. `.squad/screenshots/specs/all-examples.spec.ts` created as enforcement mechanism.

@@ -461,3 +461,31 @@ cd web && npm run test:e2e
 **References:**
 - Decision document: `.squad/decisions/inbox/knov-screenshot-workflow.md`
 - Screenshots: `.squad/screenshots/knov-before.png`, `.squad/screenshots/knov-after.png`
+
+### 2026-04-06: Full Example Runbook Verification & Comprehensive Coverage
+
+**Task:** Verify bug fixes across all 13 example runbooks, establish comprehensive testing scope.
+
+**Verification Work:**
+1. **Phase 1 (Killua + Illumi fixes):** 13/13 Playwright E2E tests pass
+2. **Phase 2 (Extended sweep):** All 13 example runbooks tested end-to-end
+   - ✅ 10/13 passing with expected outcomes (success or designed custom states)
+   - ✅ 1/13 expected failure (incident-triage escalation by design)  
+   - ✅ 1/13 expected custom state (multi-region-rollout `needs_rca`)
+   - ❌ 1/13 JSON crash (edge-case-branch — double-sendResult bug, dispatched to Killua)
+
+**Coverage Analysis:**
+- Previous scope: Only `network-health-check.runbook.yaml` tested
+- Gap: Other runbooks (simple-health-check, service-health-branching, etc.) untested  
+- Finding: Bugs D (prose spill) and E (false failed outcome) existed ONLY in simple-health-check
+- Decision: All 13 examples MUST be tested on each significant change
+
+**Spec Created:** `.squad/screenshots/specs/all-examples.spec.ts` — comprehensive test automation for future enforcement.
+
+**Post-Killua JSON Fix:** Final verification with full 26/26 Playwright suite passing, all 13 examples green.
+
+**Key Learnings:**
+- Visual bugs can be runbook-specific (simple-health-check's multi-line captured headers exposed prose spill)
+- Outcome mapping bugs are silent without real data (healthy vs resolved distinction invisible in single-runbook test)
+- Coverage must span the full example gallery, not just "canonical" scenarios
+- Autonomous verification workflow fully functional for future sweeps

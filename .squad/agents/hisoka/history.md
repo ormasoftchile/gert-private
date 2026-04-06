@@ -146,3 +146,78 @@
 **Build:** `npm run compile` passes (949.5kb bundle).
 
 **Verdict:** APPROVE — All three parts implemented and verified.
+
+### 2026-04-05: Phase 1 + Phase 2 Web Application QA Review
+
+**Scope:** HTTP transport (`serve_http.go`), web frontend (`client.ts`, `toolCatalog.ts`, `runbookRunner.ts`, `main.ts`), Playwright test infrastructure.
+
+**Verdict:** ⚠️ CONDITIONAL APPROVAL — Proceed to Phase 3 but fix 5 blocking issues in parallel.
+
+**Blocking Issues Found:**
+
+1. **B1: Event method mismatch** — `runbookRunner.ts` listens for `run/started`, `step/started`, etc. but `ws-events.md` documents `event/stepStarted`, `event/runCompleted`, etc. Either implementation or docs are wrong. Risk: runner silently ignores all events.
+
+2. **B2: Page Object navigates to non-existent route** — `RunbookRunnerPage.goto()` calls `page.goto('/runner')` but `main.ts` has no URL routing — only tab-based view switching at `/`. All R1-R10 tests will fail on navigation.
+
+3. **B3: Test R10 intercepts wrong endpoint** — Routes `**/api/runbook/execute` but actual endpoint is `POST /rpc` with JSON-RPC body. Test is a false positive.
+
+4. **B4: Absolute fixture paths** — Tests pass `path.join(__dirname, '../fixtures/runbooks/...')` but gert server needs paths relative to CWD. File not found errors expected.
+
+5. **B5: CORS origin check edge case** — Prefix check `origin[:16] == "http://127.0.0.1"` would match `http://127.0.0.10:5173`. Security edge case.
+
+**Non-Blocking Issues:**
+
+- N1: No WebSocket reconnection (Phase 3 backlog)
+- N2: `getDetailTitle()` uses non-existent `data-testid="detail-title"`
+- N3: Agent report lacks stack traces
+- N4: No fetch timeout (UI hangs if server hangs)
+- N5: State machine doesn't handle `stepDelaying`, iterate convergence events
+- N6: Choice modal listens for `run/choice` but contract documents `event/inputRequired`
+- N7: `test.skip()` placement runs setup before skip
+- N8: Fixture YAML structure needs validation against actual schema
+
+**Autonomous Loop Assessment:**
+
+Agent report provides PASS/FAIL verdict, per-test status, and screenshot paths. Gaps: no stack traces, no assertion details, no server logs. Recommend enhancing reporter before production use.
+
+**Phase 3 Risks:**
+
+1. Event contract drift — mismatch suggests no end-to-end validation
+2. No integration test for full server→WebSocket→DOM flow
+3. Tab routing needs extension for editor view
+4. `snapshotStateMachine.ts` (287 lines) has no unit tests
+
+**Key Learning:** When reviewing test infrastructure, always verify that Page Object navigation matches actual app routing, and that route intercepts match actual API endpoints. Mock-based tests can be false positives if the mocked surface doesn't match reality.
+
+**Assignees:**
+- B1, B5: Killua (Go transport owner)
+- B2, B3, B4: Knov (test infrastructure owner)
+### 2026-04-06: Playwright E2E Tests — From 0/14 to 12/14 PASS
+
+**Context:** User demanded we verify our OWN work with Playwright E2E tests. All 14 tests were failing.
+
+**Root Causes Discovered & Fixed:**
+
+1. **`__dirname` not defined in ESM** — `package.json` has `"type": "module"`. Fixed with `import.meta.url` + `fileURLToPath` in `base.ts`, `runbook-runner.spec.ts`, and `playwright.config.ts`.
+
+2. **Vite proxy hardcoded to port 7777** — Tests use gert on port 7778 but proxy wasn't configurable. Fixed `vite.config.ts` to read `GERT_PORT` env var.
+
+3. **`beforeAll`/`afterAll` ran per-test, not per-file** — `fullyParallel: true` with custom fixture caused server restart for every test (10s each). Replaced entire fixture with Playwright's built-in `webServer` config — servers start once for entire suite.
+
+4. **WebSocket events silently dropped during HTTP RPC** — `serve_http.go:responseWriter.Write()` detected events by `Method != ""` but returned `len(p), nil` (dropped them). Events never reached WebSocket clients. **Fixed:** forward events to `httpServer.broadcast()`.
+
+5. **Frontend never called `exec/next`** — Server requires `exec/next` RPC calls to advance execution step-by-step. Frontend only called `exec/start`. **Fixed:** added `advanceExecution()` loop that drives execution via sequential `exec/next` calls, handles choice prompts, and updates state from RPC responses.
+
+6. **`run/started` event never emitted** — Frontend waited for `run/started` to initialize state. Server never sends it — state must come from `exec/start` response. **Fixed:** `startRun()` initializes state from RPC response.
+
+7. **Test fixtures invalid** — `kind: diagnostic` not valid (must be reference/mitigation/rca/composable). Tool `echo` doesn't exist. Branch YAML used wrong field names (`choice` → `choices`, `tree` → `steps`). **Fixed all fixtures.**
+
+8. **Outcome value mismatch** — Test expected `"success"` but gert returns `"resolved"`. Fixed test assertion and frontend rendering.
+
+9. **Completion state missing output panel** — `renderCompletionState()` didn't include `renderOutputPanel()`. Output lines were populated from captures but invisible.
+
+10. **`tool-detail` strict mode violation** — Multiple action rows matched single locator. Fixed with `.first()`.
+
+**Final Results:** 12 passed, 0 failed, 2 skipped (intentionally: server-error and search-filter require stopping the gert server mid-test).
+
+**Key Architectural Discovery:** The gert HTTP server has a fundamental event delivery design issue. During RPC calls, `s.writer` is replaced with a response buffer that drops events. The fix forwards events to WebSocket broadcast, but this is a band-aid. A proper fix would separate the event channel from the RPC response channel at the architecture level.

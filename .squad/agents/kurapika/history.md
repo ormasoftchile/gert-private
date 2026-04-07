@@ -1,6 +1,24 @@
 
 ## Sessions
 
+### 2026-06-26: Fix web graph edge color — unvisited branches showing green
+
+**Requested by:** ormasoftchile
+
+**Bug:** In `web/src/shared/renderGraph.ts` (execution graph), edges from unvisited/not-taken branch paths to the terminal `end-0` node were rendered green instead of grey.
+
+**Root cause:** `treeToGraph.ts` — the `treeToWorkflow()` function creates the end node and its incoming edges at the bottom of the build pass. Both cases (multi-branch `branchBottomIds` and single `lastId`) were hardcoded `taken: true`, unlike every other edge in the function which correctly calls `isTaken(nodeStepId(...))`.
+
+**Fix:** Two-character change — replaced `taken: true` with `isTaken(nodeStepId(bid))` and `isTaken(nodeStepId(lastId))` for the end-node edges. Aligned with existing patterns throughout the file.
+
+**Files changed:** `web/src/shared/treeToGraph.ts`
+
+**Verified:** `npm run build` passes, zero TypeScript errors.
+
+**Commit:** `fix(web): only color edges green when source node was actually visited`
+
+---
+
 ### 2026-03-21: Delay UX verification audit — confirmed correct, Extension Host reload required
 
 **Requested by:** ormasoftchile
@@ -839,3 +857,101 @@ For all three event handlers, gate the raw `p.stepId` write behind `else` — wh
 - Template literal nesting: `${expr > 9 ? 32 : 26}` works inside backtick strings, but `${nx + w - ${expr}}` does NOT — the inner `${}` creates a syntax error. Pre-compute the value into a variable.
 - Annotation badge positioning follows the same pattern as branchBadgeSvg: top-right corner of the node rect, shifted left when another badge is present. The emoji + count layout uses two `<text>` elements at fixed offsets.
 - The GertClient `request()` method is private; adding a public `call()` wrapper is the cleanest way to expose generic RPC without duplicating the request infrastructure.
+### 2025-01-27: P2-E and P2-F — graph node parity
+
+**Requested by:** ormasoftchile
+
+**Task:** Implement when-condition subtitles for branch-step nodes (P2-E) and outcome label on terminal end-node (P2-F).
+
+**What was done:**
+
+**P2-E — Branch-step when-condition as subtitle:**
+- Added `branchCondition?: string` field to `GraphNode` interface in `treeToGraph.ts`
+- In `layoutStep`, computed the taken branch's `when` expression before creating the node (falls back to first branch condition when no branch is taken yet). Used `isTaken()` which was already available in scope.
+- Updated `renderExecutionGraphSvg` (execution graph) to use `node.branchCondition` as subtitle for branch-step nodes, truncated to 50 chars.
+- Updated `renderEditorGraphSvg` branch-step rendering to do the same.
+- Static fallback is `node.stepType || 'step'` — unchanged for all non-branch-step nodes.
+
+**P2-F — Outcome label on terminal node:**
+- Added optional `outcomeLabel?: string` parameter to `renderExecutionGraphSvg` (6th param, backward compatible).
+- End-node rendering now appends a `<text>` element below the circle if `outcomeLabel` is provided.
+- Caller (`runbookRunner.ts`) can pass the outcome state string — no changes required in runbookRunner.ts, Illumi handles that.
+
+**Files changed:**
+- `web/src/shared/treeToGraph.ts` — `GraphNode` interface + `layoutStep`
+- `web/src/shared/renderGraph.ts` — `renderExecutionGraphSvg` signature, end-node rendering, step subtitles
+
+**Build:** `cd /Volumes/Projects/gert/web && npm run build` — passed, no TS errors.
+
+## Learnings
+
+- `treeToGraph.ts` computes branch `taken` state via `isTaken()` which reads `stepStates` — so `branchCondition` can be resolved at graph-build time, no need for post-render patching.
+- The `GraphNode.data` field already holds the full branch array for branch-step nodes (`data.branches`), but populating a typed `branchCondition` field is cleaner for renderers to consume.
+- `renderExecutionGraphSvg` uses positional optional params — adding `outcomeLabel` as the 6th keeps backward compatibility since all callers currently pass ≤5 args.
+
+### 2026-04-06: Two execution bugs fixed — input ignored + green edge on untaken branch
+
+**Requested by:** ormasoftchile
+
+**Completed:**
+- ✅ **Bug 1 — Input not used:** `service-health-branching.runbook.yaml` prompted for `server_name` but all templates used `{{ .hostname }}` from `meta.vars`. Renamed input to `hostname` with `default: github.com`, removed `meta.vars.hostname`. Now the user's typed hostname actually drives the DNS lookup.
+- ✅ **Bug 2 — Green edge on untaken branch:** In `treeToGraph.ts`, passthrough nodes (collapsed untaken branches) had their ID registered in `nodeStepMap` pointing to the parent branch-step. This caused `isTaken(nodeStepId(passId))` to resolve to `isTaken('resolve_dns')` = true, making the edge from the passthrough into `end-0` (and downstream steps) render GREEN. Fix: removed `nodeStepMap.set(passId, id)` — now `nodeStepId(passId)` returns `passId` itself, absent from `stepStates`, so `resolveState` returns `'pending'` and `isTaken` returns false → grey edge.
+- ✅ `npm run build` passed, zero TypeScript errors.
+
+**Files Modified:**
+- `examples/service-health-branching.runbook.yaml` — renamed `server_name` input → `hostname` with default, removed `vars.hostname`
+- `web/src/shared/treeToGraph.ts` — removed `nodeStepMap.set(passId, id)` for passthrough nodes
+
+## Learnings
+- Passthrough nodes (collapsed untaken branches in `treeToGraph.ts`) must NOT be registered in `nodeStepMap`. Their ID should be unknown to the map so `nodeStepId` returns the passthrough's own ID, which is absent from `stepStates`, causing `isTaken` to return false and edges to render grey.
+- Input variable names in YAML `inputs:` must EXACTLY match the template variable names used in step args. If `inputs.server_name` is collected but the template uses `{{ .hostname }}`, the user's input is silently discarded. Prefer using the same variable name in both places.
+- The web runner's `advanceExecution()` calls `exec/next` in a loop until `status === 'outcome'` or `'completed'`. It does NOT wait for `run/completed` WS event — render() is called immediately when the outcome status arrives on the HTTP response.
+
+### 2025-07-17: Graph rendering parity — edge color blue + branch subtitle → true/false
+
+**Requested by:** ormasoftchile
+
+**Completed:**
+- ✅ **Fix 1 — Edge color blue:** Changed `edges.taken.color`, `edges.taken.markerColor`, `edges.backEdge.color`, and `edges.backEdge.markerColor` in `web/src/shared/themes/graphTheme.ts` from `#4caf50` (green) to `#4da6ff` (blue), matching VS Code's `stepNodeRenderer.ts` hardcoded taken-edge color. Node `states.passed.stroke` and `filters['glow-passed']` left green (node borders, not edges).
+- ✅ **Fix 2 — Branch subtitle → true/false:** In `web/src/shared/treeToGraph.ts` `layoutStep`, updated `branchCondition` logic: append ` → true` when taken branch found, ` → false` when step was decided but no branch taken (else path), raw condition when not yet decided — mirrors `vscode/src/views/stepNodeRenderer.ts:255`.
+- ✅ `npm run build` passes, zero TypeScript errors.
+
+**Files Modified:**
+- `web/src/shared/themes/graphTheme.ts` — 4 edge color values: `#4caf50` → `#4da6ff`
+- `web/src/shared/treeToGraph.ts` — `branchCondition` suffix logic
+
+## Learnings
+- VS Code's `stepNodeRenderer.ts` hardcodes `#4da6ff` for taken-edge stroke (line 64) while the theme still keeps `#4caf50` — the web theme is the canonical source so updating it fixes both edge color and arrowhead in one place.
+- Node state colors (passed.stroke = `#4caf50`) and edge colors are separate concerns in the theme — only edge colors should match VS Code's blue.
+- `branchCondition` is computed before the branch fan-out loop in `layoutStep`, so `isTaken` on the first step of each branch is the right hook for the suffix logic.
+
+### 2025-07-17: Phase 0 — Create shared/renderer package
+
+**Requested by:** ormasoftchile
+
+**Completed:**
+- ✅ Created `shared/renderer/` with `types.ts`, `helpers.ts`, `theme/`, `index.ts`, `.eslintrc.json`
+- ✅ Extracted types: `TreeNode`, `Branch`, `GraphNode` (+ `branchCondition` from web parity), `GraphEdge`, `GraphWorkflow`, `InvokeChildData`, `IteratePassRecord`, `SnapshotState`, `RecordingEvent`
+- ✅ Extracted helpers: all utility functions; `highlightQuery` refactored to accept optional `highlightCode` callback (vscode passes hljs, web passes nothing)
+- ✅ Copied theme files verbatim from vscode (canonical): `graphTheme.ts`, `highContrast.ts`, `light.ts`, `index.ts` — verified zero platform deps
+- ✅ `vscode/` theme files replaced with thin re-exports via `@gert/renderer/theme/*`
+- ✅ `vscode/` source files updated: `treeToGraph.ts`, `treeOps.ts`, `snapshotStateMachine.ts`, `helpers.ts`, `graphRenderer.ts`, `stepNodeRenderer.ts`, `renderGraph.ts`
+- ✅ `web/` source files updated: `treeToGraph.ts`, `treeOps.ts`, `snapshotStateMachine.ts`, `helpers.ts`, `themes/graphTheme.ts`, `renderGraph.ts`
+- ✅ `vscode/tsconfig.json` — path alias, removed rootDir (esbuild handles bundling)
+- ✅ `web/tsconfig.json` — path alias
+- ✅ `web/vite.config.ts` — regex alias to handle sub-path imports (`@gert/renderer/theme/*`)
+- ✅ `vscode/package.json` compile/watch scripts — `--alias:@gert/renderer=../shared/renderer`
+- ✅ Both builds pass: `npm run build` (web) ✓, `npm run compile` (vscode) ✓
+
+**Build notes:**
+- esbuild `--alias` must point to a DIRECTORY (not index.ts) for sub-path resolution to work
+- Vite needs a regex alias `{ find: /^@gert\/renderer\/(.+)$/, ... }` before the root alias
+- `isolatedModules: true` in web tsconfig requires `export type` for interface-only re-exports; using `export * from` on source files avoids this constraint
+- `noUnusedLocals: true` means `import type { X }` for types used only inside composite types (not in explicit function signatures) raises TS6196 — fixed by removing those imports
+
+## Learnings
+- Extracted types: `TreeNode`, `Branch`, `GraphNode`, `GraphEdge`, `GraphWorkflow`, `InvokeChildData`, `IteratePassRecord`, `SnapshotState`, `RecordingEvent` — all now in `shared/renderer/types.ts`
+- `branchCondition` exists only in web's GraphNode (not vscode) — added to shared canonical type
+- `highlightQuery` pattern: shared version uses optional callback; vscode wraps with hljs; web uses plain escaping
+- esbuild alias and Vite alias handle sub-paths differently — both need the directory (not the index file) as the base
+- TypeScript `export type { X }` only re-exports; you must ALSO `import type { X }` to use X in local function bodies

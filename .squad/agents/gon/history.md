@@ -457,3 +457,53 @@ Feasibility plan at `.squad/decisions/inbox/gon-web-feasibility-plan.md`
 
 **Status:** ✅ Ready for implementation. Spec forwarded to team.
 
+
+### 2026-03-22 Shared Renderer Refactor Scope Audit
+
+- **Duplication is massive:** ~4,053 lines in VS Code + ~2,777 in web, with ~75% average overlap across graph rendering, prose, step I/O, helpers, themes, and state machine.
+- **Graph rendering is the best-isolated concern:** `treeToGraph.ts` is 85% identical (web has a few bug fixes VS Code lacks: `branchCondition`, passthrough node fix). `graphTheme.ts` is 95% identical — only CSS var fallback values differ. The theme object already acts as a platform abstraction for SVG rendering.
+- **Prose rendering is the hardest concern:** VS Code uses `marked` library + `vscode.Uri` for image paths + 3 indicator modes + chain/invoke prose navigation. Web uses regex markdown. Platform adapter callbacks (renderMarkdown, resolveImagePath) are the bridge pattern.
+- **Event name divergence in snapshotStateMachine:** VS Code uses `event/stepStarted`, `event/stepCompleted`, `event/runCompleted`. Web uses `step/started`, `step/completed`, `run/completed`. Import path differs (`treeToGraph` vs `treeOps`). Otherwise 97% identical.
+- **Recommended architecture:** Monorepo internal package at `shared/renderer/` with TypeScript path aliases. Platform adapters via callback injection (not conditional imports). CSS variable indirection layer (`--gert-*` mapped to `--vscode-*` or hardcoded values).
+- **First PR (zero risk):** Extract types + helpers + theme only — import path rewiring, no logic changes. Proves build system integration works.
+- **Phase sequence:** Types/helpers → Graph rendering → Prose → Step I/O panels → State machine → Input forms. Each phase independently shippable and verifiable.
+
+## 2026-04-07 Phase 1 Plan: Shared Renderer Full VS Code Graph Feature Parity
+
+### Task
+Revised Phase 1 plan after directive change: web MUST have full feature parity with VS Code graph renderer. All features implemented directly in `shared/renderer/` package consumed by both platforms.
+
+### Audit Results — 20 Feature Gaps Cataloged
+
+Performed line-by-line comparison of:
+- `vscode/src/views/graphRenderer.ts` (889 lines)
+- `vscode/src/views/stepNodeRenderer.ts` (298 lines)
+- `vscode/src/views/treeToGraph.ts` (708 lines)
+- `web/src/shared/renderGraph.ts` (473 lines)
+- `web/src/shared/treeToGraph.ts` (728 lines)
+
+**20 feature gaps identified** spanning chain views, invoke merge, prune, iterate pass selection, annotation badges, parent minimap, debug mode, recording, expanded iterate mapping, branch resolution overrides, invoke containers, canvas minimap, active arrow, prose tooltip, zoom/pan, rich subtitles, invoke extras, boundary styling, pass badges/strips, and screenshot.
+
+### Two Web-Specific Fixes Must Flow Back to VS Code
+
+1. **`branchCondition` field on GraphNode** — web computes at layout time with `→ true/→ false` suffix. VS Code computes dynamically at render time. Shared version adopts web's approach (simpler, same data available at layout time).
+
+2. **Passthrough `nodeStepMap` fix** — VS Code line 401 adds `nodeStepMap.set(passId, id)` which causes spurious green edges on untaken branches. Web correctly omits this. Shared version adopts web's fix.
+
+### Architecture Decision: `GraphRenderOptions` Bag
+
+Single options bag replaces VS Code's `GraphRenderContext` class. All features are optional — web can start with basic rendering and progressively enable features as data becomes available. Key design: platform-specific behavior injected via callbacks (`findChildChainIndex`, `getIteratePassDetail`), not conditional imports.
+
+### Task Breakdown — 10 Tasks, 2 Owners
+
+- **Kurapika (VS Code side):** Tasks 1, 2, 3, 4, 7, 10 — core shared renderer, treeToGraph merge, step node renderer, iterate state mapping, VS Code adapter, tests
+- **Illumi (Web frontend):** Tasks 5, 6, 8, 9 — annotations helper, parent minimap, web adapter, web UI wiring
+
+### Critical Path
+Phase 0 → Task 1 (shared treeToGraph) → Task 2 (core renderer) → Tasks 7+8 (platform adapters, parallel) → Task 9 (web UI)
+
+### Estimated Duration
+7–9 working days with parallelism. Tasks 1+3+5+6+10 can all run in parallel once Phase 0 lands.
+
+### Deliverable
+Full plan at session artifacts: `shared-renderer-phase1-plan.md`

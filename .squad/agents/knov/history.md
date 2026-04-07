@@ -534,3 +534,75 @@ cd web && npm run test:e2e
 **Key Learnings:**
 - `all-examples.spec.ts` is ephemeral; it needs to be committed to the repo to survive sessions
 - 13/13 functional tests pass; 2 skips are stable and pre-existing
+
+---
+
+### 2026-04-06: Edge Color Bug Fix Verification
+
+**Task:** Verify that the fix in commit `6e6f8dd` correctly renders not-taken branch edges as grey (not green).
+
+**Fix summary:** `treeToWorkflow()` in `treeToGraph.ts` was hardcoding `taken: true` for all `branchBottomIds → endId` edges. Fixed to derive `taken` from `isTaken(nodeStepId(bid))` per-source-node, consistent with all other edge coloring.
+
+**Method:** Playwright E2E spec `knov-edge-color-verify.spec.ts` — ran `service-health-branching.runbook.yaml` to completion, then evaluated all SVG `<path stroke="...">` attributes in the workflow map.
+
+**Result: ✅ VERIFIED — Fix is working correctly**
+
+**Edge counts after a successful run (DNS resolved → HTTP OK → RESOLVED):**
+- GREEN (#4caf50) taken edges: **5** — the DNS-ok + HTTP-ok path
+- GREY (#404040) untaken edges: **2** — the DNS-failed branch (not taken)
+- Other colors: none
+
+**Screenshots:**
+- `.squad/screenshots/edge-color-01-run-started.png` — mid-execution
+- `.squad/screenshots/edge-color-02-run-complete.png` — full UI at completion (RESOLVED outcome)
+- `.squad/screenshots/edge-color-03-graph-closeup.png` — workflow map panel closeup
+
+**Visual confirmation:** Graph closeup shows the taken path (start → resolve_dns → check_http → confirm_healthy → end) in green. The DNS-failed branch stub (left side of the graph) renders with dim/grey edges, not green.
+
+**Spec file:** `web/tests/specs/knov-edge-color-verify.spec.ts` (kept for regression)
+
+---
+
+## 2026-04-06: Verified Workflow Map Parity Fixes (Illumi + Kurapika)
+
+**Context:** Two agents (Illumi and Kurapika) landed fixes for VS Code visual parity. Ran full Playwright E2E verification against live servers using `service-health-branching.runbook.yaml` with `github.com` as input.
+
+**Test Setup:**
+- gert server: `./gert serve --http --port 7777` (required `--http` flag for web mode)
+- Vite dev server: `npm run dev` at `http://localhost:5173`
+- Built latest code: `npm run build` before launching dev server
+- Script: `/Volumes/Projects/gert/verify-graph-parity2.js`
+- Screenshot: `/Volumes/Projects/gert/graph-parity2-map.png`
+
+**Results — All 4 Checks PASSED:**
+
+### ✅ 1. Taken edge color = BLUE #4da6ff
+- **Evidence:** 4 SVG `<path>` elements with `stroke="#4da6ff"` found in workflow map
+- **Untaken edges:** `stroke="#404040"` (dim gray, correct)
+- **No green edges** detected anywhere
+- Theme file: `graphTheme.ts` `edges.taken.color = '#4da6ff'` confirmed
+
+### ✅ 2. Toolbar in header row (right-aligned), with Prune + Auto buttons
+- **Evidence:** `.map-toolbar` parent is `.workflow-header` div
+- Siblings in header: `WORKFLOW MAP` label → `MITIGATION` badge → `⟲ Restart` button → `.map-toolbar`
+- `#btn-prune` and `#btn-auto` found in DOM, text "Prune" and "Auto" confirmed
+- Screenshot confirms toolbar in same row as header, right-aligned
+
+### ✅ 3. Outcome banner shows two lines: ■ RESOLVED + state label
+- **Evidence:** Banner HTML:
+  ```html
+  <div class="outcome-state">■ RESOLVED</div>
+  <div class="outcome-label">resolved</div>
+  ```
+- `className="map-outcome-banner resolved"` → green left border applied
+- Left accent border: `border-left-color: #4caf50` (green, resolved class)
+
+### ✅ 4. Branch node subtitles show `→ true`/`→ false` suffix
+- **Evidence from SVG text elements:**
+  - `{{ contains .dns_output "Address" }} → true`
+  - `{{ contains .http_response "200" }} → true`
+- Both taken branches correctly annotated; implemented in `treeToGraph.ts` lines 242-257
+
+**Learning:** gert server requires `--http` flag to start in HTTP/WebSocket mode (vs stdio mode for VS Code extension).
+
+**Decision file:** `.squad/decisions/inbox/knov-graph-parity2.md`

@@ -262,3 +262,39 @@ All 12 Playwright tests passing (~5.5s). UI responsive and production-ready.
 - CSS additions were additive-only, no regressions on existing panel styles
 
 **Status:** COMPLETE — Build passes, all 12 items implemented
+
+---
+
+### 2026-04-06: Workflow Map Visual Parity — Outcome Banner Subtitle + Toolbar Refactor
+
+**Task:** Fix 2 remaining workflow map visual gaps vs VS Code reference (image copy.png).
+
+**FIX 1 — Outcome banner subtitle + left accent border:**
+- Added `<div class="outcome-label">` below `.outcome-state` showing `outcomeResult.state` (e.g., "healthy", "resolved")
+- CSS: `.outcome-label { font-size: 11px; opacity: 0.7; margin-top: 2px; }`
+- Added `border-left: 3px solid` to `.map-outcome-banner` with per-state colors:
+  - `.resolved { border-left-color: #4caf50; }` (green)
+  - `.escalated { border-left-color: #f44336; }` (red)
+  - `.needs_rca { border-left-color: #569cd6; }` (blue)
+  - `.no_action { border-left-color: #888; }` (grey)
+
+**FIX 2 — Toolbar: moved into header row + Prune/Auto buttons:**
+- Moved `<div class="map-toolbar">` inside `<div class="workflow-header">` with `margin-left:auto` (right-aligned)
+- Removed standalone toolbar row; toolbar now sits inline in the header
+- Added separator `|` between Fit and Prune buttons
+- Added **Prune** toggle button: `togglePrune()` adds/removes `.pruned` on `.map-content`, adds `node-unvisited` class to pending step `<g>` nodes via `syncPruneClasses()`
+- Added **Auto** toggle button: `toggleAuto()` enables auto-fit after each step state change via `syncGraphStepState()`
+- CSS: `.pruned .node-unvisited { display: none; }` and `.pruned .edge-grey { display: none; }`
+- Button `.active` class: `background: rgba(0,120,212,0.3); border-color: #0078d4`
+
+**State additions:**
+- Added `pruneActive: boolean` and `autoFit: boolean` to `RunState` interface
+
+**Implementation notes:**
+- `syncGraphStepState()` now also maintains `node-unvisited` class on each node `<g>` element (adds for 'pending', removes for any other state)
+- `syncPruneClasses()` batch-applies `node-unvisited` to all existing nodes — called on Prune toggle to classify already-rendered nodes
+- Auto-fit triggers `fitGraphToWidth` + `applyGraphTransform` inline in `syncGraphStepState` when `autoFit` is enabled
+
+**Commit:** ce01021
+
+**Status:** COMPLETE — Build passes (tsc + vite), single file edit only (runbookRunner.ts)

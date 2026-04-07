@@ -1,6 +1,40 @@
 
 ## Sessions
 
+### 2026-06-26: Phase 1 Task 1 — Unified treeToGraph + treeOps in shared/renderer/graph/
+
+**Requested by:** ormasoftchile
+
+**Task:** Merge VS Code's treeToGraph.ts (canonical, full features) with web's treeToGraph.ts (critical bug fixes) into `shared/renderer/graph/treeToGraph.ts`.
+
+**Source files reviewed:**
+- `vscode/src/views/treeToGraph.ts` (708 lines) — canonical base with expandedIterate, invokeBody, all node types
+- `web/src/shared/treeToGraph.ts` (728 lines) — has branchCondition (Fix A) and passthrough fix (Fix B) and end-edge fix (Fix C)
+- `vscode/src/views/treeOps.ts` (255 lines) — superset with mergeInvokeChildren, prefixChildTree, pruneTrailingUnexecuted
+- `web/src/shared/treeOps.ts` (33 lines) — just re-exports, no logic
+
+**What was found:** `shared/renderer/graph/treeToGraph.ts` already existed (from a prior barrel commit) but was missing all three web bug fixes. The graph/index.ts already exported from treeToGraph and treeOps.
+
+**Merge decisions:**
+
+Fix A (branchCondition): Ported `branchCondition` computation block from web's `layoutStep()`. Computes the human-readable subtitle — `condition → true` if the taken branch matched, `condition → false` if decided but no branch taken, raw condition if undecided. Added to the `addNode()` call as `branchCondition` field on `GraphNode`.
+
+Fix B (passthrough nodeStepMap): Removed `nodeStepMap.set(passId, id)` that VS Code had for passthrough nodes. Web's version deliberately omits this: if passId resolves to the parent branch-step id, `isTaken()` would return true (because parent ran) and edges into the passthrough would render green even though the branch was never taken.
+
+Fix C (end-node edges): Changed `taken: true` → `isTaken(nodeStepId(bid))` and `isTaken(nodeStepId(lastId))` for end-node incoming edges. VS Code had these hardcoded, web fixed them. Aligns with the pattern used throughout the rest of the function.
+
+**Additional cleanup:**
+- Removed `export type { TreeNode, Branch, GraphNode, GraphEdge, GraphWorkflow }` re-export from treeToGraph.ts (would cause circular conflict with shared/renderer/index.ts)
+- Removed `export type { InvokeChildData }` re-export from treeOps.ts (same reason — already in types.ts barrel)
+- Made `prefixChildTree` an exported function in treeOps.ts (task requirement)
+- Added `export * from './graph'` to `shared/renderer/index.ts`
+
+**Verified:** `cd web && npm run build` passes (zero TypeScript errors). VS Code `npm run compile` passes.
+
+**Commit:** `feat(shared/renderer): Phase 1 Task 1 — unified treeToGraph + treeOps`
+
+---
+
 ### 2026-06-26: Fix web graph edge color — unvisited branches showing green
 
 **Requested by:** ormasoftchile
@@ -977,3 +1011,114 @@ For all three event handlers, gate the raw `p.stepId` write behind `else` — wh
 
 **Ready for:** Phase 1 feature porting (Gon leading)
 
+
+### 2026-06-26: Phase 1 Task 3 — Port stepNodeRenderer to shared/renderer/graph/
+
+**Task:** Port `vscode/src/views/stepNodeRenderer.ts` (298 lines) to `shared/renderer/graph/stepNodeRenderer.ts`.
+
+**Result:** File ported and committed (`2a3b62a`). `graph/index.ts` created with barrel export.
+
+**Import changes made:**
+- `./treeToGraph` → `@gert/renderer` (GraphNode, GraphEdge, InvokeChildData already in shared types)
+- `./graphRenderer` (escapeHtml, truncLabel) → `@gert/renderer`
+- `@gert/renderer` (GertGraphTheme, getStepIcon, buildRunningBadge) — already correct in source
+- Removed unused `resolveFilter` import and `mcx` destructuring (pre-existing dead code)
+
+**Type gap found:** `GraphRenderContext` is not in shared types. The source imports it from `./graphRenderer` (vscode-only). A minimal local interface was defined in the shared file covering only what `stepNodeRenderer` uses: `invokeChildren`, `branchResolutions`, `getIteratePassDetail`, `findChildChainIndex`. Full gap documented in `.squad/decisions/inbox/kurapika-task3-types-needed.md`.
+
+**Build status:** Clean — only pre-existing errors in `parentMinimap.ts` remain (unrelated, from `./treeToGraph` not yet ported).
+
+
+### 2026-06-26: Phase 1 Task 10 — Port treeToGraph tests to shared package
+
+**Task:** Port 37 existing VS Code treeToGraph tests + add regression tests for Phase 1 Task 1 bug fixes.
+
+**Result:** 47 tests committed at `shared/renderer/graph/treeToGraph.test.ts` (commit `56bec44`).
+
+**Test runner chosen:** VS Code jest + ts-jest (Option C).
+- `vscode/jest.config.js` roots extended to include `<rootDir>/../shared`
+- No new package.json or test infrastructure needed — tsconfig path aliases already map `@gert/renderer`
+
+**Test breakdown:**
+- 37 ported tests (basic topology, branching, iterate, execution state, determinism, edge cases, structural invariants)
+- 4 new: branchCondition Fix A regression (→ true / → false / raw / undefined for non-branch)
+- 2 new: passthrough Fix B regression (not-taken edge, taken-branch sanity)
+- 4 new: expandedIterate layout (header node, child prefixing, group-header type, empty groups)
+
+**All 47 pass. Pre-existing renderGraph.test.ts failure unaffected (unrelated module resolution issue).**
+
+## Phase 1 Task 2 — Full graph renderer ported to shared package
+
+**Status:** Complete  
+**Commit:** ebe3eb9
+
+### What was ported
+
+Created `shared/renderer/graph/renderGraph.ts` (1045 lines) by porting `vscode/src/views/graphRenderer.ts` (889 lines) with the following changes:
+- Replaced `ctx: GraphRenderContext` with `(tree, stepStates, options?: GraphRenderOptions)` API
+- Replaced `vscode.workspace.getConfiguration(...)` with `options.theme ?? getTheme()` from shared theme registry
+- Built `GraphRenderContext` internally via `buildContext()` helper using defaults for missing options
+
+### 20 VS Code features now in shared
+
+1. **Chain view selection** — `viewingChainIndex` selects from `chainHistory`
+2. **Invoke merge** — `mergeInvokeChildren()` called when `invokeChildren` is provided
+3. **Selected iterate pass override** — step states and details overridden per-pass
+4. **Expanded iterate state mapping** — prefixed node IDs for `expandedIterate`
+5. **Post-layout prune** — pending/skipped nodes removed when `hideUnused=true`
+6. **Synthetic end node** — edge-walk depth placement for finished runs
+7. **Branch resolution edge override** — `branchResolutions` map overrides edge `taken`
+8. **Iterate pass height expansion** — completed pass history expands iterate node height
+9. **Invoke container boundaries** — container/color/header modes with bounding boxes
+10. **Active arrow indicator** — arrow pointing at currently running step
+11. **Start node** — themed circle
+12. **End node** — with outcome label from `outcomeResult` or `outcomeLabel`
+13. **Condition node** — diamond shape
+14. **Iterate node** — with pass badge + pass selector pill strip
+15. **Group-header node** — for expanded iterate groups
+16. **Step node** — delegated to `renderStepNode()` with full invoke/branch/subtitle logic
+17. **Parent minimap** — calls `renderParentMinimap()` from shared package
+18. **Recording snapshot** — pushed to `recordingLog` if `recording=true`
+19. **Canvas minimap data** — `<canvas>` element with encoded node/edge JSON
+20. **Prose tooltip data** — tree-walk builds step title/instructions map
+- **Zoom toolbar** — full HTML with prune/debug/screenshot/auto-screenshot buttons
+
+### Also added
+- `renderEditorGraph()` ported from `web/src/shared/renderGraph.ts renderEditorGraphSvg()`
+
+### Types promoted to shared
+- `DisplayConfig` — moved from `vscode/src/serve/client.ts` to `shared/renderer/types.ts`
+- `GraphRenderContext` — full interface (not just the 4-field minimal version from Task 3)
+- `GraphRenderOptions` — new flat API for the shared renderer
+
+### Changes to existing files
+- `shared/renderer/graph/stepNodeRenderer.ts` — removed local `GraphRenderContext` interface; now imports from `@gert/renderer`
+- `shared/renderer/graph/index.ts` — added `export * from './renderGraph'`
+
+### Callbacks needed for VS Code parity
+No VS Code API callbacks were needed. The two interactive callbacks (`getIteratePassDetail`, `findChildChainIndex`) are plain function fields in `GraphRenderOptions` — no vscode.* coupling.
+
+### Build
+Zero TypeScript errors in shared package files. Pre-existing `treeToGraph.test.ts` errors (missing jest types) unchanged.
+
+---
+
+### 2026-06-26: Phase 1 Task 7 — Wire VS Code to shared renderer
+
+**Requested by:** ormasoftchile
+
+**Task:** Reduce `vscode/src/views/graphRenderer.ts` from 889 lines to a thin adapter that delegates to `shared/renderer/graph/renderGraph.ts`.
+
+**What was found:**
+- The old `graphRenderer.ts` was the monolithic SVG renderer (889 lines), now fully replaced by `shared/renderer/graph/renderGraph.ts`.
+- Callers import: `ChainEntry`, `GraphRenderContext`, `renderGraphSvg`, `escapeHtml`, `truncLabel` from the file.
+- `GraphRenderContext` in the old file used `currentStepDetail: any` (VS Code panel shape); the shared renderer uses `currentStepId: string | null`. The adapter maps `ctx.currentStepDetail?.stepId` → `currentStepId`.
+- Theme is read from `vscode.workspace.getConfiguration('gert').get('graph.theme')` inside `renderGraphSvg`.
+- `DisplayConfig` in `serve/client.ts` is identical to `shared/renderer/types.ts` — no mapping needed.
+
+**Config key mapping (VS Code → DisplayConfig):**
+All `DisplayConfig` fields pass through unchanged; they come from `factory.ts`'s `readDisplaySettings()` which already reads them from VS Code workspace config (`gert.*` namespace) before passing into `GraphRenderContext.displayConfig`.
+
+**Result:** 889 → 86 lines. Build passes (esbuild, zero errors). All callers unchanged.
+
+**Commit:** `refactor(vscode): Task 7 — graphRenderer reduced to shared renderer adapter`

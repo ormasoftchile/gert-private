@@ -317,3 +317,65 @@ All 12 Playwright tests passing (~5.5s). UI responsive and production-ready.
 **Commit:** 0f8a007
 
 **Status:** COMPLETE
+
+---
+
+### 2026-04-07: Phase 1 Task 6 — Parent Minimap Renderer Extraction
+
+**Task:** Extract `renderParentMinimap()` from `vscode/src/views/graphRenderer.ts` into `shared/renderer/graph/parentMinimap.ts`.
+
+**What was done:**
+- `ChainEntry` interface added to `shared/renderer/types.ts` (used `TreeNode[]` instead of `any[]` for the tree field — more accurate since `TreeNode` is already in shared types)
+- Created `shared/renderer/graph/parentMinimap.ts` — pure SVG minimap renderer, zero VS Code API dependencies
+- Imports helpers (`escapeHtml`, `truncLabel`) from `@gert/renderer`; imports `treeToWorkflow` from `./treeToGraph`
+- Also extracted `treeToGraph.ts` and `treeOps.ts` to `shared/renderer/graph/` — both were already `@gert/renderer`-native (no VS Code API deps), required to resolve the `treeToWorkflow` import and satisfy the web TS check
+- Updated `shared/renderer/graph/index.ts` with all new exports
+- TypeScript check (`cd web && npx tsc --noEmit`) **passes** ✅
+
+**Files created/changed:**
+- `shared/renderer/types.ts` — ChainEntry added
+- `shared/renderer/graph/parentMinimap.ts` — new
+- `shared/renderer/graph/treeToGraph.ts` — extracted from vscode (was already @gert/renderer-native)
+- `shared/renderer/graph/treeOps.ts` — extracted from vscode (was already @gert/renderer-native)
+- `shared/renderer/graph/index.ts` — updated barrel
+
+**Commits:** c301e39, 5923997
+
+**Status:** COMPLETE
+
+---
+
+### 2026-04-07: Phase 1 Task 8 — Wire Web Runner to Shared Renderer
+
+**Task:** Replace web-local renderGraph.ts/treeToGraph.ts with `renderExecutionGraph` from `@gert/renderer/graph`.
+
+**Files deleted:**
+- `web/src/shared/renderGraph.ts` — ~800-line local copy of graph renderer; replaced by shared
+- `web/src/shared/treeToGraph.ts` — ~300-line local copy of treeToGraph; replaced by shared
+
+**Files retained (Phase 0 re-export stubs — not duplicates):**
+- `web/src/shared/helpers.ts` — re-exports from `@gert/renderer`
+- `web/src/shared/snapshotStateMachine.ts` — standalone state machine (uses @gert/renderer types)
+- `web/src/shared/treeOps.ts` — re-exports from `@gert/renderer`
+- `web/src/shared/themes/graphTheme.ts` — re-exports from `@gert/renderer/theme/graphTheme`
+
+**Call site change in renderWorkflowMap():**
+
+Before: `renderExecutionGraphSvg(tree, stepStates, null, defaultGraphTheme, undefined, outcomeResult?.state)`
+
+After: `renderExecutionGraph(tree, stepStates, { delayInfo, theme, outcomeLabel, stepDetails, currentStepId, snapshotState, branchResolutions, invokeChildren, runCompleted, outcomeResult })`
+
+**New state fields now wired (enables shared renderer features):**
+- `stepDetails` — invoke boundary rendering, step detail overlays
+- `currentStepId` — active arrow / glow indicator
+- `snapshotState` — full snapshot (iteratePasses, iteratePassHistory)
+- `branchResolutions` — resolved branch coloring
+- `invokeChildren` — invoke merge + parent minimap
+- `runCompleted` — prune unvisited nodes on completion
+- `outcomeResult` — outcome banner in SVG map
+
+**Build:** passes clean (exit 0, dist/ produced).
+
+**Commit:** 9c4b2be
+
+**Status:** COMPLETE

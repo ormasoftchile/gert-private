@@ -664,3 +664,46 @@ cd web && npm run test:e2e
 
 **Recommendation:** Ready for Phase 2 (server-side annotation + per-pass detail work)
 
+
+### 2026-04-07: Phase 1 Shared Renderer — Final Verification
+
+**Context:** Phase 1 refactor complete (10 tasks). Verified shared renderer works in web app with no regressions.
+
+**Verification Results:**
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| `web` build | ✅ PASS | After fixing tsconfig.json |
+| `vscode` build | ✅ PASS | Clean, 1.1MB bundle |
+| Playwright verification spec | ✅ 4/4 PASS | New spec added |
+| Full Playwright suite | ✅ 17 passed | Up from 13 (4 new tests added) |
+| treeToGraph unit tests | ✅ 84 pass | 37 vscode + 47 shared |
+| No duplicate files | ✅ PASS | renderGraph.ts, treeToGraph.ts gone from web/src/shared/ |
+| No vscode imports in shared | ✅ PASS | Zero `from 'vscode'` hits |
+| 4 pre-existing failures | same | tool-catalog (2), knov-screenshot, knov-edge-color — pre-existing |
+
+**Bug Found and Fixed:**
+
+`web/tsconfig.json` included `../shared/renderer` but did NOT exclude `*.test.ts` files. This caused the web `tsc` build to fail with "Cannot find name 'describe'" and "Cannot find name 'expect'" errors from `treeToGraph.test.ts` (Jest globals unknown to the web tsconfig).
+
+**Fix:** Added `"exclude": ["../shared/renderer/**/*.test.ts", "../shared/renderer/**/*.spec.ts"]` to `web/tsconfig.json`.
+
+**Test Added:**
+
+`web/tests/specs/knov-phase1-verify.spec.ts` (114 lines, 4 tests):
+1. **graph renders SVG nodes** — uses `RunbookRunnerPage`, starts `simple.runbook.yaml`, waits for SVG with `wf-node`/`ed-node`/`node-label` class
+2. **prune toggle exists** — same flow, verifies `#btn-prune` in toolbar with "rune" in title
+3. **deleted files gone** — filesystem checks for `renderGraph.ts`, `treeToGraph.ts` in `web/src/shared/`
+4. **no vscode imports** — grep check on `shared/renderer/`
+
+**Infrastructure Note:**
+
+The Playwright webServer config starts gert on 7778 + Vite with GERT_PORT=7778. BUT: with `reuseExistingServer: true` and an existing Vite process (PID 6726) started without GERT_PORT, Vite proxies `/ws` to 7777 (default). Tests need a live gert server on port 7777 to work correctly in this dev environment. This is a pre-existing infrastructure concern, not a Phase 1 regression.
+
+**Commit:** `60ae641` — "test(e2e): Phase 1 shared renderer verification suite"
+
+**Files:**
+- `web/tests/specs/knov-phase1-verify.spec.ts` — Phase 1 verification spec
+- `web/tests/screenshots/phase1-graph.png` — Reference screenshot
+- `web/tsconfig.json` — Added test exclusion for shared renderer
+

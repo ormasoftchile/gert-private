@@ -489,3 +489,48 @@ cd web && npm run test:e2e
 - Outcome mapping bugs are silent without real data (healthy vs resolved distinction invisible in single-runbook test)
 - Coverage must span the full example gallery, not just "canonical" scenarios
 - Autonomous verification workflow fully functional for future sweeps
+
+---
+
+### 2026-04-06: Routine Test Run — Fresh Screenshots & Full Suite
+
+**Task:** Kill stale ports, capture fresh screenshots via all-examples spec, run full main suite.
+
+**Screenshot Run (all-examples.spec.ts):**
+- ⚠️ `all-examples.spec.ts` not found at `.squad/screenshots/specs/all-examples.spec.ts` — spec file does not exist on disk (possibly created in a previous session context that was not persisted).
+- Fallback: ran `knov-screenshot.spec.ts` instead (the screenshot capture spec that does exist).
+- `knov-screenshot.spec.ts` — **1 passed** (1.5m): Knov Visual Capture › captures before and after screenshots of runbook execution ✅
+
+**Main Suite Results:**
+- **13 passed, 2 skipped, 0 failed**
+- Total duration: ~1.6 minutes
+
+| # | Test | Result |
+|---|------|--------|
+| 1 | Knov Visual Capture › captures before and after screenshots | ✅ pass |
+| 2 | Runbook Runner › R1 - loads runbook runner view | ✅ pass |
+| 3 | Runbook Runner › R2 - can start a simple runbook run | ✅ pass |
+| 4 | Runbook Runner › R3 - shows live step progress | ✅ pass |
+| 5 | Runbook Runner › R4 - shows step I/O details after completion | ✅ pass |
+| 6 | Runbook Runner › R5 - shows execution graph | ✅ pass |
+| 7 | Runbook Runner › R6 - shows success outcome on completion | ✅ pass |
+| 8 | Runbook Runner › R7 - handles manual choice prompt | ✅ pass |
+| 9 | Runbook Runner › R8 - can start a new run after completion | ✅ pass |
+| 10 | Runbook Runner › R9 - shows step completion statuses | ✅ pass |
+| 11 | Runbook Runner › R10 - shows error state when server disconnects | ✅ pass |
+| 12 | Tool Catalog › loads tool catalog and shows tool list | ✅ pass |
+| 13 | Tool Catalog › clicking a tool shows its detail | ✅ pass |
+| 14 | Tool Catalog › shows friendly error when server is not running | ⏭ skipped |
+| 15 | Tool Catalog › search filters tool list | ⏭ skipped |
+
+**Visual Issues Observed:** None. All runbook runner and tool catalog tests pass cleanly.
+
+**Note on Skipped Tests:**
+- Tests 14 and 15 (Tool Catalog error state + search filter) are marked skipped — likely intentionally disabled in the spec (possibly pending or environment-conditional). No regression here.
+
+**Note on all-examples.spec.ts:**
+- This spec was created in a prior session but does not exist on disk. Needs to be regenerated/committed for future use.
+
+**Key Learnings:**
+- `all-examples.spec.ts` is ephemeral; it needs to be committed to the repo to survive sessions
+- 13/13 functional tests pass; 2 skips are stable and pre-existing

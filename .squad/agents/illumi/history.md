@@ -379,3 +379,104 @@ After: `renderExecutionGraph(tree, stepStates, { delayInfo, theme, outcomeLabel,
 **Commit:** 9c4b2be
 
 **Status:** COMPLETE
+
+### 2026-04-07: Phase 1 Task 6 — ChainEntry Type Promotion
+
+**Assigned by:** Squad orchestration
+
+**Task:** Type `ChainEntry.tree` field correctly in shared types.
+
+**What was found:**
+- `ChainEntry` in `vscode/src/views/graphRenderer.ts` defined `tree: any[]`
+- Shared type `TreeNode` already exists in `shared/renderer/types.ts` and matches exactly
+
+**Decision:** Use `tree: TreeNode[]` in shared `ChainEntry` definition instead of `any[]`.
+
+**Rationale:**
+- `TreeNode` is the canonical type for tree data
+- `any[]` provides zero type safety; `TreeNode[]` enables proper downstream typing
+- `renderParentMinimap` passes `tree` directly to `treeToWorkflow(tree, ...)` which expects `TreeNode[]`
+- No breakage — the VS Code definition was loosely typed, not intentionally `any`
+
+**Impact:** Any consumer of shared `ChainEntry` that passes tree data must ensure it matches `TreeNode` — this is the correct constraint
+
+---
+
+### 2026-04-07: Phase 1 Task 8 — Web Runner Integration to Shared Renderer
+
+**Assigned by:** Squad orchestration
+
+**Task:** Wire web runner's `RunState` to shared `renderExecutionGraph()`.
+
+**What was done:**
+- Deleted duplicate render files (~1100 lines):
+  - `web/src/shared/renderGraph.ts` (~600 lines)
+  - `web/src/shared/treeToGraph.ts` (~730 lines)
+- Modified `web/src/views/runbookRunner.ts` — `renderWorkflowMap()` now calls shared renderer
+- Extracted `defaultGraphTheme` to `web/src/lib/defaults.ts`
+
+**GraphRenderOptions fields now populated from RunState:**
+| Field | Source | Enables |
+|-------|--------|---------|
+| `delayInfo` | `this.state.delayInfo` | Delay timer badge on active step node |
+| `theme` | `defaultGraphTheme` | Node/edge color scheme |
+| `outcomeLabel` | `this.state.outcomeResult?.state` | Outcome string in final node |
+| `stepDetails` | `this.state.stepDetails` | Step detail display in nodes; invoke boundary |
+| `currentStepId` | `this.state.currentStepDetail?.stepId` | Active glow/arrow indicator |
+| `snapshotState` | `this.state.snapshotState` | Full snapshot (iteratePasses, history, finished flag) |
+| `branchResolutions` | `this.state.snapshotState.branchResolutions` | Resolved branch highlight |
+| `invokeChildren` | `this.state.snapshotState.invokeChildren` | Inline invoke merge + parent minimap |
+| `runCompleted` | `this.state.runCompleted` | Prune: hide unvisited nodes after run ends |
+| `outcomeResult` | `this.state.outcomeResult` | Outcome banner in workflow map SVG |
+
+**Features live:** Step rendering, branch coloring, active indicator, invoke merge, outcome banner, prune, delays
+
+**Build:** ✅ `cd web && npm run build` passes; ✅ Zero TypeScript errors; ✅ Workflow map renders with all basic features
+
+---
+
+### 2026-04-07: Phase 1 Task 9 — Advanced Web UI Wiring
+
+**Assigned by:** Squad orchestration
+
+**Task:** Implement advanced UI features in web runner (prune toggle, iterate pass selection, chain navigation).
+
+**What was implemented:**
+
+1. **Prune toggle:**
+   - Click handler on prune button → updates `RunState.pruneActive`
+   - Passed to renderer as `displayConfig.hideUnusedSteps`
+   - CSS class applies visual feedback
+
+2. **Iterate pass selection:**
+   - Pills render from `snapshotState.iteratePassHistory`
+   - Click handler updates `selectedIteratePass: Map<string, number>`
+   - Re-render triggered with selected pass index
+
+3. **Chain navigation:**
+   - Prev/next buttons update `viewingChainIndex: number | null`
+   - null = current execution view; number = historical chain entry
+   - Breadcrumb renders with chain depth
+
+4. **Chain breadcrumb minimap:**
+   - `chainHistory` passed to renderer
+   - When `viewingChainIndex != null`, renders parent minimap for that entry
+   - Shows context of invoke chain
+
+**New RunState fields:**
+```typescript
+selectedIteratePass: Map<string, number>;  // stepId → passIndex
+chainHistory: ChainEntry[];                // one entry per event/invokeStarted
+viewingChainIndex: number | null;          // null = live, number = historical
+pruneActive: boolean;                      // prune toggle state
+```
+
+**Features wired:** ✅ Prune toggle; ✅ Pass selection; ✅ Chain navigation; ✅ Parent minimap
+
+**Build:** ✅ `cd web && npm run build` passes; ✅ All UI interactions live; ✅ State flows to shared renderer
+
+**Future work (Phase 2):**
+- Annotation counting — requires server-side WS events
+- Per-pass detail tracking — requires server-side data
+- Callbacks wiring — requires chain navigation state + iterateChildDetailsByPass
+

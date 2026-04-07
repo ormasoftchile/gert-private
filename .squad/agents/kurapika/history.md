@@ -1122,3 +1122,88 @@ All `DisplayConfig` fields pass through unchanged; they come from `factory.ts`'s
 **Result:** 889 → 86 lines. Build passes (esbuild, zero errors). All callers unchanged.
 
 **Commit:** `refactor(vscode): Task 7 — graphRenderer reduced to shared renderer adapter`
+
+### 2026-04-07: Phase 1 Task 2 — Shared Renderer Core (renderGraph.ts)
+
+**Assigned by:** Squad orchestration
+
+**Task:** Extract all 20 VS Code graph rendering features into platform-neutral `shared/renderer/graph/renderGraph.ts`.
+
+**What was done:**
+- Created `renderGraph.ts` (1045 lines) implementing `renderExecutionGraph(tree: TreeNode[], states: Map<string, StepState>, options: GraphRenderOptions): string`
+- Defined `GraphRenderOptions` interface (20+ fields) in `shared/renderer/types.ts`
+- All 20 features now platform-agnostic:
+  - Step node rendering with detail panels
+  - Branch resolution & coloring
+  - Invoke boundary merge & parent minimap
+  - Active indicator (glow + arrow)
+  - Iterate pass tracking
+  - Delay badges, outcome banner, prune, theme support, recording, debug modes
+- **Zero vscode.* references** — all VS Code dependencies eliminated
+- All callbacks optional with safe defaults
+
+**Design decisions:**
+- VS Code `GraphRenderContext` promoted to `GraphRenderOptions` in shared
+- `DisplayConfig` moved to shared for adapter consumption
+- `currentStepDetail` flattened to `currentStepId?: string`
+- Callbacks implemented as plain function fields, not methods
+
+**Build:** ✅ `cd web && npm run build` passes; ✅ `cd vscode && npm run compile` passes
+
+**Commit:** ebe3eb9 — feat(shared/renderer): Phase 1 Task 2 — renderGraph.ts + GraphRenderOptions
+
+---
+
+### 2026-04-07: Phase 1 Task 7 — VS Code Adapter Integration
+
+**Assigned by:** Squad orchestration
+
+**Task:** Wire VS Code as a thin adapter to shared `renderExecutionGraph()`.
+
+**What was done:**
+- Reduced `vscode/src/views/graphRenderer.ts` from 889 lines → 86 lines
+- Implementation now:
+  1. Reads VS Code workspace config (theme, displayConfig)
+  2. Extracts caller context into `GraphRenderOptions`
+  3. Calls `renderExecutionGraph(tree, states, options)`
+  4. Returns SVG string unchanged
+- All rendering logic moved to shared; VS Code UI intact
+- All feature gates preserved (optional fields)
+
+**Key extractions:**
+- Theme reading: `getTheme(themeName)` resolved in adapter
+- Config mapping: `DisplayConfig` fields read from `gert.*` workspace config
+- Callbacks: `findChildChainIndex`, `getIteratePassDetail` extracted from `RunbookPanel` context
+
+**Build:** ✅ `cd vscode && npm run compile` passes; all existing tests pass
+
+**Outcome:** Perfect backward compatibility; all 20 features accessible from shared package
+
+---
+
+### 2026-04-07: Phase 1 Task 10 — treeToGraph Test Runner
+
+**Assigned by:** Squad orchestration
+
+**Task:** Choose a test architecture for `shared/renderer/graph/treeToGraph.ts` unit tests.
+
+**Decision:** Option C — Extended `vscode/jest.config.js` to include `shared/` as a root, placing test file at `shared/renderer/graph/treeToGraph.test.ts`.
+
+**Why:**
+- `vscode/jest.config.js` + `ts-jest` already fully configured
+- `vscode/tsconfig.json` already includes `../shared/renderer/**/*.ts` and `@gert/renderer` path alias
+- Single-line config change; zero new infrastructure
+- Tests run in same environment that validates shared code
+
+**Why not Option A (vitest in shared/):**
+- Would require new `package.json`, `vitest.config.ts`, `tsconfig.json` in `shared/renderer/`
+- Path alias duplication; more infrastructure for same outcome
+
+**Why not Option B (web test suite):**
+- Web has no unit test runner — only Playwright e2e
+- Adding jest/vitest to web more invasive than extending vscode
+
+**Trade-off note:** Tests live in `shared/` but execute via `vscode/` tooling. If `shared/` gets own package.json (e.g. for npm publishing), tests should migrate to standalone vitest later.
+
+**Outcome:** Phase 1 task tests run under `vscode/jest.config.js`; all tests pass
+

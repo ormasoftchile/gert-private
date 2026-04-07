@@ -606,3 +606,61 @@ cd web && npm run test:e2e
 **Learning:** gert server requires `--http` flag to start in HTTP/WebSocket mode (vs stdio mode for VS Code extension).
 
 **Decision file:** `.squad/decisions/inbox/knov-graph-parity2.md`
+
+### 2026-04-07: Phase 1 Final Verification
+
+**Assigned by:** Squad orchestration
+
+**Task:** Verify Phase 1 completion across all tasks (Tasks 2, 7, 8, 9).
+
+**Verification checklist:**
+
+1. ✅ **Shared renderGraph.ts**
+   - 1045 lines implementing `renderExecutionGraph()`
+   - All 20 VS Code features extracted
+   - Zero vscode.* imports
+   - GraphRenderOptions interface (20+ fields) in shared types
+
+2. ✅ **VS Code adapter (graphRenderer.ts)**
+   - Reduced from 889→86 lines
+   - Thin bridge to shared renderer
+   - Config reading + callback extraction
+   - Perfect backward compatibility
+
+3. ✅ **Web runner integration**
+   - Deleted ~1100 lines of duplicates (renderGraph.ts, treeToGraph.ts)
+   - RunState → shared renderer wiring
+   - 10 GraphRenderOptions fields populated
+   - All basic features live: step rendering, branch coloring, active indicator, invoke merge, prune
+
+4. ✅ **Advanced web UI**
+   - Prune toggle + visual feedback
+   - Iterate pass selection (pill click)
+   - Chain navigation (prev/next breadcrumb)
+   - Parent minimap display for chain context
+   - New RunState fields: selectedIteratePass, chainHistory, viewingChainIndex, pruneActive
+
+5. ✅ **Build validation**
+   - `cd web && npm run build` — ✅ passes
+   - `cd vscode && npm run compile` — ✅ passes
+   - All linters passing
+   - Zero TypeScript errors
+
+6. ✅ **Test results**
+   - Playwright suite: 12/12 passing (R1–R12 green)
+   - Runner tests: ✅ passing
+   - Edge color verification: ✅ correct (green = taken, grey = not-taken)
+   - Input form screenshot: ✅ all fields render
+   - Chain navigation screenshot: ✅ parent minimap renders
+
+**Graph parity verified:**
+- Workflow map visual match between expected and actual
+- Step node rendering matches design
+- Branch coloring correct for all test cases
+- Invoke merge displays inline correctly
+- Outcome banner renders in final node
+
+**Status:** ✅ Phase 1 Complete — All 4 tasks verified and integrated
+
+**Recommendation:** Ready for Phase 2 (server-side annotation + per-pass detail work)
+

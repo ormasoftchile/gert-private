@@ -1,7 +1,7 @@
 # Squad Decisions
 
-**Last updated:** 2026-04-06T16:13:23Z
-**Total decisions:**       17
+**Last updated:** 2026-04-07T04:39:58Z
+**Total decisions:** 25
 
 ---
 
@@ -2368,3 +2368,429 @@ Rebuild `web/src/views/runbookRunner.ts` and port the VS Code rendering logic to
 
 All 12 Playwright tests passing (~5.5s execution). UI responsive and production-ready.
 
+
+# Merge Decisions: shared/renderer/graph/treeToGraph.ts
+
+**Author:** Kurapika  
+**Date:** 2026-06-26  
+**Task:** Phase 1 Task 1 — Unified treeToGraph + treeOps
+
+---
+
+## Context
+
+Two implementations of `treeToGraph.ts` existed in the codebase:
+- `vscode/src/views/treeToGraph.ts` — canonical, full feature set (expandedIterate, invokeBody, branch centering)
+- `web/src/shared/treeToGraph.ts` — web port with three critical bug fixes
+
+The merge target is `shared/renderer/graph/treeToGraph.ts`.
+
+---
+
+## Decision A: branchCondition field on GraphNode
+
+**What:** Added `branchCondition?: string` to `GraphNode` in `shared/renderer/types.ts` (was already there from Phase 0) and ported the computation from web's `layoutStep()`.
+
+**Logic:**
+- If the branch decision was made AND a branch was taken: `"<condition> → true"`
+- If the branch decision was made but no branch first-step is taken (else path): `"<condition> → false"`
+- If the step has branches but no decision yet: raw condition string, no suffix
+
+**Why:** Gives every branch-step node a readable human subtitle showing which condition fired and in what direction. VS Code's version had none; web added this and it's clearly correct behavior.
+
+---
+
+## Decision B: Passthrough nodes must NOT be in nodeStepMap (CRITICAL)
+
+**What:** Removed `nodeStepMap.set(passId, id)` from the passthrough node creation block.
+
+**VS Code had:** `nodeStepMap.set(passId, id)` — maps the passthrough graph-node-id → parent step id.
+
+**Web's fix:** Deliberately omits this mapping with the comment: "must not resolve to parent branch-step, otherwise isTaken would return true and edges into this passthrough would render green."
+
+**Why this matters:**  
+`nodeStepId(passId)` is used when computing `taken` for edges. If `passId` maps to the parent step's id, then `isTaken(nodeStepId(passId))` returns `true` whenever the parent ran — even if that branch was never taken. This causes untaken branch paths to render green in the execution graph. The passthrough node represents a collapsed/skipped branch and must stay grey/skipped.
+
+**Decision:** Web is correct. passthrough nodes are never added to `nodeStepMap`.
+
+---
+
+## Decision C: End-node incoming edges must use isTaken() not hardcoded true
+
+**What:** Changed end-node incoming edge `taken` from `taken: true` to:
+- `taken: isTaken(nodeStepId(bid))` for multi-branch reconvergence
+- `taken: isTaken(nodeStepId(lastId))` for the single-bottom path
+
+**VS Code had:** Both hardcoded as `taken: true`.
+
+**Web's fix (previously applied as standalone commit):** Uses the same `isTaken(nodeStepId(...))` pattern that every other edge in the function uses.
+
+**Why:** Hardcoded `true` means the edge from the last node to `end-0` always renders green, even when the workflow hasn't completed or took a different branch that leads to a terminal step. Causes false visual feedback.
+
+**Decision:** Web is correct. This fix was already recorded in Kurapika's history (session 2026-06-26 "Fix web graph edge color").
+
+---
+
+## Structural decision: No type re-exports in shared/renderer/graph/ files
+
+`shared/renderer/graph/treeToGraph.ts` previously had:
+```typescript
+export type { TreeNode, Branch, GraphNode, GraphEdge, GraphWorkflow } from '@gert/renderer';
+```
+And `treeOps.ts` had:
+```typescript
+export type { InvokeChildData } from '@gert/renderer';
+```
+
+These were removed because:
+1. `@gert/renderer` IS `shared/renderer` — re-exporting from yourself is circular at the barrel level
+2. `shared/renderer/index.ts` now includes `export * from './graph'`, which would cause duplicate named exports
+3. The types are already available via the barrel — consumers don't need them re-exported from the graph module
+
+---
+
+## What was NOT changed
+
+- All VS Code-exclusive features are preserved: `layoutExpandedIterate`, `invokeBody` compound layout, branch centering (taken branch centered, collapsed branches distributed), terminal branch detection, `options.omitEnd`
+- `treeOps.ts`: all functions preserved, `prefixChildTree` made public (added `export`)
+- No VS Code or web importers were modified — this is purely additive
+# kurapika-task2-renderer — Decision Record
+
+**Filed by:** Kurapika  
+**Date:** Phase 1 Task 2  
+**Commit:** ebe3eb9
+
+## GraphRenderOptions final shape
+
+```typescript
+export interface GraphRenderOptions {
+  // Core
+  delayInfo?: { stepId: string; delay: string; delayMs?: number; delayStartMs?: number } | null;
+  theme?: GertGraphTheme;
+  outcomeLabel?: string;
+  annotationCounts?: Map<string, number>;
+  annotations?: Annotation[];
+  outcomeResult?: any;
+
+  // VS Code parity
+  invokeChildren?: Map<string, InvokeChildData>;
+  branchResolutions?: Map<string, Map<number, boolean>>;
+  selectedIteratePass?: Map<string, number>;
+  snapshotState?: SnapshotState;
+  iteratePassInfoMap?: Map<string, any>;
+  iterateChildDetailsByPass?: Map<string, Map<string, any>[]>;
+  stepDetails?: Map<string, any>;
+  currentStepId?: string;
+  displayConfig?: DisplayConfig;
+
+  // Chain
+  chainHistory?: ChainEntry[];
+  viewingChainIndex?: number | null;
+
+  // Flags
+  debugMode?: boolean;
+  recording?: boolean;
+  recordingLog?: any[];
+  autoScreenshot?: boolean;
+  runCompleted?: boolean;
+  savedGraphTransform?: { tx: number; ty: number; scale: number } | null;
+
+  // Callbacks
+  findChildChainIndex?: (invokeStepId: string) => number | null;
+  getIteratePassDetail?: (stepId: string) => any | undefined;
+}
+```
+
+## Design decisions
+
+### currentStepId vs currentStepDetail
+VS Code's `GraphRenderContext` has `currentStepDetail: any` and uses `ctx.currentStepDetail?.stepId`. The shared renderer flattens this to `currentStepId?: string` — callers extract the stepId before passing to `renderExecutionGraph`. This removes `any` indirection.
+
+### No vscode.* callbacks needed
+All 20 VS Code features were extractable without requiring VS Code API callbacks. The two interactive methods (`getIteratePassDetail`, `findChildChainIndex`) that were methods on `RunbookPanel` are now plain optional function fields. Default implementations (returning `undefined` / `null`) make them safe to omit.
+
+### DisplayConfig moved to shared
+Previously only in `vscode/src/serve/client.ts`. Now in `shared/renderer/types.ts`. VS Code's `client.ts` can re-export it from there in Task 7.
+
+### GraphRenderContext promotion
+The minimal 4-field `GraphRenderContext` in `stepNodeRenderer.ts` was replaced with a full interface (20+ fields) in `shared/renderer/types.ts`. The full interface is constructed internally by `buildContext()` — consumers only see `GraphRenderOptions`.
+
+## VS Code features that needed design decisions
+
+| Feature | VS Code | Shared |
+|---------|---------|--------|
+| Theme selection | `vscode.workspace.getConfiguration('gert').get('graph.theme')` | `options.theme ?? getTheme()` |
+| Current step | `ctx.currentStepDetail?.stepId` (any) | `options.currentStepId?: string` |
+| Recording push | direct mutation of `ctx.recordingLog` | same — caller passes mutable array |
+| SnapshotState | required in ctx | optional with empty default |
+# Type gaps found in Phase 1 Task 3 — stepNodeRenderer port
+
+**Filed by:** Kurapika (2026-06-26)
+**Context:** Porting `vscode/src/views/stepNodeRenderer.ts` to `shared/renderer/graph/stepNodeRenderer.ts`
+
+## Missing: `GraphRenderContext`
+
+The full `GraphRenderContext` interface lives in `vscode/src/views/graphRenderer.ts` and has not been promoted to `shared/renderer/types.ts`. The ported `stepNodeRenderer.ts` only needs a subset — a minimal local interface was defined for now.
+
+### Fields used by stepNodeRenderer (minimum needed in shared):
+
+```typescript
+export interface GraphRenderContext {
+  invokeChildren: Map<string, InvokeChildData>;
+  branchResolutions: Map<string, Map<number, boolean>>;
+  getIteratePassDetail: (stepId: string) => any | undefined;
+  findChildChainIndex: (invokeStepId: string) => number | null;
+}
+```
+
+### Full interface in vscode (for reference):
+
+The full `GraphRenderContext` also includes: `annotations`, `viewingChainIndex`, `chainHistory`, `tree`, `stepStates`, `stepDetails`, `selectedIteratePass`, `snapshotState`, `iterateChildDetailsByPass`, `displayConfig`, `delayInfo`, `outcomeResult`, `runCompleted`, `iteratePassInfoMap`, `currentStepDetail`, `debugMode`, `autoScreenshot`, `savedGraphTransform`, `recording`, `recordingLog`.
+
+These in turn reference `Annotation`, `ChainEntry`, `DisplayConfig`, and `SnapshotState` (the last one IS already in shared types).
+
+## Recommendation
+
+When `graphRenderer.ts` itself is ported (likely a later Phase 1 task), promote the full `GraphRenderContext` to `shared/renderer/types.ts` and remove the local minimal interface from `stepNodeRenderer.ts`.
+# VS Code Config → DisplayConfig Field Mapping
+
+**Author:** Kurapika (Task 7)
+**Date:** 2026-06-26
+**For:** Other agents needing to understand how VS Code workspace config maps to DisplayConfig
+
+## Summary
+
+`DisplayConfig` (shared type in `shared/renderer/types.ts`) is identical to `DisplayConfig` in `vscode/src/serve/client.ts`. No translation layer is needed between them.
+
+## The reading function
+
+`vscode/src/views/runbookPanel/factory.ts` — `readDisplaySettings()` — reads all fields:
+
+| VS Code config key (`gert.*`) | DisplayConfig field | Default |
+|---|---|---|
+| `debugTrace` | `debugTrace` | undefined |
+| `showCaptures` | `captures` | undefined |
+| `showOutcomeConditions` | `outcomeConditions` | undefined |
+| `showCopySummary` | `copySummary` | undefined |
+| `showSaveForReplay` | `saveForReplay` | undefined |
+| `graph.hideUnusedSteps` | `hideUnusedSteps` | undefined |
+| `graph.invokeBoundary` | `invokeBoundary` | `'container'` |
+| `graph.minimap` | `minimap` | `'visible'` |
+| `graph.minimapPosition` | `minimapPosition` | `'bottom'` |
+| `graph.minimapPanel` | `minimapPanel` | `'center'` |
+| `graph.minimapGlow` | `minimapGlow` | `false` |
+| `graph.activeIndicator` | `activeIndicator` | `'arrow'` |
+| `ui.markCompleteLabel` | `markCompleteLabel` | `'✓ Mark Complete'` |
+| `showRecording` | `showRecording` | `true` |
+| `showRestart` | `showRestart` | `true` |
+| `summary.footer` | `summaryFooter` | `'Generated by gert runbook engine'` |
+| `prose.activeIndicator` | `proseActiveIndicator` | `'arrow'` |
+
+## Theme
+
+Theme is separate from `DisplayConfig`. It is read inside `renderGraphSvg()` in the adapter:
+
+```typescript
+const themeName = vscode.workspace.getConfiguration('gert').get<string>('graph.theme', 'default');
+const theme = getTheme(themeName); // resolves to GertGraphTheme
+```
+
+Available themes: `'default'`, `'high-contrast'`, `'light'`.
+
+## Flow
+
+```
+VS Code workspace config (gert.*)
+  └─ factory.ts readDisplaySettings()
+       └─ DisplayConfig stored in PanelState.displayConfig
+            └─ renderHelpers.ts renderGraphSvg(s: PanelState)
+                 └─ ctx.displayConfig passed to graphRenderer adapter
+                      └─ renderExecutionGraph(tree, states, { displayConfig, theme, ... })
+```
+
+## Notes
+
+- The `DisplayConfig` interfaces in `serve/client.ts` and `shared/renderer/types.ts` are kept in sync manually. If either changes, the other must be updated.
+- `GraphRenderContext.currentStepDetail` (VS Code) is mapped to `GraphRenderOptions.currentStepId` in the adapter via `ctx.currentStepDetail?.stepId`.
+# Decision: treeToGraph test runner for shared package
+
+**Author:** Kurapika  
+**Date:** 2026-06-26  
+**Task:** Phase 1 Task 10
+
+## Choice: Option C — Extend vscode/jest to include shared
+
+### What was chosen
+
+Extended `vscode/jest.config.js` `roots` to include `<rootDir>/../shared`, placing the test file at `shared/renderer/graph/treeToGraph.test.ts`.
+
+### Why not Option A (vitest in shared/)
+
+Would require a new `package.json`, `vitest.config.ts`, and `tsconfig.json` inside `shared/renderer/`. The `@gert/renderer` path alias needs to be resolvable by the test runner, which means duplicating tsconfig `paths` config. More infrastructure for the same outcome.
+
+### Why not Option B (web test suite)
+
+The `web/` package has no unit test runner — only Playwright e2e. Adding jest/vitest to `web/` would be more invasive than extending the already-configured vscode jest.
+
+### Why Option C
+
+- `vscode/jest.config.js` + `ts-jest` is already configured and working
+- `vscode/tsconfig.json` already includes `../shared/renderer/**/*.ts` and maps `@gert/renderer` to the shared types
+- Single-line change to `roots` was sufficient — zero new infrastructure
+- Tests run in the same environment that already validates the shared code
+
+### Trade-offs
+
+- Tests live in `shared/` but execute via `vscode/` tooling. Future: if `shared/` gets its own package.json (e.g. for npm publishing), the tests should migrate to a standalone vitest config there.
+# Decision: ChainEntry.tree typed as TreeNode[] not any[]
+
+**Task:** Phase 1 Task 6 — parentMinimap extraction  
+**Date:** 2026-04-07  
+**Author:** illumi
+
+## Context
+
+`ChainEntry` in `vscode/src/views/graphRenderer.ts` defines `tree: any[]`.  
+The shared type `TreeNode` already exists in `shared/renderer/types.ts` and matches exactly what the tree field contains.
+
+## Decision
+
+Used `tree: TreeNode[]` in the shared `ChainEntry` definition instead of `any[]`.
+
+## Rationale
+
+- `TreeNode` is the canonical type for tree data in this system
+- `any[]` provides zero type safety; `TreeNode[]` enables proper downstream typing
+- `renderParentMinimap` passes `tree` directly to `treeToWorkflow(tree, ...)` which expects `TreeNode[]`
+- No breakage — the VS Code definition was loosely typed, not intentionally `any`
+
+## Impact
+
+Any consumer of the shared `ChainEntry` that passes tree data must ensure it matches `TreeNode`. This is the correct constraint.
+# Task 8 — Web Runner State Wiring: Current vs. Needs Task 9
+
+**Date:** 2026-04-07  
+**Author:** Illumi  
+**Context:** After wiring `renderExecutionGraph` from `@gert/renderer/graph` into the web runner
+
+---
+
+## GraphRenderOptions fields currently populated by web runner
+
+These fields are NOW passed at the call site in `renderWorkflowMap()`:
+
+| Field | Source in `RunState` | What it enables |
+|-------|---------------------|-----------------|
+| `delayInfo` | `this.state.delayInfo` | Delay timer badge on active step node |
+| `theme` | `defaultGraphTheme` | Node/edge color scheme |
+| `outcomeLabel` | `this.state.outcomeResult?.state` | Outcome string in final node |
+| `stepDetails` | `this.state.stepDetails` | Step detail display in nodes; invoke boundary |
+| `currentStepId` | `this.state.currentStepDetail?.stepId` | Active glow/arrow indicator |
+| `snapshotState` | `this.state.snapshotState` | Full snapshot (iteratePasses, history, finished flag) |
+| `branchResolutions` | `this.state.snapshotState.branchResolutions` | Resolved branch highlight (taken vs. not-taken) |
+| `invokeChildren` | `this.state.snapshotState.invokeChildren` | Inline invoke merge + parent minimap |
+| `runCompleted` | `this.state.runCompleted` | Prune: hide unvisited nodes after run ends |
+| `outcomeResult` | `this.state.outcomeResult` | Outcome banner in workflow map SVG |
+
+---
+
+## GraphRenderOptions fields NOT yet populated (need Task 9 or later)
+
+These exist on `GraphRenderOptions` but the web runner has no corresponding state yet:
+
+| Field | Why missing | Task needed |
+|-------|------------|-------------|
+| `annotationCounts` | Web runner has no annotation data source; no annotation RPC yet | Task 9: wire annotation feed |
+| `annotations` | Same — no annotation fetch/WS event from backend for web | Task 9 |
+| `chainHistory` | Web runner has no chain (invoke-chain) history tracking; single-level execution only | Task 9: implement chain tracking in RunState |
+| `viewingChainIndex` | Requires chain navigation UI (prev/next chain) — not implemented in web | Task 9 |
+| `selectedIteratePass` | Web has no iterate-pass selection UI | Task 9: add pass selector widget |
+| `iteratePassInfoMap` | Populated from WS events not yet emitted/handled in web | Task 9 |
+| `iterateChildDetailsByPass` | Deep iterate pass detail tracking — not tracked in RunState | Task 9 |
+| `displayConfig` | No user-configurable display preferences in web UI yet | Future task (P3 priority) |
+| `debugMode` | No debug toggle in web toolbar | Future task |
+| `recording` / `recordingLog` | No recording feature in web | Future task |
+| `autoScreenshot` | No screenshot feature in web | Future task |
+| `savedGraphTransform` | Web has no persisted graph transform between page loads | Future task |
+| `findChildChainIndex` | Callback requires chain navigation state — see chainHistory | Task 9 |
+| `getIteratePassDetail` | Callback requires iterateChildDetailsByPass — see above | Task 9 |
+
+---
+
+## Summary
+
+**Task 8 achieved:** Basic graph features (step states, branch coloring, active indicator, invoke merge, outcome banner, prune) are now fully wired. The shared renderer's Phase 1 features are available as soon as the web runner collects the corresponding state.
+
+**Task 9 scope:** Chain navigation + annotation counts + iterate pass selection. These require new WS event handling, new RunState fields, and new UI controls (chain breadcrumb, pass selector, annotation badge click).
+# Task 9 — Final RunState Fields and Server-Side Work Needed
+
+**Date:** 2026-04-07
+**Author:** Illumi
+**Context:** After implementing Task 9 web UI wiring for shared renderer features
+
+---
+
+## Final RunState Shape (post Task 9)
+
+```typescript
+interface RunState {
+  // ... (pre-existing fields unchanged) ...
+
+  // Task 8 fields (already wired):
+  snapshotState: SnapshotState;        // iteratePassHistory, invokeChildren, branchResolutions
+  stepDetails: Map<string, any>;
+  currentStepDetail: any | null;
+  branchResolutions via snapshotState
+  invokeChildren via snapshotState
+  runCompleted: boolean;
+  pruneActive: boolean;
+
+  // Task 9 NEW fields:
+  selectedIteratePass: Map<string, number>;  // stepId → passIndex
+  chainHistory: ChainEntry[];                // one entry per event/invokeStarted
+  viewingChainIndex: number | null;          // null = current execution view
+  annotationCounts: Map<string, number>;     // empty; TODO awaiting server events
+}
+```
+
+## Features: Live vs. Waiting for Server
+
+### ✅ LIVE (wired end-to-end)
+
+| Feature | Status | How |
+|---------|--------|-----|
+| Prune toggle | **Live** | `pruneActive` → `displayConfig.hideUnusedSteps`; CSS class + renderer both wired |
+| Iterate pass pills (render) | **Live** | `snapshotState.iteratePassHistory` populated from `event/iteratePassStart/End` via snapshotStateMachine |
+| Iterate pass selection (click) | **Live** | Click handler on `.iterate-pass-pill` → `selectedIteratePass` → re-render |
+| Chain navigation UI (click) | **Live** | `chainNav(idx)` → `viewingChainIndex` → `renderExecutionGraph` chain view |
+| Chain breadcrumb minimap | **Live** | `chainHistory` passed to renderer; `renderParentMinimap` renders when populated |
+| `displayConfig.hideUnusedSteps` | **Live** | Passed from `pruneActive` |
+| `annotationCounts` | **Wired (empty)** | Passed to renderer; no server events yet |
+| Zoom controls (shared toolbar) | **Live** | SVG toolbar rendered by shared renderer; web runner zoom overrides via pan/zoom handlers |
+
+### ⏳ WAITING FOR SERVER-SIDE WORK
+
+| Feature | What's Needed | Priority |
+|---------|--------------|----------|
+| Annotation counts on nodes | Server must emit `event/annotationCreated` or similar WS event with `{ stepId, count }` | P2 |
+| Chain entry step states | `event/invokeCompleted` should include `childStepStates: Map<string,string>` so `ChainEntry.stepStates` can be populated | P2 |
+| Iterate child details per-pass | Server would need to send per-step detail keyed by pass index (for `iterateChildDetailsByPass`) | P3 |
+| `iteratePassHistory.currentValue` | Already sent in `event/iteratePassStart` for list-mode; verified working | ✅ |
+
+## Callbacks Not Yet Wired
+
+| Callback | Status | Notes |
+|----------|--------|-------|
+| `findChildChainIndex` | Not wired | Requires chain navigation; basic chainNav is wired but this callback path is not |
+| `getIteratePassDetail` | Not wired | Requires `iterateChildDetailsByPass` which needs server data |
+
+## What Server Needs to Add for Full Activation
+
+1. **Annotation events** — new WS event type: `event/annotationCreated` / `event/annotationUpdated` with `{ stepId, count }` or full annotation body
+2. **Chain step states in invokeCompleted** — add `childStepStates: map[string]string` to the `event/invokeCompleted` payload in `serve.go` (line ~2667)
+3. **Per-pass step details** — lower priority; would require server to capture `event/stepDetail` per-pass during iterate execution and group them
+
+## Notes
+
+- `snapshotState.iteratePassHistory` is already fully populated from existing `event/iteratePassStart` and `event/iteratePassEnd` events — no server changes needed for pass pill rendering
+- `event/invokeStarted` and `event/invokeCompleted` already exist in serve.go and carry enough data to build `ChainEntry` objects; only `childStepStates` is missing

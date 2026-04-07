@@ -467,6 +467,18 @@
 
 ---
 
+### 2026-04-06T00:00:00Z: Tab re-entrancy guard for WebSocket stability
+**By:** Killua
+**What:** Always guard tab navigation with currentTab state tracking to prevent duplicate load/dispose cycles. Pattern: check `if (this.currentTab === tabName) return;` before reloading.
+**Why:** Playwright click() can trigger event handlers multiple times; without guards, UI recreation loops cause WebSocket disconnect loops and other state corruption. This pattern should be used in all tab-based UIs.
+**Status:** APPROVED
+
+### 2026-04-06T00:00:00Z: Use data-testid for stable test selectors
+**By:** Illumi
+**What:** Always use `data-testid` attributes for test targeting instead of text-based selectors like `:has-text()`. Selectors must be specific and deterministic.
+**Why:** Text selectors are fragile, non-deterministic, and match unintended elements. data-testid provides stable, explicit test contracts that don't break with UI text changes.
+**Status:** APPROVED
+
 ## Governance
 
 - All meaningful changes require team consensus

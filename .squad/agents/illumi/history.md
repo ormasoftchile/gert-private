@@ -238,3 +238,27 @@ Illumi rebuilt `web/src/views/runbookRunner.ts` from specification to achieve fu
 
 All 12 Playwright tests passing (~5.5s). UI responsive and production-ready.
 
+
+---
+
+### 2025-01-20: Parity Batch 1 — 12 Web/VS Code Alignment Items
+
+**Task:** Implement 12 visual/functional parity items to align web app with VS Code extension
+
+**Items implemented:** P1-A, P1-C, P2-A, P2-B, P2-C, P2-D, P3-A, P3-B, P3-C, P3-D, P3-E, P3-F (all 12)
+
+**Key learnings:**
+- **`runbookKind` must be lowercased** when stored — CSS badge classes are lowercase (`.badge.guide`, `.badge.mitigation` etc); the server returns mixed case
+- **`syncProseActiveStep()` must mirror `renderStepAsProse()`** — both paths must add `indicator-arrow` otherwise the arrow class disappears on DOM sync updates
+- **`renderActiveStepPanel()` is a partial re-render** — the right-panel header (P3-A) must be prepended inside this method too, not just in `renderThreePanelLayout()`; otherwise it disappears on every step transition
+- **`applyGraphTransform()` is the right place for zoom% display update** — it's called from wheel handler, zoomIn/Out, and fitGraph, so no logic duplication needed
+- **Web has no `path` module** — inline `basename` via `.replace(/\\/g, '/').split('/').pop()` works reliably in browser context
+- **`outcomeIsConclusion` already existed** in `web/src/shared/helpers.ts` — just needed to add it to the import list
+- **VS Code's `buildSummaryText()` is in `summary.ts`** with VS Code dependencies; implemented a lightweight inline version for web
+
+**What went well:**
+- All 12 items implemented in a single pass with no rework
+- Build passed first try — no TypeScript errors
+- CSS additions were additive-only, no regressions on existing panel styles
+
+**Status:** COMPLETE — Build passes, all 12 items implemented

@@ -507,3 +507,47 @@ Phase 0 → Task 1 (shared treeToGraph) → Task 2 (core renderer) → Tasks 7+8
 
 ### Deliverable
 Full plan at session artifacts: `shared-renderer-phase1-plan.md`
+
+## 2026-04-07 Phase 1 Architecture — Shared Renderer Full Feature Parity
+
+**Status:** ✅ ARCHITECTURE PLAN PRODUCED
+
+**Mandate:** User directive (ormasoftchile) — web must have FULL feature parity with VS Code graph renderer. No optional gaps. Chain views, prune, iterate pass, annotations, minimap ALL required.
+
+**Solution:** Refactor Phase 1 to port ALL 20 VS Code graph features into `shared/renderer/graph/` as a single implementation consumed by both platforms. No platform-specific logic except IPC wiring.
+
+**Key Decisions:**
+
+1. **GraphRenderOptions** — options bag with optional callbacks, replaces VS Code's GraphRenderContext class
+   - Serializable, testable, progressive enablement
+   - Each platform provides only what it has; callbacks for platform-specific lookups
+
+2. **Web's branchCondition fix canonical** — layout-time `→ true`/`→ false` computation (not dynamic during render)
+   - Simpler, self-contained, doesn't require passing branchResolutions to subtitles
+
+3. **Web's nodeStepMap fix canonical** — passthrough nodes correctly omitted from map
+   - Fixes visual bug where untaken branch edges render green
+
+4. **Shared renderer owns ALL SVG generation** — both renderExecutionGraph and renderEditorGraph in shared package
+   - Platform adapters: thin 50-line wrappers only
+   - Single source of truth eliminates divergence
+
+5. **10-task execution plan, 7-9 day estimate**
+   - Critical path: shared treeToGraph → core renderer → adapters → web UI
+   - Max parallelism: Tasks 1,3,5,6,10 concurrent
+
+**Risk Mitigation:**
+
+- CSS variable handling: shared uses `var(--vscode-*)`, web maps to `var(--gert-*)`. Phase 0 theme extraction mitigates.
+- Feature interaction complexity: Task 4 (iterate state mapping) is hardest. Coordinate with Kurapika/Illumi on edge cases.
+- Golden test breakage: adapter produces identical output, goldens remain green.
+
+**Impact:**
+
+- Web gains 20 missing features immediately
+- VS Code loses zero functionality
+- Both platforms share one tested renderer
+- Future graph features coded once
+
+**Next Phase:** Kurapika + Illumi coordinate on Task 4 complexity before task kickoff.
+

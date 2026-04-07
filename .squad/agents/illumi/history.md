@@ -298,3 +298,22 @@ All 12 Playwright tests passing (~5.5s). UI responsive and production-ready.
 **Commit:** ce01021
 
 **Status:** COMPLETE — Build passes (tsc + vite), single file edit only (runbookRunner.ts)
+
+---
+
+### Phase 1 Task 5: Shared Annotations Helper
+
+**Task:** Port `vscode/src/views/annotations.ts` to `shared/renderer/annotations.ts`
+
+**What I did:**
+- `Annotation` interface was NOT in `shared/renderer/types.ts` — added it to the Annotation types section
+- Created `shared/renderer/annotations.ts` with zero VS Code dependencies, importing `Annotation` via relative path `./types`
+- Exported: `countAnnotationsByStep`, `getStepAnnotations`, `getRunAnnotations`
+- Added `export * from './annotations'` to `shared/renderer/index.ts` barrel
+- TypeScript check passed with 0 errors (`cd web && npx tsc --noEmit`)
+
+**Annotation type location:** `shared/renderer/types.ts` (under `// ─── Annotation types ───` section)
+
+**Commit:** 0f8a007
+
+**Status:** COMPLETE

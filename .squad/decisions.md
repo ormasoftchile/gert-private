@@ -484,3 +484,98 @@
 - All meaningful changes require team consensus
 - Document architectural decisions here
 - Keep history focused on work, decisions focused on direction
+
+---
+
+## Recent Decisions (2026-04-07)
+
+### 2026-04-07: User directive — web feature parity is non-negotiable
+
+**By:** ormasoftchile (via Copilot)
+**Date:** 2026-04-07
+
+**What:** Chain views, prune, iterate pass selection, annotation badges, and minimap are REQUIRED features for the web version — not optional. The shared renderer must include ALL VS Code graph features. Missing features must be implemented, not left as web-only gaps.
+
+**Why:** User requirement — web must be functionally equivalent to VS Code. Gaps are bugs, not deferred scope.
+
+**Impact on plan:** Phase 1 of the shared renderer refactor must implement missing graph features DIRECTLY in the shared package (not in web first and then refactor). Implement once, both platforms consume.
+
+---
+
+### 2026-04-07: Shared Renderer Phase 1 — Full Feature Parity Architecture
+
+**By:** Gon (Lead Architect)
+**Date:** 2026-04-07
+**Status:** PROPOSED
+
+**What:** Phase 1 of the shared renderer refactor: port ALL 20 VS Code graph renderer features into `shared/renderer/graph/` as a single implementation consumed by both VS Code and web. No feature remains platform-specific except IPC wiring.
+
+**Key Architecture Decisions:**
+
+1. `GraphRenderOptions` replaces `GraphRenderContext`
+   - VS Code's `GraphRenderContext` is a class with methods bound to `RunbookPanel`
+   - Shared version uses a plain options bag with optional callback injection
+   - Options bag is serializable, testable without mocking, and allows each platform to provide only what it has
+   - Callbacks are the escape hatch for platform-specific lookups
+
+2. Web's `branchCondition` fix becomes canonical
+   - Web computes `branchCondition` with `→ true`/`→ false` at layout time
+   - VS Code computes it dynamically during render
+   - Shared version adopts web's approach for simplicity and self-containment
+
+3. Web's passthrough `nodeStepMap` fix becomes canonical
+   - VS Code's `nodeStepMap.set(passId, id)` on passthrough nodes maps them to the parent branch step
+   - This causes `isTaken()` to incorrectly return true
+   - Web correctly omits this mapping — shared version inherits the fix
+
+4. Shared renderer owns ALL SVG generation
+   - Both `renderExecutionGraph()` and `renderEditorGraph()` live in `shared/renderer/graph/renderGraph.ts`
+   - Platform adapters are thin wrappers (~50 lines) that read platform settings and call the shared function
+   - Single source of truth eliminates divergence
+
+5. 10 tasks across 2 engineers, 7-9 day estimate
+   - Critical path: shared treeToGraph → core renderer → platform adapters → web UI
+   - Maximum parallelism: Tasks 1, 3, 5, 6, 10 can all run concurrently
+
+**Risks:**
+
+1. CSS variable handling — shared SVG uses `var(--vscode-*)` which web must map to `var(--gert-*)`. Mitigated by Phase 0 theme extraction.
+2. Feature interaction complexity — iterate pass selection + expanded iterate + prune interact non-trivially. Task 4 (iterate state mapping) is the hardest single task.
+3. VS Code golden test breakage — any SVG output change breaks existing goldens. Mitigated by adapter approach.
+
+**Impact:**
+
+- Web gains 20 features it was missing
+- VS Code loses zero functionality
+- Both platforms share a single tested renderer
+- Future graph features are implemented once
+
+---
+
+### 2026-04-07: Phase 0 — Shared Renderer Extraction Complete
+
+**Agent:** Kurapika (Frontend Engineer)
+**Date:** 2026-04-07
+**Status:** ✅ COMPLETE
+
+**What:** Created `shared/renderer/` — a zero-dependency package containing shared rendering logic extracted from both `vscode/` and `web/`. Both builds passing.
+
+**Deliverables:**
+
+- `shared/renderer/types.ts` — unified type exports
+- `shared/renderer/helpers.ts` — shared utility functions with optional `highlightCode` callback
+- `shared/renderer/theme/` — canonical theme implementations (graphTheme, highContrast, light)
+- Updated 20 files across vscode/ and web/ to consume `@gert/renderer`
+
+**Build Status:**
+
+- web: `npm run build` ✅ (tsc + vite, 94 modules, zero errors)
+- vscode: `npm run compile` ✅ (esbuild, 1.1mb bundle)
+- vscode tsc type check: 5 pre-existing errors in `extension.ts` (`.label` on `string`) — unrelated
+
+**Notes:**
+
+- `GraphNode.branchCondition` was added to shared types (web had it, vscode didn't — merged)
+- `highlightQuery` callback pattern ready for any renderer that wants syntax highlighting
+- Ready for Phase 1 feature porting
+

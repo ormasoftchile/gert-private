@@ -955,3 +955,25 @@ For all three event handlers, gate the raw `p.stepId` write behind `else` — wh
 - `highlightQuery` pattern: shared version uses optional callback; vscode wraps with hljs; web uses plain escaping
 - esbuild alias and Vite alias handle sub-paths differently — both need the directory (not the index file) as the base
 - TypeScript `export type { X }` only re-exports; you must ALSO `import type { X }` to use X in local function bodies
+
+### 2026-04-07: Phase 0 — Shared Renderer Extraction Complete
+
+**Status:** ✅ COMPLETE
+
+**Deliverable:** Created `shared/renderer/` package extracting shared rendering logic from vscode/ and web/.
+
+**Work:**
+- Created `shared/renderer/types.ts` with unified type exports
+- Created `shared/renderer/helpers.ts` with shared utilities
+- Extracted 3 canonical theme files to `shared/renderer/theme/`
+- Updated 20 files across vscode/ and web/ to consume `@gert/renderer`
+- Both builds passing: web `npm run build` ✅, vscode `npm run compile` ✅
+
+**Key design:**
+- Path alias `@gert/renderer` in both tsconfigs
+- vscode: esbuild alias + re-exports thin wrappers
+- web: Vite regex alias + direct imports
+- `highlightQuery` callback pattern ready for future syntax highlighting
+
+**Ready for:** Phase 1 feature porting (Gon leading)
+

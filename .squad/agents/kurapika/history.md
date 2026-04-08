@@ -1207,3 +1207,55 @@ All `DisplayConfig` fields pass through unchanged; they come from `factory.ts`'s
 
 **Outcome:** Phase 1 task tests run under `vscode/jest.config.js`; all tests pass
 
+
+---
+
+### 2026-06-26: Iterate Visual Redesign — Sequential Container + Parallel Fork/Join
+
+**Requested by:** ormasoftchile
+
+**Task:** Implement distinct visual languages for sequential vs parallel iterate blocks in the runbook graph (static definition-time view).
+
+**Files modified:**
+- `shared/renderer/types.ts` — added `over`, `concurrency`, `collect` to `TreeNode.iterate`; added `'fork-diamond' | 'join-diamond'` to `GraphNode.type` union
+- `shared/renderer/graph/treeToGraph.ts` — replaced monolithic `layoutIterate()` with three functions: `layoutIterate()` (dispatcher), `layoutIterateSequentialContainer()`, `layoutIterateParallelFork()`
+- `shared/renderer/graph/renderGraph.ts` — updated both `renderEditorGraph` and `renderExecutionGraph` to handle new node types and the sequential container visual
+- `shared/renderer/graph/treeToGraph.test.ts` — updated the back-edge test; added parallel fork/join test
+
+**Design decisions implemented:**
+
+**Sequential iterate (no `concurrency` or `concurrency: 1`):**
+- Node type remains `'iterate'`, `data._iterateType = 'sequential'`
+- Header node width expands to `max(ITER_W, bodyWidth + 2×CONTAINER_HPAD)` after body layout is known
+- `data._containerHeight` stores full container extent for the renderer to draw a background rect
+- NO back-edge — the container rect IS the visual loop indicator
+- Header label becomes `for each {as} in {over}` (or fallback patterns)
+- Renderer draws: full container rect (solid border, light fill) + header fill strip + separator line + text
+
+**Parallel iterate (`concurrency > 1`):**
+- No `iterate` node created; replaced by `fork-diamond` (id=`fork-{id}`) and `join-diamond` (id=`join-{id}`)
+- Both have `stepId: id` for state resolution; `nodeStepMap.set(fork/join, id)` preserves `isTaken()` logic
+- Body lays out between fork and join with standard GAP_Y spacing
+- NO back-edge
+- Fork rendered as diamond polygon with `×N` label and "parallel" subtitle
+- Join rendered as dashed diamond with "join" label
+
+**Key layout patterns:**
+- Header node mutation pattern: `addNode()` returns the node reference, allowing post-hoc width/x/data updates after body layout dimensions are known
+- Container width = `Math.max(ITER_W, bodyLayout.width + 2 × CONTAINER_HPAD)` — body always fits
+- The `iteratePassStripH` expansion in renderExecutionGraph still operates on `type === 'iterate'` nodes, which sequential containers are — backward compatible
+
+**Test changes:**
+- Updated "single iterate block creates iterate node with back-edge" → "sequential iterate creates container node (no back-edge)"
+- Added "parallel iterate creates fork and join diamond nodes (no back-edge)"
+- All 85 shared/renderer treeToGraph tests pass; 211 total vscode tests pass
+
+**Skipped (stretch goals):**
+- Runtime expanded view (sequential groups stacked with dividers, parallel N columns) — requires `iteratePassHistory` data at render time
+- The existing `expandedIterate` rendering path (via `layoutExpandedIterate`) continues unchanged
+
+## Learnings
+- `addNode()` returns the pushed node reference — this is the correct pattern for updating node dimensions after body layout is computed (container width depends on body width, which is unknown when the header node is first created)
+- For parallel fork/join, `nodeStepMap.set(forkId, iterateId)` ensures `isTaken(forkId)` correctly resolves to the iterate step's state — avoids ghost-green edges
+- The `GraphNode.type` union is used for renderer branching; adding new types (`fork-diamond`, `join-diamond`) is clean as long as all render paths (simple + full execution) handle them explicitly
+- Edge attachment in the SVG uses `botY(src)` / `topY(tgt)` — for fork/join diamonds (SMALL_W × SMALL_H), the center and edge points fall inside the diamond polygon, which looks correct for the default bezier path rendering

@@ -707,3 +707,38 @@ The Playwright webServer config starts gert on 7778 + Vite with GERT_PORT=7778. 
 - `web/tests/screenshots/phase1-graph.png` — Reference screenshot
 - `web/tsconfig.json` — Added test exclusion for shared renderer
 
+
+### 2026-06-XX: Iterate Visual Redesign Tests
+
+**Context:** Wrote Playwright tests defining the UI contract for the iterate block visual redesign (sequential container rect + parallel fork/join diamonds). Tests intentionally fail until Kurapika ships the CSS classes.
+
+**Test Files Created:**
+- `web/tests/specs/iterate-sequential.spec.ts` — 4 tests (3 static + 1 runtime)
+- `web/tests/specs/iterate-parallel.spec.ts` — 5 tests (4 static + 1 runtime)
+
+**Assertion Strategy:**
+- Static tests load runbook → call `exec/start` → graph renders all nodes in `pending` state → assert CSS classes in SVG before any step advances.
+- Runtime tests wait for iterate to complete all passes, handle the final `type: manual` step (click "Mark Complete"), then assert.
+- Hard assertions for primary CSS classes (`wf-iterate-container`, `wf-fork-diamond`, `wf-join-diamond`). Soft warnings (console.warn) for secondary runtime attributes (`data-iterate-pass`, `data-iterate-lane`) not yet implemented.
+
+**Pattern Choices:**
+- `page.evaluate()` for SVG DOM inspection — avoids brittle Playwright locator chains on generated SVG.
+- `Promise.race()` on multiple possible manual-step button selectors — resilient to label changes.
+- Helper functions (`openRunner`, `startRun`, `waitForGraph`) duplicated per file for test isolation (no shared state across spec files).
+- `test.setTimeout(120000)` on runtime describe blocks; static tests use the 30s default.
+
+**Flakiness Risks:**
+- **Tool availability:** `collect-health.runbook.yaml` invokes `check-service.runbook.yaml` which uses `curl` tool. If curl tool is not registered in gert, invoke steps fail. `continue_on_fail: true` on inner steps mitigates this.
+- **Race condition on screenshot:** Graph renders immediately on `exec/start` but steps start executing. With `delay: 2s` on the check-service step, there's a ~2s window to capture the pending state. Low risk.
+- **Parallel iterate timing:** `concurrency: 3` means all 3 passes run simultaneously; runtime screenshot captures the joined state after fork/join complete. Not a race risk.
+- **Manual step detection:** Uses dual `Promise.race` selector guard for "Mark Complete" vs outcome buttons. Timeout 60s is generous.
+
+**Key Finding — Graph Renders from `exec/start`:**
+The graph is only rendered after `exec/start` returns `result.tree` (line 1881 of runbookRunner.ts). There is no static preview before execution begins. "Static" tests use the all-pending initial render after `exec/start`.
+
+**Runbooks Used:**
+- `examples/nested/collect-health.runbook.yaml` — sequential iterate (no concurrency), 3 items, invoke+noop steps, ends with manual step
+- `examples/nested/collect-health-parallel.runbook.yaml` — parallel iterate (concurrency: 3), same items, collect+join, ends with manual step
+
+**No Scenario Support in Web UI:**
+`exec/start` is called with `mode: 'real'` (hardcoded in runbookRunner.ts line 1875). The `scenarioDir` parameter supported by `serve.go` is not exposed in the web UI. Runtime tests therefore run against real tool execution.

@@ -5,49 +5,49 @@
       "universe": "Hunter x Hunter",
       "created_at": "2026-03-17T00:00:00Z",
       "legacy_named": false,
-      "status": "active"
+      "status": "retired"
     },
     "killua": {
       "persistent_name": "Killua",
       "universe": "Hunter x Hunter",
       "created_at": "2026-03-17T00:00:00Z",
       "legacy_named": false,
-      "status": "active"
+      "status": "retired"
     },
     "kurapika": {
       "persistent_name": "Kurapika",
       "universe": "Hunter x Hunter",
       "created_at": "2026-03-17T00:00:00Z",
       "legacy_named": false,
-      "status": "active"
+      "status": "retired"
     },
     "leorio": {
       "persistent_name": "Leorio",
       "universe": "Hunter x Hunter",
       "created_at": "2026-03-17T00:00:00Z",
       "legacy_named": false,
-      "status": "active"
+      "status": "retired"
     },
     "hisoka": {
       "persistent_name": "Hisoka",
       "universe": "Hunter x Hunter",
       "created_at": "2026-03-17T00:00:00Z",
       "legacy_named": false,
-      "status": "active"
+      "status": "retired"
     },
     "illumi": {
       "persistent_name": "Illumi",
       "universe": "Hunter x Hunter",
       "created_at": "2026-04-06T00:00:00Z",
       "legacy_named": false,
-      "status": "active"
+      "status": "retired"
     },
     "knov": {
       "persistent_name": "Knov",
       "universe": "Hunter x Hunter",
       "created_at": "2026-04-06T00:00:00Z",
       "legacy_named": false,
-      "status": "active"
+      "status": "retired"
     }
   }
 }

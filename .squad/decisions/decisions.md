@@ -2953,3 +2953,269 @@ Tool (sub-sec to 30s), Step (100ms to 5min), Run (500ms to 1hr), Approval (10s t
 
 ### Parent-Based Sampling Strategy
 Inherit parent's sampling decision if trace exists; sample at configurable rate for standalone runs (default 100 0ev, 1-10
+
+---
+
+## §03 & §14 — Step Type Refactor: Replace manual with choice/decision/collector (John, Barbara, Ken)
+
+**Date:** 2026-04-18  
+**Authors:** John (Schema Specialist), Barbara (Integrations Specialist), Ken (Runtime Architect)  
+**Status:** Implemented  
+**Affects:** §03 Schema vNext, §14 Input Provider Framework
+
+### John's Decision: Step Type Refactor
+
+**Decision:** Replace the overly-generic `manual` step type with three semantically precise step types:
+
+1. **`choice`** — User selects from predefined options; result stored in variable
+2. **`decision`** — User picks execution path; routes flow to selected runbook or step
+3. **`collector`** — User provides unstructured input (text, files, images, forms)
+
+**Rationale:** The `manual` step type conflated three distinct responsibilities violating single-responsibility principle:
+- Value capture (storing user selections)
+- Control flow (routing execution)
+- Data collection (gathering evidence/attachments)
+
+This created implementation ambiguity for parsers, runtimes, and authors.
+
+**New Step Type Inventory (12 total):**
+1. `cli` — Execute shell command
+2. `choice` — **NEW** — User selects; stores result
+3. `decision` — **NEW** — User picks path; routes execution
+4. `collector` — **REDEFINED** — Unstructured user input/files
+5. `tool` — Invoke named tool action
+6. `invoke` — Call another runbook
+7. `branch` — Conditional execution (if/else)
+8. `iterate` — Loop over collection
+9. `parallel` — Fan-out/fan-in with join semantics
+10. `assert` — Runtime assertion with predicates
+11. `compensate` — Saga pattern rollback registration
+12. `end` — Terminal outcome
+
+### choice Step Type Specification
+
+**Fields:**
+- `prompt` (string, required) — Question displayed to user
+- `options` (array, required) — List of `{label, value, hint}` objects
+- `variable` (string, required) — Variable name to store selected value
+- `default` (string, optional) — Default option value
+
+**Constraints:** Minimum 2 options; unique values; default must match option value if provided
+
+**Example:**
+```yaml
+- step:
+    id: select_environment
+    type: choice
+    prompt: Which environment are you deploying to?
+    options:
+      - label: Staging
+        value: staging
+      - label: Production
+        value: production
+    variable: deploy_env
+    default: staging
+```
+
+### decision Step Type Specification
+
+**Fields:**
+- `prompt` (string, required) — Scenario description
+- `routes` (array, required) — List of `{label, runbook, goto, hint}` objects (min 2)
+- `variable` (string, optional) — Stores selected route label for audit
+
+**Constraints:** Min 2 routes; each route has exactly one of `runbook` OR `goto`; unique labels; `router` accepted as synonym
+
+**Example:**
+```yaml
+- step:
+    id: triage_decision
+    type: decision
+    prompt: Based on error rate, which response path?
+    routes:
+      - label: Standard mitigation
+        runbook: incident-standard-mitigation
+      - label: Emergency rollback
+        runbook: incident-emergency-rollback
+      - label: Escalate to on-call
+        goto: escalate_step
+    variable: chosen_path
+```
+
+### collector Step Type Specification
+
+**Fields:**
+- `prompt` (string, required) — Markdown instructions
+- `fields` (array, required) — List of `{name, type, label, required, hint}` objects
+- `approvals` (object, optional) — Approval gate config
+
+**Field types:** `text`, `multiline`, `file`, `image`, `url`
+
+**Approval gate:**
+- `min` (integer, required) — Minimum approvals needed
+- `roles` (array, required) — Authorized roles
+- `timeout` (duration, optional) — e.g., `4h`, `30m`
+- `on_timeout` (enum, optional) — `escalate | fail | skip`
+- `escalate_to` (array, optional) — Escalation roles
+
+**Example:**
+```yaml
+- step:
+    id: collect_evidence
+    type: collector
+    prompt: Gather incident evidence
+    fields:
+      - name: incident_summary
+        type: multiline
+        label: Incident summary
+        required: true
+      - name: error_log
+        type: file
+        label: Error log file
+        required: true
+    approvals:
+      min: 1
+      roles: [DRI]
+      timeout: 30m
+      on_timeout: fail
+```
+
+### Migration Disposition
+
+`manual` steps REMOVED entirely. All use cases covered by three new types:
+- "Prompt user to pick environment" → `choice`
+- "Ask user which runbook path to take" → `decision`
+- "Collect incident evidence and approval" → `collector`
+
+Updated §03 migration rules (lines 172–184). Since v2 is not yet released, migration impact limited to internal team and design iterations.
+
+### Barbara's Decision: §14 Input Provider Framework Updates
+
+**Decision:** Enhanced §14 to define how input providers serve the three new interactive step types.
+
+**New Section: Interactive Step Type Contracts (§14.6)**
+
+**1. Choice Step Contract (§14.6.1)**
+- JSON-RPC method: `provider/choice`
+- Request: stepId, prompt, options array (value + label pairs), optional default
+- Response: selected value
+- Validation: selected value must match option value exactly
+- Built-in `prompt` provider: presents numbered list in terminal
+
+**2. Decision Step Contract (§14.6.2)**
+- JSON-RPC method: `provider/decision`
+- Request: stepId, prompt, routes array (route + label pairs)
+- Response: selected route label
+- Design point: provider does NOT need graph knowledge; only returns route label
+- Engine resolves route label to target node and validates existence
+- Decision result NOT stored as variable (flow control only)
+
+**3. Collector Step Contract (§14.6.3)**
+- JSON-RPC method: `provider/collect`
+- Request: stepId, instructions, fields array with type-specific constraints
+- Field types: text, file, url, number, date
+- File upload support: MIME type restrictions, size limits, SHA-256 hashing
+- Response: values map + artifacts array with storage metadata
+- Artifact metadata: field, filename, contentType, sizeBytes, sha256, storagePath
+- Built-in storage path: `.gert/runs/<runId>/artifacts/`
+
+**4. Provider Capability Matrix (§14.6.4)**
+- Table showing which built-in providers support which step types
+- Only `prompt` supports all three interactive step types
+- `env`, `file`, `workspace` only support input resolution
+- External providers advertise capabilities in `provider/initialize` handshake
+- Fallback: if provider doesn't support step type, engine uses `prompt` provider
+
+### Design Decisions (Barbara's Integration Analysis)
+
+| Decision | Rationale |
+|----------|-----------|
+| Providers advertise step type support via capabilities | Graceful fallback to `prompt` provider when external provider doesn't implement contracts |
+| Decision steps do NOT store route as variable | Pure control flow; if value needed, runbook author adds explicit assignment in target |
+| Provider doesn't know runbook graph | Clean separation; provider returns route label, engine handles graph navigation |
+| File size limits enforced by provider | Prevents partial uploads; provider rejects before storage |
+| SHA-256 in artifact metadata | Enables integrity verification and evidence chain validation |
+| External providers MAY use remote storage | Supports cloud deployments (S3, Azure Blob) with signed URLs |
+
+### Integration Points
+
+- **§03 (Schema Spec):** John defining three step types in taxonomy
+- **§05 (Tool Runtime):** Provider transport shares JSON-RPC mechanics with tools
+- **§07 (Security):** Artifact storage inherits evidence capture and SHA-256 requirements
+- **§13 (Adapter Contracts):** Provider contracts follow same versioning model
+
+### Ken's Architecture Review Decisions
+
+**Context:** Cross-section consistency review of gert v2 design document (§00–§15) identified critical interface mismatches.
+
+**Decision 1: Event Envelope Field Names Standardized**
+
+Resolved interface mismatch — standardized all event envelope field names across design document:
+- `seq` → `sequence` (monotonic counter within run)
+- `type` → `kind` (event kind classification)
+- `data` → `payload` (event-specific data)
+
+§06 (Runtime Events) is normative specification. §10 (Migration) already documented v1→v2 rename. §12 and §11 examples were using legacy v1 names.
+
+**Scope:** §12 JSONL envelope and event examples; §11 governance approval traces; §08 references to "seq" ordering
+
+**Status:** ✅ APPLIED — inline fixes completed
+
+**Decision 2: event_id Field Added to Trace Envelope**
+
+Added missing `event_id` field to §12 trace JSONL envelope:
+```json
+"event_id": <string>  // UUID v4 for correlation with external systems
+```
+
+§06 declares `event_id` as one of 7 mandatory envelope fields. §10 "after" example showed event_id in v2. Without it, correlation with external observability (OTel, logs) impossible.
+
+**Use cases:** Correlation between JSONL trace events and OTel spans; idempotency keys; audit trail across distributed systems
+
+**Status:** ✅ APPLIED — inline fix completed in §12
+
+**Architectural Clarification: Wire Format Conventions**
+
+Review identified both `run_id` (snake_case) and `runId` (camelCase) — this is INTENTIONAL and CORRECT:
+
+- **JSONL trace files** (§06, §12, §15 logs): Use **snake_case**
+  - Fields: `run_id`, `runbook_id`, `step_id`, `event_id`, `sequence`
+  - Rationale: Persistent audit format follows Go struct field tags
+
+- **JSON-RPC wire protocol** (§05, §13, §14): Use **camelCase**
+  - Fields: `runId`, `runbookPath`, `stepId`, `actorId`
+  - Rationale: JavaScript conventions for RPC APIs
+
+**Recommendation:** Add explicit subsection to §13.1 documenting this convention.
+
+**Status:** ⚠️ FOLLOW-UP NEEDED — Leslie (scribe) should add §13.1 clarification
+
+### Review Metrics
+
+- Sections reviewed: 16 (§00–§15)
+- Line count: 9,085 lines
+- Critical issues found: 5 (interface mismatches)
+- Critical issues fixed: 5
+- Minor issues found: 12 (documentation gaps)
+- Cross-references checked: All valid
+- Interface contracts checked: All consistent (after fixes)
+- Overall verdict: APPROVED WITH FIXES ✅
+
+### Files Changed
+
+- `design/gert-v2/sections/03-schema-vnext.tex` (§03: choice/decision/collector specs)
+- `design/gert-v2/sections/14-input-provider-framework.tex` (§14.6: +332 lines)
+
+### Build Status
+
+- Document builds to 256 pages
+- LaTeX syntax correct in both sections
+- PDF generation successful
+
+### Implementation Coordination
+
+Cross-team roles:
+- **John** owns normative schema specification (§03)
+- **Brian** (Parser Engineer) implements in parser/validator
+- **Ken** (Runtime Engineer) implements execution semantics
+- **Sam** (VS Code Engineer) implements UI rendering

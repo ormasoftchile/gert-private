@@ -285,6 +285,338 @@ The path after \texttt{workspace.} is a dot-notation key into the workspace
 configuration object.  This allows teams to centralise defaults without
 repeating them in every runbook.
 
+\section{Interactive Step Type Contracts}
+\label{sec:interactive-step-contracts}
+
+Input providers not only resolve \texttt{from:} bindings for runbook inputs,
+they also power the three interactive step types: \texttt{choice},
+\texttt{decision}, and \texttt{collector}.  When the run engine executes one of
+these steps, it dispatches a step-specific request to the configured input
+provider (or falls back to the built-in \texttt{prompt} provider).
+
+\subsection{Choice Step Contract}
+\label{subsec:choice-contract}
+
+A \texttt{choice} step presents the operator with a fixed set of labeled
+options and stores the selected value as a variable.  This is analogous to a
+dropdown menu or radio button group in a graphical form.
+
+\paragraph{Request envelope.}
+When the run engine executes a \texttt{choice} step, it sends a
+\texttt{provider/choice} JSON-RPC request to the configured provider:
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "choice-1",
+  "method": "provider/choice",
+  "params": {
+    "stepId": "select-region",
+    "prompt": "Select the target AWS region",
+    "options": [
+      { "value": "us-east-1", "label": "US East (N. Virginia)" },
+      { "value": "us-west-2", "label": "US West (Oregon)" },
+      { "value": "eu-west-1", "label": "Europe (Ireland)" }
+    ],
+    "default": "us-east-1",
+    "context": {
+      "runId": "run-abc123",
+      "stepId": "select-region",
+      "userId": "ops@acme.example",
+      "mode": "real"
+    }
+  }
+}
+\end{verbatim}
+
+\paragraph{Response envelope.}
+The provider returns the selected value:
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "choice-1",
+  "result": {
+    "selected": "us-west-2"
+  }
+}
+\end{verbatim}
+
+\paragraph{Contract requirements.}
+\begin{itemize}
+  \item The \texttt{options} array must contain at least two elements.
+  \item Each option must have both \texttt{value} (the string stored in the
+        variable) and \texttt{label} (the human-readable text displayed to the
+        operator).
+  \item The \texttt{default} field is optional.  If present, it must match one
+        of the \texttt{value} fields in the \texttt{options} array.
+  \item The provider's \texttt{selected} response must match one of the option
+        values exactly.  If the provider returns a value not in the options
+        list, the run engine fails the step with a
+        \texttt{choice.invalid\_selection} error.
+  \item Providers MAY render options in the order provided, or MAY sort them
+        alphabetically by label for improved usability.  The canonical order is
+        declared in the runbook YAML.
+\end{itemize}
+
+\paragraph{Built-in prompt provider behaviour.}
+The built-in \texttt{prompt} provider presents a numbered list in the terminal
+and waits for the operator to enter the number or value corresponding to their
+selection.  In \texttt{dry-run} mode, it reads the value from the scenario's
+\texttt{inputs.yaml} or uses the \texttt{default} if provided.
+
+\subsection{Decision (Router) Step Contract}
+\label{subsec:decision-contract}
+
+A \texttt{decision} step (also known as \texttt{router} in v1) presents the
+operator with a set of routing choices, where each choice directs execution to
+a different runbook or labeled section.  Unlike \texttt{choice}, a
+\texttt{decision} is a control-flow primitive: the selected route determines
+which node the run engine transitions to next.
+
+\paragraph{Request envelope.}
+When the run engine executes a \texttt{decision} step, it sends a
+\texttt{provider/decision} JSON-RPC request:
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "decision-1",
+  "method": "provider/decision",
+  "params": {
+    "stepId": "triage-severity",
+    "prompt": "Select the incident severity level",
+    "routes": [
+      { "route": "p1-critical", "label": "P1: Critical (immediate)" },
+      { "route": "p2-high",     "label": "P2: High (1 hour SLA)" },
+      { "route": "p3-normal",   "label": "P3: Normal (24 hour SLA)" }
+    ],
+    "context": {
+      "runId": "run-abc123",
+      "stepId": "triage-severity",
+      "userId": "ops@acme.example",
+      "mode": "real"
+    }
+  }
+}
+\end{verbatim}
+
+\paragraph{Response envelope.}
+The provider returns the selected route label:
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "decision-1",
+  "result": {
+    "route": "p2-high"
+  }
+}
+\end{verbatim}
+
+\paragraph{Contract requirements.}
+\begin{itemize}
+  \item The \texttt{routes} array must contain at least two elements.
+  \item Each route must have both \texttt{route} (the target node label or
+        runbook ID) and \texttt{label} (the human-readable text).
+  \item The provider does \emph{not} need to know about the runbook graph
+        structure.  It only returns the selected route label.  The run engine
+        is responsible for resolving the route label to a target node and
+        validating that the target exists.
+  \item If the provider returns a route label not in the \texttt{routes} array,
+        the run engine fails the step with a \texttt{decision.invalid\_route}
+        error.
+  \item The decision result is \emph{not} stored as a variable.  It only
+        controls execution flow.  If the operator needs the decision recorded,
+        the runbook author must add an explicit variable assignment in the
+        target node.
+\end{itemize}
+
+\paragraph{Built-in prompt provider behaviour.}
+The built-in \texttt{prompt} provider displays the routes as a numbered list
+and waits for the operator to select one.  In \texttt{dry-run} mode, the route
+is read from the scenario file or the run fails if no scenario is provided.
+
+\subsection{Collector Step Contract}
+\label{subsec:collector-contract}
+
+A \texttt{collector} step gathers unstructured input from the operator: free-form
+text, multi-line notes, file attachments, screenshots, URLs, or other evidence
+artifacts.  The collected data is stored as named variables or artifacts in the
+run's state.
+
+\paragraph{Request envelope.}
+When the run engine executes a \texttt{collector} step, it sends a
+\texttt{provider/collect} JSON-RPC request:
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "collect-1",
+  "method": "provider/collect",
+  "params": {
+    "stepId": "gather-evidence",
+    "instructions": "Upload a screenshot of the error and describe the issue",
+    "fields": [
+      {
+        "name": "screenshot",
+        "type": "file",
+        "label": "Error screenshot",
+        "required": true,
+        "accept": ["image/png", "image/jpeg"],
+        "maxSizeBytes": 10485760
+      },
+      {
+        "name": "description",
+        "type": "text",
+        "label": "Describe what you observed",
+        "required": true,
+        "multiline": true
+      },
+      {
+        "name": "log_url",
+        "type": "url",
+        "label": "Link to related logs (optional)",
+        "required": false
+      }
+    ],
+    "context": {
+      "runId": "run-abc123",
+      "stepId": "gather-evidence",
+      "userId": "ops@acme.example",
+      "mode": "real"
+    }
+  }
+}
+\end{verbatim}
+
+\paragraph{Response envelope.}
+The provider returns the collected values and any uploaded artifacts:
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "collect-1",
+  "result": {
+    "values": {
+      "description": "Database connection pool exhausted...",
+      "log_url": "https://logs.acme.example/trace/xyz"
+    },
+    "artifacts": [
+      {
+        "field": "screenshot",
+        "filename": "error-2026-04-18.png",
+        "contentType": "image/png",
+        "sizeBytes": 245631,
+        "sha256": "a3c7d1f...",
+        "storagePath": "artifacts/run-abc123/screenshot.png"
+      }
+    ]
+  }
+}
+\end{verbatim}
+
+\paragraph{Contract requirements.}
+\begin{itemize}
+  \item The \texttt{fields} array declares the form structure.  Each field has:
+        \begin{itemize}
+          \item \texttt{name}: the variable name where the value will be stored.
+          \item \texttt{type}: one of \texttt{text}, \texttt{file}, \texttt{url},
+                \texttt{number}, or \texttt{date}.
+          \item \texttt{label}: human-readable prompt text.
+          \item \texttt{required}: boolean flag.
+          \item Type-specific constraints: \texttt{accept} (MIME types for file
+                uploads), \texttt{maxSizeBytes} (file size limit), \texttt{multiline}
+                (for text fields).
+        \end{itemize}
+  \item Providers MUST return all required fields in the \texttt{values} map.
+        If a required field is missing, the run engine fails the step with a
+        \texttt{collector.missing\_required\_field} error.
+  \item For \texttt{type: file} fields, providers MUST upload the file to the
+        artifact store and return metadata in the \texttt{artifacts} array.
+        The artifact metadata includes:
+        \begin{itemize}
+          \item \texttt{field}: the field name from the request.
+          \item \texttt{filename}: the original filename.
+          \item \texttt{contentType}: MIME type.
+          \item \texttt{sizeBytes}: file size in bytes.
+          \item \texttt{sha256}: SHA-256 hash for integrity verification.
+          \item \texttt{storagePath}: path where the artifact is stored (relative
+                to the run's artifact root).
+        \end{itemize}
+  \item File size limits are enforced by the provider.  If an uploaded file
+        exceeds \texttt{maxSizeBytes}, the provider MUST reject it with a
+        \texttt{collector.file\_too\_large} error before storing it.
+  \item Supported MIME types for file uploads:
+        \begin{itemize}
+          \item Images: \texttt{image/png}, \texttt{image/jpeg}, \texttt{image/gif}
+          \item Documents: \texttt{application/pdf}, \texttt{text/plain},
+                \texttt{text/markdown}
+          \item Archives: \texttt{application/zip}, \texttt{application/x-tar},
+                \texttt{application/gzip}
+          \item Logs: \texttt{text/plain}, \texttt{application/json}
+        \end{itemize}
+  \item Providers MAY support additional MIME types, but MUST respect the
+        \texttt{accept} constraint if declared in the field definition.
+  \item The artifact storage path is provider-specific.  The built-in
+        \texttt{prompt} provider stores artifacts in
+        \texttt{.gert/runs/<runId>/artifacts/}.  External providers (e.g., S3,
+        Azure Blob) MAY store artifacts in remote storage and return a signed
+        URL or storage reference.
+\end{itemize}
+
+\paragraph{Built-in prompt provider behaviour.}
+The built-in \texttt{prompt} provider displays each field as a terminal prompt.
+For \texttt{type: text} with \texttt{multiline: true}, it opens the operator's
+configured editor (\texttt{\$EDITOR}).  For \texttt{type: file}, it prompts for
+a file path and copies the file to the local artifact store.  In
+\texttt{dry-run} mode, all values are read from the scenario file.
+
+\subsection{Provider Capability Matrix}
+\label{subsec:provider-capability-matrix}
+
+Not all providers support all interactive step types.  The following table
+shows which step types each built-in provider supports:
+
+\begin{center}
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Provider} & \textbf{Input Resolution} & \textbf{choice} & \textbf{decision} & \textbf{collector} \\
+\hline
+\texttt{prompt}   & Yes & Yes & Yes & Yes \\
+\texttt{env}      & Yes & No  & No  & No  \\
+\texttt{file}     & Yes & No  & No  & No  \\
+\texttt{workspace}& Yes & No  & No  & No  \\
+\hline
+\end{tabular}
+\end{center}
+
+External providers (PagerDuty, ServiceNow, Slack, etc.) MAY implement any
+combination of these contracts.  A provider that implements
+\texttt{provider/choice} MUST declare this in its capability advertisement
+during the handshake phase:
+
+\begin{verbatim}
+# Example provider capability declaration
+{
+  "jsonrpc": "2.0",
+  "method": "provider/initialize",
+  "params": {
+    "capabilities": {
+      "resolution": true,
+      "choice": true,
+      "decision": false,
+      "collector": true
+    }
+  }
+}
+\end{verbatim}
+
+If the run engine encounters a \texttt{choice}, \texttt{decision}, or
+\texttt{collector} step and the configured provider does not advertise the
+corresponding capability, the engine falls back to the built-in \texttt{prompt}
+provider.
+
 \section{Provider Composition}
 \label{sec:provider-composition}
 

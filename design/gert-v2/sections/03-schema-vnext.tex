@@ -136,9 +136,10 @@ constraints are \emph{not} breaking changes.
 \texttt{flow}                   & Retained  & Canonical execution root \\
 \texttt{tree}                   & Removed   & Use \texttt{flow} \\
 \texttt{steps}                  & Removed   & Flat step list was never canonical \\
-\texttt{step.type: collector}   & Renamed   & Becomes \texttt{type: manual} \\
+\texttt{step.type: collector}   & Renamed   & Split into \texttt{choice}, \texttt{decision}, \texttt{collector} \\
 \texttt{step.type: router}      & Renamed   & Becomes \texttt{type: end} \\
-\texttt{step.type: choice}      & Retained  & Unchanged \\
+\texttt{step.type: choice}      & New       & User selects from options; stores result \\
+\texttt{step.type: decision}    & New       & User picks runbook path; routes execution \\
 \texttt{step.type: noop}        & Removed   & Use \texttt{when:} guard on any step \\
 \texttt{step.type: extension}   & Retained  & Unchanged \\
 \texttt{step.with.argv}         & Deprecated& Use \texttt{type: cli} with \texttt{command:} \\
@@ -176,8 +177,9 @@ Migration rules applied automatically:
         to top-level.
   \item Move remaining \texttt{meta.*} fields to their v2 top-level equivalents.
   \item Rename \texttt{tree:} to \texttt{flow:}.
-  \item Rename \texttt{step.type: collector} → \texttt{manual},
-        \texttt{step.type: router} → \texttt{end}.
+  \item Replace generic \texttt{step.type: manual} from early v2 drafts with
+        three precise types: \texttt{choice}, \texttt{decision}, \texttt{collector}.
+  \item Rename \texttt{step.type: router} → \texttt{end}.
   \item Rewrite \texttt{tools: [name]} shorthand to \texttt{toolRefs:} typed
         declarations.
   \item Add \texttt{id:} to runbook if absent (derived from \texttt{name}).
@@ -639,77 +641,267 @@ the step pauses for human approval before proceeding.
       writes: [output]
 \end{verbatim}
 
-\subsection{Step Type: manual}
-\label{subsec:step-manual}
+\subsection{Step Type: choice}
+\label{subsec:step-choice}
 
-Prompts a human operator for evidence, approvals, or free-form input.  Renamed
-from \texttt{collector} in v1.  A \texttt{manual} step does not execute any
-command; it pauses execution and waits for the operator to provide the declared
-evidence items.
+Prompts the user to select from a set of predefined options and stores the
+result in a variable.  This is a value-capture primitive, analogous to a form
+field or radio-button group.  The selected value is available to subsequent
+steps via variable substitution.
 
 \begin{center}
 \begin{tabular}{lllp{5cm}}
 \hline
 \textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
 \hline
-\texttt{instructions}       & string  & No  & Markdown prompt displayed to operator \\
-\texttt{required\_evidence} & array   & No  & Evidence items (\S\ref{subsec:evidence}) \\
-\texttt{approvals}          & object  & No  & Approval gate config \\
-\texttt{choices}            & object  & No  & Radio-button choice selection \\
+\texttt{prompt}   & string  & Yes & Question or prompt displayed to user \\
+\texttt{options}  & array   & Yes & List of option objects \\
+\texttt{variable} & string  & Yes & Variable name to store selected value \\
+\texttt{default}  & string  & No  & Default option value if user skips \\
 \hline
 \end{tabular}
 \end{center}
 
-\paragraph{Evidence items}
-\label{subsec:evidence}
+\paragraph{Option structure}
+
+Each option is an object with:
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{label} & string & Yes & Display text shown to user \\
+\texttt{value} & string & Yes & Value stored in variable when selected \\
+\texttt{hint}  & string & No  & Additional context or help text \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{Constraints}
+
+\begin{itemize}
+  \item At least 2 options must be defined.
+  \item All \texttt{option.value} entries must be unique within a step.
+  \item If \texttt{default} is provided, it must match one of the option values.
+  \item The \texttt{variable} name follows standard identifier rules (alphanumeric + underscore).
+\end{itemize}
+
+\paragraph{Example: Environment selection}
 
 \begin{verbatim}
-required_evidence:
-  - kind: text
-    name: summary_notes
-  - kind: checklist
-    name: preflight
-    items:
-      - "Verified monitoring dashboard"
-      - "Confirmed no other incidents in flight"
-  - kind: attachment
-    name: screenshot
+- step:
+    id: select_environment
+    type: choice
+    title: Select deployment target
+    prompt: Which environment are you deploying to?
+    options:
+      - label: Staging
+        value: staging
+        hint: Non-production environment for validation
+      - label: Production
+        value: production
+        hint: Live customer-facing environment
+      - label: Canary (10%)
+        value: canary
+        hint: Gradual rollout to 10% of production traffic
+    variable: deploy_env
+    default: staging
 \end{verbatim}
+
+The value \texttt{staging}, \texttt{production}, or \texttt{canary} is stored in
+\texttt{\{\{ .deploy\_env \}\}} and can be referenced by subsequent steps.
+
+\subsection{Step Type: decision}
+\label{subsec:step-decision}
+
+Presents the user with 2 or more execution paths and routes the flow to the
+selected one.  This is a control-flow primitive: the user picks a branch, and
+execution forks to a different runbook or labeled section.  Unlike
+\texttt{choice}, which merely stores a value, \texttt{decision} directs the
+execution path itself.
+
+Also acceptable name: \texttt{router} (alias for \texttt{decision}).
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{prompt}   & string  & Yes & Question or scenario description \\
+\texttt{routes}   & array   & Yes & List of route objects (minimum 2) \\
+\texttt{variable} & string  & No  & Variable to store selected route label (audit) \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{Route structure}
+
+Each route is an object with:
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{label}   & string & Yes & Display text shown to user \\
+\texttt{runbook} & string & No  & Runbook ID to invoke (mutually exclusive with \texttt{goto}) \\
+\texttt{goto}    & string & No  & Step ID to jump to within current runbook \\
+\texttt{hint}    & string & No  & Additional context or help text \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{Constraints}
+
+\begin{itemize}
+  \item At least 2 routes must be defined.
+  \item Each route must specify exactly one of \texttt{runbook} or \texttt{goto}, not both.
+  \item All \texttt{route.label} entries must be unique within a step.
+  \item If \texttt{variable} is provided, it stores the selected route's \texttt{label}
+        for audit trails.
+\end{itemize}
+
+\paragraph{Example: Incident response fork}
+
+\begin{verbatim}
+- step:
+    id: triage_decision
+    type: decision
+    title: Choose incident response path
+    prompt: |
+      Based on the error rate and customer impact, which response
+      path should we take?
+    routes:
+      - label: Standard mitigation
+        runbook: incident-standard-mitigation
+        hint: Error rate < 5%, no customer escalations
+      - label: Emergency rollback
+        runbook: incident-emergency-rollback
+        hint: Error rate > 10% or critical customer impact
+      - label: Escalate to on-call
+        goto: escalate_to_oncall
+        hint: Unclear root cause; needs senior diagnosis
+    variable: chosen_path
+\end{verbatim}
+
+After the user selects a route, execution continues at the target runbook or
+step.  The \texttt{chosen\_path} variable contains the selected label
+(\texttt{"Standard mitigation"}, \texttt{"Emergency rollback"}, or
+\texttt{"Escalate to on-call"}) for audit purposes.
+
+\subsection{Step Type: collector}
+\label{subsec:step-collector}
+
+Prompts the user to provide unstructured input: free-form text, file attachments,
+screenshots, or multi-field forms.  The collected data is stored as named
+variables or artifacts for downstream steps or evidence capture.  This replaces
+the overly-generic \texttt{manual} step type from early v2 drafts.
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{prompt}     & string  & Yes & Markdown instructions displayed to user \\
+\texttt{fields}     & array   & Yes & List of field objects to collect \\
+\texttt{approvals}  & object  & No  & Approval gate config (\S\ref{subsec:approval-gate}) \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{Field structure}
+
+Each field is an object with:
+
+\begin{center}
+\begin{tabular}{lllp{4cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{name}     & string  & Yes & Variable name to store collected value \\
+\texttt{type}     & enum    & Yes & \texttt{text}, \texttt{multiline}, \texttt{file}, \texttt{image}, \texttt{url} \\
+\texttt{label}    & string  & Yes & Prompt or label text shown to user \\
+\texttt{required} & bool    & No  & If true, user must provide a value (default: false) \\
+\texttt{hint}     & string  & No  & Additional context or validation help \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{Field types}
+
+\begin{itemize}
+  \item \texttt{text}: Single-line text input.
+  \item \texttt{multiline}: Multi-line text area (e.g., for notes or summaries).
+  \item \texttt{file}: File attachment; stored as artifact with SHA256 hash.
+  \item \texttt{image}: Image/screenshot attachment; stored as artifact.
+  \item \texttt{url}: URL input with basic validation (must be valid URL).
+\end{itemize}
 
 \paragraph{Approval gate}
+\label{subsec:approval-gate}
 
-\begin{verbatim}
-approvals:
-  min: 2
-  roles: [DRI, change-manager]
-  timeout: 4h
-  on_timeout: escalate          # escalate | fail | skip
-  escalate_to: [manager]
-\end{verbatim}
+If the \texttt{approvals} field is present, the step requires explicit approval
+from designated roles before proceeding.
+
+\begin{center}
+\begin{tabular}{lllp{4cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{min}          & integer & Yes & Minimum approvals required \\
+\texttt{roles}        & array   & Yes & List of role names authorized to approve \\
+\texttt{timeout}      & string  & No  & Duration before timeout (e.g.\ \texttt{4h}) \\
+\texttt{on\_timeout}  & enum    & No  & \texttt{escalate}, \texttt{fail}, \texttt{skip} \\
+\texttt{escalate\_to} & array   & No  & Roles to escalate to if timeout occurs \\
+\hline
+\end{tabular}
+\end{center}
 
 The \texttt{timeout} and \texttt{on\_timeout} fields are new in v2, addressing
 the SLA enforcement gap identified in the research brief.
 
+\paragraph{Example: Incident evidence collection}
+
 \begin{verbatim}
 - step:
-    id: validate_dashboard
-    type: manual
-    title: Validate monitoring dashboard
-    instructions: |
-      Check the Grafana dashboard for **{{ .hostname }}**.
-      Confirm error rate is below 1% and P99 < 500 ms.
-    required_evidence:
-      - kind: checklist
-        name: dashboard_check
-        items:
-          - "Error rate < 1%"
-          - "P99 latency < 500ms"
+    id: collect_evidence
+    type: collector
+    title: Collect incident evidence
+    prompt: |
+      Gather all relevant evidence for the incident investigation.
+      Include screenshots, error logs, and a summary of impact.
+    fields:
+      - name: incident_summary
+        type: multiline
+        label: Incident summary
+        required: true
+        hint: Describe what happened, when, and what services were affected
+      - name: error_log
+        type: file
+        label: Error log file
+        required: true
+        hint: Attach the relevant error log from the affected service
+      - name: dashboard_screenshot
+        type: image
+        label: Monitoring dashboard screenshot
+        required: false
+        hint: Screenshot showing metrics during the incident
+      - name: related_ticket
+        type: url
+        label: Related ticket or alert URL
+        required: false
     approvals:
       min: 1
-      roles: [DRI]
+      roles: [DRI, incident-commander]
       timeout: 30m
       on_timeout: fail
 \end{verbatim}
+
+After the user provides the requested evidence and approval is granted, the
+collected values are available as \texttt{\{\{ .incident\_summary \}\}},
+\texttt{\{\{ .error\_log \}\}}, etc.  File and image attachments are stored as
+artifacts in the execution trace with SHA256 hashes for tamper-evidence.
 
 \subsection{Step Type: tool}
 \label{subsec:step-tool}

@@ -12,8 +12,14 @@
 
 | Name | Role | Charter | Status |
 |------|------|---------|--------|
-
-**Squad disbanded.**
+| Leslie | LaTeX Specialist | [charter](.squad/agents/leslie/charter.md) | 📝 Active |
+| Dennis | CS Researcher | [charter](.squad/agents/dennis/charter.md) | 🔬 Active |
+| Ken | Software Architect | [charter](.squad/agents/ken/charter.md) | 🏗️ Active |
+| Barbara | Integrations Specialist | [charter](.squad/agents/barbara/charter.md) | 🔌 Active |
+| Brian | Go Programmer | [charter](.squad/agents/brian/charter.md) | 🔧 Active |
+| John | YAML/Schema Specialist | [charter](.squad/agents/john/charter.md) | 📋 Active |
+| Scribe | Session Logger | [charter](.squad/agents/scribe/charter.md) | 📋 Silent |
+| Ralph | Work Monitor | — | 🔄 Monitor |
 
 ## Coding Agent
 

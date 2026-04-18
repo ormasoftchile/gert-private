@@ -48,6 +48,48 @@
       "created_at": "2026-04-06T00:00:00Z",
       "legacy_named": false,
       "status": "retired"
+    },
+    "leslie": {
+      "persistent_name": "Leslie",
+      "universe": "Computing Pioneers",
+      "created_at": "2026-04-18T20:12:16Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "dennis": {
+      "persistent_name": "Dennis",
+      "universe": "Computing Pioneers",
+      "created_at": "2026-04-18T20:12:16Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "ken": {
+      "persistent_name": "Ken",
+      "universe": "Computing Pioneers",
+      "created_at": "2026-04-18T20:12:16Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "barbara": {
+      "persistent_name": "Barbara",
+      "universe": "Computing Pioneers",
+      "created_at": "2026-04-18T20:12:16Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "brian": {
+      "persistent_name": "Brian",
+      "universe": "Computing Pioneers",
+      "created_at": "2026-04-18T20:12:16Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "john": {
+      "persistent_name": "John",
+      "universe": "Computing Pioneers",
+      "created_at": "2026-04-18T20:12:16Z",
+      "legacy_named": false,
+      "status": "active"
     }
   }
 }

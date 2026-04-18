@@ -6,7 +6,14 @@ How to decide who handles what.
 
 | Work Type | Route To | Examples |
 |-----------|----------|----------|
-| All work | ⚠️ No active team | Squad disbanded |
+| LaTeX authoring, document formatting, compilation | Leslie 📝 | "write this section", "fix the table", "compile the doc" |
+| Research, literature review, industry survey | Dennis 🔬 | "research runbook standards", "survey governance models" |
+| Architecture, system design, component boundaries | Ken 🏗️ | "design the runtime", "define component contracts", "review architecture" |
+| Integrations, tool definitions, provider contracts, extension runtime | Barbara 🔌 | "design tool transport", "extension runtime model", "provider abstraction" |
+| Go implementation, package design, code review | Brian 🔧 | "is this implementable in Go?", "Go patterns for X", "review v1 code" |
+| Schema design, YAML grammar, JSON Schema, data model | John 📋 | "design step schema", "YAML grammar for X", "schema validation rules" |
+| Multi-domain design questions | Ken + relevant specialist | "team, design the tool execution model" |
+| Session logging, decision merging | Scribe 📋 | (auto, after every batch) |
 
 ## Issue Routing
 

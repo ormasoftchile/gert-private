@@ -1,7 +1,92 @@
 # Squad Decisions
 
-**Last updated:** 2026-04-18T21:19:21Z
-**Total decisions:** 28 (Wave 2 merged: §06, §07, §10, §13, §15)
+**Last updated:** 2026-04-18T22:04:25Z
+**Total decisions:** 30 (Wave 2 merged; §02 updated; LaTeX fixes applied)
+
+---
+
+# 2026-04-18: Architecture Section Synchronized with New Step Types
+
+**Date:** 2026-04-18  
+**Author:** Ken (Software Architect)  
+**Status:** Implemented  
+**Sections affected:** §02 (Architecture)
+
+## Context
+
+John (Schema Lead) replaced the generic `manual` step type with three specialized interactive step types in §03 (Schema):
+
+1. **`choice`** — User selects from a fixed option list; result stored as a named variable
+2. **`decision`** — User picks an execution path; control flow routes to a different runbook or labeled section
+3. **`collector`** — User provides unstructured input (text, files, images, URLs); multi-field forms
+
+The architecture section (§02) still referenced the old `manual` step type in five locations, creating a cross-section inconsistency.
+
+## Decision
+
+Updated all references to `manual` in §02 to reflect the new step type taxonomy. Added comprehensive step type classification table organizing all eight step types into three categories: Execution (cli, tool), Interactive (choice, decision, collector), and Control Flow (branch, iterate, invoke).
+
+## Changes Made
+
+1. **Step Type Enumeration (Line 114):** Updated to include choice, decision, collector
+2. **SubmitEvidence Interface Comment (Lines 167-168):** Clarified distinct behaviors for each interactive type
+3. **Step Dispatch Logic (Lines 393-405):** Three distinct bullets for choice, decision, and collector
+4. **Pause and Resume (Line 454):** Replaced "manual step" with "interactive steps"
+5. **RPC Method Summary (Line 579):** Updated to reflect interactive steps
+6. **NEW: Step Type Classification Table (After Line 414):** Added table categorizing all step types
+
+## Cross-Section Consistency Verified
+
+Aligns with §03 (Schema), §06 (Events), §11 (Governance), and §14 (Providers).
+
+**Status:** ✅ COMPLETE — §02 fully consistent with §03 and design document
+
+---
+
+# 2026-04-18: LaTeX Build Fixes — 79 Issues Resolved
+
+**Author:** Leslie (LaTeX Specialist)  
+**Date:** 2026-04-18  
+**Status:** Resolved  
+
+## Summary
+
+Fixed critical LaTeX compilation errors blocking document build. Total: 79 issues resolved (23 lstlisting errors + 13 undefined references + 43 Unicode character errors).
+
+## Issues Fixed
+
+### 1. Missing `listings` Package (23 errors)
+
+**Problem:** Section §15 contains 23 lstlisting environments; package not loaded in main.tex.
+
+**Fix:** Added `\usepackage{listings}` to main.tex after xcolor.
+
+### 2. Undefined Chapter References (13 warnings)
+
+**Problem:** Missing chapter labels and inconsistent prefixes (some used `chap:` instead of `ch:`).
+
+**Fix:** Added `\label{ch:*}` after all `\chapter{}` commands; standardized to `ch:` prefix.
+
+**Affected sections:** §02, §03, §04, §05, §06, §07, §08, §14
+
+### 3. Unicode Character Errors (43 errors)
+
+**Problem:** Checkmarks, crosses, and box-drawing characters used in §07, §13, §15 caused compilation failures.
+
+**Fix:** Added `\usepackage{newunicodechar}` and `\usepackage{amssymb}` with character mappings.
+
+## Final Build Status
+
+✅ **CLEAN BUILD**
+
+- **Total errors:** 0
+- **Total undefined references:** 0
+- **Exit code:** 0 (success)
+- **Page count:** 260 pages
+- **PDF size:** 949 KB
+- **Bibliography:** 29/29 citations resolved
+
+**Status:** ✅ COMPLETE — Document builds clean, all 260 pages
 
 ---
 

@@ -1,4 +1,5 @@
 \chapter{Architecture}
+\label{ch:architecture}
 
 This chapter defines the v2 system architecture: the five primary components, their interfaces and invariants,
 the complete data flow from runbook invocation to trace archive, the execution lifecycle, the concurrency model,
@@ -110,7 +111,7 @@ type ExecutionPlan struct {
 // ResolvedStep is a single step in the plan, fully resolved.
 type ResolvedStep struct {
     ID       string
-    Kind     StepKind      // cli, manual, tool, invoke, branch, iterate
+    Kind     StepKind      // cli, choice, decision, collector, tool, invoke, branch, iterate
     Spec     StepSpec      // kind-specific parameters (resolved, not templated)
     Contract *contract.Contract  // effects/reads/writes/idempotent/deterministic
     Depth    int           // chain depth (0 = root runbook)
@@ -163,7 +164,9 @@ type RunHandle interface {
     // Approve records approval for the current step's approval gate.
     Approve(ctx context.Context, decision ApprovalDecision) error
 
-    // SubmitEvidence records evidence for the current manual step.
+    // SubmitEvidence records evidence for interactive steps (choice, decision, collector).
+    // For choice: stores selected option. For decision: stores route selection.
+    // For collector: stores multi-field form data and artifact attachments.
     SubmitEvidence(ctx context.Context, stepID string, ev map[string]*EvidenceValue) error
 
     // Cancel requests a graceful stop of the run.
@@ -389,8 +392,17 @@ For each step, the runtime executes the following sequence:
   \item \textbf{tool:} Call \texttt{ToolRuntime.Invoke(toolName, input)}. The tool runtime
         dispatches to the appropriate transport (stdio, JSON-RPC, MCP). Redaction applied
         to returned output.
-  \item \textbf{manual:} Emit \texttt{EvidenceRequired} event. Block until
-        \texttt{SubmitEvidence()} is called. SHA256-hash each evidence attachment.
+  \item \textbf{choice:} Emit \texttt{ChoiceRequired} event with option list. Block until
+        \texttt{SubmitEvidence()} is called with selected option. Store result as named
+        variable. No artifacts involved.
+  \item \textbf{decision:} Emit \texttt{DecisionRequired} event with route map. Block until
+        \texttt{SubmitEvidence()} is called with route selection. Alter execution flow by
+        jumping to the selected runbook or label. Optionally store selection in variable
+        for audit trail.
+  \item \textbf{collector:} Emit \texttt{CollectorRequired} event with field schema. Block
+        until \texttt{SubmitEvidence()} is called with multi-field form data. SHA256-hash
+        each file/image attachment. Store text fields as variables, artifacts in evidence
+        store.
   \item \textbf{invoke:} Inlined at plan time; at runtime the invoke body steps are already
         present in the plan at \texttt{Depth+1}. No special dispatch required.
   \item \textbf{branch:} Evaluate branch predicates (expression evaluator) against current
@@ -400,6 +412,33 @@ For each step, the runtime executes the following sequence:
         \texttt{event/iteratePassStart}. Execute body steps. Write
         \texttt{event/iteratePassEnd}. Repeat until condition is false.
 \end{itemize}
+
+\subsubsection*{Step Type Classification}
+
+All step types fall into one of three categories based on runtime behavior:
+
+\begin{center}
+\begin{tabular}{|l|l|p{7cm}|}
+\hline
+\textbf{Category} & \textbf{Step Types} & \textbf{Runtime Behavior} \\
+\hline
+\textbf{Execution} & cli, tool & Execute external commands or tools. Require governance
+pre-flight (allowlist, denylist, redaction). Capture output and exit codes. \\
+\hline
+\textbf{Interactive} & choice, decision, collector & Block execution, emit event requiring
+user input. \texttt{choice} stores selected option as variable. \texttt{decision} alters
+control flow by routing to a runbook or label. \texttt{collector} captures multi-field
+form data and artifacts (files, images). All three write evidence to trace. \\
+\hline
+\textbf{Control Flow} & branch, iterate, invoke & Alter execution path or loop body. \texttt{branch}
+evaluates predicates at runtime. \texttt{iterate} repeats a body until a condition is false.
+\texttt{invoke} is resolved at plan time; body steps appear inline with incremented depth. \\
+\hline
+\end{tabular}
+\end{center}
+
+Note that \texttt{invoke} is somewhat special: it is a control flow step conceptually, but its
+inlining happens during the Plan phase, so at runtime it does not require special dispatch logic.
 
 \subsubsection*{Step Post-flight (all step types)}
 \begin{enumerate}
@@ -450,9 +489,9 @@ producing the appearance of automatic advancement while retaining the single-ste
 \subsection{Pause and Resume}
 
 A run is \emph{paused} when \texttt{Next} returns a non-terminal result that requires external
-input: evidence submission (\texttt{manual} step) or approval (\texttt{approval} gate).
-The run remains paused until the required input is provided via \texttt{SubmitEvidence} or
-\texttt{Approve}. The adapter is responsible for presenting the pause to the user.
+input: interactive steps (\texttt{choice}, \texttt{decision}, \texttt{collector}) or approval
+gates. The run remains paused until the required input is provided via \texttt{SubmitEvidence}
+or \texttt{Approve}. The adapter is responsible for presenting the pause to the user.
 
 The checkpoint written after each completed step is sufficient to resume a run after a
 process restart. The checkpoint records: completed step IDs, current variable bindings,
@@ -575,7 +614,7 @@ steps are lost.
 exec/start          → Start a new run (returns RunID, first StepResult)
 exec/next           → Advance run by one step (returns StepResult)
 exec/approve        → Submit approval decision for current gate
-exec/submitEvidence → Submit evidence for current manual step
+exec/submitEvidence → Submit evidence for interactive steps (choice/decision/collector)
 exec/cancel         → Cancel the active run
 exec/list           → List all runs for this workspace (active + completed)
 exec/resume         → Resume a previously interrupted run

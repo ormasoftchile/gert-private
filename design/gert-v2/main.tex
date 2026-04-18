@@ -15,8 +15,19 @@
 \usepackage{booktabs}
 \usepackage{graphicx}
 \usepackage{xcolor}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{newunicodechar}
 \usepackage[backend=biber,style=numeric,sorting=nyt]{biblatex}
 \addbibresource{references.bib}
+
+% Define Unicode characters for checkmarks and tree symbols
+\newunicodechar{✓}{\checkmark}
+\newunicodechar{✗}{$\times$}
+\newunicodechar{└}{L}
+\newunicodechar{─}{-}
+\newunicodechar{├}{+}
+\newunicodechar{│}{|}
 
 \hypersetup{
   colorlinks=true,

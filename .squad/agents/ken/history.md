@@ -308,3 +308,63 @@ The design document is architecturally sound and ready for implementation. After
 - Ken (Runtime): Will implement execution semantics and scheduling
 - Sam (VS Code): Will implement UI rendering for interactive steps
 
+### 2026-04-18 — §02 Architecture synchronized with new step types
+
+**What was done:**
+
+Updated §02 (Architecture) to replace all references to the old `manual` step type with the three new interactive step types introduced by John in §03: `choice`, `decision`, and `collector`.
+
+**Specific changes made:**
+
+1. **Line 114 (ResolvedStep.Kind comment):** Updated step type enumeration from `cli, manual, tool, invoke, branch, iterate` to `cli, choice, decision, collector, tool, invoke, branch, iterate`
+
+2. **Lines 167-168 (SubmitEvidence comment):** Expanded comment to clarify that SubmitEvidence handles all three interactive step types with distinct behaviors:
+   - `choice`: stores selected option
+   - `decision`: stores route selection for control flow
+   - `collector`: stores multi-field form data and artifact attachments
+
+3. **Lines 393-405 (Dispatch section):** Replaced single `manual` bullet with three distinct bullets explaining runtime behavior for each interactive step type:
+   - `choice`: Emits `ChoiceRequired` event, blocks for option selection, stores as variable, no artifacts
+   - `decision`: Emits `DecisionRequired` event, blocks for route selection, alters control flow, optional audit variable
+   - `collector`: Emits `CollectorRequired` event, blocks for form data, SHA256-hashes attachments, stores fields as variables and artifacts in evidence store
+
+4. **Line 454 (Pause and Resume section):** Changed "evidence submission (`manual` step) or approval (`approval` gate)" to "interactive steps (`choice`, `decision`, `collector`) or approval gates"
+
+5. **Line 579 (RPC Method Summary):** Changed comment from "Submit evidence for current manual step" to "Submit evidence for interactive steps (choice/decision/collector)"
+
+6. **NEW: Step Type Classification Table (after line 414):** Added comprehensive step type classification table showing all eight step types organized into three categories:
+   - **Execution steps** (cli, tool): External command/tool execution, governance pre-flight, output capture
+   - **Interactive steps** (choice, decision, collector): Block for user input, emit events, write evidence; distinct behaviors documented
+   - **Control Flow steps** (branch, iterate, invoke): Runtime path alteration or looping; invoke inlined at plan time
+
+**Verification:** All occurrences of `manual` removed from §02. Architecture now fully consistent with §03 (Schema) definitions.
+
+**Cross-section consistency:** The three interactive step types align with:
+- §03 (Schema): Normative spec for choice/decision/collector fields and constraints
+- §06 (Events): ChoiceRequired, DecisionRequired, CollectorRequired events
+- §11 (Governance): Evidence capture and trace requirements for interactive steps
+- §14 (Providers): Provider capability matrix for interactive step support
+
+
+
+### 2026-04-18 — §02 Architecture synchronized with new step types (SYNC COMPLETE)
+
+**Cross-team coordination:** Ken updated §02 (Architecture) to replace all references to the old `manual` step type with Johns three new interactive step types (choice, decision, collector) introduced in §03 (Schema).
+
+**Specific changes:**
+1. Step Type Enumeration: cli, choice, decision, collector, tool, invoke, branch, iterate
+2. SubmitEvidence comment: Clarified distinct behaviors for choice/decision/collector
+3. Step Dispatch Logic: Three distinct bullets for runtime behavior
+4. Pause and Resume: Updated from "manual step" to "interactive steps"
+5. RPC Method Summary: Updated for interactive steps
+6. NEW Step Type Classification Table: All 8 step types organized into Execution/Interactive/Control Flow categories
+
+**Cross-section verification:**
+- §03 (Schema): Normative spec ✅
+- §06 (Events): Event types ✅
+- §11 (Governance): Evidence capture ✅
+- §14 (Providers): Capability matrix ✅
+
+**Document status:** 260 pages, all cross-references valid, ready for implementation handoff
+
+**Status:** ✅ COMPLETE

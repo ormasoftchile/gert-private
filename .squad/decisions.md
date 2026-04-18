@@ -579,3 +579,72 @@
 - `highlightQuery` callback pattern ready for any renderer that wants syntax highlighting
 - Ready for Phase 1 feature porting
 
+---
+
+## 2026-04-18T20:18:56Z: Architectural Decisions — Ken's Gap Analysis Findings
+
+**By:** Ken (Software Architect)  
+**Date:** 2026-04-18  
+**Source:** Gap analysis of gert v2 design sections 00–09
+
+These are decisions that the current design *implies* but never explicitly states. Each must be formally decided and recorded before core contract freeze.
+
+### Decision: v2 must execute v1 runbooks in compatibility mode
+**Status:** Implied, not stated  
+**Implication from:** §03 (schema vNext as breaking redesign), §01 (no mention of preserving v1 behavior)  
+**Options:**
+1. v2 engine runs v1 YAML natively via a compatibility adapter in the parser
+2. `gert migrate` auto-upgrades v1 to v2 schema before execution
+3. v2 provides a `--compat` flag that engages v1 parsing semantics
+4. v2 drops v1 compatibility entirely (breaking change for all existing users)
+
+**Why this must be decided:** Without this decision, the schema section cannot define breaking changes, the migration section cannot be written, and Brian cannot implement the parser.
+
+### Decision: Governance is host-enforced, not extension-contributed
+**Status:** Implied by §07's "host enforces" framing, not stated  
+**Implication from:** §07 (runtime hardening), §04 (capability-based trust)  
+**What must be stated:** Does the governance layer (allowlists, denylists, redaction, approval gates) live in the core runtime, or can extensions contribute policy rules? If extensions can contribute policy, are they evaluated in-process or out-of-process? This is a security-critical decision.
+
+### Decision: The event model is the single source of truth for adapter rendering
+**Status:** Implied by §06 ("adapters render from events"), not formally decided  
+**Implication from:** §06 (adapters must not implement private execution logic), §02 (adapters are thin)  
+**What must be stated:** Is there *any* direct API call from adapter to core, or is every adapter interaction mediated by the event stream? The decisions log shows VS Code using JSON-RPC RPC calls (e.g., `runbook/diagram`, serve endpoints) — this contradicts a pure event model.
+
+### Decision: JSON-RPC stdio transport is the v2 extension wire protocol
+**Status:** Implied by §04 ("Transport: JSON-RPC over stdio"), partially stated  
+**What must be stated:** Is this the *only* transport for extensions (i.e., gRPC is deferred per §09 open question)? If so, the spec must define the JSON-RPC method namespace, versioning, and error codes. The open question in §09 about gRPC must be resolved before the extension manifest format is frozen.
+
+### Decision: Core runtime has no direct dependency on `gert serve`
+**Status:** Implied by §01 (no UI coupling), not stated  
+**Implication from:** v1 architecture where `pkg/serve` knows about runtime internals  
+**What must be stated:** In v2, does `gert serve` become a thin adapter over the event stream and API layer, or does it retain privileged access to runtime internals? This directly affects the package boundary design in §02.
+
+### Decision: Tool definitions remain file-convention-based in v2
+**Status:** Implied by §05, not stated  
+**Implication from:** v1 convention `tools/<name>.tool.yaml`  
+**What must be stated:** Does v2 retain the `.tool.yaml` file convention, or does tool registration become exclusively extension-mediated? If both, what is the priority/override order?
+
+### Decision: SHA256 evidence hashing and append-only JSONL trace format are preserved in v2
+**Status:** Not stated anywhere in v2 design  
+**Implication from:** v1 README, operational requirements for tamper-evident audit  
+**What must be stated:** Are the trace format, evidence model, and resumption contract preserved as-is, redesigned, or removed? This is a first-class operational feature in v1 that is entirely absent from the v2 design.
+
+### Decision: The "planner" produces a flat ordered step list with resolved branches
+**Status:** Implied by §02 mentioning "planner", never defined  
+**What must be stated:** What does the planner output? A DAG? A flat sequence? A tree? This is foundational for the runtime state machine and the event model.
+
+### Decision: Extension capability taxonomy (initial v0 set)
+**Status:** Referenced in §04/§07, never defined  
+**Proposed initial capability set (to be ratified):**
+- `schema.register` — contribute schema extensions
+- `tool.register` — register tool definitions
+- `event.subscribe` — receive runtime events
+- `governance.policy` — contribute policy rules
+- `evidence.capture` — write evidence artifacts
+- `run.execute` — trigger step execution (high-privilege)
+- `fs.read(path)` — read files within declared scope
+- `fs.write(path)` — write files within declared scope
+- `network.outbound(host)` — make outbound network calls
+
+**Why this must be decided:** Every other extension-related design decision depends on this list being agreed.
+

@@ -35,4 +35,12 @@ This is a LaTeX document using the MastersThesis class. Sections are in `design/
 ## Learnings
 
 
-## Learnings
+## Cross-Agent Notes from Ken's Architectural Review (2026-04-18)
+
+**Priority finding:** Design is a skeleton placeholder, not a buildable specification. Every section needs 3–5× expansion before implementation can begin.
+
+**For Leslie:** Treat every section as "needs author pass." Critical gaps: §00 needs problem statement and v1 relationship, §01 needs measurable goals and v1 pain points, §02 needs component interfaces and data flow, §03 needs field inventory and migration path, §04 needs protocol definition, §06 needs event schema, §07 needs threat model and governance specification.
+
+**Entirely missing:** Migration strategy, governance layer design, evidence capture spec, adapter contracts, input provider design, runbook lifecycle, observability model, deployment packaging, concurrency model, and gert serve / RPC contract.
+
+**Recommended:** Leslie should prioritize writing the 7 items listed as "Priority Recommendations" in Ken's gap analysis at `.squad/tmp/ken-gap-analysis.md`. Decisions documented at `.squad/decisions.md` (search "Ken's Gap Analysis Findings").

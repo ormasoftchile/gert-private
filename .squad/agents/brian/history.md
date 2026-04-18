@@ -34,5 +34,14 @@ This is a LaTeX document using the MastersThesis class. Sections are in `design/
 
 ## Learnings
 
+## Cross-Agent Notes from Dennis's Research Brief (2026-04-18)
 
-## Learnings
+**For Brian (Go Runtime):** Research prioritizes saga/compensation and context propagation as key implementation priorities.
+
+- **Saga/Compensation Pattern**: Allow steps to register compensating actions; execute in reverse on failure. Industry standard in Temporal, Argo, Prefect. MVP priority (high impact, moderate effort).
+- **Context Propagation**: OpenTelemetry trace context must propagate across invoked runbooks and tools. Baggage for runbook-specific metadata. Correlation ID in all log entries.
+- **Timeout/Escalation State Machine**: Human step SLA enforcement with timeout and escalation paths. On timeout: escalate to alternate approvers, send notifications, or fail. MVP priority (high impact, low-moderate effort).
+- **Idempotency Guarantees**: Step design requirements must be enforced and documented. Enables retry with backoff without side effects.
+
+Full research brief: `.squad/tmp/dennis-research-brief.md`
+Decision inbox: `.squad/decisions/inbox/dennis-research-foundations.md` → merged to `.squad/decisions.md`

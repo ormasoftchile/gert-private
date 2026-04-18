@@ -51,3 +51,15 @@ This is a LaTeX document using the MastersThesis class. Sections are in `design/
 10. **MCP tool integration** — MCP tool discovery is dynamic in v1. How does this interact with static governance policies in v2?
 
 Ken's assessment: §05 is "Important" severity with 10 major gaps. This is a direct blocker for Barbara's tool/provider contract design and for Brian's tool runtime implementation. See full gap analysis at `.squad/tmp/ken-gap-analysis.md` (§05 section, lines 112–130). Decisions documented at `.squad/decisions.md` (search "Ken's Gap Analysis Findings").
+
+## Cross-Agent Notes from Dennis's Research Brief (2026-04-18)
+
+**For Barbara (Integrations):** Research identifies OPA integration and structured error envelopes as key integration findings.
+
+- **OPA Integration**: OPA is CNCF standard, cloud-agnostic, and enables centralized governance policy across tools. Integration hooks: pre-execution, pre-step, post-step. OPA server mode for policy evaluation.
+- **Structured Error Envelopes**: Industry tools (AWS, Temporal, Argo) use structured error formats with error codes, context, and metadata. Enables consistent error handling across tool/provider integrations.
+- **OpenTelemetry Integration Points**: Emit spans per step (start, end, attributes, status). Trace context propagation across invoked runbooks and tools. Correlation IDs in all log entries.
+- **Policy Examples**: "Commands including kubectl delete require 2 approvals", "Production runbooks require change-manager role"
+
+Full research brief: `.squad/tmp/dennis-research-brief.md`
+Decision inbox: `.squad/decisions/inbox/dennis-research-foundations.md` → merged to `.squad/decisions.md`

@@ -51,3 +51,15 @@ This is a LaTeX document using the MastersThesis class. Sections are in `design/
 10. **Extension registration** — How are namespaced schema extensions registered and validated?
 
 Ken's recommendation: Treat §03 as "needs expansion 3–5×". This is a blocker for Brian's parser implementation and validation engine. See full gap analysis at `.squad/tmp/ken-gap-analysis.md` (§03 section, lines 70–90). Decisions documented at `.squad/decisions.md` (search "Ken's Gap Analysis Findings").
+
+## Cross-Agent Notes from Dennis's Research Brief (2026-04-18)
+
+**For John (Schema):** Research confirms schema self-description and semantic versioning as industry standards.
+
+- **Self-Describing Schemas**: JSON Schema best practices recommend `$schema` field. Used in GitHub Actions, Argo, Kubernetes CRDs. Should be added to all runbook/tool/provider YAML files in v2.
+- **Semantic Versioning**: Clear compatibility guarantees (major.minor.patch) are industry standard. Enables automated compatibility testing (old runbooks on new runtime).
+- **Schema Embedding**: $schema field enables IDE tooling, validation, and version negotiation without external configuration.
+- **Migration Path**: Automated compatibility testing needed for v1→v2 migration.
+
+Full research brief: `.squad/tmp/dennis-research-brief.md`
+Decision inbox: `.squad/decisions/inbox/dennis-research-foundations.md` → merged to `.squad/decisions.md`

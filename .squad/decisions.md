@@ -648,3 +648,94 @@ These are decisions that the current design *implies* but never explicitly state
 
 **Why this must be decided:** Every other extension-related design decision depends on this list being agreed.
 
+---
+
+# Decision: Research-Backed Design Principles for Gert v2
+
+**Date:** 2026-04-18  
+**By:** Dennis (CS Researcher)  
+**Status:** Proposed  
+**Type:** Architectural Direction
+
+## Context
+
+Comprehensive research into runbook systems, workflow orchestration, governance models, and traceability patterns reveals industry best practices and academic foundations that should inform the gert v2 design.
+
+Research covered:
+- 15+ industry systems (AWS SSM, PagerDuty, Rundeck, StackStorm, Temporal, Prefect, Argo, Airflow, etc.)
+- 5 academic papers and technical publications
+- Multiple standards (ITIL, W3C, OpenTelemetry, SOC2, ISO27001, HIPAA)
+- Policy frameworks (OPA, Cedar)
+
+Full research brief: `.squad/tmp/dennis-research-brief.md`
+
+## Proposed Principles
+
+### 1. Workflow Sophistication: Learn from Orchestration Engines
+**Principle:** Adopt proven workflow patterns from Temporal, Argo, and Prefect.
+- Saga/Compensation Pattern: Allow steps to register compensating actions; execute in reverse on failure
+- Parallel Execution: Support fan-out/fan-in for independent steps
+- Retry with Backoff: Enhanced step-level retry configuration (exponential backoff, jitter)
+- Idempotency Guarantees: Document and enforce idempotent step design
+
+### 2. Policy-as-Code: Dynamic Governance at Scale
+**Principle:** Integrate external policy engines (OPA) rather than hardcoding all governance logic.
+- Policy evaluation hooks: pre-execution, pre-step, post-step
+- Centralized policy repository (Git), versioned and tested
+- Alternative Cedar rejected for multi-cloud context
+
+### 3. RBAC for Execution: Who Can Run What
+**Principle:** Role-based access control for runbook execution, not just command allowlists.
+- Roles define execution permissions (e.g., `incident-responder` can run `kind: mitigation`)
+- Delegated administration (project leads grant permissions within scope)
+- Integration with IdPs (LDAP, SAML, OIDC)
+
+### 4. Distributed Traceability: OpenTelemetry Integration
+**Principle:** Emit OpenTelemetry spans for observability and correlation with existing monitoring infrastructure.
+- Each step = one span (start, end, attributes, status)
+- Trace context propagation across invoked runbooks and tools
+- Correlation ID in all log entries and JSONL events
+
+### 5. Human-in-Loop with SLA Enforcement
+**Principle:** Timeout and escalation are essential for operational reliability, not optional features.
+- Configurable SLA timers on manual and approval steps
+- On timeout: escalate to alternate approvers, send notifications, or fail
+- Multi-level approval chains (parallel and serial)
+
+### 6. Schema Evolution: Self-Describing and Versioned
+**Principle:** Schemas must be self-describing, versioned, and migratable.
+- Add `$schema` field to all runbook/tool/provider YAML files
+- Semantic versioning with clear compatibility guarantees
+- Automated compatibility testing (old runbooks on new runtime)
+
+### 7. Evidence Integrity: Cryptographic Assurance
+**Principle:** For high-assurance environments, evidence must be cryptographically signed.
+- Optional cryptographic signing of JSONL trace files
+- Timestamped attestations (RFC 3161 timestamp authority)
+- Chain-of-custody metadata in evidence artifacts
+
+## Prioritization Recommendation
+
+**v2.0 MVP:**
+1. Saga/compensation pattern
+2. Timeout/escalation for human steps
+3. Self-describing schemas ($schema field)
+
+**v2.1+:**
+- RBAC for execution
+- Policy-as-code (OPA hooks)
+- Parallel fan-out/fan-in
+- OpenTelemetry spans
+
+**Future (post-v2):**
+- Cryptographic log signing
+- W3C PROV provenance graphs
+
+## Next Steps
+
+1. Ken (Architect): Review principles, incorporate into architecture chapter
+2. John (Schema): Assess schema impacts of saga/compensation and timeout/escalation
+3. Barbara (Integrations): Identify OPA and OpenTelemetry integration points
+4. Brian (Go Runtime): Plan saga executor and timeout/escalation state machine
+
+**Decision Requested:** Accept these principles as guiding constraints for v2 architecture.

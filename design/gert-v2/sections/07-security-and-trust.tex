@@ -1,17 +1,705 @@
 \chapter{Security and Trust}
 
-\section{Trust Model}
+Gert v2 is designed to operate in regulated, high-trust environments where
+operational actions must be auditable, accountable, and governed by explicit
+policy.  Security is not an add-on; it is foundational to the system's
+architecture.  This chapter defines the threat model, trust boundaries,
+process isolation mechanisms, credential handling, transport security, RBAC
+model, audit non-repudiation, and supply chain security.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Threat Model}
+\label{sec:threat-model}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Gert v2 addresses the following threat categories, which are common in
+operational runbook systems and have real-world precedent in systems like AWS
+Systems Manager, PagerDuty Runbook Automation, and Rundeck~\cite{aws-ssm-runbooks,pagerduty-automation,rundeck-docs}.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{p{0.35\linewidth}p{0.35\linewidth}p{0.20\linewidth}}
+\hline
+\textbf{Threat} & \textbf{Mitigation} & \textbf{Section Ref} \\
+\hline
+Runbook author executes unauthorized commands &
+Command allowlist/denylist enforced at runtime core &
+§\ref{sec:threat-model}, §11 \\
+\hline
+Malicious extension injects code into host process &
+Out-of-process extension isolation; cryptographic signature verification &
+§\ref{sec:extension-trust}, §4 \\
+\hline
+Tool or extension leaks credentials into trace &
+Mandatory redaction for sensitive fields; \texttt{sensitive: true} input marking &
+§\ref{sec:credential-handling} \\
+\hline
+Unauthorized user triggers runbook execution &
+RBAC enforced at \texttt{gert serve} ingress &
+§\ref{sec:rbac} \\
+\hline
+Man-in-the-middle attack on JSON-RPC transport &
+TLS required for all non-localhost listeners &
+§\ref{sec:transport-security} \\
+\hline
+Replay attack on approval decision &
+Approval tokens signed with Ed25519; \texttt{approvalId} is single-use &
+§\ref{sec:rbac}, §11 \\
+\hline
+Compromised tool binary executes untrusted code &
+Tool binary checksum verification before invocation &
+§\ref{sec:supply-chain} \\
+\hline
+\end{tabular}
+\caption{Threat model and mitigations for gert v2.}
+\label{tab:threat-model}
+\end{table}
+
+This threat model is derived from NIST SP 800-53 security controls~\cite{nist-sp800-53}
+and ISO/IEC 27001 guidance on privileged access management and audit logging~\cite{iso27001}.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Extension Trust Model}
+\label{sec:extension-trust}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Extensions operate under one of three trust levels, declared explicitly in the
+extension manifest and evaluated by the host before any process is started.
+
+\subsection{Trust Levels}
+
+\paragraph{Local trusted.}
+Installed by the machine owner (via package manager or explicit installation to
+a system-wide extension directory).  These extensions run as child processes of
+the current user, inherit the user's capability set (subject to manifest
+restriction), and have access to all host capabilities declared in their
+manifest.  No signature verification is performed; trust is conferred by the
+installation act.
+
+Example: an extension installed via \texttt{apt-get} or \texttt{brew} into
+\texttt{/usr/local/lib/gert-extensions/}.
+
+\paragraph{Project-scoped.}
+Declared in the runbook project directory (e.g.,
+\texttt{.gert/extensions.yaml}) or inline in the runbook's \texttt{extensions:}
+field.  These extensions run in a restricted sandbox: only capabilities
+explicitly granted by the workspace governance policy are forwarded.  File and
+network access are constrained to declared paths and hosts.  Signature
+verification is \emph{optional} but recommended.
+
+Use case: a team-maintained extension for Acme-specific incident tooling,
+distributed via the runbook repository.
+
+\paragraph{Remote/signed.}
+Extensions distributed via package repository or downloaded from the internet.
+These extensions \emph{must} carry a cryptographic signature verified against a
+trust store.  The signature covers the extension manifest and binary.  If
+verification fails, the extension is rejected before any subprocess is started.
+
+Signature format is defined in Section~\ref{sec:extension-signature}.
+
+\subsection{Extension Signature Format}
+\label{sec:extension-signature}
+
+Remote/signed extensions must include a \texttt{signature:} block in
+\texttt{gert-extension.yaml}:
+
+\begin{verbatim}
+# gert-extension.yaml — signed extension
+apiVersion: extension/v2
+
+meta:
+  name: acme.incident-pack
+  version: "1.2.0"
+
+signature:
+  algorithm: ed25519
+  publicKeyFingerprint: "sha256:abcd1234..."
+  signatureData: "base64-encoded-signature"
+  signedFields: ["meta", "capabilities", "entry-point", "transport"]
+
+trust_chain:
+  - fingerprint: "sha256:abcd1234..."
+    issuer: "Acme Platform Team CA"
+    notBefore: "2024-01-01T00:00:00Z"
+    notAfter: "2025-01-01T00:00:00Z"
+\end{verbatim}
+
+\paragraph{Signature verification algorithm.}
+The signature is computed over the canonical JSON representation of the fields
+listed in \texttt{signedFields}.  The host:
+
+\begin{enumerate}
+  \item Extracts the public key fingerprint from the \texttt{signature} block.
+  \item Looks up the corresponding public key in the trust store
+        (\texttt{\$HOME/.gert/trusted-keys/} or
+        \texttt{/etc/gert/trusted-keys/}).
+  \item Reconstructs the canonical JSON of the signed fields (sorted keys,
+        no whitespace).
+  \item Verifies the Ed25519 signature over the canonical JSON bytes.
+  \item Checks that the current time falls within the \texttt{notBefore} and
+        \texttt{notAfter} window of the trust chain.
+\end{enumerate}
+
+If any step fails, the extension is rejected with a
+\texttt{governance/extensionRejected} trace event and reason
+\texttt{signature\_verification\_failed}.
+
+\subsection{Extension Verification Command}
+
+The \texttt{gert extension verify} command allows operators to manually verify
+an extension before installation:
+
+\begin{verbatim}
+$ gert extension verify ./acme-extension/gert-extension.yaml \
+    --trust-store /etc/gert/trusted-keys/
+Extension: acme.incident-pack v1.2.0
+Signature: valid (ed25519, expires 2025-01-01)
+Issuer: Acme Platform Team CA
+Capabilities: tool-registration, network
+Trust level: remote/signed
+Verification: PASSED
+\end{verbatim}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Process Isolation}
+\label{sec:process-isolation}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Extensions and tools always run as separate OS processes.  They are never
+loaded as shared libraries or executed in-process.  This isolation boundary
+ensures that a crash, hang, or malicious extension cannot compromise the host
+process.
+
+\subsection{Isolation Mechanisms}
+
+\paragraph{Separate OS process.}
+As defined in §4, extensions are forked as child processes with their own
+address space, file descriptor table, and signal handlers.
+
+\paragraph{Filesystem access control.}
+Extensions with \texttt{capability/file-read} or \texttt{capability/file-write}
+declare the set of filesystem paths they may access via
+\texttt{file-read-paths} and \texttt{file-write-paths} in the manifest.  The
+host enforces these constraints:
 
 \begin{itemize}
-  \item Extensions are untrusted by default.
-  \item Capabilities are least-privilege and explicit.
-  \item Policy controls extension admission and operation.
+  \item On OpenBSD: via \texttt{unveil(2)} to restrict visible paths.
+  \item On Linux: via seccomp-bpf to filter \texttt{open(2)} and
+        \texttt{openat(2)} syscalls.
+  \item On all platforms: by validating all path arguments in
+        \texttt{file-read} and \texttt{file-write} RPC methods before dispatch.
 \end{itemize}
 
-\subsection{Runtime Hardening}
+Attempts to access undeclared paths return a capability-denied error.
+
+\paragraph{Network access control.}
+Extensions with \texttt{capability/network} declare the set of hostnames they
+may connect to via \texttt{network-hosts}.  The host validates outbound
+connections:
 
 \begin{itemize}
-  \item Host survives extension failure.
-  \item Host enforces timeout, cancellation, and retry policy.
-  \item Host logs structured diagnostics for extension interactions.
+  \item Before dispatching an extension RPC that specifies a target URL, the
+        host checks that the hostname matches one of the declared
+        \texttt{network-hosts} patterns.
+  \item Extensions may not listen for inbound connections.
+  \item Wildcard patterns are supported: \texttt{*.acme.example} permits
+        \texttt{api.acme.example}, \texttt{prod.acme.example}, etc.
 \end{itemize}
+
+\paragraph{Environment variable isolation.}
+Extensions receive ONLY the environment variables explicitly forwarded by the
+runbook's \texttt{governance.allowed\_env} list.  Host environment variables
+that match \texttt{governance.deny\_env\_vars} patterns are never forwarded,
+even if they appear in \texttt{allowed\_env}.
+
+The denylist takes precedence: if \texttt{AWS\_SECRET\_ACCESS\_KEY} is denied,
+it is stripped from the extension's environment regardless of other policy.
+
+\paragraph{Crash isolation.}
+If an extension process crashes (exits with non-zero status or is killed by a
+signal), the host:
+
+\begin{enumerate}
+  \item Emits an \texttt{extension.crashed} trace event with exit code and
+        signal number.
+  \item Marks the extension as unavailable for the remainder of the run.
+  \item Cancels all in-flight invocations to that extension with error code
+        \texttt{-32099} (\texttt{extension\_crashed}).
+  \item Continues the run: the host process does not terminate.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Credential and Secret Handling}
+\label{sec:credential-handling}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Gert v2 does not store secrets.  It acts as a pass-through: secrets are
+resolved from input providers at runtime, used for a single step invocation,
+and then discarded.  Secrets never appear in trace logs or captured output.
+
+\subsection{Secret Resolution and Redaction}
+
+\paragraph{Input provider sensitivity marking.}
+Input provider definitions declare which resolved values are sensitive via
+\texttt{sensitive: true} in the provider schema:
+
+\begin{verbatim}
+# vault.provider.yaml
+outputs:
+  credentials:
+    type: object
+    sensitive: true
+\end{verbatim}
+
+When the host resolves \texttt{from: vault.credentials}, it marks the returned
+value as sensitive in memory.  This flag is respected by all downstream
+consumers.
+
+\paragraph{Tool sensitive inputs.}
+Tool action definitions declare which input parameters accept sensitive data via
+\texttt{sensitive\_inputs}:
+
+\begin{verbatim}
+# my-tool.tool.yaml
+actions:
+  deploy:
+    args:
+      api_key:
+        type: string
+        required: true
+    sensitive_inputs: [api_key]
+\end{verbatim}
+
+When the host prepares the tool invocation envelope, it marks the
+\texttt{api\_key} field as sensitive.  The tool runtime redacts this field in
+all trace events.
+
+\paragraph{Mandatory redaction.}
+All values marked \texttt{sensitive: true} are redacted before being written to
+the trace or displayed in any adapter UI.  Redaction replaces the value with
+the string \texttt{<redacted>}.
+
+In addition, the runbook's \texttt{governance.redact} block defines regex
+patterns applied to all captured output (stdout, stderr, JSON responses) before
+storage.  See §11 for the full redaction specification.
+
+\subsection{Secret Storage Policy}
+
+Gert v2 does NOT:
+
+\begin{itemize}
+  \item Store secrets in the runbook YAML.
+  \item Write secrets to disk (trace files, state snapshots, etc.).
+  \item Cache secrets across steps (unless explicitly declared by the input
+        provider's \texttt{cache\_scope}).
+  \item Transmit secrets over unencrypted transports.
+\end{itemize}
+
+Secrets must be resolved via input providers that integrate with secret
+management systems (e.g., HashiCorp Vault, AWS Secrets Manager, 1Password).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Transport Security}
+\label{sec:transport-security}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Gert v2 supports two primary transport modes for JSON-RPC communication:
+
+\begin{enumerate}
+  \item \textbf{stdio}: JSON-RPC over stdin/stdout of a child process.  No
+        network exposure; inherently local.  No TLS required.
+  \item \textbf{HTTP/WebSocket}: JSON-RPC over HTTP for \texttt{gert serve}
+        mode.  Network exposure possible; TLS and authentication required for
+        non-localhost.
+\end{enumerate}
+
+\subsection{TLS Requirements}
+
+\paragraph{Localhost exception.}
+If \texttt{gert serve} binds to \texttt{127.0.0.1} or \texttt{localhost}, TLS
+is optional.  Connections are assumed to be local and trusted.
+
+\paragraph{Non-localhost listeners.}
+If \texttt{gert serve} binds to \texttt{0.0.0.0}, a public IP, or a hostname,
+TLS is \emph{mandatory}.  The host will refuse to start without a valid TLS
+certificate and private key.
+
+Configuration:
+
+\begin{verbatim}
+$ gert serve --http 0.0.0.0:8443 \
+    --tls-cert /etc/gert/tls/cert.pem \
+    --tls-key /etc/gert/tls/key.pem
+\end{verbatim}
+
+The host performs standard TLS 1.3 handshake with the client.  TLS 1.2 is
+supported for compatibility but TLS 1.1 and earlier are rejected.
+
+\subsection{Client Authentication}
+
+The host supports two authentication modes for \texttt{gert serve --http}:
+
+\paragraph{Bearer token authentication.}
+Clients include an \texttt{Authorization: Bearer <token>} header on all HTTP
+requests.  The token is validated against a configured token store
+(file-based, environment variable, or integration with an IdP).
+
+Example:
+
+\begin{verbatim}
+$ gert serve --http :8443 --auth-mode bearer \
+    --bearer-tokens /etc/gert/tokens.yaml
+\end{verbatim}
+
+The \texttt{tokens.yaml} file maps tokens to actor identities:
+
+\begin{verbatim}
+# tokens.yaml
+tokens:
+  - token: "abc123..."
+    actor: "ops@acme.example"
+    roles: ["operator", "viewer"]
+\end{verbatim}
+
+\paragraph{Mutual TLS (mTLS).}
+The host requires clients to present a valid X.509 client certificate signed by
+a trusted CA.  The client certificate's subject CN or SAN is used as the actor
+identity.
+
+Configuration:
+
+\begin{verbatim}
+$ gert serve --http :8443 --auth-mode mtls \
+    --tls-client-ca /etc/gert/tls/client-ca.pem
+\end{verbatim}
+
+mTLS is the recommended authentication mode for production deployments and
+enterprise environments.
+
+\subsection{WebSocket Security}
+
+WebSocket connections for the event stream (§13) inherit the security context
+of the HTTP server:
+
+\begin{itemize}
+  \item If the HTTP server uses TLS, WebSocket connections are encrypted
+        (wss://).
+  \item Client authentication applies: bearer tokens or client certificates are
+        validated before the WebSocket upgrade.
+  \item Once upgraded, the WebSocket connection is bound to the authenticated
+        actor identity for the lifetime of the connection.
+\end{itemize}
+
+\subsection{Extension JSON-RPC Transport}
+
+Extensions communicate with the host via stdio JSON-RPC (§4).  This transport
+is not exposed to the network and does not require TLS.  The process boundary
+is the trust boundary: the host trusts that OS-level process isolation prevents
+interception of stdin/stdout pipes.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{RBAC for \texttt{gert serve}}
+\label{sec:rbac}
+% ─────────────────────────────────────────────────────────────────────────────
+
+When gert runs in server mode (\texttt{gert serve --http}), it enforces
+role-based access control (RBAC) on all API operations.  Actors are assigned
+roles, and each role grants a specific set of permissions.
+
+\subsection{Actor Identity}
+
+An \textbf{actor} is the authenticated identity making a request.  Actor
+identity is derived from:
+
+\begin{itemize}
+  \item The bearer token (mapped to an actor ID via the token store), or
+  \item The client certificate subject CN/SAN (in mTLS mode).
+\end{itemize}
+
+The actor identity is recorded in all trace events where a human or external
+system initiates an action (run start, approval submission, cancellation).
+
+\subsection{Roles}
+
+Gert v2 defines three standard roles:
+
+\paragraph{Viewer.}
+Read-only access.  Permissions:
+
+\begin{itemize}
+  \item List runs (\texttt{GET /runs})
+  \item Get run details (\texttt{GET /runs/:id})
+  \item Subscribe to event stream (\texttt{GET /ws} or \texttt{GET /events})
+  \item Read trace files
+\end{itemize}
+
+Cannot start runs, approve, or cancel.
+
+\paragraph{Operator.}
+Execution permissions.  Includes all \textbf{viewer} permissions plus:
+
+\begin{itemize}
+  \item Start a run (\texttt{POST /exec/start})
+  \item Cancel a run (\texttt{POST /exec/cancel})
+  \item Submit approvals (\texttt{POST /approvals})
+\end{itemize}
+
+Cannot modify governance policy or manage roles.
+
+\paragraph{Admin.}
+Full control.  Includes all \textbf{operator} permissions plus:
+
+\begin{itemize}
+  \item Modify workspace governance policy
+  \item Manage role assignments (add/remove actors from roles)
+  \item Configure extension trust store
+\end{itemize}
+
+\subsection{Role Assignment}
+
+Roles are assigned in the workspace config (\texttt{gert-project.yaml}):
+
+\begin{verbatim}
+# gert-project.yaml
+access:
+  roles:
+    - role: admin
+      actors:
+        - "alice@acme.example"
+        - "bob@acme.example"
+    - role: operator
+      actors:
+        - "ops-team@acme.example"
+        - "oncall@acme.example"
+    - role: viewer
+      actors:
+        - "*@acme.example"  # All Acme employees
+\end{verbatim}
+
+Actor patterns support wildcards for organization-wide grants.
+
+\subsection{Approval Authorizer Role}
+
+The \texttt{governance.require\_approval} field in the runbook declares the
+role required to approve a step:
+
+\begin{verbatim}
+steps:
+  - id: delete_database
+    cli: "kubectl delete database prod-db"
+    approvals:
+      min: 1
+      roles: ["dba", "admin"]
+\end{verbatim}
+
+When the run reaches this step, it emits an
+\texttt{approval/required} trace event.  The step is paused.  Only actors with
+the \texttt{dba} or \texttt{admin} role may submit a valid approval.
+
+The approval submission includes:
+
+\begin{verbatim}
+POST /approvals
+{
+  "runId": "run-abc123",
+  "stepId": "delete_database",
+  "decision": "approve",
+  "actorId": "alice@acme.example",
+  "signature": "<ed25519-signature-of-approval-payload>",
+  "timestamp": "2026-04-18T12:00:00Z"
+}
+\end{verbatim}
+
+The host verifies:
+
+\begin{enumerate}
+  \item The actor is authenticated and has one of the required roles.
+  \item The signature is valid (Ed25519 over the canonical JSON of
+        \texttt{runId}, \texttt{stepId}, \texttt{decision}, \texttt{actorId},
+        \texttt{timestamp}).
+  \item The \texttt{timestamp} is within a 5-minute clock skew window.
+  \item The \texttt{runId} and \texttt{stepId} match an active approval gate.
+  \item This approval has not been submitted before (replay protection).
+\end{enumerate}
+
+If all checks pass, the approval is recorded in the trace
+(\texttt{approval/received}) and the step proceeds if the minimum approval
+count is reached.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Audit Non-Repudiation}
+\label{sec:audit-nonrepudiation}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Non-repudiation ensures that governance decisions — especially approvals and
+rejections — cannot be denied by the actor who made them.  This is critical for
+regulatory compliance (SOC2, ISO27001, HIPAA)~\cite{soc2-aicpa,iso27001,hipaa-security-rule}.
+
+\subsection{Governance Decision Recording}
+
+Every governance decision event (\texttt{governance/approval\_received},
+\texttt{governance/approval\_rejected}, \texttt{governance/commandBlocked})
+must record:
+
+\begin{itemize}
+  \item Actor identity (authenticated user or service principal)
+  \item Timestamp (RFC 3339 with timezone)~\cite{rfc3339}
+  \item Decision payload (what was approved/rejected)
+  \item Signature (Ed25519 over the canonical decision payload)
+\end{itemize}
+
+Example trace event:
+
+\begin{verbatim}
+{
+  "eventType": "governance/approval_received",
+  "timestamp": "2026-04-18T12:00:00Z",
+  "runId": "run-abc123",
+  "stepId": "delete_database",
+  "actor": "alice@acme.example",
+  "decision": "approve",
+  "signature": "ed25519:abcd1234...",
+  "signatureAlgorithm": "ed25519",
+  "signaturePublicKey": "sha256:pubkey-fingerprint"
+}
+\end{verbatim}
+
+The signature covers the fields \texttt{runId}, \texttt{stepId},
+\texttt{actor}, \texttt{decision}, and \texttt{timestamp}.  The public key is
+looked up from the actor's identity record or client certificate.
+
+\subsection{Trace File Integrity (HMAC Chaining)}
+
+The JSONL trace file (§12) is append-only, but this alone does not prevent
+tampering.  To provide cryptographic integrity, the host optionally computes an
+HMAC chain over the trace:
+
+\begin{enumerate}
+  \item At run start, initialize \texttt{H\_0 = HMAC-SHA256(key, runId)}.
+  \item After writing each trace event \texttt{E\_i}, compute
+        \texttt{H\_i = HMAC-SHA256(key, H\_\{i-1\} || E\_i)}.
+  \item Store \texttt{H\_i} in the event as \texttt{integrityHash}.
+  \item At run completion, emit a final \texttt{run.completed} event with
+        \texttt{finalHash: H\_N}.
+\end{enumerate}
+
+Verification: a verifier recomputes the HMAC chain from \texttt{H\_0} forward.
+If any event is modified or deleted, the chain breaks.
+
+The HMAC key is derived from the workspace master key or provided via
+\texttt{--integrity-key}.
+
+\subsection{SHA256 Evidence Capture}
+
+As defined in §12, gert captures SHA256 hashes of all evidence artifacts
+(attachments, screenshots, CLI output files).  These hashes are written to the
+trace event immediately after the artifact is captured, providing a
+cryptographic anchor for the artifact's integrity.
+
+The combination of HMAC trace chaining + SHA256 evidence hashes provides
+end-to-end non-repudiation for the entire run.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Supply Chain Security}
+\label{sec:supply-chain}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Tools and extensions are executable code distributed via package managers,
+repositories, or direct download.  Supply chain attacks (e.g., compromised
+binaries, backdoored dependencies) are a real threat in operational
+environments.  Gert v2 provides checksum verification and signature validation
+to mitigate these risks.
+
+\subsection{Tool Binary Checksums}
+
+Tool definitions may declare a \texttt{checksum:} field in
+\texttt{.tool.yaml}:
+
+\begin{verbatim}
+# kubectl.tool.yaml
+meta:
+  name: kubectl
+  binary: kubectl
+
+checksum:
+  algorithm: sha256
+  digest: "a3b4c5d6e7f8..."
+\end{verbatim}
+
+Before invoking the tool, the host:
+
+\begin{enumerate}
+  \item Resolves the binary path (via \texttt{PATH} lookup or absolute path).
+  \item Computes the SHA256 hash of the binary file.
+  \item Compares the computed hash to \texttt{checksum.digest}.
+  \item If the hashes do not match, the tool invocation is blocked with a
+        \texttt{governance/toolChecksumMismatch} trace event.
+\end{enumerate}
+
+\subsection{\texttt{gert verify} Command}
+
+The \texttt{gert verify} command validates all tools and extensions in the
+workspace before execution:
+
+\begin{verbatim}
+$ gert verify --workspace .
+Verifying tools...
+  ✓ kubectl: checksum verified (sha256:a3b4c5...)
+  ✓ curl: no checksum declared (skipped)
+  ✗ jq: checksum mismatch (expected sha256:abc123, got sha256:def456)
+
+Verifying extensions...
+  ✓ acme.incident-pack: signature valid (ed25519, expires 2025-01-01)
+  ✗ debug-tools: no signature (required for remote extensions)
+
+Verification: FAILED (2 errors)
+\end{verbatim}
+
+This command should be run in CI/CD pipelines before deploying runbooks to
+production.
+
+\subsection{Extension Signature Verification}
+
+As defined in §\ref{sec:extension-signature}, remote extensions must carry a
+cryptographic signature.  The signature verification process ensures that:
+
+\begin{itemize}
+  \item The extension binary and manifest have not been tampered with.
+  \item The extension was signed by a trusted authority (public key in the
+        trust store).
+  \item The signature has not expired (\texttt{notAfter} check).
+\end{itemize}
+
+If verification fails, the extension is rejected before any subprocess is
+started.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Security Recommendations}
+% ─────────────────────────────────────────────────────────────────────────────
+
+For production deployments, the following security practices are recommended:
+
+\begin{enumerate}
+  \item \textbf{Enable TLS for all \texttt{gert serve} deployments} — even
+        internal networks can be compromised.
+  \item \textbf{Use mTLS for client authentication} — bearer tokens are
+        vulnerable to theft; client certificates provide stronger identity.
+  \item \textbf{Enable HMAC trace chaining} — provides cryptographic integrity
+        for audit trails.
+  \item \textbf{Declare tool binary checksums} — prevents execution of
+        tampered binaries.
+  \item \textbf{Require signatures for all remote extensions} — do not trust
+        unsigned code from the internet.
+  \item \textbf{Run \texttt{gert verify} in CI} — catch integrity violations
+        before production.
+  \item \textbf{Use least-privilege capability grants} — extensions should
+        request only the capabilities they need; admins should audit and deny
+        excessive requests.
+  \item \textbf{Regularly rotate approval keys} — the Ed25519 keys used for
+        signing approvals should be rotated every 90 days.
+\end{enumerate}
+
+These recommendations align with NIST SP 800-53 controls for privileged access
+management (AC-2, AC-6), audit and accountability (AU-2, AU-9), and system
+integrity (SI-7)~\cite{nist-sp800-53}.

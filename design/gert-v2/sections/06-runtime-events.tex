@@ -1,15 +1,638 @@
 \chapter{Runtime Events and Determinism}
 
-The runtime is event-first and deterministic.
+Gert v2 is an event-driven system. Every state change in the runtime---run initiation, step advancement, governance checks, tool invocations, human interactions---produces a structured event. Events serve three purposes: (1) adapters (TUI, Web, VS Code) subscribe to events to render UI state without coupling to execution logic, (2) events are appended to the JSONL trace file for audit and replay (§12), and (3) events propagate to observability systems for real-time monitoring and alerting.
 
-\section{Event Categories}
+This section defines the complete event system: the event envelope schema, delivery semantics, the normative event catalog, event channels, subscription API, wire format, and the required vs.\ optional event classification.
 
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Event System Design}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Role of Events}
+
+Events are \textbf{fan-out notifications to subscribers}, not a command or control channel. The Runtime Core emits events as a consequence of state transitions; events do not trigger state transitions. This design ensures that execution semantics remain centralized in the Runtime Core and adapters remain passive renderers.
+
+\textbf{Key principles:}
 \begin{itemize}
-  \item Planning events
-  \item Step lifecycle events
-  \item Branching and routing events
-  \item Evidence and policy events
-  \item Completion events
+  \item \textbf{One-way flow:} Events flow from the Runtime Core outward to subscribers. Subscribers never write events back to the runtime.
+  \item \textbf{Non-blocking emission:} Event emission must not block step execution. The event bus uses a bounded channel with a discard-on-full policy for in-process subscribers to prevent slow consumers from stalling the runtime.
+  \item \textbf{Immutable once emitted:} Events are value objects; they cannot be modified after emission.
+  \item \textbf{Best-effort delivery to in-process subscribers:} If a subscriber channel is full, the event is dropped. The trace file write (§12) is the authoritative record.
 \end{itemize}
 
-Adapters render from events and must not implement private execution logic.
+\subsection{Delivery Semantics}
+
+\paragraph{At-least-once delivery.} The JSONL trace file receives every event via a synchronous write before the runtime proceeds to the next action. In-process subscribers (TUI, event forwarders) receive events on a best-effort basis; if the subscriber channel is full, the event is discarded without blocking the runtime.
+
+\paragraph{In-order per run.} All events within a single run are totally ordered by their \texttt{sequence} field. Events from different runs are not ordered relative to each other. Subscribers that process events asynchronously must tolerate out-of-order arrival from concurrent runs.
+
+\paragraph{Replay determinism.} Events written to the trace file are sufficient to reconstruct the execution timeline. Replay mode (§12.3) re-emits the same events in the same order, allowing adapters to render a historical run indistinguishably from a live run.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Event Envelope}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Every event carries a mandatory envelope with the following fields. Consumers MUST tolerate unknown fields to support additive schema evolution.
+
+\begin{center}
+\begin{tabular}{llp{7cm}}
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\hline
+\texttt{event\_id} & UUID v4 & Globally unique event identifier \\
+\texttt{run\_id} & UUID & Execution run identifier (stable across pauses/resumes) \\
+\texttt{runbook\_id} & string & Runbook name or path from runbook YAML \texttt{meta.name} \\
+\texttt{timestamp} & RFC3339 & UTC timestamp with microsecond precision \cite{rfc3339} \\
+\texttt{kind} & string & Event type (e.g., \texttt{step/started}, \texttt{governance/approved}) \\
+\texttt{sequence} & int64 & Monotonically increasing integer within this run (starting from 0) \\
+\texttt{payload} & object & Event-specific data (schema varies per \texttt{kind}) \\
+\end{tabular}
+\end{center}
+
+\paragraph{Sequence numbers.} The \texttt{sequence} field provides a total order over events in a single run. It is assigned by the \texttt{RunStore.WriteTrace} implementation and persists across pause/resume cycles. Sequence numbers are not globally unique; they are scoped to a single \texttt{run\_id}.
+
+\paragraph{Timestamps.} The \texttt{timestamp} field uses RFC3339 format with at least microsecond precision (e.g., \texttt{2026-04-18T14:32:05.123456Z}). Timestamps are wall-clock times and must not be used for precise duration calculations (use event-specific \texttt{duration\_ms} fields instead).
+
+\paragraph{Event IDs.} The \texttt{event\_id} is a UUID v4 assigned at emission time. It is globally unique across all runs and all gert deployments. Event IDs are used for correlation in distributed tracing systems (§15) and for deduplication in event forwarding pipelines.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Event Catalog}
+\label{sec:event-catalog}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The following subsections define every normative event kind in v2.0. Each definition includes the payload schema, emission semantics, and whether the event is required or optional.
+
+\subsection{Run Lifecycle Events}
+
+\subsubsection{\texttt{run/started}}
+
+\textbf{Emitted:} Once, as the first event in every execution. Must be the first line in the trace file.
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "runbook_id":    <string>,  // from meta.name or file path
+  "version":       <string>,  // runbook schema version (e.g., "runbook/v2")
+  "actor":         <string>,  // identity (from --as flag or adapter session)
+  "input_hash":    <string>,  // SHA256 of sorted input key-value pairs
+  "mode":          <string>,  // "real" | "dry-run" | "replay"
+  "client":        <string>,  // "cli" | "tui" | "web" | "vscode" | "mcp"
+  "parent_run_id": <string>   // omitted if not an invoke child
+}
+\end{verbatim}
+
+\textbf{Semantics.} The \texttt{input\_hash} is the SHA256 hex digest of the JSON-serialized input dictionary with keys sorted lexicographically. This hash is used to detect input tampering in replay mode. The \texttt{parent\_run\_id} field is present only if this run was initiated by an \texttt{invoke} step in another run.
+
+\textbf{Required:} YES. Every run MUST emit this event.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{run/completed}}
+
+\textbf{Emitted:} Once, as the terminal event for a successful run (all steps passed or skipped).
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "outcome":     <string>,  // "success" | "failure" | "cancelled"
+  "step_count":  <int>,     // total steps in the plan
+  "passed":      <int>,     // steps that completed successfully
+  "failed":      <int>,     // steps that failed
+  "skipped":     <int>,     // steps skipped (branch/iterate)
+  "duration_ms": <int64>    // wall-clock duration from run/started
+}
+\end{verbatim}
+
+\textbf{Semantics.} The \texttt{outcome} field distinguishes clean completion (\texttt{success}), error termination (\texttt{failure}), and operator-initiated halt (\texttt{cancelled}). If \texttt{outcome} is \texttt{failure}, the last event before this one should be a \texttt{step/failed} or \texttt{governance/blocked}.
+
+\textbf{Required:} YES. Every run that reaches a terminal state MUST emit this event.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{run/cancelled}}
+
+\textbf{Emitted:} When a run is cancelled by operator action (SIGINT, API call, or approval rejection).
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "reason":        <string>,  // "user_interrupt" | "approval_rejected" | "timeout"
+  "cancelled_by":  <string>,  // actor identity (omitted if SIGINT)
+  "step_id":       <string>   // step that was active at cancellation time
+}
+\end{verbatim}
+
+\textbf{Semantics.} This event is followed immediately by \texttt{run/completed} with \texttt{outcome: "cancelled"}. The \texttt{reason} field disambiguates graceful operator cancellation (\texttt{user\_interrupt}) from governance-driven rejection (\texttt{approval\_rejected}).
+
+\textbf{Required:} YES, if a run is cancelled before natural completion.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsection{Step Lifecycle Events}
+
+\subsubsection{\texttt{step/started}}
+
+\textbf{Emitted:} Immediately before a step executes (after governance checks pass).
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "step_id":   <string>,  // stable step identifier from runbook YAML
+  "step_type": <string>,  // "cli" | "manual" | "tool" | "invoke" | "branch"
+                          // | "iterate" | "parallel" | "compensate"
+  "index":     <int>      // zero-based position in the ExecutionPlan
+}
+\end{verbatim}
+
+\textbf{Required:} YES. Every step that begins execution MUST emit this event.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{step/completed}}
+
+\textbf{Emitted:} After a step exits successfully.
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "step_id":     <string>,
+  "outcome":     <string>,  // "success" | "skipped"
+  "duration_ms": <int64>,
+  "exit_code":   <int>      // for cli/tool steps; 0 for manual/invoke
+}
+\end{verbatim}
+
+\textbf{Semantics.} An \texttt{outcome} of \texttt{skipped} occurs for steps in non-taken branch paths or exhausted iterate loops. Exit code is present only for \texttt{cli} and \texttt{tool} steps; for other step types it is always 0.
+
+\textbf{Required:} YES, for every step that completes without error.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{step/failed}}
+
+\textbf{Emitted:} When a step exits with a non-zero exit code or runtime error.
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "step_id":      <string>,
+  "error_code":   <string>,  // "exit_nonzero" | "timeout" | "tool_error"
+                             // | "governance_blocked" | "invoke_failed"
+  "error_message": <string>, // human-readable (redacted)
+  "retryable":    <bool>,    // true if retry policy allows retry
+  "exit_code":    <int>      // for exit_nonzero; omitted otherwise
+}
+\end{verbatim}
+
+\textbf{Semantics.} The \texttt{retryable} field indicates whether the runtime will attempt a retry (requires a retry policy on the step). If \texttt{retryable} is true, this event will be followed by \texttt{step/retrying}.
+
+\textbf{Required:} YES, for every step that fails.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{step/skipped}}
+
+\textbf{Emitted:} When a step is not executed due to control flow.
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "step_id": <string>,
+  "reason":  <string>  // "branch_not_taken" | "iterate_exhausted"
+                       // | "dry_run" | "cancelled"
+}
+\end{verbatim}
+
+\textbf{Required:} YES, for every step that is planned but not executed.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{step/retrying}}
+
+\textbf{Emitted:} Before each retry attempt (v2.1 feature; requires retry policy).
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "step_id":       <string>,
+  "attempt":       <int>,     // 1 = first retry, 2 = second, etc.
+  "max_attempts":  <int>,
+  "backoff_ms":    <int64>    // delay before this retry
+}
+\end{verbatim}
+
+\textbf{Required:} YES, if retry is attempted. Optional in v2.0 (retry not yet implemented).
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsection{Governance Events}
+
+All governance events are normatively defined in §11. The following is a summary for completeness.
+
+\subsubsection{\texttt{governance/command\_checked}}
+
+\textbf{Emitted:} When a command is evaluated against allowlist and denylist.
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "step_id":      <string>,
+  "command":      <string>,  // base name (argv[0] stripped of path)
+  "verdict":      <string>,  // "allowed" | "denied"
+  "rule_matched": <string>   // "allowlist" | "denylist" | "default_allow"
+}
+\end{verbatim}
+
+\textbf{Required:} MAY be emitted. Recommended for audit trails but not required for basic operation.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{governance/approval\_requested}}
+
+\textbf{Emitted:} When a step's approval gate is entered.
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "step_id":         <string>,
+  "approver_roles":  [<string>],  // roles that can approve
+  "min_approvals":   <int>,
+  "timeout_seconds": <int>,       // 0 if no timeout
+  "message":         <string>     // prompt text for approvers (redacted)
+}
+\end{verbatim}
+
+\textbf{Required:} YES, when approval gates are used.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{governance/approval\_received}}
+
+\textbf{Emitted:} Each time an approver submits a decision.
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "step_id":  <string>,
+  "approver": <string>,  // actor identity
+  "role":     <string>,  // role the approver is acting in
+  "decision": <string>,  // "approved" | "rejected"
+  "comment":  <string>   // optional justification (redacted)
+}
+\end{verbatim}
+
+\textbf{Required:} YES, for every approval decision (including rejections).
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{governance/redaction\_applied}}
+
+\textbf{Emitted:} When redaction rules match and modify captured output.
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "step_id":       <string>,
+  "field_path":    <string>,  // "stdout" | "stderr" | "capture.var_name"
+  "pattern_count": <int>      // number of patterns that matched (not the patterns)
+}
+\end{verbatim}
+
+\textbf{Semantics.} The actual redaction patterns are not logged to avoid accidentally revealing what sensitive data looks like. Only the fact that redaction occurred is recorded.
+
+\textbf{Required:} MAY be emitted. Useful for audit compliance.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsection{Extension and Tool Events}
+
+\subsubsection{\texttt{extension/loaded}}
+
+\textbf{Emitted:} When an extension successfully completes the handshake.
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "extension_id": <string>,  // from extension manifest
+  "version":      <string>,  // semver version
+  "capabilities": [<string>] // list of capability names granted
+}
+\end{verbatim}
+
+\textbf{Required:} MAY be emitted. Useful for debugging extension issues.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{extension/unloaded}}
+
+\textbf{Emitted:} When an extension process exits or is terminated.
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "extension_id": <string>,
+  "reason":       <string>  // "clean_exit" | "crash" | "timeout" | "killed"
+}
+\end{verbatim}
+
+\textbf{Required:} MAY be emitted.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{tool/invoked}}
+
+\textbf{Emitted:} When a tool call is dispatched (before the tool executes).
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "step_id":        <string>,
+  "tool_name":      <string>,
+  "transport":      <string>,  // "stdio" | "jsonrpc" | "mcp"
+  "correlation_id": <string>   // UUID v4, links to tool/completed
+}
+\end{verbatim}
+
+\textbf{Required:} MAY be emitted. Recommended for observability.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{tool/completed}}
+
+\textbf{Emitted:} When a tool call returns.
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "step_id":        <string>,
+  "tool_name":      <string>,
+  "correlation_id": <string>,  // matches tool/invoked
+  "exit_code":      <int>,
+  "duration_ms":    <int64>
+}
+\end{verbatim}
+
+\textbf{Required:} MAY be emitted.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsection{Human-in-the-Loop Events}
+
+\subsubsection{\texttt{input/prompted}}
+
+\textbf{Emitted:} When a manual step or input provider displays a prompt.
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "step_id":    <string>,  // omitted if prompt is from provider
+  "prompt_id":  <string>,  // UUID v4 for correlation
+  "input_type": <string>,  // "text" | "checklist" | "attachment"
+  "prompt":     <string>   // prompt text (redacted)
+}
+\end{verbatim}
+
+\textbf{Required:} YES, for manual steps. MAY be emitted for provider prompts.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{input/received}}
+
+\textbf{Emitted:} When the operator submits a response.
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "step_id":   <string>,
+  "prompt_id": <string>,  // matches input/prompted
+  "redacted":  <bool>     // true if redaction rules matched the response
+}
+\end{verbatim}
+
+\textbf{Semantics.} The actual input value is not included in this event (it is recorded in the trace via \texttt{manual/completed} or \texttt{step/completed}). The \texttt{redacted} flag indicates whether the input passed through the redaction pipeline.
+
+\textbf{Required:} YES, for manual steps.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsection{Saga and Compensation Events (v2.1+)}
+
+The following events are reserved for the saga/compensation pattern, which is targeted for v2.1. They are included here for forward compatibility.
+
+\subsubsection{\texttt{saga/compensation\_triggered}}
+
+\textbf{Emitted:} When a step fails and has registered compensation handlers.
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "failed_step_id":     <string>,
+  "compensation_steps": [<string>]  // step IDs to execute in reverse order
+}
+\end{verbatim}
+
+\textbf{Required:} YES, if compensation is triggered (v2.1+).
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{saga/compensation\_completed}}
+
+\textbf{Emitted:} After all compensation steps complete.
+
+\textbf{Payload:}
+\begin{verbatim}
+{
+  "outcome": <string>  // "success" | "partial" | "failed"
+}
+\end{verbatim}
+
+\textbf{Required:} YES, if compensation is triggered (v2.1+).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Event Channels}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Events flow through three channels, each with distinct delivery semantics and subscribers.
+
+\subsection{In-Process Event Bus}
+
+\paragraph{Purpose.} The in-process event bus delivers events from the Runtime Core to adapters (TUI, \texttt{gert serve} session handlers) running in the same process.
+
+\paragraph{Implementation.} A Go \texttt{chan Event} with a fixed buffer size (default: 100 events). The Runtime Core writes to the channel; adapters read from it. If the channel is full, new events are discarded (the trace file is the authoritative record).
+
+\paragraph{Subscriber API.} Adapters call \texttt{RunHandle.Events()} to obtain a read-only event channel:
+
+\begin{verbatim}
+type RunHandle interface {
+    // Events returns a read-only channel of events for this run.
+    // The channel is closed when the run enters a terminal state.
+    Events() <-chan Event
+    // ... other methods ...
+}
+\end{verbatim}
+
+\paragraph{Lifecycle.} The event channel is created at \texttt{Runtime.Start()} and closed when the run emits \texttt{run/completed} or \texttt{run/cancelled}. Subscribers must drain the channel to avoid blocking the runtime (though the runtime will discard events if the subscriber is too slow).
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsection{WebSocket Broadcast (HTTP Adapter)}
+
+\paragraph{Purpose.} For \texttt{gert serve --http}, events are broadcast to WebSocket clients for real-time UI updates.
+
+\paragraph{Implementation.} The HTTP adapter subscribes to \texttt{RunHandle.Events()} and forwards events to all connected WebSocket clients for the given \texttt{run\_id}. The \texttt{/events} endpoint (existing in v1) is upgraded to WebSocket in v2.
+
+\paragraph{Wire format.} JSON-encoded event envelopes, one per WebSocket message frame.
+
+\paragraph{Delivery semantics.} Best-effort. If a WebSocket client is slow, the adapter may drop events to prevent backpressure. Clients should use the \texttt{/runs/:id/trace} HTTP endpoint to fetch the authoritative trace file if they detect gaps.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsection{JSONL Trace File}
+
+\paragraph{Purpose.} The append-only JSONL trace file (§12) is the durable, authoritative record of all events. It is the only channel with guaranteed at-least-once delivery.
+
+\paragraph{Implementation.} The Runtime Core writes every event synchronously to \texttt{.runbook/runs/<run-id>/trace.jsonl} before proceeding to the next action. File writes use \texttt{O\_APPEND} mode to ensure atomicity on Unix systems.
+
+\paragraph{Format.} One JSON object per line, with the envelope fields from §6.2. See §12.1 for the complete trace file specification.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Event Subscriptions}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Programmatic Subscription API}
+
+Extensions and adapters can subscribe to events programmatically. The subscription API supports filtering by event kind prefix and by \texttt{run\_id}.
+
+\begin{verbatim}
+// EventSubscriber is the interface for subscribing to runtime events.
+type EventSubscriber interface {
+    // Subscribe registers a subscription with optional filters.
+    // Returns a channel that will receive matching events.
+    Subscribe(ctx context.Context, opts SubscribeOptions) (<-chan Event, error)
+}
+
+type SubscribeOptions struct {
+    // KindPrefix filters events to those matching the prefix.
+    // Examples: "step/", "governance/", "run/started"
+    KindPrefix string
+
+    // RunID filters events to a specific run. If empty, all runs.
+    RunID string
+
+    // BufferSize is the channel buffer size. Default: 100.
+    BufferSize int
+}
+\end{verbatim}
+
+\paragraph{Example use cases.}
+\begin{itemize}
+  \item A TUI adapter subscribes with \texttt{KindPrefix: "step/"} to render step progress.
+  \item A governance dashboard subscribes with \texttt{KindPrefix: "governance/"} to display policy violations.
+  \item An observability forwarder subscribes with no filters to send all events to an OpenTelemetry collector (§15).
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Wire Format}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Events are serialized as JSON. The wire format is identical for the JSONL trace file, WebSocket broadcasts, and JSON-RPC notifications.
+
+\subsection{Concrete Example: \texttt{step/started}}
+
+\begin{verbatim}
+{
+  "event_id":    "a3f9c1e2-8d4b-4e1f-9a2c-3d5e6f7a8b9c",
+  "run_id":      "20260418T143022-a3f9c1",
+  "runbook_id":  "deploy-frontend",
+  "timestamp":   "2026-04-18T14:30:25.123456Z",
+  "kind":        "step/started",
+  "sequence":    3,
+  "payload": {
+    "step_id":   "build_assets",
+    "step_type": "cli",
+    "index":     2
+  }
+}
+\end{verbatim}
+
+\subsection{Concrete Example: \texttt{governance/approval\_requested}}
+
+\begin{verbatim}
+{
+  "event_id":    "b1c2d3e4-5f6a-7b8c-9d0e-1f2a3b4c5d6e",
+  "run_id":      "20260418T143022-a3f9c1",
+  "runbook_id":  "deploy-frontend",
+  "timestamp":   "2026-04-18T14:32:10.456789Z",
+  "kind":        "governance/approval_requested",
+  "sequence":    12,
+  "payload": {
+    "step_id":         "deploy_to_prod",
+    "approver_roles":  ["SRE", "PM"],
+    "min_approvals":   2,
+    "timeout_seconds": 3600,
+    "message":         "Deploying to production. Confirm change window."
+  }
+}
+\end{verbatim}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Required vs.\ Optional Events}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The following table classifies every event as REQUIRED (MUST be emitted) or OPTIONAL (MAY be emitted). Required events form the minimal contract for adapter compatibility; optional events provide observability and debugging enhancements.
+
+\begin{center}
+\small
+\begin{tabular}{llp{6cm}}
+\textbf{Event Kind} & \textbf{Status} & \textbf{Notes} \\
+\hline
+\texttt{run/started} & REQUIRED & First event in every trace \\
+\texttt{run/completed} & REQUIRED & Terminal event \\
+\texttt{run/cancelled} & REQUIRED & If cancelled \\
+\texttt{step/started} & REQUIRED & For every executed step \\
+\texttt{step/completed} & REQUIRED & For every successful step \\
+\texttt{step/failed} & REQUIRED & For every failed step \\
+\texttt{step/skipped} & REQUIRED & For every skipped step \\
+\texttt{step/retrying} & OPTIONAL & v2.1+ retry feature \\
+\texttt{governance/command\_checked} & OPTIONAL & Useful for audit trails \\
+\texttt{governance/approval\_requested} & REQUIRED & If approval gates used \\
+\texttt{governance/approval\_received} & REQUIRED & If approval gates used \\
+\texttt{governance/redaction\_applied} & OPTIONAL & Compliance logging \\
+\texttt{extension/loaded} & OPTIONAL & Debugging \\
+\texttt{extension/unloaded} & OPTIONAL & Debugging \\
+\texttt{tool/invoked} & OPTIONAL & Observability \\
+\texttt{tool/completed} & OPTIONAL & Observability \\
+\texttt{input/prompted} & REQUIRED & For manual steps \\
+\texttt{input/received} & REQUIRED & For manual steps \\
+\texttt{saga/compensation\_triggered} & REQUIRED & v2.1+ if saga used \\
+\texttt{saga/compensation\_completed} & REQUIRED & v2.1+ if saga used \\
+\end{tabular}
+\end{center}
+
+\paragraph{Adapter compatibility.} Adapters MUST handle all REQUIRED events. They SHOULD gracefully ignore unknown event kinds to support forward compatibility (e.g., a v2.0 adapter rendering a v2.1 trace with saga events).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Determinism and Replay Semantics}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Replay Mode}
+
+In replay mode (§12.3), the Runtime Core reads events from a historical trace file and re-emits them in sequence order, respecting the original timing and causality. Adapters (TUI, Web, VS Code) subscribe to the replayed event stream and render the historical run indistinguishably from a live run.
+
+\paragraph{Replay guarantees.}
+\begin{itemize}
+  \item Every event in the original trace is re-emitted with the same \texttt{sequence}, \texttt{timestamp}, \texttt{kind}, and \texttt{payload}.
+  \item New \texttt{event\_id} values are assigned (event IDs are not stable across replays).
+  \item Step execution does not occur; the runtime only emits events. No subprocesses are forked, no tools are invoked, no governance checks are evaluated.
+\end{itemize}
+
+\subsection{Non-determinism Boundaries}
+
+The following actions introduce non-determinism and are not captured in events:
+\begin{itemize}
+  \item System time (\texttt{timestamp} fields use wall-clock time, not logical time).
+  \item External network calls (DNS resolution, HTTP responses, database queries).
+  \item File system state outside \texttt{.runbook/}.
+  \item Random UUIDs (\texttt{event\_id} and \texttt{correlation\_id} fields are regenerated in replay).
+\end{itemize}
+
+To achieve full deterministic replay (for testing and debugging), use dry-run mode (§8.2) or snapshot the external environment.

@@ -1,7 +1,992 @@
 \chapter{Observability and Diagnostics}
 
-Operational visibility is essential for production systems. This section covers structured logging format, metric emission points, distributed tracing integration (OpenTelemetry), and the structured diagnostics model for extension and tool interactions. It makes actionable the hardening claims from \S~7 by specifying concrete signals operators can use to debug failures, detect anomalies, and audit compliance.
+Operational visibility is essential for production systems. This chapter specifies the observability model for gert v2: structured logging, metrics, distributed tracing, health probes, and diagnostics tooling. It is distinct from \S~12 (Evidence, Tracing, and Resumption): \textbf{§12 specifies immutable audit records for compliance and resumption}; this chapter specifies \textbf{operational signals for operators} to answer questions like \textit{is the system healthy?}, \textit{what is slow?}, \textit{where did this run fail?}, and \textit{what is the resource utilization?}
 
-\section{TODO}
+The design follows the three-pillar observability model~\cite{google-sre-book} adapted for workflow execution: metrics for aggregated performance, distributed tracing for execution flow, and structured logging for detailed context. All three are instrumented using industry standards (OpenTelemetry~\cite{otel-spec}, W3C Trace Context~\cite{w3c-trace-context}, RFC 3339 timestamps~\cite{rfc3339}) to ensure interoperability with observability platforms.
 
-This section is under active authoring.
+% ================================================================
+\section{Observability Model}
+% ================================================================
+
+Gert v2 applies the three-pillar observability model to workflow execution. Each pillar serves a distinct purpose:
+
+\subsection{Metrics: Aggregated Performance Indicators}
+
+\textbf{Purpose:} Track aggregate performance, throughput, error rates, and resource utilization over time.
+
+\textbf{Use Cases:}
+\begin{itemize}
+  \item \textit{Alerting:} Trigger alerts when error rates exceed thresholds or latency degrades
+  \item \textit{Capacity Planning:} Measure run throughput and active concurrency to inform scaling decisions
+  \item \textit{SLO Monitoring:} Track percentile latencies (p50, p95, p99) for step execution times
+\end{itemize}
+
+\textbf{Metric Types:}
+\begin{itemize}
+  \item \textbf{Counter:} Monotonically increasing (total runs, total errors)
+  \item \textbf{Gauge:} Point-in-time measurement (active runs, loaded extensions)
+  \item \textbf{Histogram:} Distribution of values (run duration, tool invocation latency)
+\end{itemize}
+
+\textbf{Exposition Format:} Prometheus OpenMetrics format exposed via HTTP endpoint (\texttt{GET /metrics}) when running in server mode (\texttt{gert serve --http}).
+
+\subsection{Distributed Tracing: Execution Flow Visualization}
+
+\textbf{Purpose:} Capture the hierarchical execution tree with timing and outcome for every run, step, and tool invocation.
+
+\textbf{Use Cases:}
+\begin{itemize}
+  \item \textit{Root-Cause Analysis:} Identify which step in a failed run caused the failure
+  \item \textit{Latency Diagnosis:} Find which tool invocations are slow
+  \item \textit{Cross-System Correlation:} Link gert spans to HTTP API call traces via W3C Trace Context propagation
+\end{itemize}
+
+\textbf{Implementation:} OpenTelemetry SDK with OTLP exporter~\cite{otel-spec}. Spans emitted for every run (root span), step (child spans), and tool invocation (grandchild spans).
+
+\textbf{Span Hierarchy:}
+\begin{verbatim}
+gert.run (run_id=...)
+├─ gert.step (step_id=backup-db, step_type=cli)
+│  ├─ gert.tool.invoke (tool=ssh, exit_code=0)
+│  └─ gert.governance.check (policy=allow-ssh)
+├─ gert.step (step_id=deploy, step_type=tool)
+│  └─ gert.tool.invoke (tool=kubectl, exit_code=0)
+└─ gert.step (step_id=verify, step_type=manual)
+   └─ gert.input.resolve (provider=approval-gate)
+\end{verbatim}
+
+\textbf{Trace Backends:} Jaeger~\cite{jaeger-docs}, Zipkin~\cite{zipkin-docs}, Datadog, New Relic, AWS X-Ray (all OTLP-compatible).
+
+\subsection{Structured Logging: Detailed Contextual Events}
+
+\textbf{Purpose:} Emit detailed, machine-parseable log lines with run and step context for debugging and incident investigation.
+
+\textbf{Use Cases:}
+\begin{itemize}
+  \item \textit{Debugging:} Search logs by \texttt{run\_id} to see all activity for a specific run
+  \item \textit{Error Investigation:} View full error messages and stack traces in context
+  \item \textit{Compliance Audit:} Query logs for all runs by a specific actor or runbook
+\end{itemize}
+
+\textbf{Log Format:} JSON, one object per line, emitted to \texttt{stderr} by default.
+
+\textbf{Required Fields:}
+\begin{itemize}
+  \item \texttt{timestamp} (RFC 3339~\cite{rfc3339})
+  \item \texttt{level} (debug, info, warn, error)
+  \item \texttt{msg} (human-readable message)
+  \item \texttt{run\_id} (when in run context)
+  \item \texttt{step\_id} (when in step context)
+\end{itemize}
+
+\textbf{Aggregation:} Loki, Elasticsearch, Splunk, CloudWatch Logs (any system that can parse JSON logs).
+
+% ================================================================
+\section{OpenTelemetry Integration}
+% ================================================================
+
+Gert v2 integrates OpenTelemetry as the standard tracing layer. All spans, metrics, and logs follow the OpenTelemetry specification~\cite{otel-spec} to ensure portability across observability backends.
+
+\subsection{Span Hierarchy and Attributes}
+
+OpenTelemetry spans form a hierarchical tree representing the execution structure. Each span level has required attributes for filtering and analysis.
+
+\subsubsection{Root Span: \texttt{gert.run}}
+
+The root span represents the entire run from start to completion.
+
+\textbf{Span Name:} \texttt{gert.run}
+
+\textbf{Required Attributes:}
+\begin{lstlisting}
+runbook.id       = "deploy-app-v3"      // runbook identifier
+runbook.version  = "1.2.3"              // version (if specified)
+actor.id         = "alice@example.com"  // human or service principal
+run.id           = "20260418T143022-a3f9c1"  // unique run ID
+run.mode         = "real"               // "real" | "replay" | "dry-run"
+client.type      = "cli"                // "cli" | "tui" | "web" | "mcp"
+\end{lstlisting}
+
+\textbf{Span Status:} 
+\begin{itemize}
+  \item \texttt{OK} if run outcome is \texttt{success}
+  \item \texttt{ERROR} if run outcome is \texttt{failure}, \texttt{cancelled}, or \texttt{governance-blocked}
+\end{itemize}
+
+\subsubsection{Child Span: \texttt{gert.step}}
+
+Each step execution produces a child span under \texttt{gert.run}.
+
+\textbf{Span Name:} \texttt{gert.step}
+
+\textbf{Required Attributes:}
+\begin{lstlisting}
+step.id          = "backup-db"          // step identifier from YAML
+step.type        = "cli"                // "cli" | "manual" | "tool" | "invoke"
+step.index       = 2                    // zero-based position in sequence
+run.id           = "20260418T143022-a3f9c1"  // run correlation
+step.name        = "Backup production database"  // human-readable name
+\end{lstlisting}
+
+\textbf{Optional Attributes:}
+\begin{lstlisting}
+step.outcome     = "success"            // "success" | "failure" | "skipped"
+step.retries     = 2                    // number of retry attempts
+\end{lstlisting}
+
+\textbf{Span Events:} Emit span events for key transitions:
+\begin{itemize}
+  \item \texttt{governance.check.started} — governance evaluation started
+  \item \texttt{governance.check.passed} — governance check passed
+  \item \texttt{approval.requested} — human approval requested
+  \item \texttt{approval.granted} — approval decision logged
+\end{itemize}
+
+\subsubsection{Grandchild Span: \texttt{gert.tool.invoke}}
+
+Tool invocations create grandchild spans under \texttt{gert.step}.
+
+\textbf{Span Name:} \texttt{gert.tool.invoke}
+
+\textbf{Required Attributes:}
+\begin{lstlisting}
+tool.name        = "kubectl"            // tool identifier
+tool.transport   = "exec"               // "exec" | "ssh" | "http"
+tool.exit_code   = 0                    // process exit code (exec only)
+run.id           = "20260418T143022-a3f9c1"  // run correlation
+step.id          = "deploy"             // parent step
+\end{lstlisting}
+
+\textbf{Optional Attributes:}
+\begin{lstlisting}
+tool.args        = ["apply", "-f", "deployment.yaml"]  // redacted args
+tool.duration_ms = 1234                 // invocation latency
+\end{lstlisting}
+
+\subsubsection{Grandchild Span: \texttt{gert.input.resolve}}
+
+Input provider resolutions create grandchild spans.
+
+\textbf{Span Name:} \texttt{gert.input.resolve}
+
+\textbf{Required Attributes:}
+\begin{lstlisting}
+input.name       = "db_password"        // input key from runbook
+provider.type    = "vault"              // provider type
+provider.address = "https://vault:8200" // endpoint (if applicable)
+run.id           = "20260418T143022-a3f9c1"
+\end{lstlisting}
+
+\subsubsection{Grandchild Span: \texttt{gert.governance.check}}
+
+Governance evaluations create grandchild spans.
+
+\textbf{Span Name:} \texttt{gert.governance.check}
+
+\textbf{Required Attributes:}
+\begin{lstlisting}
+policy.name      = "allow-ssh"          // policy identifier
+policy.outcome   = "allow"              // "allow" | "deny"
+run.id           = "20260418T143022-a3f9c1"
+step.id          = "backup-db"
+\end{lstlisting}
+
+\subsection{Span Status and Error Handling}
+
+OpenTelemetry spans have three status codes:
+\begin{itemize}
+  \item \texttt{UNSET} — default, no explicit status set
+  \item \texttt{OK} — operation completed successfully
+  \item \texttt{ERROR} — operation failed
+\end{itemize}
+
+\textbf{Status Mapping:}
+\begin{itemize}
+  \item \texttt{gert.run} span:
+    \begin{itemize}
+      \item \texttt{OK} if run outcome is \texttt{success}
+      \item \texttt{ERROR} if run outcome is \texttt{failure}, \texttt{cancelled}, \texttt{governance-blocked}
+    \end{itemize}
+  \item \texttt{gert.step} span:
+    \begin{itemize}
+      \item \texttt{OK} if step outcome is \texttt{success} or \texttt{skipped}
+      \item \texttt{ERROR} if step outcome is \texttt{failure}
+    \end{itemize}
+  \item \texttt{gert.tool.invoke} span:
+    \begin{itemize}
+      \item \texttt{OK} if \texttt{exit\_code == 0}
+      \item \texttt{ERROR} if \texttt{exit\_code != 0} or invocation crashes
+    \end{itemize}
+\end{itemize}
+
+When a span is marked \texttt{ERROR}, the runtime MUST record the error message as a span event or exception:
+
+\begin{lstlisting}
+span.RecordError(err, trace.WithAttributes(
+  attribute.String("error.type", "tool_invocation_failed"),
+  attribute.String("error.message", err.Error()),
+))
+\end{lstlisting}
+
+\subsection{Context Propagation}
+
+Gert v2 propagates trace context across system boundaries using W3C Trace Context~\cite{w3c-trace-context}.
+
+\subsubsection{W3C Trace Context Headers}
+
+When a tool invokes an HTTP API, the runtime MUST inject W3C headers:
+
+\begin{verbatim}
+traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+tracestate: gert=run_id:20260418T143022-a3f9c1
+\end{verbatim}
+
+The \texttt{traceparent} header contains:
+\begin{itemize}
+  \item \texttt{version} (00)
+  \item \texttt{trace-id} (128-bit, globally unique)
+  \item \texttt{parent-id} (64-bit span ID)
+  \item \texttt{trace-flags} (sampling decision)
+\end{itemize}
+
+The \texttt{tracestate} header carries vendor-specific metadata. Gert includes \texttt{run\_id} as baggage for cross-system correlation.
+
+\subsubsection{Baggage}
+
+The \texttt{run\_id} is propagated as OpenTelemetry baggage to all child spans and external systems:
+
+\begin{lstlisting}
+baggage.Set("run_id", runID)
+\end{lstlisting}
+
+This allows downstream systems to tag their own spans with the originating gert run ID, enabling end-to-end tracing across multi-system workflows.
+
+\subsection{OTLP Exporter Configuration}
+
+The runtime supports two trace export modes:
+
+\subsubsection{OTLP Export (Production)}
+
+Configure via environment variable or CLI flag:
+
+\begin{verbatim}
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+gert run deploy.yaml
+\end{verbatim}
+
+Or:
+
+\begin{verbatim}
+gert run deploy.yaml --otel-endpoint=http://jaeger:4317
+\end{verbatim}
+
+The runtime uses the OTLP/gRPC exporter by default. For HTTP, use:
+
+\begin{verbatim}
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+\end{verbatim}
+
+\subsubsection{Console Export (Development)}
+
+For local development without a trace backend:
+
+\begin{verbatim}
+gert run deploy.yaml --otel-console
+\end{verbatim}
+
+This prints spans to \texttt{stderr} in a human-readable format.
+
+\subsection{Sampling Strategy}
+
+Gert v2 uses \textbf{parent-based sampling} with a configurable default rate:
+
+\begin{itemize}
+  \item If an incoming request already has a trace context (e.g., gert invoked via HTTP from another traced system), \textbf{inherit the parent's sampling decision}.
+  \item If no parent context exists, sample at the configured rate (default: 100\% = always sample).
+\end{itemize}
+
+Configuration:
+
+\begin{verbatim}
+export OTEL_TRACES_SAMPLER=parentbased_traceidratio
+export OTEL_TRACES_SAMPLER_ARG=0.1  # sample 10% of traces
+\end{verbatim}
+
+For production systems with high throughput, consider \texttt{0.01} (1\%) or \texttt{0.001} (0.1\%) to reduce backend load.
+
+% ================================================================
+\section{Metrics Catalog}
+% ================================================================
+
+Gert v2 exposes the following metrics in Prometheus OpenMetrics format. All metrics are prefixed with \texttt{gert\_}.
+
+\subsection{Run Metrics}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|p{4.5cm}|p{1.5cm}|p{3.5cm}|p{5.5cm}|}
+\hline
+\textbf{Metric} & \textbf{Type} & \textbf{Labels} & \textbf{Description} \\
+\hline
+\texttt{gert\_runs\_total} & Counter & \texttt{outcome}, \texttt{runbook\_id} & Total run completions by outcome (\texttt{success}, \texttt{failure}, \texttt{cancelled}) \\
+\hline
+\texttt{gert\_run\_duration\_seconds} & Histogram & \texttt{outcome}, \texttt{runbook\_id} & End-to-end run duration (start to completion) \\
+\hline
+\texttt{gert\_active\_runs} & Gauge & — & Currently executing runs \\
+\hline
+\end{tabular}
+\caption{Run-level metrics}
+\end{table}
+
+\textbf{Histogram Buckets:} \texttt{gert\_run\_duration\_seconds} uses exponential buckets: \texttt{0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1800, 3600} (seconds).
+
+\subsection{Step Metrics}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|p{4.5cm}|p{1.5cm}|p{3.5cm}|p{5.5cm}|}
+\hline
+\textbf{Metric} & \textbf{Type} & \textbf{Labels} & \textbf{Description} \\
+\hline
+\texttt{gert\_steps\_total} & Counter & \texttt{outcome}, \texttt{step\_type} & Total step completions by outcome and type \\
+\hline
+\texttt{gert\_step\_duration\_seconds} & Histogram & \texttt{step\_type} & Per-step duration by type (\texttt{cli}, \texttt{manual}, \texttt{tool}, \texttt{invoke}) \\
+\hline
+\end{tabular}
+\caption{Step-level metrics}
+\end{table}
+
+\textbf{Histogram Buckets:} \texttt{gert\_step\_duration\_seconds} uses buckets: \texttt{0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300} (seconds).
+
+\subsection{Tool Invocation Metrics}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|p{4.5cm}|p{1.5cm}|p{3.5cm}|p{5.5cm}|}
+\hline
+\textbf{Metric} & \textbf{Type} & \textbf{Labels} & \textbf{Description} \\
+\hline
+\texttt{gert\_tool\_invocations\_total} & Counter & \texttt{tool\_name}, \texttt{outcome} & Tool invocation count by tool and outcome (\texttt{success}, \texttt{failure}) \\
+\hline
+\texttt{gert\_tool\_duration\_seconds} & Histogram & \texttt{tool\_name} & Tool invocation latency \\
+\hline
+\end{tabular}
+\caption{Tool invocation metrics}
+\end{table}
+
+\textbf{Histogram Buckets:} \texttt{gert\_tool\_duration\_seconds} uses buckets: \texttt{0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10, 30} (seconds).
+
+\subsection{Approval Metrics}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|p{4.5cm}|p{1.5cm}|p{3.5cm}|p{5.5cm}|}
+\hline
+\textbf{Metric} & \textbf{Type} & \textbf{Labels} & \textbf{Description} \\
+\hline
+\texttt{gert\_approval\_wait\_seconds} & Histogram & \texttt{step\_id} & Time from approval request to decision (approved or rejected) \\
+\hline
+\texttt{gert\_approvals\_total} & Counter & \texttt{decision}, \texttt{step\_id} & Total approval decisions (\texttt{approved}, \texttt{rejected}) \\
+\hline
+\end{tabular}
+\caption{Approval metrics}
+\end{table}
+
+\textbf{Histogram Buckets:} \texttt{gert\_approval\_wait\_seconds} uses buckets: \texttt{10, 30, 60, 300, 600, 1800, 3600, 7200, 14400, 28800, 86400} (seconds, up to 24 hours).
+
+\subsection{Extension Metrics}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|p{4.5cm}|p{1.5cm}|p{3.5cm}|p{5.5cm}|}
+\hline
+\textbf{Metric} & \textbf{Type} & \textbf{Labels} & \textbf{Description} \\
+\hline
+\texttt{gert\_extension\_crashes\_total} & Counter & \texttt{extension\_id} & Extension process crashes \\
+\hline
+\texttt{gert\_extension\_loaded} & Gauge & \texttt{extension\_id} & 1 if extension is loaded, 0 otherwise \\
+\hline
+\end{tabular}
+\caption{Extension metrics}
+\end{table}
+
+\subsection{Metrics Endpoint}
+
+When running in server mode, metrics are exposed at:
+
+\begin{verbatim}
+GET http://localhost:8080/metrics
+\end{verbatim}
+
+Configure the server:
+
+\begin{verbatim}
+gert serve --http --addr=:8080
+\end{verbatim}
+
+The response is in Prometheus text exposition format. Example:
+
+\begin{verbatim}
+# TYPE gert_runs_total counter
+gert_runs_total{outcome="success",runbook_id="deploy-app-v3"} 42
+gert_runs_total{outcome="failure",runbook_id="deploy-app-v3"} 3
+
+# TYPE gert_run_duration_seconds histogram
+gert_run_duration_seconds_bucket{outcome="success",runbook_id="deploy-app-v3",le="1"} 5
+gert_run_duration_seconds_bucket{outcome="success",runbook_id="deploy-app-v3",le="5"} 18
+gert_run_duration_seconds_bucket{outcome="success",runbook_id="deploy-app-v3",le="+Inf"} 42
+gert_run_duration_seconds_sum{outcome="success",runbook_id="deploy-app-v3"} 187.4
+gert_run_duration_seconds_count{outcome="success",runbook_id="deploy-app-v3"} 42
+
+# TYPE gert_active_runs gauge
+gert_active_runs 3
+\end{verbatim}
+
+\subsection{Push-Based Metrics (OTLP)}
+
+For environments where scraping is not feasible (e.g., ephemeral CI jobs), use OTLP metrics export:
+
+\begin{verbatim}
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4317
+export OTEL_METRICS_EXPORTER=otlp
+gert run deploy.yaml
+\end{verbatim}
+
+The runtime pushes metrics to the OTLP endpoint at configurable intervals (default: 60 seconds).
+
+% ================================================================
+\section{Structured Logging}
+% ================================================================
+
+Gert v2 emits structured JSON logs to \texttt{stderr}. Every log line is a complete JSON object.
+
+\subsection{Log Line Format}
+
+\begin{lstlisting}
+{
+  "timestamp": "2026-04-18T14:30:22.123456Z",
+  "level": "info",
+  "msg": "step execution started",
+  "run_id": "20260418T143022-a3f9c1",
+  "step_id": "backup-db",
+  "step_type": "cli",
+  "actor": "alice@example.com"
+}
+\end{lstlisting}
+
+\subsection{Required Fields}
+
+\begin{itemize}
+  \item \texttt{timestamp} — RFC 3339 format~\cite{rfc3339} with microsecond precision, UTC timezone
+  \item \texttt{level} — one of: \texttt{debug}, \texttt{info}, \texttt{warn}, \texttt{error}
+  \item \texttt{msg} — human-readable message describing the event
+\end{itemize}
+
+\subsection{Contextual Fields (When Applicable)}
+
+\begin{itemize}
+  \item \texttt{run\_id} — run identifier (present in all logs within run context)
+  \item \texttt{step\_id} — step identifier (present in all logs within step context)
+  \item \texttt{step\_type} — step type (\texttt{cli}, \texttt{manual}, \texttt{tool}, \texttt{invoke})
+  \item \texttt{actor} — user or service principal executing the run
+  \item \texttt{tool\_name} — tool identifier (for tool invocation logs)
+  \item \texttt{error} — error message (for \texttt{error} level logs)
+  \item \texttt{exit\_code} — process exit code (for CLI step completions)
+\end{itemize}
+
+\subsection{Log Levels}
+
+\begin{itemize}
+  \item \textbf{debug} — Detailed diagnostic information (e.g., input resolution, policy evaluation details)
+  \item \textbf{info} — Operational milestones (e.g., step started, run completed)
+  \item \textbf{warn} — Recoverable issues (e.g., retry attempt, fallback to default)
+  \item \textbf{error} — Failures requiring attention (e.g., step failure, governance denial)
+\end{itemize}
+
+Configure via environment variable or CLI flag:
+
+\begin{verbatim}
+export GERT_LOG_LEVEL=debug
+gert run deploy.yaml
+\end{verbatim}
+
+Or:
+
+\begin{verbatim}
+gert run deploy.yaml --log-level=debug
+\end{verbatim}
+
+Default: \texttt{info}.
+
+\subsection{Sensitive Data Handling}
+
+Log lines MUST NOT contain sensitive input values. The runtime applies the same redaction rules as the trace file (see \S~12.4).
+
+\textbf{Safe:}
+\begin{lstlisting}
+{"msg": "resolved input 'db_password' from provider 'vault'"}
+\end{lstlisting}
+
+\textbf{Unsafe:}
+\begin{lstlisting}
+{"msg": "resolved input 'db_password' = 'hunter2'"}
+\end{lstlisting}
+
+When logging errors that may contain sensitive data, scrub or omit the error message:
+
+\begin{lstlisting}
+{"msg": "input resolution failed", "input_name": "db_password", 
+ "provider": "vault", "error": "connection timeout"}
+\end{lstlisting}
+
+\subsection{Log Output Configuration}
+
+By default, logs are written to \texttt{stderr}. To write to a file:
+
+\begin{verbatim}
+gert run deploy.yaml --log-output=file:/var/log/gert/gert.log
+\end{verbatim}
+
+This writes logs to the file \textit{in addition to} \texttt{stderr}.
+
+For syslog output:
+
+\begin{verbatim}
+gert run deploy.yaml --log-output=syslog://localhost:514
+\end{verbatim}
+
+\subsection{Log Aggregation and Correlation}
+
+Every log line in run context includes \texttt{run\_id}, enabling log aggregation by run:
+
+\textbf{Loki Query:}
+\begin{verbatim}
+{job="gert"} | json | run_id="20260418T143022-a3f9c1"
+\end{verbatim}
+
+\textbf{Elasticsearch Query:}
+\begin{verbatim}
+GET /gert-logs-*/_search
+{
+  "query": {
+    "term": {"run_id": "20260418T143022-a3f9c1"}
+  }
+}
+\end{verbatim}
+
+This returns all log lines for the specified run, ordered by timestamp.
+
+% ================================================================
+\section{Health and Readiness Endpoints}
+% ================================================================
+
+When running in server mode (\texttt{gert serve --http}), the runtime exposes HTTP endpoints for health probes. These are designed for Kubernetes liveness and readiness probes.
+
+\subsection{Liveness Endpoint}
+
+\begin{verbatim}
+GET /health
+\end{verbatim}
+
+\textbf{Purpose:} Indicates whether the gert process is alive.
+
+\textbf{Response (200 OK):}
+\begin{lstlisting}
+{
+  "status": "ok",
+  "version": "v2.0.0",
+  "uptime_seconds": 3600
+}
+\end{lstlisting}
+
+\textbf{Use Case:} Kubernetes liveness probe to restart crashed pods.
+
+\subsection{Readiness Endpoint}
+
+\begin{verbatim}
+GET /ready
+\end{verbatim}
+
+\textbf{Purpose:} Indicates whether the runtime is ready to accept new runs.
+
+\textbf{Response (200 OK):}
+\begin{lstlisting}
+{
+  "status": "ready",
+  "extensions_loaded": 3,
+  "extensions_failed": 0
+}
+\end{lstlisting}
+
+\textbf{Response (503 Service Unavailable):}
+\begin{lstlisting}
+{
+  "status": "not_ready",
+  "reason": "extension 'aws-tools' failed to load",
+  "extensions_loaded": 2,
+  "extensions_failed": 1
+}
+\end{lstlisting}
+
+\textbf{Use Case:} Kubernetes readiness probe to delay traffic until extensions are loaded.
+
+\subsection{Kubernetes Probe Configuration}
+
+\begin{lstlisting}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gert-server
+spec:
+  containers:
+  - name: gert
+    image: gert:v2.0.0
+    command: ["gert", "serve", "--http", "--addr=:8080"]
+    livenessProbe:
+      httpGet:
+        path: /health
+        port: 8080
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    readinessProbe:
+      httpGet:
+        path: /ready
+        port: 8080
+      initialDelaySeconds: 10
+      periodSeconds: 5
+\end{lstlisting}
+
+% ================================================================
+\section{Diagnostics Commands}
+% ================================================================
+
+Gert v2 provides CLI commands for self-diagnosis and trace inspection.
+
+\subsection{\texttt{gert diagnose}}
+
+\textbf{Purpose:} Run pre-flight checks to verify that the runtime environment is correctly configured.
+
+\textbf{Usage:}
+\begin{verbatim}
+gert diagnose [--runbook=<path>]
+\end{verbatim}
+
+\textbf{Checks Performed:}
+\begin{enumerate}
+  \item \textbf{Runbook Schema Validation:} Parse and validate the runbook YAML against JSON Schema
+  \item \textbf{Tool Availability:} Verify that all declared tools (\texttt{.tool.yaml}) are executable and findable in \texttt{PATH} or \texttt{.runbook/tools/}
+  \item \textbf{Input Provider Connectivity:} Test that all input providers (\texttt{.provider.yaml}) can be reached (e.g., Vault is reachable, API keys are valid)
+  \item \textbf{Extension Loading:} Attempt to load all declared extensions and report any load failures
+  \item \textbf{Governance Policy Syntax:} Validate OPA policies (if policy-as-code is configured)
+\end{enumerate}
+
+\textbf{Output (Success):}
+\begin{verbatim}
+✓ Runbook schema validation passed
+✓ Tool 'kubectl' found at /usr/local/bin/kubectl
+✓ Tool 'aws' found at /usr/local/bin/aws
+✓ Input provider 'vault' reachable at https://vault:8200
+✓ Extension 'aws-tools' loaded successfully
+✓ Extension 'k8s-tools' loaded successfully
+
+Diagnostics: PASS
+\end{verbatim}
+
+\textbf{Output (Failure):}
+\begin{verbatim}
+✓ Runbook schema validation passed
+✗ Tool 'kubectl' not found in PATH or .runbook/tools/
+✓ Tool 'aws' found at /usr/local/bin/aws
+✗ Input provider 'vault' unreachable: connection refused
+✓ Extension 'aws-tools' loaded successfully
+✗ Extension 'k8s-tools' failed to load: missing dependency
+
+Diagnostics: FAIL (3 errors)
+\end{verbatim}
+
+\textbf{Exit Code:} 0 if all checks pass, 1 if any check fails.
+
+\subsection{\texttt{gert trace show}}
+
+\textbf{Purpose:} Pretty-print a completed run's trace from the JSONL file.
+
+\textbf{Usage:}
+\begin{verbatim}
+gert trace show <run_id>
+\end{verbatim}
+
+\textbf{Output:}
+\begin{verbatim}
+Run: 20260418T143022-a3f9c1
+Runbook: deploy-app-v3
+Actor: alice@example.com
+Started: 2026-04-18T14:30:22Z
+Completed: 2026-04-18T14:33:15Z
+Duration: 2m53s
+Outcome: success
+
+Steps:
+  [0] backup-db (cli) - 12.3s - success
+    └─ tool: ssh - 12.1s - exit_code=0
+  [1] deploy (tool) - 45.2s - success
+    └─ tool: kubectl - 44.8s - exit_code=0
+  [2] verify (manual) - 2m10s - success
+    └─ approval: alice@example.com - granted
+\end{verbatim}
+
+\subsection{\texttt{gert trace export}}
+
+\textbf{Purpose:} Convert a JSONL trace to OpenTelemetry OTLP format for import into Jaeger or Zipkin.
+
+\textbf{Usage:}
+\begin{verbatim}
+gert trace export <run_id> --format=otlp --output=trace.json
+\end{verbatim}
+
+\textbf{Supported Formats:}
+\begin{itemize}
+  \item \texttt{otlp} — OTLP JSON format
+  \item \texttt{jaeger} — Jaeger JSON format
+  \item \texttt{zipkin} — Zipkin JSON format
+\end{itemize}
+
+\textbf{Use Case:} Retrospectively analyze a run in a trace visualization tool when the runtime was not configured to export traces at execution time.
+
+\subsection{\texttt{gert run list}}
+
+\textbf{Purpose:} List recent runs with status.
+
+\textbf{Usage:}
+\begin{verbatim}
+gert run list [--limit=N] [--json]
+\end{verbatim}
+
+\textbf{Output (Human-Readable):}
+\begin{verbatim}
+RUN_ID                       RUNBOOK          ACTOR                OUTCOME    DURATION
+20260418T143022-a3f9c1       deploy-app-v3    alice@example.com    success    2m53s
+20260418T140015-f3a7b2       rollback-v2      bob@example.com      failure    45s
+20260418T135512-c9e8d1       backup-db        cron@system          success    3m12s
+\end{verbatim}
+
+\textbf{Output (JSON, for CI integration):}
+\begin{lstlisting}
+[
+  {
+    "run_id": "20260418T143022-a3f9c1",
+    "runbook_id": "deploy-app-v3",
+    "actor": "alice@example.com",
+    "outcome": "success",
+    "duration_ms": 173000,
+    "started_at": "2026-04-18T14:30:22Z",
+    "completed_at": "2026-04-18T14:33:15Z"
+  },
+  ...
+]
+\end{lstlisting}
+
+\textbf{Use Case:} CI pipelines can parse JSON output to determine run status.
+
+% ================================================================
+\section{Integration Recipes}
+% ================================================================
+
+This section provides practical integration patterns for common observability platforms.
+
+\subsection{Prometheus + Grafana}
+
+\textbf{Step 1: Start gert server}
+\begin{verbatim}
+gert serve --http --addr=:8080
+\end{verbatim}
+
+\textbf{Step 2: Configure Prometheus scrape target}
+
+Add to \texttt{prometheus.yml}:
+\begin{lstlisting}
+scrape_configs:
+  - job_name: 'gert'
+    static_configs:
+      - targets: ['localhost:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+\end{lstlisting}
+
+\textbf{Step 3: Import Grafana dashboard}
+
+Gert provides a reference Grafana dashboard JSON at \texttt{.runbook/observability/grafana-dashboard.json}. Import it into Grafana to visualize:
+\begin{itemize}
+  \item Run throughput (runs/minute)
+  \item Success vs. failure rate
+  \item p50, p95, p99 run duration
+  \item Active runs (gauge)
+  \item Step execution time by type
+  \item Tool invocation latency
+\end{itemize}
+
+\subsection{Jaeger (Distributed Tracing)}
+
+\textbf{Step 1: Start Jaeger (all-in-one)}
+\begin{verbatim}
+docker run -d --name jaeger \
+  -p 16686:16686 \
+  -p 4317:4317 \
+  jaegertracing/all-in-one:latest
+\end{verbatim}
+
+\textbf{Step 2: Configure gert to export traces}
+\begin{verbatim}
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+gert run deploy.yaml
+\end{verbatim}
+
+\textbf{Step 3: View traces in Jaeger UI}
+
+Open \url{http://localhost:16686}, select service \texttt{gert}, and search for traces.
+
+\subsection{Loki + Grafana (Log Aggregation)}
+
+\textbf{Step 1: Configure Promtail to scrape gert logs}
+
+Add to \texttt{promtail-config.yaml}:
+\begin{lstlisting}
+scrape_configs:
+  - job_name: gert
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: gert
+          __path__: /var/log/gert/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            msg: msg
+            run_id: run_id
+      - labels:
+          level:
+          run_id:
+\end{lstlisting}
+
+\textbf{Step 2: Start gert with file logging}
+\begin{verbatim}
+gert run deploy.yaml --log-output=file:/var/log/gert/gert.log
+\end{verbatim}
+
+\textbf{Step 3: Query logs in Grafana Explore}
+\begin{verbatim}
+{job="gert"} | json | run_id="20260418T143022-a3f9c1"
+\end{verbatim}
+
+\subsection{Datadog / New Relic (OTLP-Compatible SaaS)}
+
+Both platforms support OpenTelemetry OTLP ingestion.
+
+\textbf{Datadog:}
+\begin{verbatim}
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://api.datadoghq.com
+export DD_API_KEY=<your-api-key>
+gert run deploy.yaml
+\end{verbatim}
+
+\textbf{New Relic:}
+\begin{verbatim}
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.nr-data.net:4317
+export NEW_RELIC_API_KEY=<your-api-key>
+gert run deploy.yaml
+\end{verbatim}
+
+Consult platform documentation for exact endpoint URLs and authentication headers.
+
+% ================================================================
+\section{Observability for CI/CD Pipelines}
+% ================================================================
+
+Gert v2 provides machine-readable output for CI/CD integration.
+
+\subsection{JSON Output Mode}
+
+\begin{verbatim}
+gert run deploy.yaml --output=json
+\end{verbatim}
+
+On completion, emits a JSON summary to \texttt{stdout}:
+
+\begin{lstlisting}
+{
+  "run_id": "20260418T143022-a3f9c1",
+  "outcome": "success",
+  "step_count": 3,
+  "failed_step": null,
+  "duration_ms": 173000,
+  "started_at": "2026-04-18T14:30:22Z",
+  "completed_at": "2026-04-18T14:33:15Z"
+}
+\end{lstlisting}
+
+\textbf{Exit Code:}
+\begin{itemize}
+  \item 0 if \texttt{outcome == "success"}
+  \item 1 if \texttt{outcome == "failure"}
+  \item 2 if \texttt{outcome == "governance-blocked"}
+  \item 3 if \texttt{outcome == "cancelled"}
+\end{itemize}
+
+\subsection{GitHub Actions Example}
+
+\begin{lstlisting}
+- name: Run gert runbook
+  id: gert_run
+  run: |
+    OUTPUT=$(gert run deploy.yaml --output=json)
+    echo "$OUTPUT" | jq .
+    RUN_ID=$(echo "$OUTPUT" | jq -r .run_id)
+    OUTCOME=$(echo "$OUTPUT" | jq -r .outcome)
+    echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+    echo "outcome=$OUTCOME" >> $GITHUB_OUTPUT
+
+- name: Upload trace artifact
+  if: always()
+  uses: actions/upload-artifact@v3
+  with:
+    name: gert-trace
+    path: .runbook/runs/${{ steps.gert_run.outputs.run_id }}/trace.jsonl
+\end{lstlisting}
+
+\subsection{GitLab CI Example}
+
+\begin{lstlisting}
+deploy:
+  script:
+    - gert run deploy.yaml --output=json | tee run-output.json
+    - RUN_ID=$(jq -r .run_id run-output.json)
+    - echo "Run ID: $RUN_ID"
+  artifacts:
+    when: always
+    paths:
+      - .runbook/runs/
+    reports:
+      junit: .runbook/runs/*/trace.jsonl
+\end{lstlisting}
+
+% ================================================================
+\section{Summary}
+% ================================================================
+
+This chapter specifies a production-grade observability model for gert v2 grounded in industry standards:
+
+\begin{itemize}
+  \item \textbf{Three-pillar model:} Metrics (Prometheus), distributed tracing (OpenTelemetry), structured logging (JSON)
+  \item \textbf{Span hierarchy:} \texttt{gert.run} → \texttt{gert.step} → \texttt{gert.tool.invoke / gert.governance.check / gert.input.resolve}
+  \item \textbf{Context propagation:} W3C Trace Context headers and OpenTelemetry baggage for cross-system correlation
+  \item \textbf{Metrics catalog:} 9 metrics covering runs, steps, tools, approvals, and extensions
+  \item \textbf{Health endpoints:} \texttt{/health} (liveness), \texttt{/ready} (readiness), \texttt{/metrics} (Prometheus)
+  \item \textbf{Diagnostics commands:} \texttt{gert diagnose}, \texttt{gert trace show}, \texttt{gert trace export}, \texttt{gert run list}
+  \item \textbf{Integration recipes:} Prometheus, Grafana, Jaeger, Loki, Datadog, New Relic
+  \item \textbf{CI/CD support:} JSON output mode with exit codes for pipeline integration
+\end{itemize}
+
+Operators gain visibility into run health, performance bottlenecks, and failure root causes. The design ensures portability across observability platforms by adhering to open standards~\cite{otel-spec, w3c-trace-context, google-sre-book}.

@@ -1,7 +1,857 @@
 \chapter{Adapter Contracts}
 
-Gert v2 decouples the core runtime from presentation adapters (TUI, Web, VS Code) through explicitly versioned contracts. This section defines the concrete interface that adapters implement: event subscription API, initialization handshake, render lifecycle, and the non-negotiable constraint that adapters own no execution logic. This contract must be stable and extensible to support current and future adapters.
+Gert v2 decouples the core runtime from presentation adapters (TUI, Web, VS
+Code) and integration systems (CI/CD platforms, observability backends, approval
+workflow systems) through explicitly versioned contracts.  An \textbf{adapter
+contract} is a stable, versioned interface that gert commits to maintain across
+minor and patch releases.  Adapters are consumers of these contracts: they
+observe, render, or orchestrate gert runs, but they own no execution logic.
 
-\section{TODO}
+This chapter defines the four primary adapter surfaces exposed by gert v2:
+JSON-RPC execution contract, WebSocket event stream contract, tool invocation
+contract, and extension handshake contract.
 
-This section is under active authoring.
+% ─────────────────────────────────────────────────────────────────────────────
+\section{What is an Adapter Contract?}
+\label{sec:adapter-contract-definition}
+% ─────────────────────────────────────────────────────────────────────────────
+
+An \textbf{adapter contract} is a versioned API specification that defines:
+
+\begin{enumerate}
+  \item The set of RPC methods, request/response schemas, and error envelopes.
+  \item The stability guarantee: which fields are required, which are optional,
+        and which may be added in future minor versions.
+  \item The versioning scheme: how breaking changes are communicated, and how
+        long deprecated versions are supported.
+  \item The transport layer: HTTP, WebSocket, stdio JSON-RPC, etc.
+\end{enumerate}
+
+Adapter contracts are the integration surface of gert.  They are designed for
+external systems to consume.  Breaking changes to a contract require a major
+version bump and a deprecation period.
+
+\paragraph{Example consumers:}
+
+\begin{itemize}
+  \item VS Code extension (consumes JSON-RPC execution contract and WebSocket
+        event stream)~\cite{vscode-extension-api}
+  \item GitLab CI runner (consumes JSON-RPC execution contract to trigger runs)
+  \item Datadog integration (consumes event stream to emit metrics)
+  \item Slack approval bot (consumes event stream, submits approvals via
+        JSON-RPC)
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Contract Categories}
+\label{sec:contract-categories}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Gert v2 exposes four distinct adapter surfaces, each with its own versioning
+and stability guarantees.
+
+\subsection{JSON-RPC Execution Contract (\texttt{exec/v2})}
+\label{sec:jsonrpc-exec-contract}
+
+The execution contract is the primary interface for starting, monitoring, and
+controlling gert runs.  It is served over \texttt{gert serve --stdio} (stdio
+JSON-RPC) or \texttt{gert serve --http} (HTTP POST to \texttt{/rpc}).
+
+\paragraph{Contract version:} \texttt{exec/v2}
+
+\paragraph{Transport:} stdio JSON-RPC 2.0 or HTTP POST (JSON-RPC over HTTP)
+
+\paragraph{Methods:}
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{p{0.25\linewidth}p{0.60\linewidth}}
+\hline
+\textbf{Method} & \textbf{Description} \\
+\hline
+\texttt{exec/start} &
+Start a new runbook execution.  Params: \texttt{runbookPath}, \texttt{inputs},
+\texttt{mode}, \texttt{actorId}.  Returns: \texttt{runId}, \texttt{status}. \\
+\hline
+\texttt{exec/next} &
+Advance the run by one step or until it reaches a pause point (approval,
+manual, error).  Params: \texttt{runId}.  Returns: \texttt{stepId},
+\texttt{status}, \texttt{output}. \\
+\hline
+\texttt{exec/cancel} &
+Cancel an in-progress run.  Params: \texttt{runId}, \texttt{reason}.  Returns:
+\texttt{cancelled: bool}. \\
+\hline
+\texttt{exec/status} &
+Get the current status of a run.  Params: \texttt{runId}.  Returns:
+\texttt{status}, \texttt{currentStepId}, \texttt{progress}. \\
+\hline
+\texttt{run/list} &
+List all runs in the workspace.  Params: \texttt{filter}, \texttt{limit}.
+Returns: \texttt{runs: [RunSummary]}. \\
+\hline
+\texttt{run/get} &
+Get full details of a run.  Params: \texttt{runId}.  Returns: \texttt{run:
+RunDetails}. \\
+\hline
+\end{tabular}
+\caption{JSON-RPC execution contract methods (\texttt{exec/v2}).}
+\label{tab:exec-methods}
+\end{table}
+
+\paragraph{Request schema — \texttt{exec/start}:}
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "method": "exec/start",
+  "params": {
+    "runbookPath": "./runbooks/incident-triage.yaml",
+    "inputs": {
+      "incident_id": "INC-12345",
+      "severity": "high"
+    },
+    "mode": "real",        // real | dry-run | replay
+    "actorId": "ops@acme.example"
+  }
+}
+\end{verbatim}
+
+\paragraph{Response schema — \texttt{exec/start}:}
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "result": {
+    "runId": "run-abc123",
+    "status": "running",
+    "createdAt": "2026-04-18T12:00:00Z",
+    "traceFile": "./traces/run-abc123.jsonl"
+  }
+}
+\end{verbatim}
+
+\paragraph{Error envelope:}
+
+All errors follow JSON-RPC 2.0 error format:
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "error": {
+    "code": 1001,
+    "message": "run not found",
+    "data": {
+      "runId": "run-xyz789",
+      "category": "client_error",
+      "retryable": false
+    }
+  }
+}
+\end{verbatim}
+
+See Section~\ref{sec:error-codes} for the canonical error code registry.
+
+\paragraph{Stability guarantee:}
+
+Within the \texttt{exec/v2} contract:
+
+\begin{itemize}
+  \item All required fields in request/response schemas are stable.
+  \item Optional fields may be added in minor versions (clients MUST ignore
+        unknown fields).
+  \item Required fields will not be removed or renamed (breaking change →
+        \texttt{exec/v3}).
+  \item Error codes are stable; new codes may be added but existing codes will
+        not change semantics.
+\end{itemize}
+
+\subsection{WebSocket Event Stream Contract (\texttt{events/v2})}
+\label{sec:ws-event-contract}
+
+The event stream contract allows adapters to subscribe to real-time events from
+a running or completed gert execution.  It is served over \texttt{gert serve
+--http} at the \texttt{/ws} or \texttt{/events} endpoint.
+
+\paragraph{Contract version:} \texttt{events/v2}
+
+\paragraph{Transport:} WebSocket (wss:// or ws://)
+
+\paragraph{Connection lifecycle:}
+
+\begin{enumerate}
+  \item Client establishes WebSocket connection to \texttt{/ws}.
+  \item Client sends a \texttt{subscribe} message with \texttt{runId}.
+  \item Server streams all events for that run in order.
+  \item Client may disconnect at any time; server closes gracefully.
+\end{enumerate}
+
+\paragraph{Subscribe message:}
+
+\begin{verbatim}
+{
+  "action": "subscribe",
+  "runId": "run-abc123",
+  "sinceSequence": 0  // Optional: replay from sequence number
+}
+\end{verbatim}
+
+\paragraph{Event envelope:}
+
+Events are transmitted as JSON objects, one per WebSocket message.  The event
+envelope is identical to the trace event format defined in §12:
+
+\begin{verbatim}
+{
+  "eventType": "step/started",
+  "timestamp": "2026-04-18T12:00:00Z",
+  "runId": "run-abc123",
+  "stepId": "lookup_incident",
+  "sequence": 42,
+  "payload": {
+    "stepType": "tool",
+    "toolName": "acme.pd-lookup"
+  }
+}
+\end{verbatim}
+
+All events carry:
+
+\begin{itemize}
+  \item \texttt{eventType}: canonical event type (e.g.,
+        \texttt{step/started}, \texttt{governance/approval\_required}).
+  \item \texttt{timestamp}: RFC 3339 timestamp.
+  \item \texttt{runId}: globally unique run identifier.
+  \item \texttt{sequence}: monotonically increasing event sequence number
+        (starts at 0).
+  \item \texttt{payload}: event-specific data.
+\end{itemize}
+
+\paragraph{Reconnection protocol:}
+
+If the WebSocket connection is lost, the client may reconnect and provide
+\texttt{sinceSequence} to resume from the last received event:
+
+\begin{verbatim}
+{
+  "action": "subscribe",
+  "runId": "run-abc123",
+  "sinceSequence": 42  // Resume from event 43
+}
+\end{verbatim}
+
+The server will replay all events with \texttt{sequence > 42}.
+
+\paragraph{Stability guarantee:}
+
+Within the \texttt{events/v2} contract:
+
+\begin{itemize}
+  \item Event envelope fields (\texttt{eventType}, \texttt{timestamp},
+        \texttt{runId}, \texttt{sequence}) are stable.
+  \item New event types may be added in minor versions.
+  \item Existing event types will not change their \texttt{eventType} string.
+  \item Payload schemas may add optional fields; clients MUST ignore unknown
+        fields.
+\end{itemize}
+
+\subsection{Tool Invocation Contract (\texttt{tool/v2})}
+\label{sec:tool-invocation-contract}
+
+The tool invocation contract defines the stdio JSON-RPC protocol that tools
+must implement to be invoked by gert.  All tools — whether built-in,
+project-level, or extension-contributed — implement this contract.
+
+\paragraph{Contract version:} \texttt{tool/v2}
+
+\paragraph{Transport:} stdio JSON-RPC 2.0
+
+\paragraph{Invocation request:}
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "invocation-5",
+  "method": "invoke",
+  "params": {
+    "action": "lookup",
+    "inputs": {
+      "id": "INC-12345"
+    },
+    "context": {
+      "runId": "run-abc123",
+      "stepId": "lookup_incident",
+      "traceId": "trace-xyz789",
+      "userId": "ops@acme.example",
+      "mode": "real",
+      "attempt": 1
+    }
+  }
+}
+\end{verbatim}
+
+\paragraph{Success response:}
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "invocation-5",
+  "result": {
+    "outputs": {
+      "incident": {
+        "id": "INC-12345",
+        "severity": "high",
+        "status": "open"
+      }
+    },
+    "exitCode": 0,
+    "telemetry": {
+      "durationMs": 320,
+      "startedAt": "2026-04-18T12:00:00Z",
+      "finishedAt": "2026-04-18T12:00:00.320Z"
+    }
+  }
+}
+\end{verbatim}
+
+\paragraph{Error response:}
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "invocation-5",
+  "error": {
+    "code": -32050,
+    "message": "incident not found",
+    "data": {
+      "category": "runtime",
+      "retryable": false,
+      "details": {
+        "incidentId": "INC-12345",
+        "statusCode": 404
+      }
+    }
+  }
+}
+\end{verbatim}
+
+\paragraph{Cancellation request:}
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "cancel-5",
+  "method": "cancel",
+  "params": {
+    "invocationId": "invocation-5",
+    "reason": "run-cancelled"
+  }
+}
+\end{verbatim}
+
+\paragraph{MCP tool adapter:}
+
+When an MCP server is used as a tool source (§5), the gert host wraps the MCP
+\texttt{tools/call} protocol to satisfy the tool invocation contract.  The
+adapter:
+
+\begin{enumerate}
+  \item Translates the \texttt{invoke} request to an MCP \texttt{tools/call}
+        request.
+  \item Forwards the \texttt{context} object as \texttt{\_gert\_context} in the
+        MCP request (extension to MCP protocol).
+  \item Translates the MCP response back to the tool invocation contract
+        response.
+  \item Flattens MCP \texttt{content} arrays to a single string for capture.
+\end{enumerate}
+
+\paragraph{Stability guarantee:}
+
+Within the \texttt{tool/v2} contract:
+
+\begin{itemize}
+  \item Request/response envelope fields are stable.
+  \item The \texttt{context} object fields are stable; new fields may be added.
+  \item Error code ranges are stable (see Section~\ref{sec:error-codes}).
+  \item Tools MUST ignore unknown fields in requests.
+\end{itemize}
+
+\subsection{Extension Handshake Contract (\texttt{extension/v2})}
+\label{sec:extension-handshake-contract}
+
+The extension handshake contract defines the initialization and capability
+negotiation protocol between the gert host and an extension process.  It is
+defined in §4 and summarized here for completeness.
+
+\paragraph{Contract version:} \texttt{extension/v2}
+
+\paragraph{Transport:} stdio JSON-RPC 2.0
+
+\paragraph{Initialize request:}
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "method": "extension/initialize",
+  "params": {
+    "host": {
+      "name": "gert",
+      "version": "2.0.0",
+      "apiVersion": "2.0"
+    },
+    "protocolVersion": "2.0",
+    "grantedCapabilities": [
+      "capability/tool-registration",
+      "capability/network"
+    ],
+    "runContext": {
+      "runId": "run-abc123",
+      "mode": "real"
+    }
+  }
+}
+\end{verbatim}
+
+\paragraph{Initialize response:}
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "result": {
+    "extension": {
+      "name": "acme.incident-pack",
+      "version": "1.2.0"
+    },
+    "protocolVersion": "2.0",
+    "acknowledgedCapabilities": [
+      "capability/tool-registration",
+      "capability/network"
+    ]
+  }
+}
+\end{verbatim}
+
+\paragraph{Heartbeat (ping/pong):}
+
+\begin{verbatim}
+Request:
+{
+  "jsonrpc": "2.0",
+  "id": "42",
+  "method": "extension/ping",
+  "params": {}
+}
+
+Response:
+{
+  "jsonrpc": "2.0",
+  "id": "42",
+  "result": {
+    "status": "ok"
+  }
+}
+\end{verbatim}
+
+\paragraph{Stability guarantee:}
+
+Within the \texttt{extension/v2} contract:
+
+\begin{itemize}
+  \item The \texttt{extension/initialize} request/response schema is stable.
+  \item New capabilities may be added; extensions MUST ignore unknown
+        capabilities in \texttt{grantedCapabilities}.
+  \item The \texttt{extension/ping} method signature is stable.
+  \item Extension error codes (§4) are stable.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Contract Versioning}
+\label{sec:contract-versioning}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Each adapter contract has a version declared in the initial handshake or HTTP
+header.  The version format is \texttt{\{surface\}/\{major\}} (e.g.,
+\texttt{exec/v2}, \texttt{events/v2}).  There is no minor version: any breaking
+change bumps the major version.
+
+\subsection{Version Declaration}
+
+\paragraph{HTTP-based contracts (JSON-RPC, WebSocket):}
+
+Clients MUST send an \texttt{X-Gert-Contract} header on the initial HTTP
+request:
+
+\begin{verbatim}
+GET /ws HTTP/1.1
+Host: gert.acme.example:8443
+X-Gert-Contract: events/v2
+\end{verbatim}
+
+The server responds with:
+
+\begin{verbatim}
+HTTP/1.1 200 OK
+X-Gert-Contract: events/v2
+\end{verbatim}
+
+If the client sends an unsupported contract version, the server responds with
+HTTP 400 and error:
+
+\begin{verbatim}
+{
+  "error": {
+    "code": 4001,
+    "message": "unsupported contract version",
+    "data": {
+      "requestedVersion": "events/v3",
+      "supportedVersions": ["events/v2"]
+    }
+  }
+}
+\end{verbatim}
+
+\paragraph{stdio-based contracts (tool, extension):}
+
+The contract version is declared in the first message exchanged (initialize or
+handshake):
+
+\begin{verbatim}
+{
+  "protocolVersion": "2.0"
+}
+\end{verbatim}
+
+If the protocol version is unsupported, the responder returns error code
+\texttt{-32001} (protocol version not supported).
+
+\subsection{Breaking vs. Non-Breaking Changes}
+
+\paragraph{Non-breaking changes (minor version, no contract version bump):}
+
+\begin{itemize}
+  \item Adding optional fields to requests or responses.
+  \item Adding new methods to the contract.
+  \item Adding new error codes.
+  \item Adding new event types.
+\end{itemize}
+
+Consumers MUST implement forward compatibility: ignore unknown fields, ignore
+unknown methods, ignore unknown event types.
+
+\paragraph{Breaking changes (major version bump):}
+
+\begin{itemize}
+  \item Removing or renaming required fields.
+  \item Changing the semantics of existing methods.
+  \item Removing methods.
+  \item Changing error code meanings.
+  \item Incompatible transport changes (e.g., switching from JSON-RPC to gRPC).
+\end{itemize}
+
+Breaking changes require a new contract version (e.g., \texttt{exec/v2} →
+\texttt{exec/v3}).
+
+\subsection{Deprecation Policy}
+
+\begin{itemize}
+  \item When a new major contract version is released, the previous version is
+        supported for 12 months after the new version's GA date.
+  \item During the deprecation period, both versions are supported
+        simultaneously.
+  \item After 12 months, the old version is removed.  Clients must upgrade.
+\end{itemize}
+
+Example timeline:
+
+\begin{itemize}
+  \item 2026-04-01: \texttt{exec/v2} released.
+  \item 2027-06-01: \texttt{exec/v3} released; \texttt{exec/v2} enters
+        deprecation.
+  \item 2028-06-01: \texttt{exec/v2} removed; only \texttt{exec/v3} supported.
+\end{itemize}
+
+\subsection{Forward and Backward Compatibility}
+
+\paragraph{Forward compatibility (clients):}
+
+Clients MUST ignore unknown fields in responses.  This allows the server to add
+optional fields without breaking existing clients.
+
+Example:
+
+\begin{verbatim}
+// Server adds a new optional field in exec/v2
+{
+  "result": {
+    "runId": "run-abc123",
+    "status": "running",
+    "newOptionalField": "value"  // Clients ignore this
+  }
+}
+\end{verbatim}
+
+\paragraph{Backward compatibility (servers):}
+
+Servers MUST accept requests that omit optional fields added in later minor
+versions.  Servers MUST NOT require new optional fields.
+
+Example:
+
+\begin{verbatim}
+// Client sends an old request format (before a new optional field was added)
+{
+  "method": "exec/start",
+  "params": {
+    "runbookPath": "./runbook.yaml"
+    // Missing new optional field "labels"
+  }
+}
+// Server accepts and defaults the missing field
+\end{verbatim}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Error Codes}
+\label{sec:error-codes}
+% ─────────────────────────────────────────────────────────────────────────────
+
+All adapter contracts use a canonical error code registry.  Error codes are
+integers organized by category.  Codes are stable across contract versions.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{p{0.15\linewidth}p{0.60\linewidth}p{0.15\linewidth}}
+\hline
+\textbf{Code} & \textbf{Description} & \textbf{Retryable} \\
+\hline
+\multicolumn{3}{c}{\textbf{1xxx — Execution Errors}} \\
+\hline
+1001 & Run not found (invalid \texttt{runId}) & No \\
+1002 & Step failed (runtime error in step execution) & Maybe \\
+1003 & Run cancelled (user or timeout cancellation) & No \\
+1004 & Run already exists (duplicate \texttt{runId}) & No \\
+\hline
+\multicolumn{3}{c}{\textbf{2xxx — Governance Errors}} \\
+\hline
+2001 & Command denied (not in allowlist or in denylist) & No \\
+2002 & Approval timeout (no approval received in time) & No \\
+2003 & Approval rejected (approver rejected the request) & No \\
+2004 & Insufficient approvals (min approval count not reached) & No \\
+\hline
+\multicolumn{3}{c}{\textbf{3xxx — Schema Errors}} \\
+\hline
+3001 & Schema validation failed (runbook does not match schema) & No \\
+3002 & Unknown step type (unrecognized \texttt{stepType}) & No \\
+3003 & Import cycle detected (circular runbook dependencies) & No \\
+\hline
+\multicolumn{3}{c}{\textbf{4xxx — Integration Errors}} \\
+\hline
+4001 & Tool not found (tool name does not resolve) & No \\
+4002 & Extension handshake failed (protocol error) & Maybe \\
+4003 & Input resolution failed (provider error or missing input) & Maybe \\
+4004 & Unsupported contract version & No \\
+\hline
+\multicolumn{3}{c}{\textbf{5xxx — Server Errors}} \\
+\hline
+5001 & Internal error (unexpected host failure) & Maybe \\
+5002 & Resource exhausted (rate limit or quota exceeded) & Yes \\
+5003 & Service unavailable (host shutting down or overloaded) & Yes \\
+\hline
+\end{tabular}
+\caption{Canonical error code registry for adapter contracts.}
+\label{tab:error-codes}
+\end{table}
+
+\paragraph{Error envelope structure:}
+
+\begin{verbatim}
+{
+  "error": {
+    "code": 2001,
+    "message": "command denied: not in allowlist",
+    "data": {
+      "category": "governance",
+      "retryable": false,
+      "details": {
+        "command": "rm",
+        "reason": "in_denylist"
+      }
+    }
+  }
+}
+\end{verbatim}
+
+\paragraph{Error code stability:}
+
+\begin{itemize}
+  \item Existing error codes will not change their meaning.
+  \item New error codes may be added in minor versions.
+  \item Clients MUST handle unknown error codes gracefully (fallback to generic
+        error handling).
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Contract Test Suite}
+\label{sec:contract-test-suite}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The gert repository includes a contract test suite that validates adapter
+implementations against the canonical contracts.  Adapter authors SHOULD run
+these tests to ensure compatibility.
+
+\subsection{Test Suite Structure}
+
+Contract tests are located in \texttt{testdata/contracts/}:
+
+\begin{verbatim}
+testdata/contracts/
+  exec-v2/
+    01-start-run.test.yaml
+    02-cancel-run.test.yaml
+    03-list-runs.test.yaml
+  events-v2/
+    01-subscribe.test.yaml
+    02-reconnect.test.yaml
+  tool-v2/
+    01-invoke.test.yaml
+    02-cancel.test.yaml
+  extension-v2/
+    01-initialize.test.yaml
+    02-ping.test.yaml
+\end{verbatim}
+
+Each test case is a YAML file with:
+
+\begin{itemize}
+  \item \texttt{description}: human-readable test case description.
+  \item \texttt{request}: the JSON-RPC request or WebSocket message.
+  \item \texttt{expectedResponse}: the expected response (or error).
+  \item \texttt{preconditions}: setup required before the test (e.g., "a run
+        with id run-abc123 exists").
+\end{itemize}
+
+\subsection{Running Contract Tests}
+
+\begin{verbatim}
+$ gert contract test --adapter=vscode
+Running contract tests for adapter: vscode
+  ✓ exec-v2/01-start-run (passed)
+  ✓ exec-v2/02-cancel-run (passed)
+  ✗ events-v2/01-subscribe (failed: missing 'sequence' field)
+
+Contract test results: 2 passed, 1 failed
+\end{verbatim}
+
+Adapter implementations SHOULD achieve 100\% pass rate before release.
+
+\subsection{Contract Test CI Integration}
+
+Contract tests are part of the CI gate for all adapter implementations:
+
+\begin{itemize}
+  \item The VS Code extension CI runs \texttt{gert contract test
+        --adapter=vscode}.
+  \item Third-party adapters are encouraged to use the same test suite.
+  \item Failed contract tests block merges to the main branch.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Reference Implementations}
+\label{sec:reference-implementations}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\paragraph{VS Code extension.}
+
+The official VS Code extension (\texttt{vscode/} in the repository) is the
+reference implementation of the JSON-RPC execution contract (\texttt{exec/v2})
+and the WebSocket event stream contract (\texttt{events/v2}).  Adapter authors
+should study its implementation for best practices.
+
+\paragraph{Built-in tools.}
+
+The built-in tools (\texttt{ext/builtin/tools/} in the repository) are the
+reference implementation of the tool invocation contract (\texttt{tool/v2}).
+They demonstrate how to handle \texttt{invoke}, \texttt{cancel}, and error
+responses.
+
+\paragraph{MCP adapter.}
+
+The MCP tool adapter (\texttt{ext/toolruntime/mcp\_adapter.go}) demonstrates
+how to wrap an external protocol (MCP) to satisfy the tool invocation contract.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Contract Stability Guarantees}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Gert v2 commits to the following stability guarantees for all adapter
+contracts:
+
+\begin{enumerate}
+  \item \textbf{Semantic versioning}: major version bumps indicate breaking
+        changes; minor/patch versions are backward compatible.
+  \item \textbf{12-month deprecation period}: old contract versions are
+        supported for 12 months after a new major version is released.
+  \item \textbf{Additive changes only}: within a major version, only
+        non-breaking changes (adding optional fields, new methods, new event
+        types) are permitted.
+  \item \textbf{Error code stability}: error codes do not change meaning within
+        a major version.
+  \item \textbf{Forward compatibility}: clients must ignore unknown fields;
+        servers must accept omitted optional fields.
+\end{enumerate}
+
+These guarantees are designed to minimize adapter churn and allow external
+systems to depend on gert contracts with confidence.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Contract Documentation and Tooling}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{OpenAPI Specifications}
+
+All HTTP-based contracts (JSON-RPC over HTTP, WebSocket event stream) are
+documented as OpenAPI 3.1 specifications~\cite{openapi-spec} in
+\texttt{specs/contracts/}:
+
+\begin{itemize}
+  \item \texttt{specs/contracts/exec-v2.openapi.yaml}
+  \item \texttt{specs/contracts/events-v2.openapi.yaml}
+\end{itemize}
+
+These specifications are the source of truth for request/response schemas and
+are used to generate client libraries.
+
+\subsection{JSON Schema Validation}
+
+All JSON-RPC request/response schemas are defined as JSON Schema (Draft
+2020-12)~\cite{jsonschema-spec} in \texttt{specs/contracts/schemas/}.  These
+schemas are used for:
+
+\begin{itemize}
+  \item Runtime validation of requests/responses.
+  \item Contract test validation.
+  \item Client library generation (TypeScript, Python, Go).
+\end{itemize}
+
+\subsection{Client Library Generation}
+
+The gert project provides code generation tools to generate client libraries
+from the OpenAPI and JSON Schema definitions:
+
+\begin{verbatim}
+$ gert codegen client --language=typescript --output=./clients/ts/
+Generated TypeScript client for exec/v2 and events/v2
+Files written to ./clients/ts/
+\end{verbatim}
+
+Official client libraries are provided for:
+
+\begin{itemize}
+  \item TypeScript (for VS Code and web adapters)
+  \item Python (for CI/CD integrations)
+  \item Go (for extension authors)
+\end{itemize}

@@ -1,0 +1,656 @@
+\chapter{Evidence, Tracing, and Resumption}
+
+Gert v2 captures a complete, durable record of every execution for audit, compliance, incident response, and operational replay. This section specifies the append-only JSONL trace format, evidence capture model, per-step snapshot contract, run resumption semantics, replay mode, and OpenTelemetry integration. Together these mechanisms ensure that every run produces a self-contained artifact that answers three questions: \textit{what happened}, \textit{what evidence was collected}, and \textit{how can execution be recovered or replicated}.
+
+% ------------------------------------------------------------------ %
+\section{Trace File Format}
+% ------------------------------------------------------------------ %
+
+\subsection{File Location and Naming}
+
+Each run produces a single trace file located at:
+
+\begin{verbatim}
+.runbook/runs/<run-id>/trace.jsonl
+\end{verbatim}
+
+The \texttt{<run-id>} is a URL-safe string assigned at run creation time (e.g.\ \texttt{20260418T143022-a3f9c1}). All run artefacts are co-located under the run directory:
+
+\begin{verbatim}
+.runbook/runs/<run-id>/
+  trace.jsonl          # append-only JSONL event log
+  snapshots/           # per-step state checkpoints
+    step-0000.json
+    step-0001.json
+    ...
+  attachments/         # binary evidence referenced from trace events
+    <sha256>.bin
+    ...
+  run.yaml             # completion manifest (written on terminal event)
+  annotations.jsonl    # operator notes (append-only)
+  lock                 # PID lock (removed on clean exit)
+\end{verbatim}
+
+\subsection{JSONL Envelope}
+
+Every line in \texttt{trace.jsonl} is a self-contained JSON object with a common envelope. Consumers MUST tolerate unknown fields to allow additive schema evolution.
+
+\begin{verbatim}
+{
+  "seq":       <int64>,     // monotonically increasing within this run
+  "type":      <string>,    // event type (see §12.1.3)
+  "timestamp": <RFC3339>,   // UTC timestamp with sub-second precision
+  "run_id":    <string>,    // run identifier
+  "path":      <array>,     // tree-path to the active node (may be null)
+  "data":      <object>     // type-specific payload (see below)
+}
+\end{verbatim}
+
+The \texttt{seq} field provides a total order over events in a single run. It is assigned by the \texttt{RunStore.WriteTrace} implementation and is not trusted for cross-run ordering.
+
+\subsection{Event Type Catalogue}
+
+The following event types are normative in v2. All user-supplied string fields (command arguments, outputs, prompt responses) pass through the redaction pipeline before being written.
+
+\subsubsection{\texttt{run/started}}
+
+Emitted once, as the first event in every trace file.
+
+\begin{verbatim}
+"data": {
+  "runbook_id":    <string>,  // runbook name/path
+  "user":          <string>,  // actor identity
+  "mode":          <string>,  // "real" | "replay" | "dry-run"
+  "inputs":        <object>,  // resolved input values (redacted)
+  "client":        <string>,  // "cli" | "tui" | "web" | "mcp"
+  "parent_run_id": <string>   // omitted if not an invoke child
+}
+\end{verbatim}
+
+\subsubsection{\texttt{step/started}}
+
+Emitted immediately before executing a step.
+
+\begin{verbatim}
+"data": {
+  "step_id":   <string>,  // stable step identifier
+  "step_type": <string>,  // "cli" | "manual" | "tool" | "invoke"
+  "step_name": <string>   // human-readable name from runbook YAML
+}
+\end{verbatim}
+
+\subsubsection{\texttt{step/completed}}
+
+Emitted after a step exits cleanly.
+
+\begin{verbatim}
+"data": {
+  "step_id":    <string>,
+  "exit_status": <int>,      // exit code for cli steps; 0 for others
+  "duration_ms": <int64>,    // wall-clock duration in milliseconds
+  "captures":   <object>,    // captured output variables (redacted)
+  "evidence":   [            // zero or more evidence items
+    {
+      "name":   <string>,
+      "kind":   "text" | "checklist" | "attachment",
+      "value":  <string>,    // for kind=text
+      "items":  <object>,    // for kind=checklist
+      "path":   <string>,    // relative path for kind=attachment
+      "sha256": <string>,    // hex SHA256 for kind=attachment
+      "size":   <int64>      // bytes for kind=attachment
+    }
+  ]
+}
+\end{verbatim}
+
+\subsubsection{\texttt{step/failed}}
+
+Emitted when a step exits with a non-zero status or returns a runtime error.
+
+\begin{verbatim}
+"data": {
+  "step_id":    <string>,
+  "error_type": <string>,  // "exit_code" | "timeout" | "governance"
+                           // | "tool_error" | "invoke_failed"
+  "error":      <string>,  // human-readable message (redacted)
+  "exit_status": <int>,    // for error_type=exit_code
+  "duration_ms": <int64>
+}
+\end{verbatim}
+
+\subsubsection{\texttt{step/skipped}}
+
+Emitted when a step is not executed due to branch evaluation or iterate exhaustion.
+
+\begin{verbatim}
+"data": {
+  "step_id": <string>,
+  "reason":  "branch_not_taken" | "iterate_exhausted" | "dry_run"
+}
+\end{verbatim}
+
+\subsubsection{\texttt{step/retrying}}
+
+Emitted before each retry attempt (requires the retry policy feature).
+
+\begin{verbatim}
+"data": {
+  "step_id":       <string>,
+  "attempt":       <int>,     // attempt number (1 = first retry)
+  "max_attempts":  <int>,
+  "backoff_ms":    <int64>
+}
+\end{verbatim}
+
+\subsubsection{\texttt{tool/invoked}}
+
+Emitted when the tool runtime dispatches a tool call.
+
+\begin{verbatim}
+"data": {
+  "tool_name":      <string>,
+  "transport":      "stdio" | "jsonrpc" | "mcp",
+  "correlation_id": <string>,  // UUIDv4, links to tool/responded
+  "inputs":         <object>   // sanitized inputs
+}
+\end{verbatim}
+
+\subsubsection{\texttt{tool/responded}}
+
+Emitted when the tool call returns.
+
+\begin{verbatim}
+"data": {
+  "correlation_id": <string>,
+  "exit_code":      <int>,
+  "duration_ms":    <int64>,
+  "truncated":      <bool>     // true if output was capped
+}
+\end{verbatim}
+
+\subsubsection{\texttt{manual/prompted}}
+
+Emitted when a manual step displays its prompt to the operator.
+
+\begin{verbatim}
+"data": {
+  "step_id":     <string>,
+  "prompt_text": <string>,   // the prompt shown (redacted)
+  "sla_seconds": <int>       // 0 if no SLA configured
+}
+\end{verbatim}
+
+\subsubsection{\texttt{manual/completed}}
+
+Emitted when the operator submits a response to a manual step.
+
+\begin{verbatim}
+"data": {
+  "step_id":      <string>,
+  "response":     <string>,   // operator's text response (redacted)
+  "attestation":  <string>,   // "operator_confirmed" | "skipped"
+  "approver":     <string>,   // identity of responding actor
+  "duration_ms":  <int64>
+}
+\end{verbatim}
+
+\subsubsection{\texttt{governance/blocked}}
+
+Emitted when a governance rule blocks execution.
+
+\begin{verbatim}
+"data": {
+  "step_id":          <string>,
+  "rule":             <string>,  // allowlist | denylist | env_block
+                                 // | output_redact | approval_gate
+  "action_attempted": <string>,  // description of blocked action
+  "policy":           <string>   // policy name or path
+}
+\end{verbatim}
+
+\subsubsection{\texttt{governance/approved}}
+
+Emitted when an approval gate is cleared.
+
+\begin{verbatim}
+"data": {
+  "step_id":         <string>,
+  "approver":        <string>,  // identity of approver
+  "approval_method": <string>,  // "interactive" | "mcp" | "api"
+  "duration_ms":     <int64>
+}
+\end{verbatim}
+
+\subsubsection{\texttt{run/completed}}
+
+Terminal event for a successful run.
+
+\begin{verbatim}
+"data": {
+  "final_status": "passed" | "failed" | "skipped",
+  "duration_ms":  <int64>,
+  "step_count":   <int>,
+  "passed":       <int>,
+  "failed":       <int>,
+  "skipped":      <int>
+}
+\end{verbatim}
+
+\subsubsection{\texttt{run/failed}}
+
+Terminal event for a run that halted due to an unrecoverable error.
+
+\begin{verbatim}
+"data": {
+  "failing_step_id": <string>,
+  "error":           <string>,
+  "duration_ms":     <int64>
+}
+\end{verbatim}
+
+\subsubsection{\texttt{checkpoint}}
+
+Internal event written by \texttt{RunStore.SaveCheckpoint} to link a snapshot file to the trace sequence. Not user-facing but required for resumption.
+
+\begin{verbatim}
+"data": {
+  "snapshot_file": <string>  // e.g. "step-0003.json"
+}
+\end{verbatim}
+
+\subsection{Crash Safety}
+
+The trace file is opened with \texttt{O\_APPEND} and each event is written as a single \texttt{write(2)} call followed by \texttt{fsync}. On POSIX systems, a write of fewer than \texttt{PIPE\_BUF} bytes (4096 bytes on Linux) to an \texttt{O\_APPEND} file is atomic. Because the JSON encoding of a single trace event is always well under 4096 bytes for typical runbooks, partial-line corruption on crash is avoided in practice. For large payloads (e.g.\ tool output), the runtime truncates at a configurable limit (default 4 KB per field) before encoding.
+
+The Go implementation:
+
+\begin{verbatim}
+// WriteTrace appends one event atomically and fsyncs.
+func (d *DirRunStore) WriteTrace(event DurableEvent) error {
+    p := filepath.Join(d.baseDir, "trace.jsonl")
+    f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+    if err != nil {
+        return fmt.Errorf("open trace: %w", err)
+    }
+    defer f.Close()
+
+    data, err := json.Marshal(event)
+    if err != nil {
+        return fmt.Errorf("marshal event: %w", err)
+    }
+    data = append(data, '\n') // JSONL delimiter
+    if _, err := f.Write(data); err != nil {
+        return fmt.Errorf("write trace: %w", err)
+    }
+    return f.Sync() // durability guarantee
+}
+\end{verbatim}
+
+On recovery, any line that fails \texttt{json.Unmarshal} is silently skipped. The last clean \texttt{checkpoint} event determines the recoverable state.
+
+\subsection{Tamper Evidence}
+
+The v2 trace format supports optional HMAC-SHA256 signing of each event. When a signing key is configured (via \texttt{GERT\_TRACE\_KEY} or the workspace config), the runtime appends a \texttt{"sig"} field to the envelope containing the HMAC-SHA256 of the canonical JSON of all other fields. Verifiers can replay the trace and recompute signatures. This does not prevent deletion of events (append-only at the filesystem level provides that property) but detects modification of existing events.
+
+% ------------------------------------------------------------------ %
+\section{Evidence Capture}
+% ------------------------------------------------------------------ %
+
+\subsection{What Constitutes Evidence}
+
+In v2, ``evidence'' is any artefact that attests to a step's outcome:
+
+\begin{itemize}
+  \item \textbf{Command output} — stdout/stderr of a \texttt{cli} step, captured and embedded in \texttt{step/completed}.
+  \item \textbf{Manual attestations} — operator-provided text, checklist responses, and explicit confirmations from \texttt{manual} steps.
+  \item \textbf{Tool responses} — structured JSON returned by a \texttt{tool} step, captured in \texttt{step/completed.captures}.
+  \item \textbf{File attachments} — binary or text files explicitly attached by an operator or produced by a step, stored in the \texttt{attachments/} directory and referenced by SHA256 digest.
+\end{itemize}
+
+\subsection{SHA256 Hashing}
+
+All file attachments are content-addressed by their SHA256 digest. The \texttt{evidence} package exposes:
+
+\begin{verbatim}
+// HashFile returns hex SHA256 and file size.
+func HashFile(path string) (sha256hex string, size int64, err error)
+
+// NewAttachmentEvidence creates an EvidenceValue with hash and size.
+func NewAttachmentEvidence(path string) (*EvidenceValue, error)
+\end{verbatim}
+
+The hash is stored in the \texttt{step/completed} event alongside the relative path under \texttt{attachments/}. Consumers can verify integrity at any time by re-hashing the referenced file.
+
+Text evidence fields (command output, operator responses) are not individually hashed — the overall trace event integrity is provided by the optional HMAC-SHA256 event signature described in \S~12.1.5.
+
+\subsection{File Attachments}
+
+When a step produces a binary artefact, the runtime:
+
+\begin{enumerate}
+  \item Copies the file to \texttt{.runbook/runs/<run-id>/attachments/<sha256>.<ext>}.
+  \item Emits an \texttt{EvidenceValue} of kind \texttt{attachment} in the \texttt{step/completed} event with fields \texttt{path}, \texttt{sha256}, and \texttt{size}.
+\end{enumerate}
+
+Attachments are deduplicated by content: if two steps produce identical file content, they share one attachment file. The trace events may reference the same \texttt{sha256} value independently.
+
+\subsection{Evidence Retention}
+
+Evidence is retained for the lifetime of the run directory. The workspace-level retention policy (configurable in \texttt{gert.yaml}) specifies:
+
+\begin{itemize}
+  \item \textbf{\texttt{retention.runs}} — number of completed runs to retain (default: 50).
+  \item \textbf{\texttt{retention.max\_age\_days}} — maximum age in days (default: 90).
+  \item \textbf{\texttt{retention.attachments}} — whether to include attachments in retention (default: true).
+\end{itemize}
+
+The \texttt{gert gc} command enforces retention policy by removing the oldest run directories, deleting their \texttt{attachments/} content first.
+
+% ------------------------------------------------------------------ %
+\section{Run State Snapshots}
+% ------------------------------------------------------------------ %
+
+\subsection{Checkpoint Model}
+
+A checkpoint is a complete serialisation of \texttt{RunState} written to \texttt{snapshots/step-NNNN.json} after every successfully completed step. The snapshot captures the minimum state needed to resume execution from the next step:
+
+\begin{verbatim}
+type RunState struct {
+    RunID             string
+    RunbookPath       string
+    Mode              string            // "real" | "replay" | "dry-run"
+    StartedAt         time.Time
+    Actor             string
+    CurrentStepIndex  int               // flat-mode index (legacy compat)
+    Path              TreePath          // tree-mode cursor (authoritative)
+    Vars              map[string]string // resolved input bindings
+    Captures          map[string]string // accumulated step outputs
+    History           []*StepResult     // completed step records
+    InvokeStack       []InvokeFrame     // nested invoke context stack
+    IterateState      map[string]*IterateProgress
+    ParallelSlots     map[string][]SlotState
+    LastCheckpointSeq int64             // trace seq at checkpoint time
+}
+\end{verbatim}
+
+\subsection{Atomic Snapshot Write}
+
+Snapshots are written atomically: the runtime marshals the state to a \texttt{.tmp} file, fsyncs it, then renames it to the final path. An incomplete snapshot (e.g.\ from a crash mid-write) retains the \texttt{.tmp} suffix and is skipped during recovery.
+
+\begin{verbatim}
+func (d *DirRunStore) SaveCheckpoint(state *RunState) (string, error) {
+    filename := fmt.Sprintf("step-%04d.json", len(state.History))
+    finalPath := filepath.Join(d.baseDir, "snapshots", filename)
+    tmpPath   := finalPath + ".tmp"
+
+    data, _  := json.MarshalIndent(state, "", "  ")
+    os.WriteFile(tmpPath, data, 0644)          // write to temp
+    tf, _ := os.Open(tmpPath); tf.Sync(); tf.Close() // fsync temp
+    os.Rename(tmpPath, finalPath)              // atomic rename
+    // ... then write checkpoint trace event
+}
+\end{verbatim}
+
+\subsection{Minimum Resumption State}
+
+The state required to resume a run from step $N$ is exactly the snapshot at \texttt{step-NNNN.json}. It contains:
+
+\begin{itemize}
+  \item All resolved input values (\texttt{Vars}).
+  \item Outputs captured by completed steps (\texttt{Captures}).
+  \item The tree cursor (\texttt{Path}) identifying which node executes next.
+  \item Branch decisions already taken (encoded in \texttt{History} step statuses).
+  \item Iterate progress counters and parallel slot states.
+  \item The invoke stack for nested runbooks.
+\end{itemize}
+
+The runbook YAML itself is not stored in the snapshot; it is re-read from \texttt{RunbookPath} at resume time. Operators must not modify the runbook between the original run and resumption.
+
+% ------------------------------------------------------------------ %
+\section{Run Resumption}
+% ------------------------------------------------------------------ %
+
+\subsection{The \texttt{gert exec --resume} Contract}
+
+\begin{verbatim}
+gert exec --resume <run-id>
+\end{verbatim}
+
+The runtime executes the following recovery sequence:
+
+\begin{enumerate}
+  \item Locate \texttt{.runbook/runs/<run-id>/}.
+  \item Attempt to acquire the \texttt{lock} file. Fail if a live process holds it.
+  \item Call \texttt{RunStore.LoadLatestCheckpoint()} — scan \texttt{snapshots/} descending, skip \texttt{.tmp} files, return the newest valid JSON.
+  \item Re-open \texttt{trace.jsonl} for append.
+  \item Advance \texttt{CurrentStepIndex} by one (or advance the tree \texttt{Path} cursor past the last completed node).
+  \item Re-build the governance engine from the runbook's policy block.
+  \item Resume the execution loop from the restored \texttt{Path}.
+\end{enumerate}
+
+The resumption does \emph{not} re-execute any step recorded in \texttt{History}. It continues from the step \emph{after} the last checkpoint.
+
+\subsection{Resumability by Step Type}
+
+\begin{itemize}
+  \item \textbf{\texttt{cli} steps} — safe to resume. The step is re-executed from scratch. Runbook authors should ensure cli steps are idempotent (e.g.\ \texttt{kubectl apply} over \texttt{kubectl create}).
+  \item \textbf{\texttt{manual} steps} — the operator is re-prompted. The prior response (if any) is lost. The prompt is re-displayed and the operator must re-attest.
+  \item \textbf{\texttt{tool} steps} — resumable if idempotent. If the tool call was in-flight when the process crashed (i.e.\ a \texttt{tool/invoked} event exists with no matching \texttt{tool/responded}), the runtime re-issues the call. Authors must declare \texttt{idempotent: true} on tools where safe; others are re-executed with a warning log.
+  \item \textbf{\texttt{invoke} steps} — if the child run completed (its terminal event is in the parent trace), the invoke is treated as completed. If the child run was in progress, the child is itself resumed via the nested run ID stored in the \texttt{InvokeStack}.
+  \item \textbf{\texttt{branch}/\texttt{iterate}} — structural nodes; not executed directly. Cursor advancement handles re-entry correctly.
+\end{itemize}
+
+\subsection{Idempotency Guidance}
+
+Runbook authors should write resumable runbooks by following these guidelines:
+
+\begin{itemize}
+  \item Use \texttt{kubectl apply} and \texttt{terraform apply} instead of imperative create commands.
+  \item Use \texttt{--if-not-exists} or \texttt{--create-or-replace} flags where available.
+  \item For tool steps, declare \texttt{idempotent: true} in the tool definition when the operation is safe to call multiple times.
+  \item For manual steps, write prompts as questions that remain valid on a second ask (``Has the database migration completed?'' rather than ``Confirm you have started the migration'').
+  \item Avoid steps whose side effects depend on the current time or a random seed without an explicit override mechanism.
+\end{itemize}
+
+\subsection{Partial Step Resumption}
+
+If a \texttt{tool/invoked} event has no matching \texttt{tool/responded} event, the tool call was interrupted mid-flight. On resumption:
+
+\begin{enumerate}
+  \item The runtime logs a warning identifying the orphaned correlation ID.
+  \item If \texttt{idempotent: true}: the tool call is re-issued from the beginning.
+  \item If \texttt{idempotent: false} (default): the step is treated as \textbf{failed} and execution follows the normal failure path (error branch, if defined, or halt).
+\end{enumerate}
+
+% ------------------------------------------------------------------ %
+\section{Replay Mode}
+% ------------------------------------------------------------------ %
+
+\subsection{Overview}
+
+\begin{verbatim}
+gert exec --mode replay --scenario <scenario.yaml>
+\end{verbatim}
+
+Replay mode executes a runbook against a set of pre-recorded command responses and evidence values. No real commands are executed and no real tools are invoked. The mode is used for:
+
+\begin{itemize}
+  \item \textbf{Testing} — validating that a runbook's branching logic, captures, and governance rules behave correctly for a given set of inputs and command outputs (see \S~13 Testing and Acceptance).
+  \item \textbf{Demonstration} — showing a runbook's execution flow without real infrastructure.
+  \item \textbf{Regression} — verifying that a refactored runbook produces the same trace as the original.
+\end{itemize}
+
+\subsection{Scenario File Format}
+
+A scenario file is a YAML document that maps commands to recorded responses and step IDs to recorded evidence:
+
+\begin{verbatim}
+commands:
+  - argv: ["kubectl", "get", "pods", "-n", "prod"]
+    stdout: "NAME          READY   STATUS    RESTARTS\npod-abc   1/1     Running   0\n"
+    stderr: ""
+    exit_code: 0
+
+evidence:
+  check-pod-health:          # step_id
+    observation:             # evidence name
+      kind: text
+      value: "pod is healthy, proceeding"
+\end{verbatim}
+
+Commands are matched in order of declaration (first match wins). Unmatched commands fail the scenario unless \texttt{allow\_unmatched: true} is set.
+
+\subsection{Replay Semantics}
+
+In replay mode:
+
+\begin{itemize}
+  \item \texttt{cli} steps — the command executor returns the pre-recorded stdout/stderr/exit\_code.
+  \item \texttt{manual} steps — the evidence collector returns the pre-recorded evidence values instead of prompting the operator.
+  \item \texttt{tool} steps — tool invocations are intercepted; if a matching recorded response exists, it is returned. Otherwise the step fails.
+  \item \texttt{invoke} steps — the child runbook is executed in replay mode using the same scenario (or a nested scenario file if \texttt{scenario\_file:} is specified on the invoke step).
+  \item Governance rules — evaluated normally; replay does not bypass governance.
+  \item Trace events — written normally; the replay trace can be compared against a golden trace for regression testing.
+\end{itemize}
+
+\subsection{Determinism Requirement}
+
+For replay to produce the same outcome across runs, the runbook must be deterministic given fixed inputs and command outputs. Non-determinism sources to avoid:
+
+\begin{itemize}
+  \item Timestamps in expressions (use captured values instead of \texttt{time.Now()}).
+  \item Random identifiers in step names or captures.
+  \item File system state that is not reproduced by the scenario.
+  \item External API calls in tool steps that are not replayed (tool steps should be declared \texttt{idempotent: true} and covered by scenario fixtures).
+\end{itemize}
+
+% ------------------------------------------------------------------ %
+\section{OpenTelemetry Integration}
+% ------------------------------------------------------------------ %
+
+\subsection{Rationale}
+
+The JSONL trace format is optimised for durability, human readability, and offline analysis. OpenTelemetry (OTel) spans are optimised for real-time observability, distributed tracing, and integration with platforms such as Jaeger, Zipkin, Datadog, and Grafana Tempo. Both serve complementary purposes and v2 supports both simultaneously.
+
+\subsection{Span Hierarchy}
+
+When OTel is enabled, the runtime creates a span hierarchy that mirrors the runbook execution tree:
+
+\begin{verbatim}
+Span: gert.run                    // root span, covers entire run
+  Span: gert.step                 // one per step executed
+    Span: gert.tool.invoke        // one per tool call within a step
+  Span: gert.step                 // next step
+  ...
+\end{verbatim}
+
+The Go implementation uses \texttt{go.opentelemetry.io/otel/trace}:
+
+\begin{verbatim}
+func (e *Engine) runWithOTel(ctx context.Context) error {
+    ctx, runSpan := otel.Tracer("gert").Start(ctx, "gert.run",
+        trace.WithAttributes(
+            attribute.String("gert.run_id",    e.State.RunID),
+            attribute.String("gert.runbook",   e.Runbook.Meta.Name),
+            attribute.String("gert.actor",     e.State.Actor),
+            attribute.String("gert.mode",      e.State.Mode),
+        ),
+    )
+    defer runSpan.End()
+    return e.execute(ctx)
+}
+
+func (e *Engine) executeStep(ctx context.Context, step Step) error {
+    ctx, stepSpan := otel.Tracer("gert").Start(ctx, "gert.step",
+        trace.WithAttributes(
+            attribute.String("gert.step_id",   step.ID),
+            attribute.String("gert.step_type", step.Type),
+            attribute.String("gert.step_name", step.Name),
+        ),
+    )
+    defer stepSpan.End()
+    // ...
+}
+\end{verbatim}
+
+\subsection{Span Attributes}
+
+The following attributes are set on all spans:
+
+\begin{center}
+\begin{tabular}{lll}
+\hline
+\textbf{Attribute} & \textbf{Spans} & \textbf{Description} \\
+\hline
+\texttt{gert.run\_id}     & all       & Run identifier \\
+\texttt{gert.runbook}     & all       & Runbook name \\
+\texttt{gert.actor}       & run       & Actor identity \\
+\texttt{gert.mode}        & run       & Execution mode \\
+\texttt{gert.step\_id}    & step, tool & Step identifier \\
+\texttt{gert.step\_type}  & step      & Step type \\
+\texttt{gert.tool\_name}  & tool      & Tool name \\
+\texttt{gert.transport}   & tool      & Transport (stdio/jsonrpc/mcp) \\
+\hline
+\end{tabular}
+\end{center}
+
+Trace context is propagated into tool invocations via the W3C \texttt{traceparent} header where the transport supports it (HTTP-based MCP tools). For stdio tools, context is passed as an environment variable \texttt{OTEL\_TRACEPARENT}.
+
+\subsection{Relationship to JSONL Trace}
+
+OTel spans and the JSONL trace are complementary, not redundant:
+
+\begin{itemize}
+  \item The JSONL trace is the authoritative durable record. It contains evidence hashes, governance events, snapshot references, and redacted output that OTel spans do not.
+  \item OTel spans are ephemeral, push-based, and optimised for latency-sensitive observability dashboards.
+  \item The trace event \texttt{"seq"} is embedded as the \texttt{gert.trace\_seq} span attribute, enabling correlation between spans and trace events.
+\end{itemize}
+
+\subsection{Configuration}
+
+OTel is opt-in and configured via standard OTEL environment variables:
+
+\begin{verbatim}
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+OTEL_SERVICE_NAME=gert
+OTEL_TRACES_SAMPLER=always_on
+\end{verbatim}
+
+When \texttt{OTEL\_EXPORTER\_OTLP\_ENDPOINT} is not set, the OTel SDK is initialised with a no-op tracer and zero overhead is incurred. There is no \texttt{--otel} flag; configuration is entirely via the environment. This ensures that CI and offline use work without modification.
+
+% ------------------------------------------------------------------ %
+\section{Implementation Notes for Go}
+% ------------------------------------------------------------------ %
+
+The key Go interfaces for this subsystem are:
+
+\begin{verbatim}
+// TraceWriter is the interface the engine uses to record events.
+// Implementations must be safe for concurrent use from a single goroutine
+// (the engine's execution loop); multi-goroutine safety is optional.
+type TraceWriter interface {
+    Write(event DurableEvent) error
+    Close() error
+}
+
+// RunStore manages all artefacts for a single run.
+type RunStore interface {
+    RunID() string
+    WriteTrace(event DurableEvent) error
+    ReadTrace() ([]DurableEvent, error)
+    ReadTraceSince(afterSeq int64) ([]DurableEvent, error)
+    SaveCheckpoint(state *RunState) (string, error)
+    LoadLatestCheckpoint() (*RunState, int64, error)
+    AcquireLock() error
+    ReleaseLock() error
+    WriteManifest(manifest *RunManifest) error
+}
+
+// EvidenceCollector is the interface for gathering evidence at manual steps.
+type EvidenceCollector interface {
+    Collect(ctx context.Context, stepID string,
+        prompts []Prompt) (map[string]*EvidenceValue, error)
+}
+\end{verbatim}
+
+The \texttt{DirRunStore} is the production implementation. A \texttt{MemRunStore} (storing events in a slice) is provided for unit tests where filesystem I/O is undesirable. The \texttt{ReplayEvidenceCollector} returns pre-recorded evidence for scenario tests.

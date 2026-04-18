@@ -739,3 +739,971 @@ Full research brief: `.squad/tmp/dennis-research-brief.md`
 4. Brian (Go Runtime): Plan saga executor and timeout/escalation state machine
 
 **Decision Requested:** Accept these principles as guiding constraints for v2 architecture.
+# Integration Decisions — Barbara (Integrations Specialist)
+**Date:** 2026-04-18
+**Author:** Barbara
+**Sections:** §04 Extension Runtime, §05 Tool Runtime, §14 Input Provider Framework
+
+---
+
+## Decision 1: Extension spec reference is valid — do not remove it
+
+**What:** `specs/002-extension-runtime-v0/spec.md` exists in the repository at the path referenced. The design section now explicitly cites it as the normative specification while the design chapter provides the design-level elaboration.
+
+**Why:** Removing a valid spec reference would orphan an existing normative document. The right fix was to correct the relationship: spec = normative/implementable, design chapter = design rationale + elaboration.
+
+---
+
+## Decision 2: Capability taxonomy is a named, versioned list
+
+**What:** Extension capabilities follow the naming convention `capability/<name>` (e.g., `capability/tool-registration`, `capability/network`). The initial set of 10 capabilities is defined in §04 Table 1.
+
+**Why:** Unnamed capability strings cannot be statically analysed or enumerated by tooling. A named list enables IDE completion, policy file validation, and extension manifest linting. Future additions are backward-compatible minor bumps to the host API version.
+
+**Capabilities defined:**
+- `capability/tool-registration`
+- `capability/schema-extension`
+- `capability/event-subscription`
+- `capability/policy-contribution`
+- `capability/provider-registration`
+- `capability/file-read`
+- `capability/file-write`
+- `capability/network`
+- `capability/env-read`
+- `capability/run-state-read`
+
+---
+
+## Decision 3: Extension manifest format is YAML, not JSON
+
+**What:** The `gert-extension.yaml` manifest uses YAML (not JSON as in the v0 spec). `apiVersion: extension/v2`.
+
+**Why:** gert is a YAML-first system. All other definition files (.tool.yaml, .provider.yaml, runbooks) use YAML. Adopting JSON for manifests would require operators to maintain two formats. YAML is a superset of JSON so existing JSON manifests remain parseable.
+
+---
+
+## Decision 4: Extension discovery uses 4 sources with explicit precedence
+
+**What:** Discovery order: (1) built-in, (2) workspace `.gert/extensions.yaml`, (3) runbook `extensions:` field, (4) CLI `--extension` flag. Later sources take precedence; duplicates by name are deduplicated with a warning.
+
+**Why:** Allows workspace-level defaults while letting individual runbooks or operators override for testing. This is the same layering pattern used by tool-path resolution.
+
+---
+
+## Decision 5: JSON-RPC method namespace is `extension/` for lifecycle, `contributions/` for registration
+
+**What:**
+- Lifecycle methods: `extension/initialize`, `extension/ping`, `extension/shutdown`
+- Registration: `contributions/list`
+- Tool invocation: `tools/invoke`, `tools/cancel`
+
+**Why:** Namespaced methods prevent collisions when extensions implement their own custom methods. The `extension/` prefix signals host-initiated lifecycle control; `contributions/` signals the registration phase.
+
+---
+
+## Decision 6: Tool resolution uses 4-source order, first-match wins with name collision warning
+
+**What:** Tool name resolution: (1) dynamically registered (MCP + extensions), (2) project `tools/`, (3) required-package `tools/`, (4) built-in registry. Collision emits a warning; no error.
+
+**Why:** Allows workspace tools to override package defaults (intentional shadowing) while surfacing unintentional collisions as warnings. Matches common package manager semantics.
+
+---
+
+## Decision 7: MCP tools are registered under `<server-name>/<tool-name>` composite key
+
+**What:** When an MCP server is declared as `name: acme-mcp`, its tools are registered as `acme-mcp/lookup`, `acme-mcp/resolve`, etc.
+
+**Why:** MCP servers can expose many tools; without namespacing, two MCP servers could collide. The composite key preserves origin traceability and enables unambiguous runbook references.
+
+---
+
+## Decision 8: Provider definitions use `apiVersion: provider/v2`, distinct from tools
+
+**What:** Provider manifests use `apiVersion: provider/v2`, not `tool/v2`. The v1 `provider/v0` format is preserved for backward compatibility via automatic conversion.
+
+**Why:** Providers have a distinct resolution contract from tools (different JSON-RPC method, caching semantics, prefix-dispatch model). Keeping them as a distinct apiVersion prevents accidental misuse and allows the provider schema to evolve independently.
+
+---
+
+## Decision 9: Provider composition chains are declared inline as YAML lists
+
+**What:**
+```yaml
+inputs:
+  api_token:
+    from:
+      - env.ACME_API_TOKEN
+      - vault.secret/acme/api-token
+      - prompt
+```
+Left-to-right, first successful resolution wins.
+
+**Why:** Common enterprise pattern: try env var first (CI/CD injects it), fall back to secret manager for interactive use, fall back to prompt as last resort. The inline list is the least surprising syntax given that `from: prompt` is already a string.
+
+---
+
+## Decision 10: Providers are persistent processes (long-lived) for stdio-jsonrpc and mcp
+
+**What:** Providers using `stdio-jsonrpc` or `mcp` transport are started once at pre-flight and kept alive for the full run. Providers using `stdio` are per-resolution (spawned once per call).
+
+**Why:** External providers (Vault, PagerDuty) may need to establish authenticated sessions or maintain connection pools. Spawning once amortises that cost. `stdio` providers are stateless by definition (binary/exit model), so per-resolution is the right default.
+
+---
+
+## Open Questions (for Ken / team resolution)
+
+1. **gRPC transport for extensions**: The v0 spec left gRPC as an open question. §04 declares `grpc` as a valid transport value but does not specify the proto contract. This needs resolution before the manifest format is frozen.
+2. **Extension signature verification**: The v0 spec made signatures optional. Should v2 require signatures for production deployments? Suggest making them required in `allowed-environments: [real]` policy.
+3. **Provider prefix length-based disambiguation**: When two providers share a common prefix root (e.g., `pd.` and `pd.legacy.`), the longest-match rule is specified. Brian should confirm the implementation handles this correctly in the prefix map.
+4. **Resolution caching across run resumptions**: Currently cache scope is in-memory only. If a run is resumed, all provider resolutions are re-run. This may surprise operators. Consider a `scope: resume` option that persists resolved values in the run snapshot.
+
+# Brian — Implementation Decisions Inbox
+**Date:** 2026-04-18
+**Author:** Brian (Go Programmer)
+**Status:** Pending merge to `.squad/decisions.md`
+
+---
+
+## Decision: JSONL Trace Event Format (v2)
+
+**What:** The v2 trace format uses a `DurableEvent` envelope with fields `seq` (int64), `type` (string), `timestamp` (RFC3339), `run_id` (string), `path` (TreePath), and `data` (json.RawMessage). Fourteen normative event types are defined in §12. Every event is followed by `fsync` for durability. The `seq` field provides total order within a run.
+
+**Why:** v1's `TraceEvent` wraps only `StepResult` — it cannot represent governance events, tool invocations, or partial step lifecycle. The new format is additive (unknown fields tolerated) and type-discriminated, enabling typed consumers. The `seq` field enables `ReadTraceSince` for incremental polling by the serve layer.
+
+**Impact:** John must define JSON Schema for each of the 14 event types. The serve layer must be updated to publish `DurableEvent`s to the VS Code extension (see compatibility decision below).
+
+---
+
+## Decision: Event Bus Uses Bounded Buffered Channels
+
+**What:** The `EventBus` delivers to each subscriber via a buffered channel (capacity 64–256 events). If a subscriber's channel is full, the event is dropped (counted in a metric) and the engine's execution loop is NOT blocked. The `Publish` method uses a non-blocking `select { case ch <- ev: default: }` pattern.
+
+**Why:** Blocking the execution loop on a slow adapter consumer (e.g. a TUI renderer lagging behind) would make human-in-the-loop runbooks unpredictably slow. The engine's correctness must be independent of adapter throughput. Dropped events are acceptable for display adapters (they can request catch-up via `ReadTraceSince`); they are not used for durability (that is the TraceWriter's job).
+
+**Constraint:** The `TraceWriter.Write` path is separate from the `EventBus.Publish` path. Every event is written to the trace file AND published to the bus — these are independent operations. A slow bus subscriber never affects trace durability.
+
+---
+
+## Decision: Sequential Engine Loop (No Goroutine-Per-Step)
+
+**What:** The core execution loop is single-goroutine and sequential. One goroutine owns the `RunState`, the `TraceWriter`, and the `EventBus.Publish` calls. Parallel iterate (`concurrency` field) uses a bounded worker pool; workers communicate results back to the coordinator goroutine via a results channel, not directly to the TraceWriter.
+
+**Why:** Concurrent access to `RunState` would require pervasive locking with no correctness benefit for the common case (sequential runbook). The governance engine, snapshot writer, and trace writer are all simpler without synchronization. Parallel iterate is a special case with well-defined fan-out/fan-in semantics.
+
+---
+
+## Decision: Snapshot Format Must Be Versioned
+
+**What:** All `RunState` JSON snapshots in v2 must include `"schema_version": 2`. The `LoadLatestCheckpoint` function must check this field and return an error (not silently corrupt) if it encounters a version mismatch.
+
+**Why:** v1 snapshots have no version field. When v2 changes `RunState` (e.g. adding `InvokeStack`, `ParallelSlots`), unversioned snapshots from older runs will silently deserialize with zero values, causing incorrect resumption. Versioning enables explicit migration or rejection.
+
+---
+
+## Decision: OTel is Opt-In via Environment Variables Only
+
+**What:** OpenTelemetry tracing is enabled when `OTEL_EXPORTER_OTLP_ENDPOINT` is set in the environment. When unset, the OTel SDK is initialized with a no-op tracer (`trace.NewNoopTracerProvider()`). There is no `--otel` CLI flag. Configuration is 100% via the standard OTEL environment variable convention.
+
+**Why:** Adding a CLI flag creates a discoverability and documentation burden. The OTEL environment variable convention is the industry standard and is already understood by operators who use OTel. No-op tracer incurs zero overhead (no allocations) so always-initializing the SDK is safe.
+
+---
+
+## Decision: Non-Idempotent In-Flight Tool Calls Are Treated as Failed on Resumption
+
+**What:** If a `tool/invoked` event exists in the trace with no matching `tool/responded` event (orphaned correlation ID), the behaviour on resumption is determined by the tool's `idempotent` flag. If `idempotent: true`, the tool call is re-issued. If `idempotent: false` (the default), the step is treated as failed and the normal failure path is taken.
+
+**Why:** Re-invoking a non-idempotent tool (e.g. `send-notification`, `create-database`) on resumption would cause duplicate side effects. The safe default is to fail, forcing the operator to either declare idempotency or handle the failure branch. This matches the behaviour of Temporal's at-least-once guarantee with idempotency keys.
+
+---
+
+## Decision: `pkg/` Is the Core Boundary; `ext/` Cannot Be Imported by `pkg/`
+
+**What:** The Go module enforces a strict import boundary: packages under `pkg/` MUST NOT import packages under `ext/`. The `ext/` packages (serve, tui, mcp, debug) MAY import from `pkg/`. This is enforced by a linter rule (`depguard` or `gomodguard`).
+
+**Why:** v1 already follows this convention informally. Formalizing it in the linter ensures that future contributors cannot accidentally add an `ext/ → pkg/` import that introduces coupling between the adapter layer and the core. This is the architectural property that makes the core testable without spinning up a serve layer.
+
+---
+
+## Decision: v1 Scenario Files Are Forward-Compatible With v2 `gert test`
+
+**What:** v1 scenario YAML files (with `commands` and `evidence` keys) are valid input to the v2 `gert test` runner without modification. v2 adds an optional `assertions` block; if absent, the test runner only checks that the run completes without error.
+
+**Why:** Operators have existing scenario test suites. Requiring them to migrate scenario files before v2 adoption raises the barrier to migration. Forward compatibility for read-only scenario input (no write-back) is free — the parser just ignores the missing `assertions` block.
+
+# Dennis — v2 Framing Decisions
+**Author:** Dennis (CS Researcher)  
+**Date:** 2026-04-18  
+**Status:** Proposed — for team review
+
+---
+
+## Framing Decisions Made in §00, §01, §09
+
+### 1. Problem Statement Framing: Three Properties, Not One
+
+I framed the gert v2 problem as requiring three co-present properties: **executable**, **governed**, and
+**traceable**. A tool that is only executable is a script runner (Bash). A tool that is only governed is
+a policy engine (OPA). Only the intersection of all three defines the gert design space. This framing
+should be used consistently across sections that reference gert's purpose.
+
+**Citation:** IBM Redbook on Operational Runbooks; IJSRET Vol.10 Issue 6.
+
+---
+
+### 2. Success Definition is Feature-Gated, Not Process-Gated
+
+The five success criteria in §00 are all verifiable functional outcomes, not process outcomes ("team
+agreed", "document reviewed"). This was a deliberate choice to give Brian and the build team a clear
+done state. If any of the five criteria are adjusted, the change should be recorded here.
+
+**Current five criteria:**
+1. v1 runbook migrates and executes via `gert migrate` without manual fixup
+2. TUI + VS Code + a third-party adapter all build against published contracts without importing internals
+3. Governance enforced across all execution modes including extension-invoked runs
+4. Every execution produces a valid v2 trace (append-only, crash-safe, schema-valid)
+5. `gert test` passes a scenario suite covering all step types, governance rules, and evidence capture
+
+---
+
+### 3. Non-Goals Are Feature-Scoped
+
+All five non-goals in §01 are feature-scoped ("gert v2 does not provide X"), not process-scoped
+("we will not do Y in this sprint"). This was Ken's explicit request and is the right pattern for
+design documents intended as build references. If the team re-opens a non-goal, it should be promoted
+to a goal with a rationale.
+
+---
+
+### 4. Open Questions Are Structured as Decision Records
+
+Each question in §09 now has three parts: (a) why it matters, (b) options, (c) information needed.
+This structure is intentional: it means any team member can pick up a question, gather the information
+listed, and bring a proposal to the decisions log without needing to re-read the full design. Questions
+that depend on each other are cross-referenced (Q2↔Q12, Q4↔Q7).
+
+---
+
+### 5. v1 Preservation Goals Are Explicit and Enumerated
+
+Goal G3 explicitly lists every v1 feature that must be preserved by name: evidence capture, SHA256
+hashing, scenario replay, Bubble Tea TUI, VS Code extension, `gert test`, and its assertion engine.
+This prevents any of these features from being dropped silently during the v2 build. If the team
+decides to drop or defer one of these, a decision record is required.
+
+---
+
+### 6. OTel Integration Is a Binding Goal, Not a Stretch Goal
+
+I escalated OpenTelemetry integration from "recommendation" (research brief §7.2) to a binding goal
+(G6) in §01. The reasoning: W3C Trace Context and OTel spans are now the industry standard for
+operational visibility in any system that touches infrastructure. For gert to be useful in modern SRE
+environments, OTel is not optional. If the team disagrees, this should be downgraded to a non-binding
+recommendation and the rationale recorded here.
+
+---
+
+### 7. Saga / Compensation Is a Binding Goal
+
+Similarly, saga/compensation (G5) was elevated from recommendation to goal. The research brief §2.2
+is clear: without compensation, partially-executed runbooks leave infrastructure in undefined states.
+This is a correctness issue, not a feature request.
+
+---
+
+## Questions for the Team
+
+- **Q1 (v1 compatibility):** Should we survey existing users before the concurrency model decision?
+  If so, who owns that survey?
+- **Q6 (gert serve contract):** Brian should produce a JSON-RPC method inventory before contract freeze.
+  Is this assigned?
+- **Q11 (extension schema namespacing):** John (Schema) should validate whether JSON Schema Draft 2020-12
+  supports dynamic `$ref` resolution before we commit to option (a).
+
+# John — Schema vNext Key Decisions
+**Date:** 2026-04-18
+**Author:** John (YAML/Schema Specialist)
+**Section:** §03 Schema vNext
+
+---
+
+## Decision 1: apiVersion Values for v2
+
+**What:** v2 document kinds use `runbook/v2`, `tool/v2`, and `provider/v2` as their `apiVersion` strings.
+
+**Why:** The `<kind>/<major>` format is consistent with v1 (`runbook/v1`, `tool/v0`) and follows Kubernetes convention. Minor/patch changes within a major do not alter the `apiVersion` string — they are tracked by the schema artifact semver.
+
+**Breaking change definition:** A major increment (e.g. v1 → v2) constitutes a breaking change. Adding optional fields or loosening constraints does not.
+
+---
+
+## Decision 2: $schema Field is Recommended, Not Required
+
+**What:** All v2 runbook, tool, and provider documents *should* include a `$schema` field pointing to `https://schemas.gert.dev/<kind>/<version>.json`. The field is optional at runtime (the runtime dispatches on `apiVersion`) but strongly recommended for IDE tooling.
+
+**Why:** Dennis's research confirmed this is industry standard (GitHub Actions, Argo, Kubernetes CRDs). It enables zero-config IDE auto-completion and offline validation with any Draft 2020-12 validator.
+
+---
+
+## Decision 3: v1 Compatibility Mode in v2 Parser
+
+**What:** The v2 parser accepts `runbook/v1` documents in compatibility mode — all v1 field paths are normalized to v2 equivalents before validation. `gert migrate` permanently rewrites to v2 canonical form. `runbook/v0` is not supported in v2 (two-stage migration required).
+
+**Why:** Existing v1 runbooks must not break on upgrade to v2 runtime. The compatibility adapter is in the parser layer (Brian's domain); it does not leak into the runtime.
+
+---
+
+## Decision 4: meta.* Fields Promoted to Top-Level (Breaking Change)
+
+**What:** The `meta:` wrapper is removed in v2. Fields `name`, `kind`, `description`, `vars`, `inputs`, `governance`, `prose`, `defaults` become top-level runbook fields. A new required top-level field `id` (machine slug) is introduced.
+
+**Why:** The `meta:` wrapper was a historical artifact that created unnecessary nesting. Promoting fields to top-level improves document readability, reduces YAML depth, and aligns with the schema self-description pattern (top-level `$schema` and `apiVersion` are already top-level).
+
+**Migration:** `gert migrate` handles promotion automatically.
+
+---
+
+## Decision 5: toolRefs Replaces Flat tools Array
+
+**What:** The v1 `tools: [name, ...]` string array is replaced by `toolRefs: [{name, path?, alias?}]` in v2. Default discovery path remains `tools/<name>.tool.yaml`.
+
+**Why:** The flat array forced tool names to match filenames exactly and provided no way to alias or override paths. `toolRefs` supports both conventions and enables aliasing for runbooks that reference the same tool under different names.
+
+---
+
+## Decision 6: step.type Inventory for v2
+
+**What:**
+- Retained: `tool`, `cli`, `invoke`, `choice`, `assert`, `parallel`, `extension`, `end`
+- Renamed: `collector` → `manual`, `router` → `end` (merged)
+- New: `compensate` (saga/rollback pattern)
+- Removed: `noop` (use `when:` guard instead)
+- `branch` is both a step type (inline) and a TreeNode sibling
+
+**Why:**
+- `manual` is a clearer name for human interaction steps than `collector`.
+- `compensate` addresses the saga pattern gap identified in Dennis's research brief.
+- `noop` steps can always be replaced by a `when:` guard on any step; eliminating the type reduces surface area.
+
+---
+
+## Decision 7: Go Templates Retained in v2 (With Function Library)
+
+**What:** Go `text/template` remains the expression language for all interpolated fields. A standard function library is added: `contains`, `hasPrefix`, `hasSuffix`, `trim`, `toLower`, `toUpper`, `split`, `join`, `env`, `now`, `runID`, `not`.
+
+**Why:** The v1 template engine is battle-tested and broadly used in existing runbooks. Switching to a different expression language would be a major migration burden with no clear benefit for operational use cases. The function library addresses the expressiveness gap identified in v1 (e.g. string manipulation required pipeline gymnastics).
+
+**Template error handling change:** In v2, a template evaluation error is a hard step failure (not a soft skip). This is a behavior change from v1.
+
+---
+
+## Decision 8: Extension Namespace Convention — x-<namespace> Prefix
+
+**What:** Extension fields in all v2 documents must use the `x-<namespace>` prefix pattern (e.g. `x-myorg-cost-center`). Unregistered `x-*` fields produce a WARNING; registered fields are validated against an extension schema fragment.
+
+**Why:** Follows OpenAPI and GitHub Actions convention. Allows `additionalProperties: false` in the core JSON Schema while still permitting extension fields. The `x-` prefix is immediately recognizable as non-core.
+
+**Hard error:** Any field that does not match a core field name AND does not start with `x-` is a structural validation error.
+
+---
+
+## Decision 9: Two-Phase Validation (Structural + Semantic)
+
+**What:** `gert validate` runs in two phases:
+1. **Structural** — JSON Schema Draft 2020-12 validation (field types, required fields, enums, patterns). Stateless.
+2. **Semantic** — 10 domain rules (step ID uniqueness, invoke target resolution, branch condition variable scope, tool reference resolution, provider binding, circular invoke detection, capture write-before-read, governance pre-check, output completeness, compensate ordering).
+
+**Why:** JSON Schema cannot express domain rules that require cross-referencing parts of the document or loading external files. Separating the phases gives better error messages and allows the structural pass to run without any file system access.
+
+---
+
+## Decision 10: tool/v2 and provider/v2 Schema Changes
+
+**What:**
+- `tool/v2` adds: `capture.stdout.format` (json|text|lines), per-action `contract`, per-action `governance`, `meta.version`.
+- `provider/v2` adds: typed `fields` map with schema declarations, `meta.kind` (input-provider | enrichment-provider), `capabilities` array.
+
+**Why:** `capture.format` enables the `json.<path>` capture syntax in runbook steps. Per-action contracts allow the governance engine to evaluate effects without step-level contract overrides. The `fields` map in provider definitions enables the semantic validator to check `from: <provider>.<field>` bindings at validate time.
+
+---
+
+## Decision 11: Approval Gate Gains Timeout and Escalation (v2)
+
+**What:** The `approvals` block on `manual` steps gains three new fields: `timeout` (duration), `on_timeout` (escalate|fail|skip), `escalate_to` (array of role/email strings).
+
+**Why:** Dennis's research identified SLA enforcement for human steps as a gap in v1. Without timeouts, a runbook can stall indefinitely waiting for human approval. The escalation chain aligns with ITIL change management practice.
+
+---
+
+## Decision 12: parallel Step Type with Join Semantics
+
+**What:** A new `type: parallel` step executes multiple branch groups concurrently. The `join.wait_for` field specifies `all | any | majority`. Captures from parallel branches are merged (last-writer-wins with a warning on conflict).
+
+**Why:** Parallel fan-out/fan-in is a standard workflow pattern identified in Dennis's research brief. It reduces total execution time for independent checks (e.g. DNS + HTTP probes running simultaneously).
+
+---
+
+## Compatibility Matrix
+
+| Feature | v0 | v1 | v2 |
+|---------|----|----|-----|
+| apiVersion field | runbook/v0 | runbook/v1 | runbook/v2 |
+| meta wrapper | ✓ | ✓ | ✗ (promoted) |
+| $schema field | ✗ | ✗ | ✓ (recommended) |
+| tools: string array | ✓ | ✓ | ✗ (toolRefs) |
+| type: collector | ✗ | ✓ | ✗ (→ manual) |
+| type: compensate | ✗ | ✗ | ✓ (new) |
+| type: parallel | ✗ | ✓ | ✓ |
+| Input type field | ✗ | ✗ | ✓ |
+| Output declarations | ✗ | ✗ | ✓ |
+| Approval timeout | ✗ | ✗ | ✓ |
+| json.<path> capture | ✗ | ✗ | ✓ |
+| Extension x- prefix | ✗ | ✗ | ✓ |
+
+# Ken — Architectural Decisions
+**Date:** 2026-04-18
+**Author:** Ken (Software Architect)
+**Status:** Pending team review
+
+These decisions were made in the process of authoring §02 (Architecture) and §11 (Governance and Policy)
+for the gert v2 design document.
+
+---
+
+## AD-01: ExecutionPlan is a flat ordered list, not a DAG
+
+**Decision:** The `ExecutionPlan` produced by the Planner is a flat, ordered list of resolved steps.
+Branch and iterate control flow are runtime decisions made by the Runtime Core against evaluated
+expressions. The Planner does not compute which branches will be taken.
+
+**Rationale:** Branch predicates and iterate counts depend on captured variable values that are only
+known at runtime. Attempting to pre-compute a DAG would require symbolic execution or over-
+approximation. A flat list with runtime control flow evaluation is simpler, faster to plan, and
+consistent with how v1 works today.
+
+**Implications:** The Planner's output has no branching structure. The Runtime Core is the sole
+authority over which steps actually execute. Adapters receive a `branchResolved` event when a
+branch predicate is evaluated, providing visibility without requiring the adapter to understand
+the plan structure.
+
+---
+
+## AD-02: Step advancement is always client-driven
+
+**Decision:** The Runtime Core never auto-advances steps. The adapter (CLI, TUI, gert serve client,
+test harness) is always responsible for calling `RunHandle.Next()`. The `--auto` flag in the CLI
+adapter produces the appearance of auto-advance by calling `Next()` in a loop, but the runtime
+contract is unchanged.
+
+**Rationale:** Client-driven advancement is what makes interactive step-through, approval gates,
+and evidence collection possible without special cases in the runtime. A single `Next()` contract
+covers all modes (interactive, automated, debugger). This is the v1 model and it has proven sound.
+
+**Implications:** Every adapter must implement a step loop. This is a small price for a clean
+runtime contract. The `gert serve` adapter's loop is driven by `exec/next` RPC calls from the
+VS Code extension.
+
+---
+
+## AD-03: Single-run-per-process for v2.0
+
+**Decision:** The v2.0 runtime hosts at most one run per process. `gert serve` may host multiple
+sequential runs within a session but not concurrent runs.
+
+**Rationale:** Governance enforcement (file-level trace writes, subprocess environment filtering,
+approval gate state) is dramatically simpler with one run per process. Process isolation provides
+a natural crash boundary. The demand for concurrent runs has not been demonstrated in v1 usage.
+
+**Implications:** Operators who need to run multiple runbooks simultaneously must start multiple
+`gert exec` processes. Concurrent runs within a single `gert serve` session are an explicit v2.1
+concern listed in §09 Open Questions.
+
+---
+
+## AD-04: Denylist takes precedence over allowlist
+
+**Decision:** When evaluating command governance, the denylist is checked before the allowlist.
+A command in both lists is denied. The allowlist is only consulted if the denylist check passes.
+
+**Rationale:** Security-by-default: a denylist entry should always be a hard block regardless of
+what the allowlist says. If an operator adds `rm` to the denylist, they mean it unconditionally.
+Requiring operators to remove `rm` from the allowlist as well would be an easy mistake to miss.
+
+**Implications:** Operators who want to test whether a command is permitted must check the denylist
+first. The `GovernanceEngine.CheckCommand()` implementation already encodes this order in v1;
+v2 preserves and formalizes it.
+
+---
+
+## AD-05: OPA integration deferred to v2.1; ship structured YAML policy first
+
+**Decision:** v2.0 uses structured YAML `meta.governance` blocks as the sole policy mechanism.
+Open Policy Agent (OPA) integration, via a `PolicyEngine` interface with `EvaluatePreStep` and
+`EvaluatePreRun` hooks, is targeted for v2.1.
+
+**Rationale:** The v2.0 governance vocabulary is small (six primitives) and closed. A full
+policy DSL (Rego) would be over-engineered for this scope. Structured YAML blocks are
+self-contained, JSON Schema validatable at authoring time, and backward-compatible with v1.
+The `PolicyEngine` interface is designed now so that v2.1 OPA support is a drop-in addition
+without breaking the runtime contract.
+
+**Implications:** The `PolicyEngine` interface must be defined as a first-class Go interface
+in the Runtime Core package (not just in the design document) before v2.0 ships, even if the
+only implementation is the built-in structured evaluator. This ensures v2.1 OPA work has a
+clean seam to attach to.
+
+---
+
+## AD-06: Identity is self-asserted in v2.0 via `--as`
+
+**Decision:** Actor identity in v2.0 is the string passed via `--as <identity>`. It is not
+authenticated or verified by gert. The `--as` value is recorded in the trace as the actor
+identity for all governance events.
+
+**Rationale:** Authentication is the responsibility of the surrounding infrastructure
+(CI/CD pipeline credentials, VS Code GitHub Copilot session, MCP server auth). gert is a
+governance engine, not an identity provider. Introducing authentication in v2.0 would require
+picking an identity protocol (OIDC? SSH cert?) with significant integration cost and no clear
+winner across all deployment contexts.
+
+**Implications:** Governed environments must enforce authenticated identity at the adapter layer
+(e.g., the `gert serve` process is launched with a verified identity token that populates `--as`).
+An `IdentityProvider` interface is defined for v2.1 to allow adapters to supply verified claims.
+
+---
+
+## AD-07: Saga/compensation deferred to v2.1
+
+**Decision:** v2.0 does not implement saga/compensation handlers. Cancellation stops the
+current step (SIGTERM + SIGKILL grace period) and writes `run/cancelled` to the trace.
+No compensation steps are invoked.
+
+**Rationale:** Compensation requires: (a) a way to declare compensation handlers in the schema,
+(b) a mechanism to track which compensation handlers have been "registered" as steps complete,
+(c) execution of the compensation chain in reverse order. This is substantial schema and runtime
+work. Dennis's research identifies it as an important pattern (Temporal, Argo) but not a v2.0
+blocker. The most common v1 workflows have manual cleanup steps, not automated compensation.
+
+**Implications:** The schema and lifecycle model must be designed with compensation in mind
+(i.e., the step schema should have an optional `on_cancel` or `compensate` field that is
+parsed but not executed in v2.0). This avoids a breaking schema change when v2.1 adds support.
+
+---
+
+## AD-08: `gert serve` is an adapter in the API/Adapter Layer
+
+**Decision:** `gert serve` is formally classified as an adapter implementing the `Adapter` interface.
+It is not a special mode of the runtime or a peer component; it is a consumer of `RunHandle` and
+the event channel, like TUI and any future web adapter.
+
+**Rationale:** In v1, the coupling between `ext/serve` and `pkg/engine` was a major pain point
+(identified in gap analysis). The serve package imported internal engine types directly. Classifying
+`gert serve` as an adapter enforces the same boundary rules as TUI: no execution logic, only event
+rendering and input forwarding.
+
+**Implications:** The `serve` package must not import `pkg/engine` internal types. It may only
+import the public `RunHandle`, `Event`, `StepResult`, and `ApprovalDecision` types defined in the
+API/Adapter Layer boundary package. Brian (Go) should enforce this with a `go/analysis` import
+restriction check in CI.
+
+---
+
+## AD-09: Trace events have monotonic sequence numbers
+
+**Decision:** Every trace event in the append-only JSONL trace file has a `seq` field containing
+a monotonically increasing integer, starting from 1 for each run.
+
+**Rationale:** Sequence numbers enable consumers to detect gaps (indicating corruption or tampering),
+establish total ordering without relying on wall-clock timestamps, and support efficient incremental
+consumption (a reader can resume from a known sequence number). This is a minor addition to the
+trace format with significant auditability benefits.
+
+**Implications:** The `TraceWriter` must maintain an internal sequence counter protected by a mutex.
+Sequence numbers must not be reused, even across crash-recovery resume scenarios (resume continues
+from last known sequence).
+
+# Decision: Iterate Visual Redesign — Test Contract
+
+**Date:** 2026-06-XX  
+**By:** Knov (Playwright & E2E Testing Specialist)  
+**Task:** Write Playwright tests for iterate block visual redesign
+
+---
+
+## Decision: CSS Class Names as the Test Contract
+
+Tests assert on `.wf-iterate-container`, `.wf-fork-diamond`, `.wf-join-diamond` in the SVG DOM. These are the classes Kurapika must add to the graph renderer. The tests **intentionally fail until those classes are shipped** — they are the acceptance criteria, not post-hoc coverage.
+
+**Why this matters:** Any implementation that passes these tests is correct from the testing perspective. If Kurapika uses different class names, the tests should be updated at the same time.
+
+---
+
+## Decision: Secondary Runtime Attributes Use Soft Assertions
+
+`data-iterate-pass` and `data-iterate-lane` (runtime expansion attributes) are checked with `console.warn`, not `expect()`. Reason: runtime expansion is a separate milestone and blocking the static tests on unimplemented runtime features would cause false failures in CI before the feature lands.
+
+Once Kurapika ships runtime expansion, the soft checks should be promoted to hard `expect()` assertions.
+
+---
+
+## Decision: No Scenario Injection in Runtime Tests
+
+The web app does not expose `scenarioDir` to the web UI (the `exec/start` call in `runbookRunner.ts` hardcodes `mode: 'real'`). Runtime tests therefore run against the real gert engine with real tool invocations.
+
+**Recommendation:** Kurapika or Killua should add scenario/replay support to the web runner to enable deterministic runtime testing. Until then, runtime tests depend on tool availability and may flake in CI environments without the `curl` gert tool registered.
+
+**Tracking:** Runtime tests have `test.setTimeout(120000)` and graceful fallbacks for failed invocations (iterate steps have `continue_on_fail: true`).
+
+---
+
+## Files Delivered
+
+| File | Tests | Purpose |
+|------|-------|---------|
+| `web/tests/specs/iterate-sequential.spec.ts` | 4 | Sequential iterate: container rect, no back-edge, header text, runtime passes |
+| `web/tests/specs/iterate-parallel.spec.ts` | 5 | Parallel iterate: fork diamond, join diamond, symmetric count, no wrong class, runtime columns |
+
+**Screenshots produced:**
+- `web/tests/screenshots/iterate-sequential-static.png`
+- `web/tests/screenshots/iterate-sequential-runtime.png`
+- `web/tests/screenshots/iterate-parallel-static.png`
+- `web/tests/screenshots/iterate-parallel-runtime.png`
+
+# Phase 1 Shared Renderer Verification — Knov Report
+
+**Date:** 2026-04-07  
+**Verified by:** Knov (Playwright & E2E Testing Specialist)  
+**Commit:** `60ae641`
+
+---
+
+## Overall Verdict: ✅ PASS (with one bug found and fixed)
+
+---
+
+## Step-by-Step Results
+
+### Step 1: Build State
+
+| Target | Result |
+|--------|--------|
+| `web` build (`tsc && vite build`) | ✅ PASS (after tsconfig fix) |
+| `vscode` build (`esbuild`) | ✅ PASS — 1.1MB clean bundle |
+
+**Bug Found:** `web/tsconfig.json` included `../shared/renderer` but not excluding `*.test.ts` files. The `treeToGraph.test.ts` (which uses Jest globals) was being type-checked by the web's tsconfig, failing with `Cannot find name 'describe'` etc.
+
+**Fix Applied:** Added to `web/tsconfig.json`:
+```json
+"exclude": ["../shared/renderer/**/*.test.ts", "../shared/renderer/**/*.spec.ts"]
+```
+
+---
+
+### Step 2: Existing Playwright Tests
+
+**Result: 13 passed → 17 passed (4 new tests added) — no regressions**
+
+Same 4 pre-existing failures remain (confirmed pre-existing by checking before/after):
+- `knov-edge-color-verify.spec.ts` — DNS test (requires live DNS infrastructure)
+- `knov-screenshot.spec.ts` — screenshot capture (pre-existing)
+- `tool-catalog.spec.ts` (×2) — tool list timeout (pre-existing gert server config issue)
+
+---
+
+### Step 3: Verification Spec
+
+**Result: 4/4 PASS** — `web/tests/specs/knov-phase1-verify.spec.ts`
+
+| Test | Result |
+|------|--------|
+| graph renders SVG nodes from shared renderer | ✅ PASS |
+| prune toggle button exists in toolbar | ✅ PASS |
+| deleted files confirmed gone from web/src/shared/ | ✅ PASS |
+| shared/renderer has zero vscode imports | ✅ PASS |
+
+**Screenshot:** `web/tests/screenshots/phase1-graph.png`
+
+---
+
+### Step 5: treeToGraph Unit Tests
+
+**Result: 84 tests PASS** (37 from `vscode/src/views/treeToGraph.test.ts` + 47 from `shared/renderer/graph/treeToGraph.test.ts`)
+
+Command: `cd vscode && npx jest --testPathPattern="treeToGraph" --no-coverage`
+
+---
+
+### Step 6: Duplicate File / Platform Import Checks
+
+| Check | Result |
+|-------|--------|
+| `web/src/shared/renderGraph.ts` absent | ✅ PASS — file is gone |
+| `web/src/shared/treeToGraph.ts` absent | ✅ PASS — file is gone |
+| `web/src/shared/` only has: `helpers.ts`, `snapshotStateMachine.ts`, `themes/`, `treeOps.ts` | ✅ PASS |
+| `grep -r "from 'vscode'" shared/renderer/` | ✅ PASS — CLEAN |
+| `grep -r "from '.*web/" shared/` | ✅ PASS — no web imports |
+
+---
+
+## Summary
+
+Phase 1 is verified. The shared renderer:
+- Builds cleanly in both web and vscode
+- Renders the graph correctly in the web app (SVG with `wf-node`/`ed-node` classes)
+- Exposes the prune toggle in the toolbar
+- Has zero platform-specific imports
+- Has no duplicates left in `web/src/shared/`
+- 84 unit tests all pass
+
+**One tsconfig bug was found and fixed** as part of this verification. The fix is clean and precise: excluding test files from the web TypeScript compilation.
+
+# Decision: Iterate Block Visual Language Split
+
+**Date:** 2026-06-26  
+**By:** Kurapika (Frontend Engineer)  
+**Status:** Implemented
+
+## Decision
+
+Sequential and parallel `iterate` blocks are now rendered with distinct visual languages.
+
+### Sequential iterate (no `concurrency` or `concurrency: 1`)
+- **Visual:** n8n-style container rect wrapping body steps
+- **Node type:** still `'iterate'`, distinguished by `data._iterateType = 'sequential'`
+- **Header label:** `↻ for each {as} in {over}` — clearly communicates the loop variable
+- **No back-edge** — the container rect IS the visual loop indicator
+- **Container geometry** stored as `data._containerHeight` / `data._containerWidth` for the renderer
+
+### Parallel iterate (`concurrency > 1`)
+- **Visual:** Fork diamond `◇ ×N` → body column → Join diamond `◇ join`
+- **Node types:** `'fork-diamond'` and `'join-diamond'` (new types added to `GraphNode.type` union)
+- **No container rect** — the fork/join chrome frames the body
+- **No back-edge**
+
+## Why
+
+The old rendering (dashed-border header node + back-edge bezier) gave no visual signal about whether iteration was sequential or parallel. The two paradigms have fundamentally different execution semantics (one item at a time vs N concurrent), so the static graph should communicate this immediately.
+
+## Type changes
+
+Added to `TreeNode.iterate`: `over?: string`, `concurrency?: number`, `collect?: Record<string, string>`  
+Added to `GraphNode.type`: `'fork-diamond'`, `'join-diamond'`
+
+## Backward compatibility
+
+- `expandedIterate` tree nodes still use the original `layoutExpandedIterate()` path (unchanged)
+- The `iteratePassStripH` runtime expansion in `renderExecutionGraph` still works (targets `type === 'iterate'` nodes which sequential containers are)
+- Pre-existing iterate tests updated: back-edge assertion replaced with container/no-back-edge assertion; parallel test added
+
+# Decision: Bibliography System for Gert v2 Design Document
+
+**Date:** 2026-04-18  
+**Author:** Leslie (LaTeX Specialist)  
+**Status:** Implemented  
+
+## Context
+
+The gert v2 design document had NO bibliography infrastructure. All references to academic papers, industry systems, standards, and specifications were mentioned inline as text (e.g., "IBM Redbook", "Temporal", "OpenTelemetry Specification") with no proper citations or bibliography chapter.
+
+This was a significant documentation gap:
+- No way to look up full citations
+- No DOIs or URLs for referenced papers
+- Difficult to audit which claims are backed by research
+- Fails academic/professional documentation standards
+
+## Decision
+
+Implemented a complete bibliography system using **biblatex + biber** (not natbib).
+
+### Why biblatex + biber?
+
+**Chosen:** biblatex with biber backend, numeric citation style, sorted by name/year/title
+
+**Rejected:** natbib + bibtex (older, less flexible)
+
+**Rationale:**
+- biblatex is the modern LaTeX bibliography system (actively maintained)
+- Biber backend provides better Unicode support, better sorting, more flexibility
+- Numeric citation style fits technical documentation style
+- The MastersThesis class is compatible with biblatex
+- pdflatex + biber workflow is standard on modern TeX installations
+
+### Implementation
+
+1. **Created references.bib** with 40+ entries covering:
+   - Academic papers (IBM Redbook, IJSRET, DBSec 2024)
+   - Standards (OpenTelemetry, ISO 27001, SOC 2, NIST SP 800-53, RFC 3339)
+   - Specifications (JSON Schema, OpenAPI, W3C Trace Context, ITIL v4)
+   - Workflow systems (Temporal, Argo, Prefect, Airflow, Step Functions)
+   - Runbook tools (AWS SSM, PagerDuty, Rundeck, StackStorm)
+   - Policy frameworks (OPA, Cedar, Sentinel)
+   - Cloud-native tools (Kubernetes, Gatekeeper, Jaeger, Zipkin)
+   - Development tools (Testify, Bubble Tea, JSON-RPC, VS Code API, MCP)
+
+2. **Updated main.tex:**
+   - Added `\usepackage[backend=biber,style=numeric,sorting=nyt]{biblatex}`
+   - Added `\addbibresource{references.bib}`
+   - Added `\backmatter` and `\printbibliography[heading=bibintoc,title={References}]` before `\end{document}`
+
+3. **Added \cite{} commands** throughout sections:
+   - §00 Overview: 9 citations
+   - §01 Goals and Non-Goals: 12 citations
+   - §03 Schema: 3 citations
+   - §05 Tool Runtime: 2 citations
+   - §08 Testing: 1 citation
+   - §09 Open Questions: 4 citations
+   - Total: 26 unique citations (out of 40+ available entries)
+
+4. **Compilation workflow:**
+   ```
+   pdflatex main.tex    # First pass
+   biber main           # Process bibliography
+   pdflatex main.tex    # Second pass (resolve citations)
+   pdflatex main.tex    # Final pass (resolve cross-refs)
+   ```
+
+## Outcomes
+
+✅ **All 26 citations resolved successfully** (no undefined citation warnings)  
+✅ **Bibliography chapter added** with proper formatting  
+✅ **Page count increased from 147 to 155** (8 pages for References)  
+✅ **References appear in table of contents**  
+✅ **Clean compilation** (no critical errors)  
+
+## Citation Style Examples
+
+- Single: `\cite{temporal-docs}`
+- Multiple: `\cite{soc2-aicpa,iso27001,hipaa-security-rule}`
+- In text: "...industry standard~\cite{otel-spec}..."
+
+## Future Work
+
+### Additional citations to add:
+- §02 Architecture (currently no citations)
+- §04 Extension Runtime (currently no citations)
+- §11 Governance and Policy (policy-as-code examples)
+- §12 Evidence/Tracing (event sourcing, PROV model)
+- §14 Input Provider Framework (provider patterns)
+
+### BibTeX entries available but not yet cited:
+- google-sre-book, google-sre-workbook (SRE best practices)
+- w3c-prov (provenance model)
+- dbsec2024-playbook-generation (playbook optimization)
+- runops-engineering, runbooks-as-code-tutorial
+- airflow-docs, rundeck-docs, stackstorm-docs
+- sentinel-docs
+
+These can be added as sections are expanded with more context.
+
+## Files Modified
+
+- `/Volumes/Projects/gert/design/gert-v2/references.bib` (created)
+- `/Volumes/Projects/gert/design/gert-v2/main.tex` (updated)
+- `/Volumes/Projects/gert/design/gert-v2/sections/00-overview.tex` (citations added)
+- `/Volumes/Projects/gert/design/gert-v2/sections/01-goals-and-nongoals.tex` (citations added)
+- `/Volumes/Projects/gert/design/gert-v2/sections/03-schema-vnext.tex` (citations added)
+- `/Volumes/Projects/gert/design/gert-v2/sections/05-tool-runtime.tex` (citations added)
+- `/Volumes/Projects/gert/design/gert-v2/sections/08-testing-and-acceptance.tex` (citations added)
+- `/Volumes/Projects/gert/design/gert-v2/sections/09-open-questions.tex` (citations added)
+
+## Recommendation
+
+This bibliography system is **production-ready** and should be maintained as the design document evolves:
+
+1. **When adding new references:** Add BibTeX entry to references.bib with proper metadata
+2. **When citing:** Use `\cite{key}` not inline text descriptions
+3. **Cite keys:** Use descriptive names (e.g., `temporal-docs`, `iso27001`, `otel-spec`)
+4. **Compile:** Always run full pdflatex + biber + pdflatex + pdflatex cycle
+5. **Verify:** Check main.log for undefined citations before committing
+
+## Cross-references
+
+- Dennis's research brief: `/Volumes/Projects/gert/.squad/tmp/dennis-research-brief.md` (primary source for references)
+- Bibliography file: `design/gert-v2/references.bib`
+- Leslie's history: `.squad/agents/leslie/history.md`
+
+# Decision Record: Document Structure Preparation for v2 Design Spec
+
+**Date:** 2026-04-18  
+**Author:** Leslie (LaTeX Specialist)  
+**Audience:** gert Team, specifically Ken (Architecture), Dennis (Research), Brian (Go Implementation)
+
+---
+
+## Context
+
+Ken's gap analysis identified **six entirely missing sections** critical to a buildable v2 design specification. The current document (9 sections) is a "table of contents with design intent" but lacks buildable specifications for migration, governance, tracing, adapter contracts, input providers, and observability.
+
+Ken's recommendations: These six sections must be added before any implementation begins, as they are either launch blockers (migration) or core to the design (governance, events, adapters).
+
+---
+
+## Decision
+
+**Created six new sections (§10–§15) with stub structure.**
+
+### Sections Created
+
+| § | Title | Rationale |
+|---|-------|-----------|
+| 10 | Migration and Compatibility | Launch blocker: operators need to know what breaks, what migrates automatically, what requires manual work |
+| 11 | Governance and Policy | Governance is gert's core differentiator (allowlists, denylists, env blocking, redaction, approval gates); v1 design entirely absent from v2 |
+| 12 | Evidence, Tracing, and Resumption | Append-only trace format, state snapshots, SHA256 capture, run resumption; load-bearing operational feature missing from current design |
+| 13 | Adapter Contracts | Explicit interface (event subscription, handshake, render lifecycle) required before TUI, Web, VS Code adapter work begins |
+| 14 | Input Provider Framework | Input resolution framework; carries forward v1 `.provider.yaml` model (or explicitly redesigns it) |
+| 15 | Observability and Diagnostics | Structured logging, metrics, OpenTelemetry; makes §07 hardening claims implementable |
+
+### Stub Structure
+
+Each section follows a consistent template:
+- `\chapter{Title}` — matching Ken's proposal title exactly
+- **2-3 sentence description** — drawn from Ken's section proposal, emphasizing scope and criticality
+- `\section{TODO}` with placeholder text `This section is under active authoring.`
+
+This provides clear visual markers for authoring while maintaining compilability and table-of-contents visibility.
+
+### Compilation and Audits
+
+- **main.tex updated:** Added `\input{sections/10-migration-compatibility}` through `\input{sections/15-observability-diagnostics}` after §09
+- **Compilation verified:** pdflatex succeeded with 18-page output (172 KB), no critical LaTeX errors
+- **Existing sections audited:** All §00–§09 confirmed LaTeX-clean (no unclosed environments, no escaping errors)
+
+---
+
+## Rationale
+
+### Why six sections, not more/fewer?
+
+Ken's gap analysis identified **10 entirely missing topics** but prioritized only 6 for immediate authoring (the other 4 map to subsections within existing chapters). These 6 address the most critical gaps that block implementation and are most likely to require dedicated sections for clarity.
+
+### Why stubs, not blank files?
+
+Stubs serve three purposes:
+1. **Compilability:** Document can compile and be distributed; sections are visible in TOC
+2. **Visibility:** Authors know exactly where to write (clear sections to fill) and what topics are in-scope (from description)
+3. **Reviewability:** Ken and ormasoftchile can review authoring assignments and priorities before writing begins
+
+### Why integrate into main.tex now vs. later?
+
+Integrating now ensures:
+- Document compiles cleanly as a whole from this point forward
+- TOC shows full structure immediately (helps with editorial prioritization)
+- No risk of sections being forgotten in the final integration phase
+- Adapters (Brian's Go code, John's schema) can reference section numbers stable
+
+---
+
+## Next Steps (For Team)
+
+1. **Assign authoring:** Each section should be assigned to a single author (likely Dennis for research-heavy §10, §12, §15; Ken for architecture-driven §13, §14; coordinated team effort for §11)
+2. **Define author order:** Suggest authoring order: §10 (migration), §11 (governance), §13 (adapter contracts) first, as they unblock other work
+3. **Link to design decisions:** As authors write, maintain cross-references to `.squad/decisions.md` 
+4. **Expand existing sections:** Remember Ken's critical gaps in §00–§09 also require 3–5× expansion
+
+---
+
+## Decision Metadata
+
+- **Status:** Accepted
+- **Impact:** Document structure now ready for full writing sprint
+- **Risk:** None (stubs are non-breaking)
+- **Reversibility:** High (stubs can be removed or reorganized without affecting compilation)

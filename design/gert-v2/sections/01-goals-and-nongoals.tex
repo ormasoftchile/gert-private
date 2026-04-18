@@ -1,0 +1,106 @@
+\chapter{Goals and Non-Goals}
+\label{ch:goals}
+
+\section{Goals}
+
+The following goals are the binding commitments of the v2 design. Where possible, each goal is stated
+as a verifiable criterion rather than an aspiration.
+
+\begin{enumerate}[label=\textbf{G\arabic*.}]
+
+  \item \textbf{Preserve and formalize the governance layer.}
+    Every capability that made v1 operationally useful---command allowlists and denylists, environment
+    variable blocking, output redaction with regex patterns, and per-step role-based approval
+    gates---must be present in v2 with identical or stronger semantics. Governance is gert's core
+    differentiator~\cite{pagerduty-automation,aws-ssm-runbooks}: approval gates
+    integrated directly into step definitions. v2 must additionally support RBAC scoping on runbook
+    execution: which identities may run which runbooks, and under what conditions.
+
+  \item \textbf{Preserve the append-only, crash-safe, tamper-evident trace.}
+    The v2 execution trace must be an append-only JSONL file. Each line is a self-describing JSON
+    object with a unique event ID (UUID), ISO~8601 UTC timestamp~\cite{rfc3339}, actor identity, step ID, and
+    structured payload. The file must be crash-safe (partial writes must not corrupt prior entries)
+    and must support optional cryptographic signing to satisfy SOC~2 and ISO~27001~(A.12.4) audit
+    requirements~\cite{soc2-aicpa,iso27001}. This is a launch blocker: no trace, no compliance.
+
+  \item \textbf{Preserve evidence capture, deterministic replay, TUI, VS Code extension, and
+    \texttt{gert test}.}
+    The following v1 capabilities must be functionally preserved in v2: evidence capture with text,
+    checklists, and SHA256-hashed attachments; scenario-based deterministic replay (\texttt{--mode
+    replay}); the Bubble~Tea terminal UI~\cite{bubbletea-framework}; the VS~Code extension powered by the JSON-RPC server~\cite{jsonrpc-spec,vscode-extension-api}; and
+    the \texttt{gert test} scenario runner with its assertion engine. These features represent
+    validated operational value. Their absence in v2 is a regression, not a simplification.
+
+  \item \textbf{Establish stable, versioned extension contracts.}
+    Tool definitions (\texttt{.tool.yaml}), input providers (\texttt{.provider.yaml}), and
+    out-of-process extensions must bind to named, versioned contracts. A host version bump that breaks
+    an extension contract requires a major version increment and a migration path. The capability
+    taxonomy---what an extension may register, observe, and invoke---must be a published, enumerated
+    list, not an implicit set of permissions inferred from code. This pattern is established by
+    VS~Code's extension API~\cite{vscode-extension-api} and Kubernetes admission controller design~\cite{kubernetes-docs}.
+
+  \item \textbf{Introduce saga and compensation for multi-step rollback.}
+    v2 must support explicit compensation registration: when a forward step completes, the runbook may
+    declare a compensating action to execute in reverse order on failure. This is the industry-standard
+    saga pattern, implemented in production by Temporal~\cite{temporal-docs} and AWS Step Functions~\cite{aws-step-functions}. Without compensation,
+    partially-executed runbooks that modify infrastructure leave systems in undefined intermediate
+    states.
+
+  \item \textbf{Integrate OpenTelemetry for distributed tracing.}
+    Every runbook execution must emit OpenTelemetry spans~\cite{otel-spec}: one root span per run, one child span per
+    step, with W3C Trace Context~\cite{w3c-trace-context} (\texttt{traceparent} / \texttt{tracestate}) propagated to tool
+    invocations. Correlation IDs must appear in both the JSONL trace and the OTel span attributes, so
+    that run traces can be joined with infrastructure observability data in Jaeger~\cite{jaeger-docs}, Zipkin~\cite{zipkin-docs}, or any
+    OTLP-compatible backend. This is the current industry standard for operational visibility.
+
+  \item \textbf{Decouple adapters from core via a typed event API.}
+    The TUI, VS~Code extension, and any future web adapter must attach to the core exclusively via a
+    typed event subscription interface. No adapter may import internal runtime packages or call runtime
+    methods directly. The event schema must be versioned: adapters declare which schema version they
+    consume, and the host rejects incompatible connections. This constraint is necessary for gert to
+    support concurrent adapters (e.g., TUI and VS~Code running simultaneously against a single run).
+
+  \item \textbf{Establish migration compatibility for v1 runbooks.}
+    The command \texttt{gert migrate} (v2 edition) must produce a valid \texttt{runbook/v2} document
+    from any well-formed \texttt{runbook/v0} or \texttt{runbook/v1} input with no manual fixup
+    required for standard runbooks. The v2 runtime should additionally support a compatibility
+    execution mode that accepts v1 runbooks without prior migration, so that existing users are not
+    blocked from adopting v2 incrementally.
+
+\end{enumerate}
+
+\section{Non-Goals}
+
+The following are explicitly outside the scope of gert v2. These boundaries are feature-scoped, not
+process-scoped, and are intended to prevent scope creep during implementation.
+
+\begin{enumerate}[label=\textbf{NG\arabic*.}]
+
+  \item \textbf{Gert v2 does not provide a managed cloud execution service.}
+    There is no gert-as-a-service, no central execution registry, and no SaaS offering. Gert v2 is a
+    local-first binary. Cloud scheduling, multi-tenant isolation, and remote execution orchestration
+    are concerns for a hypothetical v3 or a separate product.
+
+  \item \textbf{Gert v2 does not implement a general-purpose workflow orchestrator.}
+    Gert is not Temporal, Argo, or Prefect~\cite{temporal-docs,argo-workflows,prefect-docs}. It does not support distributed workers, fan-out
+    parallelism across remote nodes, or arbitrary DAG execution. Parallel execution within a single
+    local run is a stretch goal; cross-host parallelism is explicitly out of scope.
+
+  \item \textbf{Gert v2 does not ship a built-in policy server.}
+    While v2 defines governance semantics and may integrate policy-as-code hooks~\cite{opa-docs}, it does not
+    bundle or operate an OPA server. Policy evaluation happens at the host process level. Central
+    policy distribution, policy bundles over HTTP, and multi-host policy synchronization are out of
+    scope.
+
+  \item \textbf{Gert v2 does not define an extension marketplace or signing authority.}
+    v2 will define an extension signing \textit{mechanism} (a verifiable public key model), but it
+    will not operate a registry, curate extensions, or act as a certificate authority. Extension
+    distribution is the responsibility of the extension author.
+
+  \item \textbf{Gert v2 does not guarantee binary backward compatibility with v1 internal packages.}
+    v2 is a clean-break architecture. The internal Go package structure, private interfaces, and
+    runtime internals are not subject to backward compatibility guarantees. Only the documented public
+    contracts---the runbook schema, the tool schema, the JSON-RPC API surface, the extension
+    protocol, and the JSONL trace schema---carry compatibility commitments.
+
+\end{enumerate}

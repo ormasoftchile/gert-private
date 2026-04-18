@@ -1,0 +1,544 @@
+\chapter{Governance and Policy}
+
+Governance is Gert's core differentiator: allowlists, denylists, environment variable blocking,
+output redaction, and approval gates. This section defines the v2 governance model, specifying
+what policy fields survive from v1, how policy is evaluated at runtime, whether policy is
+host-enforced or extension-contributed, and how approval gates integrate with the event model.
+
+Governance features are a first-class design requirement and must not be treated as optional
+or defer-to-extension.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Governance Primitives}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The following primitives form gert's policy vocabulary. Each is defined precisely below, with
+its evaluation point in the execution pipeline, its schema representation, and its trace event.
+
+\subsection{Command Allowlist (\texttt{allowed\_commands})}
+
+\textbf{Definition.} A whitelist of executable names (argv[0], without path components) that
+may be invoked by \texttt{cli} steps and tool subprocess invocations. If the allowlist is
+non-empty, any command whose base name is not in the list is blocked before the subprocess is
+forked.
+
+\textbf{Semantics.} Path-stripping is applied before matching: \texttt{/usr/bin/curl} matches
+the allowlist entry \texttt{curl}. Glob patterns are \emph{not} supported in v2.0 (exact match
+only). The empty list (\texttt{[]}) means all commands are permitted (permissive default).
+
+\textbf{Schema.}
+\begin{verbatim}
+meta:
+  governance:
+    allowed_commands: [kubectl, curl, jq, aws]
+\end{verbatim}
+
+\textbf{Evaluation point.} Runtime Core, immediately before subprocess fork (after template
+evaluation). See §\ref{sec:policy-eval}.
+
+\textbf{Trace event.} \texttt{governance/commandBlocked} — written when a command is denied.
+Fields: \texttt{stepId}, \texttt{command}, \texttt{reason: "not\_in\_allowlist"}.
+
+\subsection{Command Denylist (\texttt{denied\_commands})}
+
+\textbf{Definition.} An explicit list of executable names that are unconditionally blocked.
+The denylist takes precedence over the allowlist: if a command appears in both, it is denied.
+
+\textbf{Use case.} Operators use the denylist to forbid dangerous commands (\texttt{rm},
+\texttt{dd}, \texttt{shutdown}) without needing to enumerate all permitted commands.
+
+\textbf{Schema.}
+\begin{verbatim}
+meta:
+  governance:
+    denied_commands: [rm, dd, shutdown, reboot]
+\end{verbatim}
+
+\textbf{Evaluation point.} Runtime Core, same checkpoint as allowlist. Denylist check runs
+first.
+
+\textbf{Trace event.} \texttt{governance/commandBlocked} — fields: \texttt{stepId},
+\texttt{command}, \texttt{reason: "in\_denylist"}.
+
+\subsection{Environment Variable Blocking (\texttt{deny\_env\_vars})}
+
+\textbf{Definition.} A list of glob patterns matched against environment variable names.
+Any environment variable whose name matches a pattern is stripped from the subprocess
+environment before the command is executed.
+
+\textbf{Rationale.} Prevents accidental or malicious exfiltration of secrets (e.g.,
+\texttt{AWS\_SECRET\_ACCESS\_KEY}, \texttt{GITHUB\_TOKEN}) by commands in the runbook.
+
+\textbf{Schema.}
+\begin{verbatim}
+meta:
+  governance:
+    deny_env_vars:
+      - "*_SECRET*"
+      - "*_TOKEN"
+      - "AWS_*"
+      - "GITHUB_*"
+\end{verbatim}
+
+\textbf{Evaluation point.} Runtime Core, immediately before subprocess fork. Applied to the
+full process environment (not just explicitly passed vars).
+
+\textbf{Trace event.} \texttt{governance/envVarBlocked} — fields: \texttt{stepId},
+\texttt{varNames: [string]} (names of blocked variables, not values).
+
+\subsection{Output Redaction (\texttt{redact})}
+
+\textbf{Definition.} A list of redaction rules. Each rule has a \texttt{pattern} (a RE2
+regular expression) and a \texttt{replace} string. After a \texttt{cli} or \texttt{tool}
+step produces output, all redaction rules are applied to the captured stdout/stderr before
+the output is stored in run variables or written to the trace.
+
+\textbf{Semantics.} Rules are applied in declaration order. The replace string may use RE2
+backreferences (\texttt{\$1}). The special replace value \texttt{[REDACTED]} is the
+conventional replacement for secrets.
+
+\textbf{Schema.}
+\begin{verbatim}
+meta:
+  governance:
+    redact:
+      - pattern: "token=[A-Za-z0-9_\\-]{20,}"
+        replace: "token=[REDACTED]"
+      - pattern: "password: .+"
+        replace: "password: [REDACTED]"
+      - pattern: "(?i)bearer\\s+[A-Za-z0-9._\\-]+"
+        replace: "Bearer [REDACTED]"
+\end{verbatim}
+
+\textbf{Evaluation point.} Runtime Core, immediately after subprocess/tool output is captured,
+before capture variables are set and before any trace write.
+
+\textbf{Trace event.} \texttt{governance/redactionApplied} — fields: \texttt{stepId},
+\texttt{ruleCount} (number of rules that matched, not the patterns themselves, to avoid
+logging the pattern that matched sensitive data).
+
+\subsection{Approval Gates}
+
+Approval gates are first-class step-level governance primitives. They are defined on any step
+type and pause execution until a minimum number of approvals from specified roles have been
+recorded. See §\ref{sec:approval-gate} for the complete approval gate design.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Policy Evaluation Model}
+\label{sec:policy-eval}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Policy primitives are evaluated at specific, well-defined points in the execution pipeline.
+The evaluation order within each checkpoint is fixed and must not be reordered by extensions.
+
+\begin{center}
+\begin{tabular}{lll}
+\textbf{Checkpoint} & \textbf{Primitives Evaluated} & \textbf{Phase} \\
+\hline
+Parser validation & Schema structural rules & Parse \\
+Planner validation & Import cycles, tool existence & Plan \\
+Run pre-flight & Extension policy rules & Run init \\
+Step pre-flight & Denylist check & Runtime Core \\
+Step pre-flight & Allowlist check & Runtime Core \\
+Step pre-flight & Approval gate & Runtime Core \\
+Subprocess fork & Env var blocking & Runtime Core \\
+Output captured & Redaction & Runtime Core \\
+Post-step & Contract risk warning & Runtime Core \\
+\end{tabular}
+\end{center}
+
+\paragraph{Order of precedence.}
+Within the pre-flight checkpoint for a \texttt{cli} or \texttt{tool} step, the evaluation
+order is:
+\begin{enumerate}
+  \item Denylist check (hard block, step fails immediately if matched).
+  \item Allowlist check (hard block, step fails immediately if not matched and list is non-empty).
+  \item Approval gate (soft pause; step is held until approvals arrive).
+  \item Env var blocking (applied at fork time, not a failure condition — silently strips).
+\end{enumerate}
+
+A policy violation at any hard-block checkpoint writes the corresponding trace event and
+returns an error from \texttt{RunHandle.Next()}. The run is placed in the
+\texttt{policy\_violation} terminal state. The operator must resolve the policy
+(e.g., add the command to the allowlist) and re-run; resumption from a policy violation
+is not supported in v2.0.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Approval Gate Design}
+\label{sec:approval-gate}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Schema Declaration}
+
+Approval gates are declared in the step's \texttt{approvals} block:
+
+\begin{verbatim}
+steps:
+  - id: delete_database
+    kind: cli
+    command: "kubectl delete namespace {{ .targetNamespace }}"
+    approvals:
+      min: 2
+      roles: ["DRI", "change-manager"]
+      timeout: 24h
+      on_timeout: fail   # or: escalate
+      escalate_to: ["senior-sre", "director-of-eng"]
+      message: "Deleting {{ .targetNamespace }} is irreversible. Confirm change window."
+\end{verbatim}
+
+\subsection{UX Contract}
+
+When the Runtime Core reaches a step with an \texttt{approvals} block, it:
+\begin{enumerate}
+  \item Writes \texttt{governance/approvalRequired} trace event (stepId, message, roles, min, timeout).
+  \item Emits an \texttt{ApprovalRequired} runtime event on the event channel.
+  \item Returns from \texttt{Next()} with a \texttt{StepResult} of kind \texttt{PendingApproval}.
+        The step does \emph{not} execute yet.
+  \item Subsequent calls to \texttt{Next()} on the same step return \texttt{ErrAwaitingApproval}
+        until the approval quorum is met.
+\end{enumerate}
+
+The adapter (VS Code extension, TUI, or \texttt{gert serve} client) is responsible for
+presenting the approval request to authorized users and collecting decisions.
+
+\subsection{Approval Decision Protocol}
+
+An approver submits a decision by calling \texttt{RunHandle.Approve(ctx, ApprovalDecision)}:
+
+\begin{verbatim}
+type ApprovalDecision struct {
+    StepID   string    // step to approve (must match current paused step)
+    Actor    string    // identity of the approver (e.g., "alice@corp.com")
+    Role     string    // role the approver is acting in (must be in step.approvals.roles)
+    Approved bool      // true = approved, false = rejected
+    Comment  string    // optional justification
+    At       time.Time // timestamp of decision
+}
+\end{verbatim}
+
+The runtime validates:
+\begin{itemize}
+  \item The \texttt{Actor} identity is established (either from \texttt{--as} flag or,
+        in a multi-user context, from the adapter's authenticated session).
+  \item The \texttt{Role} is in the step's declared \texttt{approvals.roles}.
+  \item The same actor may not approve the same gate twice.
+  \item If \texttt{Approved = false}, the gate is immediately rejected (any single rejection
+        vetos the gate), and the run enters the \texttt{rejected} terminal state.
+\end{itemize}
+
+When the approval count reaches \texttt{min}, the runtime writes
+\texttt{governance/approvalGranted} to the trace and the next call to \texttt{Next()}
+proceeds with normal step execution.
+
+\subsection{Approval Recording in the Trace}
+
+Every approval decision is written to the trace as an immutable record:
+
+\begin{verbatim}
+// governance/approvalRequired
+{
+  "seq": 14,
+  "event": "governance/approvalRequired",
+  "stepId": "delete_database",
+  "message": "Deleting prod-ns is irreversible. Confirm change window.",
+  "roles": ["DRI", "change-manager"],
+  "min": 2,
+  "timeout": "24h",
+  "at": "2026-04-18T10:00:00Z"
+}
+
+// governance/approvalDecision (written once per decision)
+{
+  "seq": 15,
+  "event": "governance/approvalDecision",
+  "stepId": "delete_database",
+  "actor": "alice@corp.com",
+  "role": "DRI",
+  "approved": true,
+  "comment": "Change window confirmed with customer.",
+  "at": "2026-04-18T10:05:00Z"
+}
+
+// governance/approvalGranted (written when quorum is met)
+{
+  "seq": 16,
+  "event": "governance/approvalGranted",
+  "stepId": "delete_database",
+  "approvals": ["alice@corp.com", "bob@corp.com"],
+  "at": "2026-04-18T10:07:00Z"
+}
+\end{verbatim}
+
+The trace provides a complete, tamper-evident audit record of who approved what and when.
+
+\subsection{Timeout and Escalation}
+
+If \texttt{timeout} is set and the approval quorum is not met within the deadline:
+\begin{itemize}
+  \item \textbf{\texttt{on\_timeout: fail}:} The run enters the \texttt{timed\_out} terminal state.
+        \texttt{governance/approvalTimedOut} is written to the trace.
+  \item \textbf{\texttt{on\_timeout: escalate}:} The runtime emits an \texttt{ApprovalEscalated}
+        event. If \texttt{escalate\_to} roles are declared, a new \texttt{ApprovalRequired} event
+        is emitted targeting those roles. The timeout clock restarts. Escalation is attempted
+        once; if the escalated request also times out, the run fails.
+\end{itemize}
+
+Timeout enforcement is implemented via a \texttt{context.WithDeadline} passed to the approval
+wait loop. The adapter (or the \texttt{gert serve} session timer) is responsible for surfacing
+the timeout to the approver.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Policy-as-Code Direction}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{v2.0: Structured YAML Policy Blocks}
+
+For v2.0, gert uses \textbf{structured YAML policy blocks} embedded in the runbook's
+\texttt{meta.governance} section. This is the approach inherited from v1, extended with the
+richer primitives defined in §\ref{sec:approval-gate}.
+
+\textbf{Rationale for v2.0:}
+\begin{itemize}
+  \item The policy vocabulary is small and closed (six primitives as of v2.0). A full policy
+        DSL would be over-engineered for this set.
+  \item YAML policy blocks are self-contained: the runbook declares its own governance
+        constraints without requiring external policy files or a running policy server.
+  \item Structured blocks are straightforward to validate with JSON Schema at authoring time,
+        giving operators early feedback in the VS Code extension.
+  \item The existing v1 governance model (allowlists, redaction, env blocking) translates
+        directly to structured blocks with no loss of expressiveness.
+\end{itemize}
+
+\subsection{v2.1+: OPA Integration Hooks}
+
+Dennis's research confirms that Open Policy Agent (OPA) is the CNCF standard for
+policy-as-code in operational tooling. For \textbf{v2.1}, gert will introduce OPA
+integration at the following evaluation hooks:
+
+\begin{verbatim}
+// OPA evaluation hook interface (v2.1 target)
+type PolicyEngine interface {
+    // EvaluatePreStep is called before each step pre-flight.
+    // The policy engine receives the full step context and returns
+    // allow/deny with a reason.
+    EvaluatePreStep(ctx context.Context, input PolicyInput) (PolicyDecision, error)
+
+    // EvaluatePreRun is called once after plan construction.
+    // Used for runbook-level access control (RBAC).
+    EvaluatePreRun(ctx context.Context, input PolicyInput) (PolicyDecision, error)
+}
+
+type PolicyInput struct {
+    Runbook  RunbookMeta
+    Step     ResolvedStep
+    Actor    string
+    Vars     map[string]string
+    Contract *contract.Contract
+}
+
+type PolicyDecision struct {
+    Allow  bool
+    Reason string
+    // For approval gates: required roles computed by policy engine
+    RequiredApprovers []string
+}
+\end{verbatim}
+
+The \texttt{PolicyEngine} interface will have two implementations in v2.1:
+\begin{enumerate}
+  \item \textbf{Built-in:} evaluates the structured YAML policy blocks (backward-compatible
+        with v2.0 runbooks).
+  \item \textbf{OPA:} calls an OPA bundle loaded from a project policy directory
+        (\texttt{.gert/policy/*.rego}).
+\end{enumerate}
+
+The two implementations compose: the built-in engine runs first; if it allows, the OPA engine
+runs second. A denial from either blocks the step.
+
+\textbf{Recommendation:} Do not block the v2.0 launch on OPA integration. Ship the structured
+YAML model first, then introduce OPA as an opt-in engine in v2.1. This allows the governance
+interface to be designed correctly without the complexity of Rego authoring in the initial release.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{RBAC Model}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Identity Establishment}
+
+Actor identity is established via the \texttt{--as <identity>} flag passed at invocation time.
+The identity string is an opaque label (conventionally an email address or a role name) recorded
+in the trace and used for approval gate matching.
+
+\textbf{v2.0 limitation:} Identity is not authenticated. The \texttt{--as} flag is
+self-asserted; gert does not verify that the caller is who they claim to be. Enforcement
+of identity authenticity is the responsibility of the surrounding infrastructure (CI/CD
+pipeline, VS Code extension SSO, MCP server authentication).
+
+\textbf{v2.1 target:} An \texttt{IdentityProvider} interface will allow adapters to supply
+verified identity tokens (e.g., OIDC tokens from VS Code GitHub Copilot authentication),
+replacing self-asserted identity for governed environments.
+
+\subsection{Runbook-Level Access Control}
+
+Runbooks may declare a \texttt{requires\_role} field to restrict who may execute them:
+
+\begin{verbatim}
+meta:
+  governance:
+    requires_role: "incident-responder"
+    # or: requires_any_role: ["DRI", "incident-responder"]
+    # or: requires_all_roles: ["DRI", "change-manager"]
+\end{verbatim}
+
+The Runtime Core evaluates this constraint during run initialization (pre-flight, before
+any step executes). If the actor's identity does not match, \texttt{governance/accessDenied}
+is written to the trace and the run fails immediately.
+
+\subsection{Step-Level Role Restriction}
+
+Individual steps may declare \texttt{requires\_role} to restrict who may trigger that step.
+This is distinct from approval gates (which require external approval) — step role restriction
+\emph{prevents} a step from executing unless the actor themselves holds the required role.
+
+\begin{verbatim}
+steps:
+  - id: promote_to_production
+    kind: cli
+    requires_role: "release-manager"
+    command: "kubectl set image deployment/app app={{ .imageTag }}"
+\end{verbatim}
+
+\subsection{Separation of Duties}
+
+The approval gate model supports separation of duties: the \texttt{same-actor-cannot-approve}
+invariant (defined in §\ref{sec:approval-gate}) ensures that a step author cannot self-approve
+their own gate. In environments requiring formal change management, the actor who initiates
+the run and the actor(s) who approve high-risk steps must be different.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Redaction}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Pattern-Based Redaction}
+
+The primary redaction mechanism is pattern-based: operators declare RE2 regular expressions
+in \texttt{meta.governance.redact}. Redaction is applied eagerly: captured output is
+redacted \emph{before} any capture variable assignment or trace write.
+
+\subsection{Explicit Field Marking (v2.1)}
+
+For structured tool outputs (JSON objects returned by MCP tools), v2.1 will introduce explicit
+field marking: a tool definition may declare that a returned field contains sensitive data.
+The runtime will redact the field value without requiring a regex pattern.
+
+\begin{verbatim}
+# In .tool.yaml (v2.1 target)
+outputs:
+  - name: api_key
+    sensitive: true   # value redacted from trace and captures
+\end{verbatim}
+
+\subsection{Redaction Guarantees}
+
+\begin{itemize}
+  \item Redaction is applied to all output paths: captured variables, trace events, and
+        event channel payloads.
+  \item Redaction rules are compiled (regex pre-compiled) during run initialization, not
+        re-compiled per step.
+  \item Redaction is applied unconditionally in all run modes (real, dry-run, replay).
+  \item The original (pre-redaction) value is \emph{never} written to disk in any path.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Audit Trail Requirements}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The append-only JSONL trace file is gert's primary audit artifact. Every governance event
+is a first-class trace entry. The following governance events are guaranteed to be written:
+
+\begin{center}
+\begin{tabular}{ll}
+\textbf{Trace Event} & \textbf{Written When} \\
+\hline
+\texttt{governance/commandBlocked} & A command is blocked by denylist or allowlist \\
+\texttt{governance/envVarBlocked} & Env vars are stripped before subprocess fork \\
+\texttt{governance/redactionApplied} & Redaction rules matched captured output \\
+\texttt{governance/approvalRequired} & A step's approval gate is entered \\
+\texttt{governance/approvalDecision} & An approver submits approve or reject \\
+\texttt{governance/approvalGranted} & Approval quorum is met \\
+\texttt{governance/approvalRejected} & An approver rejects the gate \\
+\texttt{governance/approvalTimedOut} & Approval timeout expires \\
+\texttt{governance/accessDenied} & RBAC check fails (run or step level) \\
+\texttt{governance/contractWarning} & Step contract risk level is critical \\
+\texttt{governance/policyViolation} & Generic policy violation (OPA engine, v2.1) \\
+\end{tabular}
+\end{center}
+
+\subsection{Trace Integrity}
+
+The trace file is protected by:
+\begin{itemize}
+  \item \textbf{Append-only write discipline:} the trace writer never seeks backward or
+        truncates. Each write is followed by \texttt{fsync}.
+  \item \textbf{SHA256 evidence hash:} at run completion, the SHA256 of the entire trace
+        file is written as the final record and also stored in a sidecar
+        \texttt{trace.sha256} file.
+  \item \textbf{Monotonic sequence numbers:} every trace event has a \texttt{seq} field
+        (incrementing integer). Gaps in sequence numbers signal corruption or tampering.
+\end{itemize}
+
+\subsection{Compliance Alignment}
+
+These audit trail guarantees are designed to satisfy the requirements of:
+\begin{itemize}
+  \item \textbf{SOC 2 Type II} — Change management controls: every command execution and
+        approval is logged with actor identity and timestamp.
+  \item \textbf{HIPAA} — Access controls and audit logging: env var blocking and redaction
+        prevent PHI from appearing in traces; approval gates enforce separation of duties.
+  \item \textbf{ITIL Change Management} — Normal/standard/emergency change paths can be
+        modeled via \texttt{requires\_role} and multi-approver gates.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Extension-Contributed Policy}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Extensions may contribute governance rules through the \texttt{ContributedPolicyRules()}
+method of the Extension Host (see §02). These rules compose with host policy under the
+following invariants:
+
+\begin{enumerate}
+  \item \textbf{Additive only.} Extension rules may add restrictions; they may never
+        remove or override host-defined policy. An extension cannot remove a command
+        from the denylist, relax a required role, or suppress a redaction rule.
+  \item \textbf{Host policy takes precedence on conflict.} If an extension rule and a
+        host rule address the same primitive and disagree, the more restrictive interpretation
+        applies.
+  \item \textbf{Extension rules are visible in the trace.} A
+        \texttt{governance/extensionPolicyApplied} trace event is written when an
+        extension-contributed rule is evaluated, naming the extension and rule ID.
+  \item \textbf{Extension rules are not trusted with approval authority.} Extensions may
+        not grant approvals on behalf of human approvers. Approval decisions must originate
+        from a human actor via the \texttt{RunHandle.Approve()} API.
+\end{enumerate}
+
+\subsection{Extension Policy Rule Schema}
+
+\begin{verbatim}
+// PolicyRule is contributed by an extension and evaluated at pre-step checkpoint.
+type PolicyRule struct {
+    ID          string       // unique within the extension's namespace
+    Description string
+    // Evaluate returns Deny if the rule blocks this step, Allow otherwise.
+    // Extensions communicate rules as static declarations (v2.0); dynamic
+    // rule evaluation via the extension RPC transport is v2.1.
+    StepKinds   []StepKind   // step types this rule applies to (empty = all)
+    CommandGlob string       // if set, only applies to commands matching this glob
+    Action      PolicyAction // Deny or Warn
+    Reason      string       // human-readable reason written to trace event
+}
+\end{verbatim}
+
+Extension-contributed policy is loaded during the Extension Host's \texttt{Load()} phase,
+before the first \texttt{Next()} call. Policy rules are static for the lifetime of a run;
+extensions may not add or remove rules after the run has started.

@@ -1,0 +1,338 @@
+\chapter{Input Provider Framework}
+\label{chap:input-providers}
+
+The input provider framework governs how gert resolves dynamic input values
+at run time.  When a runbook declares an input with a \texttt{from:} binding,
+the provider framework locates the appropriate provider, dispatches a
+resolution request, and returns the concrete value before the first step that
+needs it begins.
+
+\section{Design Goals}
+
+\begin{itemize}
+  \item \textbf{Extensibility}: third-party systems (PagerDuty, ServiceNow,
+        Vault, etc.) integrate as provider plugins without changes to the host
+        binary.
+  \item \textbf{Transparency}: every resolved value is recorded in the run
+        trace so the operator can audit where each input came from.
+  \item \textbf{Fallback safety}: resolution failures degrade gracefully to an
+        interactive prompt rather than aborting the run silently.
+  \item \textbf{Consistency with tools}: providers share the same transport
+        layer as tools (\texttt{stdio}, \texttt{stdio-jsonrpc}, \texttt{mcp}),
+        minimising implementation surface.
+\end{itemize}
+
+\section{Provider Definition Schema}
+\label{sec:provider-definition-schema}
+
+Each provider is declared in a \texttt{.provider.yaml} file.  By convention,
+project-level providers live in \texttt{providers/<name>.provider.yaml}.
+
+\begin{verbatim}
+# providers/pagerduty.provider.yaml
+apiVersion: provider/v2
+
+meta:
+  name: pd                         # Prefix used in from: bindings (e.g. pd.*)
+  version: "1.0.0"
+  description: "Resolves inputs from PagerDuty incidents and services"
+  binary: pd-provider              # Executable name (looked up in PATH)
+
+transport:
+  mode: stdio-jsonrpc              # stdio | stdio-jsonrpc | mcp
+  startup:
+    argv: ["--config", "pd.yaml"]
+    ready-pattern: "provider ready"
+    timeout: "10s"
+    shutdown-method: "shutdown"
+
+resolution:
+  method: provider/resolve         # JSON-RPC method the host calls
+  prefixes:
+    - "pd."                        # All from: values starting with pd.
+                                   # are dispatched to this provider
+
+  # Schema for what the provider needs in each resolution request
+  input-schema:
+    type: object
+    properties:
+      bindings:
+        type: object
+        description: "Map of input name to from: binding string"
+      context:
+        type: object
+        description: "Execution context (runId, userId, mode)"
+    required: ["bindings"]
+
+  # Schema for what the provider returns
+  output-schema:
+    type: object
+    properties:
+      resolved:
+        type: object
+        description: "Map of input name to resolved string value"
+      warnings:
+        type: array
+        items:
+          type: string
+    required: ["resolved"]
+
+  cache:
+    enabled: true
+    scope: run                     # run | step | none
+    ttl: "60s"
+
+governance:
+  requires-capabilities:
+    - capability/network           # This provider needs outbound network
+  env-read-patterns:
+    - "PD_API_KEY"
+    - "PD_*"
+\end{verbatim}
+
+\section{Resolution Protocol}
+\label{sec:provider-protocol}
+
+\subsection{Resolution Flow}
+
+When the run engine encounters an input with a \texttt{from:} binding (e.g.,
+\texttt{from: pd.incident.title}), the following steps occur:
+
+\begin{enumerate}
+  \item \textbf{Prefix match}: the framework scans registered providers for one
+        whose declared prefix matches the start of the binding string.  The
+        longest matching prefix wins.
+  \item \textbf{Provider start}: if the matched provider's process is not yet
+        running, the host spawns it and waits for the ready signal (same
+        mechanics as \texttt{stdio-jsonrpc} tools; see
+        Section~\ref{sec:tool-transport}).
+  \item \textbf{Batch collection}: all inputs whose binding prefix maps to the
+        same provider are grouped into a single resolution request to minimise
+        round-trips.
+  \item \textbf{JSON-RPC call}: the host sends a \texttt{provider/resolve}
+        request.
+  \item \textbf{Result merge}: resolved values are merged into the run's
+        variable map.
+  \item \textbf{Fallback}: any binding that was not resolved (absent from the
+        response's \texttt{resolved} map, or where the provider returned a
+        warning) falls back according to the input's \texttt{fallback:} field
+        (default: interactive prompt).
+\end{enumerate}
+
+\subsection{Resolution Request Envelope}
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "prov-1",
+  "method": "provider/resolve",
+  "params": {
+    "bindings": {
+      "incident_title": "pd.incident.title",
+      "incident_severity": "pd.incident.severity",
+      "service_name": "pd.service.name"
+    },
+    "context": {
+      "runId":   "run-abc123",
+      "stepId":  "__pre-flight__",
+      "userId":  "ops@acme.example",
+      "mode":    "real",
+      "traceId": "trace-xyz"
+    }
+  }
+}
+\end{verbatim}
+
+\subsection{Resolution Response Envelope}
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "prov-1",
+  "result": {
+    "resolved": {
+      "incident_title": "Database connection pool exhausted",
+      "incident_severity": "P1",
+      "service_name": "payments-api"
+    },
+    "warnings": [],
+    "telemetry": {
+      "startedAt":  "2026-04-18T10:00:00Z",
+      "finishedAt": "2026-04-18T10:00:00.080Z",
+      "durationMs": 80
+    }
+  }
+}
+\end{verbatim}
+
+\subsection{Resolution Error Handling}
+
+If the provider returns a JSON-RPC error, or if a binding key is absent from
+the \texttt{resolved} map, the host applies the input's fallback strategy:
+
+\begin{verbatim}
+# In runbook meta.inputs
+inputs:
+  incident_title:
+    from: pd.incident.title
+    description: "Active incident title"
+    fallback: prompt              # prompt | fail | default
+    default: "Unknown incident"   # Used when fallback: default
+\end{verbatim}
+
+\begin{itemize}
+  \item \texttt{fallback: prompt} (default): the host issues an interactive
+        prompt for the value.  In non-interactive modes (dry-run, CI) this
+        causes the run to fail.
+  \item \texttt{fallback: default}: the declared \texttt{default:} value is
+        used without prompting.  A warning is written to the trace.
+  \item \texttt{fallback: fail}: the run aborts immediately with a structured
+        error.
+\end{itemize}
+
+\subsection{Resolution Caching}
+
+Providers may declare a cache policy in their definition.  The host respects
+this policy:
+
+\begin{itemize}
+  \item \texttt{scope: run} — the resolved value is reused for all subsequent
+        steps in the same run that reference the same binding.  This is the
+        default for external providers.
+  \item \texttt{scope: step} — the value is resolved fresh on each step that
+        references it.
+  \item \texttt{scope: none} — caching is disabled; every binding triggers a
+        new RPC call.
+\end{itemize}
+
+Cache entries are keyed by \texttt{(runId, bindingString)}.  Cached values are
+stored in the run's in-memory variable map only; they are not persisted across
+run resumptions.
+
+\section{Built-in Providers}
+\label{sec:builtin-providers}
+
+The following providers are compiled into the gert host binary and are always
+available without a \texttt{.provider.yaml} file.
+
+\subsection{env}
+
+Reads values from environment variables.
+
+\begin{verbatim}
+inputs:
+  api_key:
+    from: env.ACME_API_KEY
+    description: "API key for the Acme service"
+\end{verbatim}
+
+The \texttt{env.} prefix is followed by the exact environment variable name.
+If the variable is not set, resolution fails and the fallback strategy is
+applied.  The \texttt{env} provider never contacts an external process; it
+reads directly from the host's environment.
+
+\subsection{file}
+
+Reads values from files on the local file system.
+
+\begin{verbatim}
+inputs:
+  ssh_key:
+    from: "file.~/.ssh/id_rsa"
+    description: "SSH private key"
+  config_value:
+    from: "file./etc/gert/config.json#/database/host"
+    description: "Database host from config file"
+\end{verbatim}
+
+The path after \texttt{file.} is the file path.  An optional JSON Pointer
+fragment (\texttt{\#/path/to/field}) extracts a nested value from a JSON or
+YAML file.  Without a fragment, the entire file contents are returned as a
+string.
+
+\subsection{prompt}
+
+The interactive prompt provider is the default resolution strategy.  It is
+also the fallback for any failed provider resolution (unless overridden).
+
+\begin{verbatim}
+inputs:
+  server_name:
+    from: prompt
+    description: "Server to check"
+\end{verbatim}
+
+In \texttt{real} and \texttt{debug} modes, the host presents a terminal prompt
+to the operator.  In \texttt{dry-run} and \texttt{replay} modes, the prompt
+provider reads from the scenario's \texttt{inputs.yaml} instead.  In
+non-interactive environments where no scenario is available, the prompt provider
+fails with an informative error directing the operator to supply the value via
+\texttt{--var} or an explicit provider.
+
+\subsection{workspace}
+
+Reads values from the workspace configuration file
+(\texttt{.gert/config.yaml}).
+
+\begin{verbatim}
+inputs:
+  default_region:
+    from: workspace.defaults.region
+    description: "AWS region from workspace config"
+\end{verbatim}
+
+The path after \texttt{workspace.} is a dot-notation key into the workspace
+configuration object.  This allows teams to centralise defaults without
+repeating them in every runbook.
+
+\section{Provider Composition}
+\label{sec:provider-composition}
+
+A \texttt{from:} binding may declare a priority-ordered chain of providers.
+The host attempts each provider in order and uses the first successful result.
+
+\begin{verbatim}
+inputs:
+  api_token:
+    from:
+      - env.ACME_API_TOKEN          # Try env var first
+      - vault.secret/acme/api-token # Fall back to Vault
+      - prompt                      # Final fallback: ask the operator
+    description: "API token for Acme service"
+\end{verbatim}
+
+Chaining is evaluated left-to-right.  A provider is considered to have failed
+if it returns an error, if the binding key is absent from the resolved map, or
+if the resolved value is an empty string (unless the input declares
+\texttt{allow-empty: true}).
+
+\section{Provider Lifecycle}
+\label{sec:provider-lifecycle}
+
+\paragraph{Process model.}
+Providers that use the \texttt{stdio-jsonrpc} or \texttt{mcp} transport are
+\emph{persistent}: the host spawns each provider process once at the start of
+the pre-flight resolution phase and keeps it alive for the entire run.  This
+avoids repeated startup latency for providers that need to authenticate or
+maintain session state (e.g., Vault token renewal, PagerDuty OAuth).
+
+Providers using the \texttt{stdio} transport are \emph{per-resolution}: the
+host spawns a new process for each resolution request.
+
+\paragraph{Startup.}
+Provider processes are started lazily on first use, following the same
+\texttt{ready-pattern} / timeout mechanism as \texttt{stdio-jsonrpc} tools
+(Section~\ref{sec:tool-transport}).
+
+\paragraph{Shutdown.}
+At run completion (success, failure, or cancellation) the host iterates over
+all running provider processes and sends the method declared in
+\texttt{transport.startup.shutdown-method} (default: \texttt{shutdown}).
+Providers are given a 5-second grace period to clean up before the host sends
+SIGTERM, then SIGKILL after a further 5 seconds.
+
+\paragraph{Crash handling.}
+If a provider process crashes during a resolution call, the host logs a
+structured \texttt{provider.crashed} trace event and applies the input's
+\texttt{fallback:} strategy for all bindings that were in-flight at the time
+of the crash.

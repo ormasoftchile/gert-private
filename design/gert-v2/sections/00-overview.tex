@@ -1,0 +1,101 @@
+\chapter{Overview}
+
+\section{Problem Statement}
+
+Operational procedures are the connective tissue of production engineering. When a service degrades,
+an incident fires, or a change must be applied under pressure, engineers rely on runbooks---step-by-step
+guides that encode institutional knowledge about how to respond. The research literature is unambiguous:
+\textit{unstructured runbooks fail.} Static documents drift from reality, skip governance checks, and
+produce no audit evidence. Teams that operate at scale cannot afford a response that depends entirely on
+whether the on-call engineer remembers to follow the wiki~\cite{ibm-redbook-runbooks,ijsret-runbook-engineering}.
+
+The core operational problem is threefold. First, runbooks must be \textbf{executable}: a document that
+cannot be run is a suggestion, not a procedure. Second, runbooks must be \textbf{governed}: every action
+that touches infrastructure must be bounded by policy---command allowlists, environment variable
+controls, output redaction, and role-based approval gates. Third, runbooks must be \textbf{traceable}:
+every execution must produce an immutable, auditable record that satisfies SOC~2, ISO~27001, and HIPAA
+audit requirements~\cite{soc2-aicpa,iso27001,hipaa-security-rule} without manual effort. Without all three properties, organizations face audit
+failures, runbook drift, and uncontrolled blast radius during incidents.
+
+Gert is designed to solve exactly this problem: a governed, executable, debuggable runbook engine that
+produces full traceability and evidence by construction.
+
+\section{Why v2: What v1 Got Right, and What Constrained It}
+
+Gert v1 validated the core thesis. It delivered governed execution with command allowlists, environment
+variable blocking, output redaction, and per-step approval gates. It captured evidence---text,
+checklists, attachments with SHA256 hashes---and wrote an append-only JSONL trace for every run. It
+provided deterministic replay via recorded scenarios, a full terminal UI (Bubble Tea), a VS~Code
+extension over JSON-RPC~2.0, interactive debugging with a step-through REPL, and a \texttt{gert~test}
+scenario runner. These are production-grade features that must be preserved in v2.
+
+However, v1 accumulated architectural constraints that limit its evolution. The serve layer
+(\texttt{gert serve}) is tightly coupled to the runtime, making it difficult to add new adapters without
+modifying core logic. Schema versioning is brittle: \texttt{runbook/v0} and \texttt{runbook/v1} diverge
+with no formal compatibility contract. The tool and provider subsystems are functional but have no stable
+extension contract, making third-party tool development fragile. There is no saga or compensation pattern
+for rollback on failure, no parallel fan-out execution, no policy-as-code integration, and no
+OpenTelemetry support for distributed tracing---all of which are now industry-standard in comparable
+workflow orchestration systems~\cite{temporal-docs,argo-workflows,prefect-docs}.
+
+These constraints are architectural, not cosmetic. A clean-break v2 is warranted.
+
+\section{Scope}
+
+\textbf{Gert v2 is:} a local-first, governed runbook execution engine with a stable component
+architecture, versioned extension contracts, a first-class governance and policy layer, full traceability
+by construction, and defined adapter interfaces for TUI, VS~Code, and web clients. It ships as a single
+Go binary with an optional out-of-process extension runtime.
+
+\textbf{Gert v2 is not:} a managed cloud execution service, a general-purpose workflow orchestrator, a
+CI/CD pipeline system, a SOAR platform, or a replacement for systems like Temporal, Argo, or PagerDuty
+Runbook Automation~\cite{temporal-docs,argo-workflows,pagerduty-automation}. It does not provide a central policy server, a shared execution registry, or
+multi-tenant execution isolation.
+
+\section{Design Priorities}
+
+\begin{itemize}
+  \item \textbf{A core runtime isolated from presentation adapters.} The execution engine---parser,
+    planner, state machine, governance enforcer, trace writer---must have no dependency on any
+    presentation layer. TUI, VS~Code, and web clients attach via a stable event subscription API;
+    they observe execution but never own it. This isolation is the prerequisite for every other
+    architectural goal.
+
+  \item \textbf{Explicit and versioned contracts for schema, tools, and events.} Every interface that
+    crosses a component boundary must be named, versioned, and documented. The runbook schema carries
+    an \texttt{apiVersion} field with formal compatibility guarantees. Tool definitions carry a version.
+    The runtime event stream has a defined schema with ordered delivery guarantees. Breaking a contract
+    requires a version increment, not a silent edit.
+
+  \item \textbf{A secure extension runtime using out-of-process plugins.} Extensions run in isolated
+    processes and are granted capabilities explicitly. No extension receives ambient authority. The
+    capability model---what an extension may register, observe, or invoke---is a named, versioned list
+    that the host enforces at admission time. This pattern follows the principle of least privilege
+    endorsed by NIST SP~800-53~\cite{nist-sp800-53} and applied in production by systems such as Kubernetes admission
+    controllers~\cite{kubernetes-docs} and OPA Gatekeeper~\cite{opa-gatekeeper}.
+\end{itemize}
+
+\section{Document Roadmap}
+
+This document is organized as follows. \S\ref{ch:goals} defines measurable goals and explicit
+non-goals, establishing scope boundaries for implementors. \S\ref{ch:architecture} describes the five
+primary components and the dependency rules between them. \S\ref{ch:schema} specifies the v2 runbook
+schema, including versioning strategy, field inventory, and migration path from v1. \S\ref{ch:extension}
+defines the extension runtime: capability taxonomy, handshake protocol, and trust model.
+\S\ref{ch:tools} specifies the tool runtime: discovery, invocation, transport contracts, and governance
+integration. \S\ref{ch:events} defines the runtime event model: event schema, ordering guarantees,
+delivery semantics, and replay contract. \S\ref{ch:security} specifies the security and trust model:
+threat model, policy enforcement, supply chain controls, and audit requirements. \S\ref{ch:testing}
+defines the testing and acceptance strategy: contract test categories, coverage requirements, and
+acceptance criteria. \S\ref{ch:questions} documents open architectural questions with options and
+resolution criteria.
+
+\section{Success Definition}
+
+Gert v2 is complete when: (1) a v1 runbook can be migrated to v2 schema via \texttt{gert migrate} and
+executed without manual fixup; (2) the TUI, VS~Code extension, and a third-party adapter can all be
+built against the published event and API contracts without importing internal packages; (3) the
+governance layer---allowlists, denylists, env blocking, redaction, approval gates---is enforced for
+every execution mode including extension-invoked runs; (4) every execution produces an append-only,
+crash-safe JSONL trace that is structurally valid against the v2 trace schema; and (5) \texttt{gert
+test} passes a scenario suite covering all step types, governance rules, and evidence capture cases.

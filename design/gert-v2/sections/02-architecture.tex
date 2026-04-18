@@ -1,0 +1,585 @@
+\chapter{Architecture}
+
+This chapter defines the v2 system architecture: the five primary components, their interfaces and invariants,
+the complete data flow from runbook invocation to trace archive, the execution lifecycle, the concurrency model,
+and how the \texttt{gert serve} JSON-RPC layer integrates as a first-class adapter.
+
+The single most important architectural rule is: \textbf{dependencies flow inward toward the Core Domain.}
+The Runtime Core knows nothing about TUI, VS Code, or JSON-RPC. Adapters know nothing about execution semantics.
+Every component boundary is enforced by a Go interface; no component imports a package that is ``above'' it in
+the dependency graph.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Primary Components}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Parser}
+
+\paragraph{Responsibility.}
+The Parser owns the transformation of a raw YAML document into a validated, semantically-resolved
+\texttt{ParsedRunbook} value. It does \emph{not} own execution, planning, tool discovery, or input resolution.
+It validates schema structure and surface-level semantic rules (duplicate step IDs, unknown step types,
+malformed Go template expressions) but intentionally defers deep semantic validation (e.g., whether a
+\texttt{from:} binding can actually be resolved) to later pipeline stages.
+
+\paragraph{Interface.}
+
+\begin{verbatim}
+// Parser transforms raw YAML bytes into a validated ParsedRunbook.
+type Parser interface {
+    // Parse reads YAML from r, validates against the v2 JSON Schema,
+    // applies structural semantic checks, and returns a ParsedRunbook.
+    // Errors carry structured diagnostics (file, line, column, message).
+    Parse(ctx context.Context, r io.Reader, opts ParseOptions) (*ParsedRunbook, error)
+}
+
+type ParseOptions struct {
+    // SchemaVersion overrides the apiVersion field for compatibility shims.
+    SchemaVersion string
+    // StrictMode causes deprecation warnings to be surfaced as errors.
+    StrictMode bool
+}
+
+// ParsedRunbook is an immutable, fully-validated representation of a runbook.
+// All fields have been structurally validated. Templates are not yet evaluated.
+type ParsedRunbook struct {
+    Meta       RunbookMeta
+    Governance GovernancePolicy  // nil if no governance block
+    Steps      []ParsedStep
+    Imports    map[string]string // alias -> path (not yet resolved)
+    Tools      []string          // tool names (not yet discovered)
+    Schema     SchemaRef         // version and $schema URL
+}
+\end{verbatim}
+
+\paragraph{Dependencies.}
+The Parser depends only on the JSON Schema artifact (a static embedded file) and the expression
+evaluator (for template syntax validation). It has no runtime dependencies.
+
+\paragraph{Key Invariants.}
+\begin{itemize}
+  \item A \texttt{ParsedRunbook} returned without error is structurally valid against the v2 JSON Schema.
+  \item All step IDs are unique within a \texttt{ParsedRunbook}.
+  \item No I/O occurs during parsing (file imports are recorded as paths, not resolved).
+  \item Parsing is pure and deterministic: the same input always produces the same output.
+\end{itemize}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Planner}
+
+\paragraph{Responsibility.}
+The Planner transforms a \texttt{ParsedRunbook} into an \texttt{ExecutionPlan}: a resolved, ordered,
+dependency-annotated representation of every step the runtime will execute. The Planner resolves imports
+(recursively parsing and inlining invoked runbooks), discovers and validates tool definitions, resolves
+input provider bindings to their declared sources, and produces the static step ordering. It does
+\emph{not} evaluate dynamic conditions (branch predicates, iterate count expressions) — those are
+runtime concerns.
+
+\paragraph{What is an ExecutionPlan?}
+An \texttt{ExecutionPlan} is a \emph{flat, ordered list} of resolved steps with pre-computed metadata,
+not a DAG. Branch logic and iteration are left as runtime decisions because they depend on captured
+variables evaluated during execution. The plan encodes \emph{which steps exist} and \emph{what
+preconditions they carry}, not which steps will actually run. This design keeps the planner pure and
+the runtime authoritative over control flow.
+
+\begin{verbatim}
+type Planner interface {
+    // Plan resolves imports, discovers tools, validates bindings,
+    // and returns a fully-resolved ExecutionPlan ready for the runtime.
+    Plan(ctx context.Context, rb *ParsedRunbook, opts PlanOptions) (*ExecutionPlan, error)
+}
+
+type PlanOptions struct {
+    BaseDir     string            // working directory for import resolution
+    ToolDirs    []string          // directories to search for .tool.yaml files
+    ProviderDir string            // directory for .provider.yaml files
+    Vars        map[string]string // CLI-supplied variable overrides
+}
+
+// ExecutionPlan is an immutable, fully-resolved plan for a single run.
+type ExecutionPlan struct {
+    RunID       string
+    RunbookPath string
+    Steps       []ResolvedStep       // ordered; includes inlined invoke steps
+    Tools       map[string]*ToolDef  // name -> resolved tool definition
+    Providers   map[string]*ProviderDef // binding name -> provider
+    Governance  *GovernancePolicy
+    Metadata    PlanMetadata
+}
+
+// ResolvedStep is a single step in the plan, fully resolved.
+type ResolvedStep struct {
+    ID       string
+    Kind     StepKind      // cli, manual, tool, invoke, branch, iterate
+    Spec     StepSpec      // kind-specific parameters (resolved, not templated)
+    Contract *contract.Contract  // effects/reads/writes/idempotent/deterministic
+    Depth    int           // chain depth (0 = root runbook)
+    Origin   string        // source runbook path (for inlined invoke steps)
+}
+\end{verbatim}
+
+\paragraph{Dependencies.}
+The Planner depends on the Parser (for import resolution), the Tool Registry (for
+\texttt{.tool.yaml} discovery), and the Provider Registry (for \texttt{.provider.yaml}
+discovery). It must not depend on the Runtime Core, Extension Host, or any adapter.
+
+\paragraph{Key Invariants.}
+\begin{itemize}
+  \item An \texttt{ExecutionPlan} returned without error contains only resolvable steps.
+  \item All tool names referenced by steps appear in \texttt{ExecutionPlan.Tools}.
+  \item Import graphs are acyclic; the Planner detects and rejects cycles.
+  \item All \texttt{from:} bindings that declare a provider appear in \texttt{ExecutionPlan.Providers}.
+  \item The Planner does not execute or side-effect; it is safe to plan without running.
+\end{itemize}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Runtime Core}
+
+\paragraph{Responsibility.}
+The Runtime Core owns the execution loop: advancing through an \texttt{ExecutionPlan} step by step,
+evaluating templates and branch predicates, dispatching tool invocations, collecting evidence, writing
+the append-only trace, enforcing governance pre-flight checks, emitting structured events, and
+managing the mutable run state. It does \emph{not} own user presentation, serialization formats, or
+network transport.
+
+\paragraph{Interface.}
+
+\begin{verbatim}
+type Runtime interface {
+    // Start initializes a run from a plan and returns a RunHandle.
+    // The run does not advance until Next is called.
+    Start(ctx context.Context, plan *ExecutionPlan, opts RunOptions) (RunHandle, error)
+
+    // Resume restores a previously checkpointed run from the run store.
+    Resume(ctx context.Context, runID string, opts RunOptions) (RunHandle, error)
+}
+
+type RunHandle interface {
+    // Next advances the run by one step. Blocks until the step completes
+    // (or is paused waiting for evidence/approval).
+    // Returns io.EOF when the run has no more steps.
+    Next(ctx context.Context) (*StepResult, error)
+
+    // Approve records approval for the current step's approval gate.
+    Approve(ctx context.Context, decision ApprovalDecision) error
+
+    // SubmitEvidence records evidence for the current manual step.
+    SubmitEvidence(ctx context.Context, stepID string, ev map[string]*EvidenceValue) error
+
+    // Cancel requests a graceful stop of the run.
+    Cancel(ctx context.Context, reason string) error
+
+    // State returns the current mutable run state (read-only snapshot).
+    State() RunState
+
+    // Events returns a channel of structured events emitted during execution.
+    Events() <-chan Event
+}
+
+type RunOptions struct {
+    Mode        RunMode           // real, dry-run, replay
+    Actor       string            // --as identity
+    Vars        map[string]string // variable overrides
+    ScenarioDir string            // replay scenario directory
+    Store       RunStore          // durable store for checkpointing
+    OnEvent     func(Event)       // synchronous event hook (nil = use Events channel)
+}
+\end{verbatim}
+
+\paragraph{Dependencies.}
+The Runtime Core depends on the Governance Engine, Tool Runtime (for tool invocation),
+Expression Evaluator (for templates and branch predicates), Evidence store, and Trace Writer.
+It does not depend on the Extension Host, API/Adapter Layer, or any adapter.
+
+\paragraph{Key Invariants.}
+\begin{itemize}
+  \item The trace is append-only: no event is ever deleted or modified after being written.
+  \item Governance pre-flight is enforced before every \texttt{cli} and \texttt{tool} step dispatch.
+  \item Redaction is applied to all captured output before it is written to the trace.
+  \item The run state is checkpointed after every step completion.
+  \item Events are emitted in a total order that matches step execution order.
+  \item The runtime is re-entrant per run: multiple callers may call \texttt{Next} sequentially
+        (but not concurrently) on the same \texttt{RunHandle}.
+\end{itemize}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Extension Host}
+
+\paragraph{Responsibility.}
+The Extension Host manages the lifecycle of out-of-process extensions: discovery, launch, capability
+negotiation, RPC dispatch, sandboxing, and graceful shutdown. It exposes extension-contributed tools
+and providers to the Tool Runtime and Provider Registry. It does \emph{not} execute runbook steps
+directly and does not own the extension communication protocol (that belongs to the extension RPC
+layer, defined in §04).
+
+\paragraph{Interface.}
+
+\begin{verbatim}
+type ExtensionHost interface {
+    // Load discovers and launches all extensions declared in the project manifest.
+    Load(ctx context.Context, manifest *ProjectManifest) error
+
+    // Shutdown gracefully stops all running extensions.
+    Shutdown(ctx context.Context) error
+
+    // ContributedTools returns all tools contributed by loaded extensions.
+    ContributedTools() []*ToolDef
+
+    // ContributedProviders returns all providers contributed by loaded extensions.
+    ContributedProviders() []*ProviderDef
+
+    // ContributedPolicyRules returns governance rules contributed by extensions.
+    // These compose with host policy; host policy takes precedence on conflict.
+    ContributedPolicyRules() []PolicyRule
+}
+\end{verbatim}
+
+\paragraph{Dependencies.}
+The Extension Host depends on the extension manifest schema and the extension RPC transport
+(stdio JSON-RPC, as specified in §04). It does not depend on the Runtime Core or any adapter.
+
+\paragraph{Key Invariants.}
+\begin{itemize}
+  \item No extension operates without an explicit capability grant from the host.
+  \item Extension crashes do not crash the host process.
+  \item The Extension Host enforces timeout and cancellation on all RPC calls to extensions.
+  \item Extension-contributed policy rules are additive; they can only \emph{restrict}, not
+        \emph{relax}, host-defined policy.
+\end{itemize}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{API / Adapter Layer}
+
+\paragraph{Responsibility.}
+The API/Adapter Layer is the boundary between the Runtime Core and all external consumers
+(TUI, VS Code extension, web clients, CI pipelines). It translates the runtime's event stream
+and \texttt{RunHandle} contract into transport-specific protocols. Each adapter is a thin,
+stateless renderer: it subscribes to the event stream, presents state to the user, and forwards
+user input (approvals, evidence, cancellation) back to the \texttt{RunHandle}. Adapters own
+\emph{no} execution logic.
+
+\paragraph{Interface.}
+
+\begin{verbatim}
+// Adapter is the interface every consumer of the Runtime Core must implement.
+type Adapter interface {
+    // Attach binds the adapter to a RunHandle before the first Next call.
+    Attach(handle RunHandle) error
+
+    // Run blocks until the run completes or is cancelled. It is responsible
+    // for draining Events(), rendering output, and forwarding user input.
+    Run(ctx context.Context) error
+}
+
+// The gert serve JSON-RPC layer implements Adapter over stdio.
+// The TUI (Bubble Tea) implements Adapter over a terminal.
+// Future: a web adapter implements Adapter over WebSocket.
+\end{verbatim}
+
+\paragraph{Dependencies.}
+Adapters depend on the \texttt{RunHandle} and \texttt{Event} types from the Runtime Core.
+They must not import any package from the Parser, Planner, or Extension Host.
+
+\paragraph{Key Invariants.}
+\begin{itemize}
+  \item An adapter may not call \texttt{Next} more than once concurrently.
+  \item An adapter may not modify run state directly; all state changes go through \texttt{RunHandle}.
+  \item Adapters must handle the case where the event channel is closed (run ended) without blocking.
+  \item An adapter failure must not corrupt the run trace or run state.
+\end{itemize}
+
+\paragraph{Dependency Direction Summary.}
+
+\begin{verbatim}
+  Adapter Layer
+       |
+       v
+  Runtime Core  <---- Extension Host
+       |                    |
+       v                    v
+    Planner           Tool Runtime
+       |
+       v
+    Parser
+       |
+       v
+  Schema / JSON Schema artifact
+\end{verbatim}
+
+No upward arrow exists. The Parser knows nothing about the Runtime. The Runtime knows nothing
+about adapters. The Extension Host is a peer of the Runtime Core, contributing tools and policy
+rules but not owning execution.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Data Flow}
+% ─────────────────────────────────────────────────────────────────────────────
+
+This section traces the complete path from runbook invocation to trace archive, identifying
+exactly where each responsibility is exercised.
+
+\subsection{Phase 1: Parse}
+
+The user invokes \texttt{gert exec runbook.yaml --as eng@corp.com}. The CLI layer reads the
+YAML file and calls \texttt{Parser.Parse()}. The Parser validates the document against the
+embedded v2 JSON Schema, checks structural semantic rules, and returns a \texttt{ParsedRunbook}.
+If validation fails, structured diagnostics are returned and execution does not proceed.
+
+\subsection{Phase 2: Plan}
+
+The \texttt{ParsedRunbook} is passed to \texttt{Planner.Plan()}. The Planner:
+\begin{enumerate}
+  \item Resolves all \texttt{imports:} recursively (parse → plan each imported runbook, inline
+        its steps with incremented \texttt{Depth}).
+  \item Discovers \texttt{.tool.yaml} files for each named tool.
+  \item Resolves \texttt{from:} input bindings to their declared providers.
+  \item Validates that all step references (branch targets, iterate bodies) are valid step IDs.
+  \item Constructs and returns an \texttt{ExecutionPlan}.
+\end{enumerate}
+
+Governance policy from the runbook's \texttt{meta.governance} block is extracted and embedded
+in the \texttt{ExecutionPlan} for runtime enforcement.
+
+\subsection{Phase 3: Run Initialization}
+
+\texttt{Runtime.Start(plan, opts)} is called. The runtime:
+\begin{enumerate}
+  \item Generates a \texttt{RunID} (format: \texttt{YYYYMMDDTHHmmss-xxxxxxxx}).
+  \item Creates the run directory: \texttt{.runbook/runs/<runID>/}.
+  \item Opens the append-only trace file: \texttt{.runbook/runs/<runID>/trace.jsonl}.
+  \item Writes the \texttt{run/started} trace event (runbook path, actor, mode, plan hash).
+  \item Initializes the \texttt{GovernanceEngine} from the plan's governance policy.
+  \item Compiles redaction rules from the governance policy.
+  \item Returns a \texttt{RunHandle}; the run is now paused at step 0.
+\end{enumerate}
+
+\subsection{Phase 4: Step Execution Loop}
+
+The adapter calls \texttt{RunHandle.Next(ctx)} in a loop until \texttt{io.EOF}.
+For each step, the runtime executes the following sequence:
+
+\subsubsection*{Step Pre-flight (all step types)}
+\begin{enumerate}
+  \item Write \texttt{step/started} trace event.
+  \item Emit \texttt{StepStarted} runtime event to the event channel.
+  \item Evaluate template expressions in the step spec against current run variables.
+\end{enumerate}
+
+\subsubsection*{Governance Pre-flight (cli and tool steps)}
+\begin{enumerate}
+  \item \textbf{Command check:} \texttt{GovernanceEngine.CheckCommand(argv[0])} evaluates
+        the denylist (deny takes precedence) and then the allowlist. A violation writes a
+        \texttt{governance/commandBlocked} trace event and returns an error; the step fails.
+  \item \textbf{Env var check:} \texttt{GovernanceEngine.FilterEnvVars()} removes variables
+        matching \texttt{deny\_env\_vars} patterns. Blocked variable names are written to the
+        \texttt{governance/envVarBlocked} trace event.
+  \item \textbf{Contract check:} The step's \texttt{Contract.Risk()} is evaluated. Steps
+        with \texttt{RiskCritical} that do not have an explicit approval gate declaration
+        in the plan emit a \texttt{governance/contractWarning} event (not a hard failure in
+        v2.0; upgraded to error in strict mode).
+  \item \textbf{Approval gate:} If the step declares \texttt{approvals.min > 0}, the runtime
+        pauses and emits an \texttt{ApprovalRequired} event. Execution blocks at this step
+        until \texttt{RunHandle.Approve()} is called with sufficient approvals.
+        See §\ref{sec:approval-gate} (Governance chapter) for the full approval protocol.
+\end{enumerate}
+
+\subsubsection*{Dispatch (step-type-specific)}
+\begin{itemize}
+  \item \textbf{cli:} Fork a subprocess. Capture stdout/stderr. Apply redaction rules to
+        captured output before storing in run variables or writing to trace.
+  \item \textbf{tool:} Call \texttt{ToolRuntime.Invoke(toolName, input)}. The tool runtime
+        dispatches to the appropriate transport (stdio, JSON-RPC, MCP). Redaction applied
+        to returned output.
+  \item \textbf{manual:} Emit \texttt{EvidenceRequired} event. Block until
+        \texttt{SubmitEvidence()} is called. SHA256-hash each evidence attachment.
+  \item \textbf{invoke:} Inlined at plan time; at runtime the invoke body steps are already
+        present in the plan at \texttt{Depth+1}. No special dispatch required.
+  \item \textbf{branch:} Evaluate branch predicates (expression evaluator) against current
+        variables. Select the matching branch arm. Write \texttt{event/branchResolved}
+        trace event. Advance step cursor to the first step of the resolved arm.
+  \item \textbf{iterate:} Evaluate the iteration expression. Write
+        \texttt{event/iteratePassStart}. Execute body steps. Write
+        \texttt{event/iteratePassEnd}. Repeat until condition is false.
+\end{itemize}
+
+\subsubsection*{Step Post-flight (all step types)}
+\begin{enumerate}
+  \item Apply outcome evaluation: test \texttt{when:} expressions; record \texttt{OutcomeRecord}.
+  \item Write captured variables to run state.
+  \item Checkpoint run state to \texttt{.runbook/runs/<runID>/snapshots/<stepID>.json}.
+  \item Write \texttt{step/completed} trace event (outcome, captures, elapsed time).
+  \item Emit \texttt{StepCompleted} runtime event.
+\end{enumerate}
+
+\subsection{Phase 5: Run Completion}
+
+When \texttt{Next} returns \texttt{io.EOF}:
+\begin{enumerate}
+  \item Write \texttt{run/completed} trace event (final outcome, step counts, elapsed time).
+  \item Flush and sync the trace file.
+  \item Compute SHA256 of the trace file; write \texttt{run/evidenceHash} record.
+  \item Optionally archive the run directory (compress to \texttt{.runbook/archive/}).
+  \item Close the event channel.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Lifecycle Model}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Run Start}
+
+A run starts in one of two ways:
+
+\begin{enumerate}
+  \item \textbf{Direct invocation:} The CLI or test harness calls \texttt{Runtime.Start()}
+        directly. This is the path for \texttt{gert exec}, \texttt{gert tui}, \texttt{gert debug},
+        and \texttt{gert test}.
+  \item \textbf{RPC invocation:} A client sends \texttt{exec/start} to the JSON-RPC server
+        (\texttt{gert serve}). The server calls \texttt{Runtime.Start()} on behalf of the
+        client and returns the \texttt{RunID} in the response. Subsequent step advancement
+        is driven by \texttt{exec/next} RPC calls.
+\end{enumerate}
+
+\subsection{Step Advancement}
+
+Step advancement is \emph{always client-driven}. The runtime does not auto-advance.
+After \texttt{Start}, the client calls \texttt{Next} to execute each step in sequence.
+This applies to all adapters, including headless CI mode. The only exception is the
+\texttt{--auto} flag, which causes the CLI adapter to call \texttt{Next} in a tight loop,
+producing the appearance of automatic advancement while retaining the single-step contract.
+
+\subsection{Pause and Resume}
+
+A run is \emph{paused} when \texttt{Next} returns a non-terminal result that requires external
+input: evidence submission (\texttt{manual} step) or approval (\texttt{approval} gate).
+The run remains paused until the required input is provided via \texttt{SubmitEvidence} or
+\texttt{Approve}. The adapter is responsible for presenting the pause to the user.
+
+The checkpoint written after each completed step is sufficient to resume a run after a
+process restart. The checkpoint records: completed step IDs, current variable bindings,
+current evidence values, and the trace sequence number. Resumption is initiated by calling
+\texttt{Runtime.Resume(runID)} from any adapter.
+
+\subsection{Cancellation}
+
+\texttt{RunHandle.Cancel(ctx, reason)} initiates graceful cancellation:
+\begin{enumerate}
+  \item The currently-executing subprocess (if any) receives \texttt{SIGTERM} followed by
+        \texttt{SIGKILL} after a 5-second grace period.
+  \item The runtime writes a \texttt{run/cancelled} trace event with the reason and actor.
+  \item Subsequent \texttt{Next} calls return \texttt{ErrRunCancelled}.
+  \item The run state is checkpointed as \texttt{cancelled} (resumable).
+\end{enumerate}
+
+The cancellation contract does not invoke compensation handlers in v2.0. Saga/compensation
+(stepping backward through a compensation chain on failure) is deferred to v2.1 as specified
+in §09 (Open Questions).
+
+\subsection{Crash Recovery}
+
+If the gert process crashes mid-run, the trace and checkpoint files remain on disk in a
+consistent state due to the append-only, sync-after-write trace discipline. On restart,
+the user (or the VS Code extension) can call \texttt{Runtime.Resume(runID)} to continue
+from the last completed step. The runtime reads the checkpoint to reconstruct run state.
+Steps already recorded as completed in the trace are not re-executed.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Concurrency Model}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Per-Process Run Isolation}
+
+The v2 runtime is \textbf{single-run-per-process}. Each \texttt{gert exec} invocation is a
+separate OS process. \texttt{gert serve} is the exception: it is a long-running process that
+may host multiple sequential runs (one at a time) for a single VS Code extension session.
+Concurrent runs within a single \texttt{gert serve} instance are explicitly out of scope
+for v2.0 (see §09).
+
+\paragraph{Rationale.} Governance enforcement, file-level trace writes, and subprocess management
+are dramatically simpler with one run per process. Process isolation also provides a natural
+crash boundary: a failed run cannot corrupt the state of a concurrent run.
+
+\subsection{Goroutine Model}
+
+Within a single run, the concurrency model is:
+
+\begin{itemize}
+  \item \textbf{One goroutine per run:} the step execution loop runs on a single goroutine.
+        Steps execute sequentially; there is no goroutine-per-step parallelism in v2.0.
+  \item \textbf{Event fan-out goroutine:} a second goroutine reads from an internal event
+        buffer and writes to the \texttt{Events()} channel. This decouples event emission
+        (which must be synchronous with step execution) from event consumption (which may
+        be slow, e.g., a WebSocket write).
+  \item \textbf{Subprocess goroutine:} when a \texttt{cli} step spawns a subprocess, a
+        goroutine is used to drain stdout/stderr concurrently, preventing deadlock on
+        full pipe buffers.
+  \item \textbf{Tool RPC goroutine:} tool invocations over JSON-RPC or MCP use a goroutine
+        per call, managed by the Tool Runtime's connection pool.
+\end{itemize}
+
+\subsection{Thread Safety at Component Boundaries}
+
+\begin{itemize}
+  \item \texttt{RunHandle} is \textbf{not safe for concurrent use}. The adapter must
+        serialize all calls. \texttt{gert serve} enforces this with a per-session mutex.
+  \item The \texttt{Events()} channel is safe for a single consumer goroutine.
+  \item The \texttt{GovernanceEngine} is \textbf{read-only after construction} and therefore
+        safe for concurrent read access (relevant if future versions support parallel steps).
+  \item The Trace Writer is protected by an internal mutex; write calls are safe to issue
+        from any goroutine within the run.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{\texttt{gert serve} Integration}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\texttt{gert serve} is the JSON-RPC 2.0 server that powers the VS Code extension, the MCP
+tools layer, and any future web client. In the v2 architecture it is classified as an
+\textbf{adapter in the API/Adapter Layer}.
+
+\subsection{Architectural Position}
+
+\texttt{gert serve} is a process that:
+\begin{enumerate}
+  \item Starts a long-lived stdio JSON-RPC 2.0 listener (newline-delimited JSON over stdin/stdout).
+  \item On receiving \texttt{exec/start}, calls \texttt{Runtime.Start()} and stores the
+        resulting \texttt{RunHandle} in a session map (keyed by \texttt{RunID}).
+  \item On receiving \texttt{exec/next}, calls \texttt{RunHandle.Next()} and returns the
+        \texttt{StepResult} as the RPC response.
+  \item Drains the \texttt{Events()} channel in a background goroutine and forwards each
+        event as a JSON-RPC notification to the client.
+  \item On receiving \texttt{exec/approve}, \texttt{exec/submitEvidence}, or
+        \texttt{exec/cancel}, dispatches to the corresponding \texttt{RunHandle} method.
+\end{enumerate}
+
+\subsection{Event Forwarding}
+
+Every event emitted by the Runtime Core is forwarded to the client as a JSON-RPC
+\emph{notification} (no \texttt{id} field) with method \texttt{event/\textit{eventType}}.
+The payload is the event's JSON representation. The VS Code extension subscribes to
+these notifications to update its UI without polling.
+
+Events forwarded over WebSocket (for a future web adapter) follow the same schema;
+only the transport changes.
+
+\subsection{Crash Recovery in \texttt{gert serve}}
+
+If the VS Code extension reconnects after a crash (e.g., the gert process was killed),
+\texttt{gert serve} exposes \texttt{exec/list} and \texttt{exec/resume} methods. The
+extension discovers the interrupted run, calls \texttt{exec/resume}, and receives a new
+\texttt{RunHandle} over the same session. The trace and checkpoint on disk ensure no
+steps are lost.
+
+\subsection{RPC Method Summary}
+
+\begin{verbatim}
+exec/start          → Start a new run (returns RunID, first StepResult)
+exec/next           → Advance run by one step (returns StepResult)
+exec/approve        → Submit approval decision for current gate
+exec/submitEvidence → Submit evidence for current manual step
+exec/cancel         → Cancel the active run
+exec/list           → List all runs for this workspace (active + completed)
+exec/resume         → Resume a previously interrupted run
+runbook/validate    → Validate a runbook YAML (parse + plan, no exec)
+runbook/diagram     → Generate a Mermaid or ASCII diagram
+event/<type>        → Notification from server to client (not a request)
+\end{verbatim}

@@ -1,0 +1,70 @@
+\documentclass[
+	11pt,
+	oneside,
+	english,
+	singlespacing,
+	headsepline,
+]{MastersThesis}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage[backend=biber,style=numeric,sorting=nyt]{biblatex}
+\addbibresource{references.bib}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue,
+  pdftitle={Gert v2 Design Document},
+  pdfauthor={Gert Team}
+}
+
+\thesistitle{Gert v2 Design Document}
+\author{Gert Team}
+\supervisor{Design Reference}
+\degree{Technical Documentation}
+\university{Gert Project}
+\department{Core Architecture}
+\subject{Runtime System Design}
+\keywords{runbook, execution, schema, extension, tool-runtime}
+
+\begin{document}
+
+\frontmatter
+
+\maketitle
+
+\tableofcontents
+\newpage
+
+\mainmatter
+
+\input{sections/00-overview}
+\input{sections/01-goals-and-nongoals}
+\input{sections/02-architecture}
+\input{sections/03-schema-vnext}
+\input{sections/04-extension-runtime}
+\input{sections/05-tool-runtime}
+\input{sections/06-runtime-events}
+\input{sections/07-security-and-trust}
+\input{sections/08-testing-and-acceptance}
+\input{sections/09-open-questions}
+\input{sections/10-migration-compatibility}
+\input{sections/11-governance-policy}
+\input{sections/12-evidence-tracing-resumption}
+\input{sections/13-adapter-contracts}
+\input{sections/14-input-provider-framework}
+\input{sections/15-observability-diagnostics}
+
+\backmatter
+\printbibliography[heading=bibintoc,title={References}]
+
+\end{document}

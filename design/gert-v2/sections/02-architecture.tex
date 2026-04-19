@@ -472,6 +472,192 @@ pool. Optionally enforces a business-day timeout (GAP-1) and M-of-N quorum track
 
 
 % ─────────────────────────────────────────────────────────────────────────────
+\subsection{CLI Step Executor Contract}
+\label{sec:cli_executor_contract}
+% ─────────────────────────────────────────────────────────────────────────────
+
+A \texttt{type: cli} step executes a shell command or script on the host.  Two
+execution forms are supported:
+
+\begin{itemize}
+  \item \textbf{Exec form} (\texttt{command}/\texttt{args}) — bypasses the shell
+        entirely.  The runtime forks the binary directly, which is both faster and
+        injection-safe.
+  \item \textbf{Shell-string form} (\texttt{run: "<string>"}) — passes a script to a
+        shell interpreter.  Supports multi-line scripts and shell built-ins at the cost
+        of increased injection risk.
+  \item \textbf{Multi-shell map form} (\texttt{run: \{bash: "…", cmd: "…", …\}}) —
+        provides per-shell scripts; the executor selects the first available shell at
+        run time.  Designed for cross-platform runbooks.
+\end{itemize}
+
+The fields \texttt{command} and \texttt{run} are mutually exclusive.  If both are
+present the step fails validation with an error (see validation table below).
+
+\subsubsection*{Shell Resolution — String Form}
+
+When \texttt{run} is a string the executor resolves the shell before forking.
+
+\paragraph{Automatic detection (\texttt{shell: auto}, the default).}
+The executor inspects the OS at plan-time and selects the platform-native shell:
+
+\begin{itemize}
+  \item \textbf{Linux / macOS:} \texttt{/bin/sh} — POSIX-guaranteed to exist.
+  \item \textbf{Windows:} \texttt{pwsh} if \texttt{exec.LookPath("pwsh")} succeeds;
+        otherwise \texttt{cmd.exe}.
+\end{itemize}
+
+\paragraph{Explicit shell (\texttt{shell: bash | sh | pwsh | cmd}).}
+The executor calls \texttt{exec.LookPath(shell)} at \emph{plan time}.  If the binary
+is not found the plan fails immediately with:
+
+\begin{verbatim}
+Shell 'bash' not found on this host (exec.LookPath returned empty)
+\end{verbatim}
+
+This is a plan-time error, not a run-time error — the runbook is rejected before
+execution begins.
+
+\paragraph{Invocation patterns.}
+Once the shell is resolved the script is passed using the shell's standard
+non-interactive flag:
+
+\begin{center}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Shell} & \textbf{Invocation} \\
+\hline
+\texttt{bash} & \texttt{["bash", "-c", script]} \\
+\texttt{sh}   & \texttt{["sh", "-c", script]} \\
+\texttt{pwsh} & \texttt{["pwsh", "-NonInteractive", "-Command", script]} \\
+\texttt{cmd}  & \texttt{["cmd.exe", "/c", script]} \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{Template expansion.}
+Template expansion (Sprig/Go template) is applied to the \texttt{run} string
+\emph{before} the result is handed to the shell.  The shell receives the
+already-expanded string.  Shell interpretation therefore operates on the final
+expanded text, not on the template source.
+
+\paragraph{Security note — shell injection.}
+Shell-string form is \textbf{not} immune to shell injection.  If a template variable
+contains shell metacharacters (\texttt{\$}, \texttt{`}, \texttt{;}, \texttt{|},
+\texttt{\&}, parentheses, etc.) they will be interpreted by the shell after template
+expansion.  \emph{Authors are responsible for sanitizing template values used in
+shell-string steps.}  For untrusted input, prefer the exec form
+(\texttt{command}/\texttt{args}), which bypasses the shell entirely.
+
+\subsubsection*{Shell Resolution — Multi-Shell Map Form}
+
+When \texttt{run} is a YAML mapping (e.g.\
+\texttt{run: \{bash: "…", pwsh: "…"\}}) the executor performs a two-phase
+resolution.
+
+\paragraph{Phase 1 — Plan-time key validation.}
+The executor reads all map keys and verifies each against the set of recognized
+shell names: \texttt{bash}, \texttt{sh}, \texttt{pwsh}, \texttt{cmd}.  Any
+unrecognized key is a load-time validation error:
+
+\begin{verbatim}
+Unknown shell 'zsh' in run map. Valid values: bash, sh, pwsh, cmd
+\end{verbatim}
+
+The plan is rejected before execution begins.
+
+\paragraph{Phase 2 — Run-time shell selection.}
+At the moment the step is dispatched the executor walks the map in \emph{insertion
+order} and calls \texttt{exec.LookPath(key)} for each entry:
+
+\begin{enumerate}
+  \item The \textbf{first key whose shell resolves successfully} is selected.
+  \item \textbf{Platform-family fallback:} if the \texttt{bash} key is present but
+        \texttt{bash} is not found, the executor tries \texttt{sh} as a fallback
+        before moving on to the next map key.
+  \item If \textbf{no key resolves} the step fails with:
+\begin{verbatim}
+CLI step '<id>': no shell from map {bash, pwsh} available on this host.
+Install one of: bash, pwsh.
+\end{verbatim}
+\end{enumerate}
+
+The \texttt{shell} field is ignored when \texttt{run} is a map.  Setting it
+produces a warning (see validation table).
+
+\paragraph{Audit record.}
+The JSONL trace records which map entry was selected.  A \texttt{shell\_selected}
+field is written alongside the step's \texttt{step/started} event:
+
+\begin{verbatim}
+{ "kind": "step/started", ..., "payload": {
+    "step_id": "deploy-linux",
+    "shell_selected": "bash",
+    ...
+  }
+}
+\end{verbatim}
+
+This field appears in the \texttt{step/started} payload whenever a shell-string or
+map-form CLI step begins.  For exec-form steps the field is omitted.
+
+\paragraph{Template expansion.}
+The same expansion-before-invocation rule applies: template expansion is applied to
+the selected map value before it is passed to the shell.
+
+\subsubsection*{Platform Variable Injection}
+
+The runtime injects a \texttt{gert.platform} namespace into the variable scope at
+run start.  These variables are available to all template expressions throughout the
+run, including \texttt{branch} predicates.
+
+\begin{center}
+\begin{tabular}{|l|l|p{7cm}|}
+\hline
+\textbf{Variable} & \textbf{Type} & \textbf{Values} \\
+\hline
+\texttt{gert.platform.os}    & string & \texttt{"linux"} \textbar\ \texttt{"darwin"} \textbar\ \texttt{"windows"} \\
+\texttt{gert.platform.arch}  & string & \texttt{"amd64"} \textbar\ \texttt{"arm64"} \textbar\ \texttt{"arm"} \\
+\texttt{gert.platform.shell} & string & Shell name selected for the current step (e.g.\ \texttt{"bash"}).
+                                        Set after shell resolution; available in \texttt{capture} output
+                                        and downstream steps.  \textbf{Not} usable inside the \texttt{run}
+                                        script of the same step — resolution happens before template
+                                        expansion of that field is complete. \\
+\hline
+\end{tabular}
+\end{center}
+
+\texttt{gert.platform.os} is particularly useful for complementing the map form with
+\texttt{branch} steps in cases requiring more complex platform-conditional logic than
+the map form alone can express.
+
+\subsubsection*{Validation Rules}
+
+\begin{center}
+\begin{tabular}{|p{5.5cm}|l|p{6cm}|}
+\hline
+\textbf{Rule} & \textbf{Severity} & \textbf{Message} \\
+\hline
+\texttt{command} and \texttt{run} both present & Error &
+  \texttt{Fields \`{}command\`{} and \`{}run\`{} are mutually exclusive on type: cli} \\
+\hline
+\texttt{run} is a map \textbf{and} \texttt{shell} is set & Warning &
+  \texttt{\`{}shell\`{} is ignored when \`{}run\`{} is a map — shell is determined by
+  map key resolution} \\
+\hline
+\texttt{run} map has unknown key & Error &
+  \texttt{Unknown shell '\{key\}' in run map. Valid values: bash, sh, pwsh, cmd} \\
+\hline
+\texttt{shell} is explicit but not found on host & Plan-time Error &
+  \texttt{Shell '\{shell\}' not found on this host (exec.LookPath returned empty)} \\
+\hline
+\texttt{run} map, no key resolves at run time & Run-time Error &
+  \texttt{No shell from map \{keys\} available on this host} \\
+\hline
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
 \subsection{Include Step Executor Contract}
 \label{sec:include_executor_contract}
 % ─────────────────────────────────────────────────────────────────────────────

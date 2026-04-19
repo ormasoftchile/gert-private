@@ -43,10 +43,11 @@ flow:
       id: init_audit_package
       type: cli
       title: Initialize audit package directory
-      command: bash
-      args:
-        - "-c"
-        - "mkdir -p /audit/{{ .audit_id }} && echo '{}' > /audit/{{ .audit_id }}/manifest.json"
+      run:
+        bash: "mkdir -p /audit/{{ .audit_id }} && echo '{}' > /audit/{{ .audit_id }}/manifest.json"
+        pwsh: |
+          New-Item -ItemType Directory -Force -Path C:\audit\{{ .audit_id }} | Out-Null
+          Set-Content -Path C:\audit\{{ .audit_id }}\manifest.json -Value '{}'
       capture:
         audit_dir: stdout
 

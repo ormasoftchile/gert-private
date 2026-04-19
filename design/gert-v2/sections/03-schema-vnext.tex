@@ -653,25 +653,96 @@ Executes a local command directly.  In the v2 runtime \texttt{cli} is the
 canonical command step; the v1 \texttt{with.argv} form is accepted in
 compatibility mode and rewritten to \texttt{cli} by the migration tool.
 
+\texttt{type: cli} supports two mutually exclusive input modes:
+
+\begin{itemize}
+  \item \textbf{Exec form} (\texttt{command} + \texttt{args}): the executor
+        invokes the binary directly without a shell.  No shell expansion occurs;
+        arguments are passed verbatim (after template substitution).
+  \item \textbf{Run form} (\texttt{run}): a shell-script string or a map of
+        per-shell scripts is passed to a shell process.  The \texttt{shell}
+        field controls which shell is used when \texttt{run} is a string.
+\end{itemize}
+
+Using both \texttt{command}/\texttt{args} and \texttt{run} in the same step is
+a \textbf{schema validation error}.
+
 \begin{center}
-\begin{tabular}{lllp{5cm}}
+\begin{tabular}{lllp{5.2cm}}
 \hline
-\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\textbf{Field}   & \textbf{Type}            & \textbf{Required} & \textbf{Description} \\
 \hline
-\texttt{command}  & string       & Yes & Executable name or full path \\
-\texttt{args}     & string array & No  & Arguments (templates expanded) \\
-\texttt{env}      & map          & No  & Additional environment variables \\
-\texttt{workdir}  & string       & No  & Working directory \\
-\texttt{stdin}    & string       & No  & Template string piped to stdin \\
-\texttt{capture}  & map          & No  & \texttt{stdout | stderr | exit\_code} → var \\
+\texttt{command} & string                   & See note & Executable name or full path.
+                                                         Mutually exclusive with \texttt{run}. \\
+\texttt{args}    & string array             & No       & Arguments (templates expanded).
+                                                         Only valid with \texttt{command}. \\
+\texttt{run}     & string \textbar{} map    & See note & Shell-string or per-shell map.
+                                                         Mutually exclusive with \texttt{command}. \\
+\texttt{shell}   & string                   & No       & Shell to use with \texttt{run} string form.
+                                                         Enum: \texttt{auto | bash | sh | pwsh | cmd}.
+                                                         Default: \texttt{auto}.
+                                                         Ignored when \texttt{run} is a map
+                                                         (validation warning if both are present). \\
+\texttt{env}     & map                      & No       & Additional environment variables \\
+\texttt{workdir} & string                   & No       & Working directory \\
+\texttt{stdin}   & string                   & No       & Template string piped to stdin \\
+\texttt{capture} & map                      & No       & \texttt{stdout | stderr | exit\_code} → var \\
 \hline
 \end{tabular}
 \end{center}
+
+\textit{Note:} Exactly one of \texttt{command} or \texttt{run} must be present.
 
 Governance checks against the \texttt{allowed\_commands} / \texttt{denied\_commands}
 lists and any matching \texttt{governance.rules[].effects} are evaluated
 before the command executes.  If the rule action is \texttt{require-approval},
 the step pauses for human approval before proceeding.
+
+\paragraph{Run form: string}
+
+When \texttt{run} is a string, the executor spawns the shell specified by the
+\texttt{shell} field and passes the string as a single script argument (equivalent
+to \texttt{shell -c "script"}).  When \texttt{shell: auto} (the default), the
+executor selects the platform-native shell: \texttt{bash} on Linux/macOS,
+\texttt{pwsh} on Windows (falling back to \texttt{cmd} if PowerShell is absent).
+
+\paragraph{Run form: map}
+
+When \texttt{run} is a map, the keys are shell names (\texttt{bash}, \texttt{sh},
+\texttt{pwsh}, \texttt{cmd}) and the values are shell-script strings.  The
+executor selects the entry that matches the shell available on the current host.
+
+\subparagraph{Map key resolution order}
+
+\begin{enumerate}
+  \item \textbf{Exact match}: the host's configured or detected shell matches a
+        map key (e.g.\ host has \texttt{bash} → use \texttt{bash} entry).
+  \item \textbf{Platform-family fallback}: if the exact match fails, fall back
+        according to the table below.
+  \item \textbf{No match}: the step \textbf{fails} with the error:
+        \textit{``No matching shell entry for current platform.
+        Available entries: \{keys\}.  Platform shell: \{detected\}.''}
+\end{enumerate}
+
+\begin{center}
+\begin{tabular}{ll}
+\hline
+\textbf{Requested shell} & \textbf{Falls back to} \\
+\hline
+\texttt{bash} & \texttt{sh} \\
+\texttt{sh}   & (none — fail) \\
+\texttt{pwsh} & \texttt{cmd} (Windows only) \\
+\texttt{cmd}  & (none — fail) \\
+\hline
+\end{tabular}
+\end{center}
+
+When \texttt{run} is a map and a \texttt{shell} field is also present, the
+\texttt{shell} field is \textbf{ignored} and the runtime emits a validation
+warning: \textit{``shell field is ignored when run is a map.  Remove shell or
+convert run to a string.''}.
+
+\paragraph{Example: exec form (unchanged)}
 
 \begin{verbatim}
 - step:
@@ -687,6 +758,46 @@ the step pauses for human approval before proceeding.
       effects: [filesystem.read]
       reads: [log_file]
       writes: [output]
+\end{verbatim}
+
+\paragraph{Example: run string form with explicit shell}
+
+\begin{verbatim}
+- step:
+    id: run_script
+    type: cli
+    shell: bash
+    run: |
+      if [ "{{ .env }}" = "prod" ]; then
+        echo "Production deploy"
+      fi
+    capture:
+      stdout: script_output
+\end{verbatim}
+
+\paragraph{Example: run string form with auto shell}
+
+\begin{verbatim}
+- step:
+    id: echo_env
+    type: cli
+    run: echo "Environment is {{ .env }}"
+    capture:
+      stdout: echo_result
+\end{verbatim}
+
+\paragraph{Example: run map form (multi-shell)}
+
+\begin{verbatim}
+- step:
+    id: clear_cache
+    type: cli
+    run:
+      bash: rm -rf /tmp/cache/{{ .service }}
+      cmd: rd /s /q C:\tmp\cache\{{ .service }}
+      pwsh: Remove-Item -Recurse -Force C:\tmp\cache\{{ .service }}
+    capture:
+      exit_code: clear_result
 \end{verbatim}
 
 \subsection{Step Type: choice}

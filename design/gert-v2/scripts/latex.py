@@ -114,7 +114,20 @@ def cmd_build(args: argparse.Namespace) -> int:
     if status != 0:
         return status
 
-    return build_with_engine(engine, args, project_dir, build_dir)
+    code = build_with_engine(engine, args, project_dir, build_dir)
+    if code != 0:
+        return code
+
+    # Always sync the built PDF to the project root so the committed copy
+    # never lags behind what was actually compiled.
+    stem = Path(args.main).stem
+    built_pdf = build_dir / f"{stem}.pdf"
+    root_pdf = project_dir / f"{stem}.pdf"
+    if built_pdf.exists():
+        shutil.copy2(built_pdf, root_pdf)
+        print(f"ok: synced {built_pdf.name} → {root_pdf}")
+
+    return 0
 
 
 def cmd_clean(args: argparse.Namespace) -> int:

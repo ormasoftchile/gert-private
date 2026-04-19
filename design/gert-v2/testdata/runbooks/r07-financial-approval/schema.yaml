@@ -1,0 +1,331 @@
+$schema: "https://schemas.gert.dev/runbook/v2.json"
+apiVersion: runbook/v2
+id: financial-approval-large-purchase
+name: Financial Approval for Large Purchase
+kind: reference
+description: |
+  Approval workflow for large capital expenditure ($50k+). Multi-level
+  approval chain: requester → manager → finance → director/VP/CFO/board.
+
+inputs:
+  requester_email:
+    type: string
+    required: true
+    description: Email of the purchase requester
+    from: prompt
+
+governance:
+  rules:
+    - effects: ["finance.approval"]
+      action: require-approval
+      min_approvers: 1
+
+flow:
+  # Step 1: Purchase Request Form
+  - step:
+      id: purchase_request_form
+      type: collector
+      title: Purchase request form
+      prompt: |
+        Complete the purchase request for capital expenditure over $50,000.
+      fields:
+        - name: item_description
+          type: text
+          label: Item description (max 500 chars)
+          required: true
+        - name: vendor_name
+          type: text
+          label: Vendor name
+          required: true
+        - name: amount
+          type: text
+          label: Amount (USD, e.g. 75000)
+          required: true
+        - name: business_justification
+          type: multiline
+          label: Business justification
+          required: true
+        - name: budget_line_item
+          type: text
+          label: Budget line item
+          required: true
+          hint: "Select from approved budget line items" # GAP: no dropdown from finance system
+        - name: requested_delivery_date
+          type: text
+          label: Requested delivery date (YYYY-MM-DD)
+          required: true
+        - name: department
+          type: text
+          label: Department
+          required: true
+          hint: "Options: Engineering, Sales, Marketing, Finance, Operations" # GAP: no dropdown
+      approvals:
+        min: 1
+        roles: [requester]
+
+  # Step 2: Manager Approval
+  # GAP: Approver should be requester's manager (dynamic lookup from HR system).
+  #      Schema only supports static role list. Using hardcoded role as workaround.
+  - step:
+      id: manager_approval
+      type: collector
+      title: Manager approval — justify business need
+      prompt: |
+        Purchase request for review:
+        - Item: {{ .item_description }}
+        - Vendor: {{ .vendor_name }}
+        - Amount: ${{ .amount }}
+        - Justification: {{ .business_justification }}
+        
+        Approve purchase as necessary for business?
+      fields:
+        - name: manager_approved
+          type: text
+          label: "Type 'yes' to approve"
+          required: true
+        - name: manager_comments
+          type: multiline
+          label: Comments
+          required: false
+      approvals:
+        min: 1
+        roles: [manager] # GAP: should be dynamic lookup of requester's specific manager
+        timeout: 48h # GAP: prose says "2 business days"
+        on_timeout: escalate
+        escalate_to: [director]
+
+  # Step 3: Finance Review
+  - step:
+      id: finance_review
+      type: collector
+      title: Finance review — budget verification
+      prompt: |
+        Finance review for purchase:
+        - Item: {{ .item_description }}
+        - Amount: ${{ .amount }}
+        - Budget line: {{ .budget_line_item }}
+        - Manager approved: {{ .manager_approved }}
+        
+        Confirm budget availability and procurement policy compliance?
+      fields:
+        - name: budget_confirmed
+          type: text
+          label: Budget line item has sufficient funds? (yes/no)
+          required: true
+        - name: vendor_approved
+          type: text
+          label: Vendor is on approved vendor list? (yes/no)
+          required: true
+        - name: policy_compliant
+          type: text
+          label: Purchase complies with procurement policy? (yes/no)
+          required: true
+        - name: finance_approved
+          type: text
+          label: "Type 'yes' to approve"
+          required: true
+      approvals:
+        min: 1
+        roles: [finance-team]
+        timeout: 72h # GAP: prose says "3 business days"
+        on_timeout: escalate
+        escalate_to: [finance-director]
+
+  # Step 4: Approval Tier Decision
+  - step:
+      id: approval_tier_decision
+      type: branch
+      title: Route to appropriate approval tier
+      branches:
+        # GAP: Go template string comparison for numeric ranges is fragile.
+        #      Schema lacks native numeric comparison operators for conditions.
+        - condition: '{{ and (gt .amount "50000") (lt .amount "100000") }}'
+          label: Director Approval (50k-100k)
+          steps:
+            # Step 5: Director Approval
+            # GAP: Director should be looked up from org chart. Hardcoded role used.
+            - step:
+                id: director_approval
+                type: collector
+                title: Director approval
+                prompt: |
+                  Purchase request for director review:
+                  - Item: {{ .item_description }}
+                  - Amount: ${{ .amount }}
+                  
+                  Approve this purchase?
+                fields:
+                  - name: director_approved
+                    type: text
+                    label: "Type 'yes' to approve"
+                    required: true
+                approvals:
+                  min: 1
+                  roles: [department-director] # GAP: dynamic lookup from org chart
+                  timeout: 72h # GAP: prose says "3 business days"
+                  on_timeout: escalate
+                  escalate_to: [vp]
+
+        - condition: '{{ and (ge .amount "100000") (lt .amount "500000") }}'
+          label: VP Approval (100k-500k)
+          steps:
+            # Step 6: VP Approval
+            - step:
+                id: vp_approval
+                type: collector
+                title: VP approval
+                prompt: |
+                  Purchase for VP review:
+                  - Item: {{ .item_description }}
+                  - Amount: ${{ .amount }}
+                  
+                  Approve this purchase?
+                fields:
+                  - name: vp_approved
+                    type: text
+                    label: "Type 'yes' to approve"
+                    required: true
+                approvals:
+                  min: 1
+                  roles: [department-vp] # GAP: dynamic lookup from org chart
+                  timeout: 120h # GAP: prose says "5 business days"
+                  on_timeout: escalate
+                  escalate_to: [cfo]
+
+        - condition: '{{ ge .amount "500000" }}'
+          label: CFO Approval (500k+)
+          steps:
+            # Step 7a: CFO Approval
+            - step:
+                id: cfo_approval
+                type: collector
+                title: CFO approval
+                prompt: |
+                  Large purchase for CFO review:
+                  - Item: {{ .item_description }}
+                  - Amount: ${{ .amount }}
+                  
+                  Approve this purchase?
+                fields:
+                  - name: cfo_approved
+                    type: text
+                    label: "Type 'yes' to approve"
+                    required: true
+                approvals:
+                  min: 1
+                  roles: [cfo]
+                  timeout: 168h # GAP: prose says "7 business days"
+                  on_timeout: escalate
+                  escalate_to: [ceo]
+
+            # Step 7b: Board Approval (if amount >= $1M)
+            - step:
+                id: board_approval
+                type: collector
+                title: Board approval (required for $1M+)
+                when: '{{ ge .amount "1000000" }}'
+                prompt: |
+                  Purchase requires board approval:
+                  - Item: {{ .item_description }}
+                  - Amount: ${{ .amount }}
+                  - Business justification: {{ .business_justification }}
+                  
+                  Board quorum: 3 of 5 board members must approve.
+                  Approve this capital expenditure?
+                fields:
+                  - name: board_approved
+                    type: text
+                    label: "Type 'yes' to approve"
+                    required: true
+                approvals:
+                  min: 3 # Quorum: 3 of 5 must approve
+                  roles: [board-member]
+                  timeout: 336h # GAP: prose says "14 business days"
+                  on_timeout: fail
+
+  # Step 8: Vendor Notification
+  - step:
+      id: vendor_notification
+      type: extension
+      title: Send purchase order to vendor
+      extension:
+        name: procurement-system
+        action: create-po
+        args:
+          vendor: "{{ .vendor_name }}"
+          item: "{{ .item_description }}"
+          amount: "{{ .amount }}"
+          delivery_date: "{{ .requested_delivery_date }}"
+      capture:
+        po_number: json.po_number
+
+  # Step 9: Contract Execution
+  - step:
+      id: contract_execution
+      type: collector
+      title: Upload signed contract and vendor quote
+      prompt: |
+        Upload the signed contract and vendor quote for PO {{ .po_number }}.
+      fields:
+        - name: signed_contract
+          type: file
+          label: Signed contract (PDF)
+          required: true
+        - name: vendor_quote
+          type: file
+          label: Vendor quote (PDF)
+          required: true
+      approvals:
+        min: 1
+        roles: [procurement-team]
+        timeout: 240h # GAP: prose says "10 business days"
+        on_timeout: escalate
+        escalate_to: [procurement-manager]
+
+  # Step 10: Finance Record Purchase
+  - step:
+      id: record_purchase
+      type: extension
+      title: Record purchase in finance system
+      extension:
+        name: finance-system
+        action: record-transaction
+        args:
+          po_number: "{{ .po_number }}"
+          amount: "{{ .amount }}"
+          budget_line: "{{ .budget_line_item }}"
+      capture:
+        transaction_id: json.transaction_id
+
+  # Step 11: Notify Requester
+  - step:
+      id: notify_requester
+      type: extension
+      title: Notify requester of approval
+      extension:
+        name: email-sender
+        action: send
+        args:
+          to: "{{ .requester_email }}"
+          subject: "Purchase Approved - PO {{ .po_number }}"
+          body: "Your purchase request has been approved. PO number: {{ .po_number }}. Expected delivery: {{ .requested_delivery_date }}"
+
+  # Step 12: Close Approval Workflow
+  - step:
+      id: close_workflow
+      type: extension
+      title: Close approval workflow
+      extension:
+        name: workflow-tracker
+        action: close
+        args:
+          status: approved
+          transaction_id: "{{ .transaction_id }}"
+
+  - step:
+      id: complete
+      type: end
+      title: Financial approval workflow complete
+      outcome:
+        category: resolved
+        code: purchase_approved

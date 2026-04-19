@@ -172,7 +172,7 @@ is not supported in v2.0.
 
 Approval gates are declared in the step's \texttt{approvals} block:
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 steps:
   - id: delete_database
     kind: cli
@@ -400,7 +400,7 @@ Individual steps may declare \texttt{requires\_role} to restrict who may trigger
 This is distinct from approval gates (which require external approval) — step role restriction
 \emph{prevents} a step from executing unless the actor themselves holds the required role.
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 steps:
   - id: promote_to_production
     kind: cli

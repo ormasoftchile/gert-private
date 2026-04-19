@@ -509,3 +509,21 @@ Minted v3 loads style files via its own AtBeginDocument hooks. Since ours is reg
 
 ### Mixed YAML + Go template blocks must use {text}
 Any \begin{minted}{yaml} (or {json}) block whose content contains Go template expressions ({{ }}, {{ if }}, {{/* */}}) must be re-languaged to \begin{minted}{text}. The YAML/JSON Pygments lexers classify those characters as Token.Error, causing red boxes. text = no highlighting, clean monospace, no error tokens.
+
+### Root cause of persisting red boxes on page 45 (final fix — 2026-04-19)
+**Root cause:** The `\AtBeginDocument{\@namedef{PYG@tok@err}{}}` fix fires too early. In minted v3, style files are loaded *lazily* inside `\minted@defstyle@load`, called at each minted environment in the document body — not in `\AtBeginDocument`. So the style file's `fcolorbox`-based `\PYG@tok@err` definition overwrote our no-op on every single minted block.
+
+**What actually generates red borders in minted v3:** The `.style.minted` cache file (e.g. `default.style.minted`, `friendly.style.minted`) contains:
+```
+\@namedef{PYG@tok@err}{\def\PYG@bc##1{{\setlength{\fboxsep}{\string -\fboxrule}\fcolorbox[rgb]{1.00,0.00,0.00}{1,1,1}{\strut ##1}}}}
+```
+This is re-input every time a new style is needed (lazy, per-environment), so any earlier override is destroyed.
+
+**Correct fix:** Use minted's built-in `ignorelexererrors=true` in `\setminted{}`. Minted calls `\minted@patch@ignorelexererrors` — which sets `\PYG@tok@err=\relax` — *after* each style file loads, so it always wins. No manual `\AtBeginDocument` hack needed. The option is documented in minted.sty at `\def\minted@patch@ignorelexererrors`.
+
+```latex
+\setminted{
+  ...
+  ignorelexererrors=true   % suppress red error-token boxes (<string>, <int>, etc.)
+}
+```

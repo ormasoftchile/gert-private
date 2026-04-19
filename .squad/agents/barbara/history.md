@@ -232,6 +232,72 @@ Enhanced §14 (Input Provider Framework) to define provider contracts for the th
 
 ---
 
+### 2026-04-19 — Runbook and Toolset Gap Analysis
+
+**What was done:**
+Completed comprehensive gap analysis for Cristian's correctness strategy questions:
+1. Sample runbooks — which phases need them, coverage assessment, what's missing
+2. Standard toolset — what reference/builtin tools are needed for integration testing
+
+**Analysis output:** `.squad/tmp/barbara-runbook-toolset-gaps.md` (29.6 KB)
+
+**Key findings:**
+
+**Gap 1: Runbook Coverage**
+- Current state: 10 runbooks (r01–r10) cover 8 of 14 step types
+- Missing coverage: `iterate`, `approve` (standalone), `decision`, `sleep`, `log`, `set`
+- Impact: Phase 5 (Step Types), Phase 11 (Evidence & Replay), Phase 13 (Acceptance) are BLOCKED
+- 6 step types (43%) have zero runbook fixtures — cannot validate step executors, trace format, or replay semantics
+
+**Gap 2: Standard Toolset**
+- Current state: Spec references "built-in tool registry" but does NOT define what's in it
+- Runbooks reference 8 builtin tools (slack, pagerduty, aws, okta, etc.) with ZERO definitions
+- Missing: Reference tools for testing stdio/jsonrpc/mcp transports independently
+- Impact: Phase 6 (Tool Runtime) is BLOCKED — cannot test transport layer without actual tool definitions
+- r01 and r05 are non-executable (20% of acceptance corpus broken before code is written)
+
+**What needs to be created:**
+
+Runbooks (before Phase 5):
+1. **r11-iterate-loop.yaml** — tests iterate.over (list), iterate.until (convergence), collect accumulation (~40 lines)
+2. **r12-approval-quorum.yaml** — tests standalone type:approve with quorum mode, business-day timeout (~30 lines)
+3. **r13-decision-routing.yaml** — tests type:decision with goto and runbook routes (~50 lines)
+4. Enhance r02 — replace 17 sequential cli steps with iterate node (prose describes iteration, schema doesn't use it)
+
+Reference Tools (Phase 6 deliverables):
+1. `echo` — stdio, simplest possible tool (uses /bin/echo)
+2. `fail` — stdio, always exits non-zero (custom Go binary, 100 lines)
+3. `slow` — stdio, delays before success (custom Go binary, 50 lines)
+4. `json-emitter` — stdio, emits structured JSON (custom Go binary, 100 lines)
+5. `jsonrpc-test-server` — stdio-jsonrpc, persistent process (custom Go binary, 300 lines)
+6. `mcp-test-server` — mcp, dynamic tool discovery (custom Go binary, 500 lines)
+
+Builtin Tool Stubs (Phase 6 deliverables):
+- 8 `.tool.yaml` definitions for slack/pagerduty/aws/okta/palo-alto/splunk/email/alertmanager
+- 1 generic stub binary `gert-test-stub` (Go, 100 lines) to satisfy all 8 builtin stubs
+- Compiled into gert binary at build time (embedded tool registry)
+
+**Design decisions:**
+- Builtin tools are STUBS for v2.0 (real implementations deferred to v2.1) — avoids external dependencies/API keys
+- Reference tools are Go binaries (not shell scripts) — cross-platform compatibility
+- MCP reference server implements minimal compliance — initialize/tools/list/tools/call/tools/cancel only
+- Total deliverables: 14 tool definitions + 6 custom binaries + 1 stub binary (~1200 lines Go)
+
+**Phases blocked:**
+- Phase 5: No runbooks for iterate/approve/decision → cannot integration-test step executors
+- Phase 6: No reference tools → cannot test stdio/jsonrpc/mcp transports independently
+- Phase 11: 6 step types have no trace coverage → HMAC chaining incomplete, replay untested for 43% of types
+- Phase 13: 6 step types have no golden traces + r01/r05 broken → acceptance corpus incomplete
+
+**Spec gaps identified:**
+1. §05 Tool Runtime does NOT define built-in tool registry contents → add §05-A appendix
+2. §03 Schema vNext lacks .tool.yaml examples for each transport → add 3 examples
+3. §11 Evidence & Replay does NOT specify test fixtures for replay → add note requiring 14/14 step type coverage
+
+**Cross-reference:** Cristian's correctness strategy question from `.squad/tmp/cristian-correctness-questions.md`
+
+---
+
 ## 2026-04-18 — Team Sync: Step Type Refactor Complete
 
 **Status:** ✅ Merged to decisions.md

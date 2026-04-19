@@ -603,3 +603,71 @@ executor contract subsection.
 **Decision record:** `.squad/decisions/inbox/ken-include-executor-contract.md`
 
 **Status:** COMPLETE. Awaiting Leslie to compile and commit.
+
+---
+
+## 2026-04-18 — Correctness Strategy Gap Analysis (Cristian)
+
+**Context:** Cristian issued BUILD-REPORT-2026-04-18.md identifying critical gaps in the correctness strategy for the 13-phase implementation plan.
+
+**Task:** Analyze three gaps from an architectural standpoint:
+1. Parallel step validation (goroutine-per-branch correctness)
+2. Wait-on-event testing (external event arrival without real sources)
+3. Multi-OS/multi-platform considerations (Linux/macOS/Windows compatibility)
+
+**What I did:**
+- Read PLAN.md (13-phase plan), §02 (architecture/concurrency), §03 (parallel/wait schema), §06 (events), §08 (testing)
+- Analyzed each gap for: concrete problem, required test infrastructure, affected phases, what's missing today
+- Identified 6 architectural decisions that block correct testing
+- Defined test matrices (7 parallel scenarios, 7 wait scenarios, 8 OS scenarios)
+
+**Key findings:**
+
+**Gap 1 (Parallel):**
+- Spec defines goroutine-per-branch + join semantics but not event ordering when branches emit concurrently
+- Missing: FakeStepExecutor (controllable delays), ConcurrentEventCollector, DeterministicScheduler, timeout injection
+- Missing decision: are nested parallel blocks allowed? (Recommendation: forbid in v2.0 to prevent goroutine explosion)
+- Missing specification: what happens when two branches write the same variable? (Spec says "last-writer-wins warning" but no enforcement contract)
+
+**Gap 2 (Wait):**
+- Spec defines wait_for_event but no fake EventDispatcher exists to inject events during tests
+- Missing: FakeEventDispatcher, TimeController (fake clock for deterministic timeout testing), EventArrivalSimulator
+- Missing decision: does first wait step consume the event or broadcast? (Recommendation: consume, matches Go channel semantics)
+- Missing trace event: no event/received to record when external event arrives (audit trail gap)
+
+**Gap 3 (Multi-OS):**
+- Spec assumes Unix primitives (O_APPEND, POSIX signals, /tmp, seccomp) without marking as platform-specific
+- Windows has different: path separators, no SIGUSR1, different file locking, CRLF newlines
+- Missing: Platform abstraction layer, FakePlatform, path normalization, stdio CRLF handling
+- Missing decision: is Windows Tier 1 (must work) or Tier 2 (best-effort)? (Recommendation: Tier 2 for v2.0)
+
+**Six architectural decisions identified:**
+1. **Event sequencing for parallel blocks:** Recommendation = branch-order deterministic (buffer events per-branch, append in order at join)
+2. **Nested parallel blocks:** Recommendation = forbid (semantic validation rejects)
+3. **Event consumption semantics:** Recommendation = consume (first wait step takes the event)
+4. **Trace event for event arrival:** Recommendation = add event/received event
+5. **Windows support tier:** Recommendation = Tier 2 (CI advisory, bugs are P2 not P0)
+6. **Signal source support:** Recommendation = OS-specific allow list (SIGINT everywhere, SIGUSR1 only Linux/macOS)
+
+**Phase impact summary:**
+- Phases 3, 5, 11, 13 affected by Gap 1
+- Phases 3, 5, 9, 11, 13 affected by Gap 2
+- Phases 1, 3, 5, 6, 7, 13 affected by Gap 3
+
+**Deliverables:**
+- `.squad/tmp/ken-enabler-gaps.md` — 25KB comprehensive analysis with test matrices and next actions per phase
+- Architectural decision recommendations (6 total)
+
+**Learnings:**
+
+1. **Test infrastructure is architectural, not incidental.** The spec defined runtime semantics but treated testing as post-hoc validation. Reality: the test harness is a primary design artifact that exposes hidden contracts (event ordering, timeout races, platform assumptions) that must be decided before implementation.
+
+2. **Concurrency semantics must be explicit at boundaries.** "Goroutine-per-branch" is insufficient. Must answer: what happens when two goroutines emit events simultaneously? The answer (deterministic buffering vs. arrival-order vs. timestamp-ordered) is load-bearing for trace replay and golden file testing.
+
+3. **External event sources create testability boundaries.** Any feature waiting for external input requires a fake/stub in the test package. Not "nice to have" — mandatory precondition for correctness validation.
+
+4. **Platform assumptions are invisible until enumerated.** Cross-platform correctness requires: (a) explicit platform abstraction layer, (b) OS-specific allow lists, (c) CI matrix, (d) documented tier system.
+
+5. **Replay determinism depends on event sequencing guarantees.** If parallel branches emit in non-deterministic order, replay cannot re-emit the same trace. Breaks golden trace testing and audit trail reproducibility.
+
+6. **Missing trace events create audit gaps.** The wait_for_event step has no event/received. Trace shows "started" and "completed" but not *when* the external event arrived or *what* its payload was. Audit trail gap for compliance.

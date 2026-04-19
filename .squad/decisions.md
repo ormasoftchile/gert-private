@@ -1785,3 +1785,233 @@ Integrating now ensures:
 **What:** Leslie is a man — use he/him pronouns when referring to him.
 
 **Why:** User correction — captured for team memory.
+
+
+---
+
+## 2026-04-19T21:32:56Z: Event Sequencing for Parallel Blocks
+
+**By:** Ken (Software Architect)  
+**Status:** PROPOSED  
+**Priority:** P0 (blocks Phase 5)
+
+**Problem:** When two parallel branches emit events concurrently, what ordering is guaranteed in the trace file? The spec defines goroutine-per-branch execution but is silent on event ordering when multiple goroutines emit simultaneously.
+
+**Options:**
+1. Goroutine schedule-dependent (non-deterministic)
+2. Branch-order deterministic (buffer events per branch until join)
+3. Timestamped with microsecond precision
+
+**Recommendation:** Option 2 (branch-order deterministic)
+
+**Rationale:**
+- Preserves replay determinism: same runbook + inputs → identical trace file
+- Enables golden trace testing
+- Trade-off: adds complexity but correctness benefit outweighs implementation cost
+
+**Impact:** Phase 3 (per-branch buffer), Phase 5 (join flushes in order), Phase 11 (replay), spec update to §06
+
+---
+
+## 2026-04-19T21:32:56Z: Nested Parallel Blocks
+
+**By:** Ken (Software Architect)  
+**Status:** PROPOSED  
+**Priority:** P1
+
+**Problem:** Is a `parallel` step allowed inside a parallel branch? No clear use case in runbook domain; without restriction, goroutine explosion risk (e.g., 4x4 = 16 concurrent).
+
+**Recommendation:** Forbid nested parallel (Option 2)
+
+**Rationale:**
+- No use case for nested fan-out in operations tasks
+- Clear concurrency bound: max goroutines = max branch count
+- Can lift restriction in v2.1 if demand emerges
+
+**Impact:** Phase 1 (semantic validation), spec update to §03
+
+---
+
+## 2026-04-19T21:32:56Z: Event Consumption Semantics for wait_for_event
+
+**By:** Ken (Software Architect)  
+**Status:** PROPOSED  
+**Priority:** P0 (blocks Phase 9)
+
+**Problem:** If two `wait_for_event` steps wait for the same `channel:foo`, does the first one consume the event or do both receive it (broadcast)?
+
+**Recommendation:** Consume (Option 1)
+
+**Rationale:**
+- Matches Go channel semantics (familiar)
+- Simpler EventDispatcher implementation
+- If broadcast needed, use different event IDs per step (e.g., `channel:foo.step1`)
+
+**Impact:** Phase 9 (EventDispatcher consume semantics), spec update to §03
+
+---
+
+## 2026-04-19T21:32:56Z: Trace Event for Event Arrival
+
+**By:** Ken (Software Architect)  
+**Status:** PROPOSED  
+**Priority:** P1 (audit trail requirement)
+
+**Problem:** `wait_for_event` emits `step/started` and `step/completed` but no event when external event arrives. Trace lacks when event arrived or what payload was. Audit trail gap for compliance.
+
+**Recommendation:** Add `event/received` event
+
+**Impact:** Phase 3 (event catalog), Phase 9 (emit when event matches), spec update to §06
+
+---
+
+## 2026-04-19T21:32:56Z: Windows Support Tier
+
+**By:** Ken (Software Architect)  
+**Status:** PROPOSED  
+**Priority:** P2
+
+**Problem:** Spec assumes Unix primitives (O_APPEND, POSIX signals, /tmp, seccomp). Windows has different semantics. Is Windows Tier 1 (must work) or Tier 2 (best-effort)?
+
+**Recommendation:** Option 2 — Tier 2 for v2.0, promote to Tier 1 in v2.1 if adoption warrants
+
+**Rationale:**
+- Most gert users on Linux/macOS (DevOps/SRE context)
+- Windows valuable but not load-bearing for MVP
+- Tier 2 allows accepting Windows PRs without blocking releases on Windows-specific issues
+
+**Impact:** Phase 13 (CI matrix with `continue-on-error: true` on Windows), documentation
+
+---
+
+## 2026-04-19T21:32:56Z: Signal Source Support
+
+**By:** Ken (Software Architect)  
+**Status:** PROPOSED  
+**Priority:** P1
+
+**Problem:** `wait_for_event` supports `source: signal` but spec doesn't define supported signals. Windows has no POSIX signals. What signal set is portable?
+
+**Recommendation:** Option 3 (OS-specific allow list)
+
+**Allow list:**
+- **Linux:** SIGINT, SIGTERM, SIGUSR1, SIGUSR2, SIGHUP
+- **macOS:** SIGINT, SIGTERM, SIGUSR1, SIGUSR2, SIGHUP
+- **Windows:** SIGINT only
+
+**Rationale:** Balances portability (SIGINT works everywhere) with power-user needs (SIGUSR1 for custom workflows on Linux)
+
+**Impact:** Phase 1 (platform-aware signal validation), Phase 5 (signal registration), spec update to §03
+
+---
+
+## 2026-04-19T21:32:56Z: Create 3 New Minimal Runbooks Before Phase 5
+
+**By:** Barbara (Integrations Specialist)  
+**Status:** PROPOSED  
+**Priority:** CRITICAL (blocks Phase 5, 11, 13)
+
+**Problem:** 6 of 14 step types (43 percent) have ZERO runbook coverage: iterate, approve, decision, sleep, log, set. Phase 5 requires fixtures for all 14 types.
+
+**Recommendation:** Create r11, r12, r13 runbooks
+
+**Proposed runbooks:**
+1. **r11-iterate-loop.yaml** — iterate.over (list), iterate.until (convergence), collect accumulation
+2. **r12-approval-quorum.yaml** — standalone type:approve, quorum mode, business-day timeout
+3. **r13-decision-routing.yaml** — type:decision, goto vs runbook routes
+
+**Effort:** ~120 lines YAML total (40 + 30 + 50 lines)  
+**Owner:** John (Schema) to write, Dennis to validate prose-to-schema fidelity
+
+**Impact:**
+- BLOCKS: Phase 5, Phase 11, Phase 13
+- Parser and integration tests now have real-world fixtures for all step types
+
+---
+
+## 2026-04-19T21:32:56Z: Define Standard Reference Toolset (6 Tools)
+
+**By:** Barbara (Integrations Specialist)  
+**Status:** PROPOSED  
+**Priority:** CRITICAL (blocks Phase 6)
+
+**Problem:** Phase 6 (Tool Runtime) cannot test transport layer without actual tool definitions. Spec references "built-in tool registry" but does NOT define what's in it.
+
+**Proposed tools:**
+1. `echo` — stdio, simplest possible (/bin/echo)
+2. `fail` — stdio, exits non-zero (Go binary, 100 lines)
+3. `slow` — stdio, delays before success (Go binary, 50 lines)
+4. `json-emitter` — stdio, structured JSON output (Go binary, 100 lines)
+5. `jsonrpc-test-server` — stdio-jsonrpc, persistent process (Go binary, 300 lines)
+6. `mcp-test-server` — mcp, dynamic tool discovery (Go binary, 500 lines)
+
+**Effort:** ~1100 lines Go code + 6 .tool.yaml definitions  
+**Owner:** Brian (Parser) to implement as part of Phase 6  
+**Location:** `testdata/tools/` directory
+
+**Impact:** Transport layer testing, integration test fixtures for all transports (stdio, jsonrpc, mcp)
+
+---
+
+## 2026-04-19T21:32:56Z: Builtin Tools — Stubs or Real Implementations?
+
+**By:** Barbara (Integrations Specialist)  
+**Status:** PROPOSED  
+**Priority:** CRITICAL (blocks r01/r05 execution, Phase 6)
+
+**Problem:** Spec references builtin tools (slack, pagerduty, aws, okta, palo-alto, splunk, email, alertmanager) but doesn't define them. Real implementations require API keys, network, external deps. Bloats test environment and complicates CI.
+
+**Recommendation:** Stubs for v2.0, real implementations in v2.1
+
+**Proposed approach:**
+- Write 8 `.tool.yaml` definitions (slack/pagerduty/aws/okta/palo-alto/splunk/email/alertmanager)
+- Write 1 generic stub binary `gert-test-stub` (Go, 100 lines) — accepts any action, echoes to stdout, exits 0
+- Compile stub definitions into gert binary at build time (embedded tool registry)
+
+**Effort:** ~100 lines Go + 8 .tool.yaml definitions  
+**Owner:** Brian (Parser) to implement stub and embed registry in Phase 6  
+**Location:** `testdata/tools/builtin/*.tool.yaml` → compiled into binary
+
+**Impact:**
+- r01 and r05 become executable immediately (currently broken)
+- Acceptance corpus goes from 80 percent executable to 100 percent
+
+---
+
+## 2026-04-19T21:32:56Z: Spec Updates Required
+
+**By:** Barbara (Integrations Specialist)  
+**Status:** PROPOSED  
+**Priority:** HIGH (spec gap fix)
+
+**Problem:** Section 05 (Tool Runtime) references "built-in tool registry" but does NOT define which tools, what actions, which transport each uses.
+
+**Proposed spec updates:**
+1. Add §05-A appendix: Built-in Tool Catalog (8 stubs with full .tool.yaml definitions)
+2. Add §05-B appendix: Reference Tools for Testing (6 tools with transport examples)
+3. Add 3 .tool.yaml examples to §03 Schema vNext (one per transport: stdio, stdio-jsonrpc, mcp)
+4. Add note to §11 Evidence & Replay: "Replay tests require runbook coverage for all 14 step types"
+
+**Owner:** Barbara (Integrations) to draft appendices, Ken (Architecture) to review  
+**Deliverable:** Updated spec sections before Phase 6 begins
+
+---
+
+## 2026-04-19T21:32:56Z: Enhancement to r02 (Use Iterate Node)
+
+**By:** Barbara (Integrations Specialist)  
+**Status:** PROPOSED  
+**Priority:** LOW (defer to post-Phase 5)
+
+**Problem:** r02 prose describes 10-minute monitoring loop with 60 iterations but uses 17 sequential `cli` steps (workaround). True `iterate` step would align schema with prose.
+
+**Recommendation:** Defer to post-Phase 5 (can implement after r11 written and iterate executor ready)
+
+**Rationale:**
+- Tests iterate semantics in real-world canary deployment scenario
+- Reduces r02 verbosity (17 steps → 1 iterate with 3 nested)
+- Aligns schema with prose intent
+
+**Effort:** ~30 lines YAML refactor  
+**Owner:** John (Schema) to refactor r02  
+**Timing:** After r11 is written and iterate executor implemented (Phase 5)

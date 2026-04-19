@@ -19,7 +19,7 @@ All gert v2 tests are written in Go using the standard \texttt{testing} package 
 
 Table-driven tests are the preferred pattern for all logic that has well-defined input/output pairs (e.g.\ expression evaluation, schema validation, governance rule matching):
 
-\begin{minted}{go}
+\begin{verbatim}
 func TestGovernanceAllowlist(t *testing.T) {
     cases := []struct {
         name    string
@@ -37,7 +37,7 @@ func TestGovernanceAllowlist(t *testing.T) {
         })
     }
 }
-\end{minted}
+\end{verbatim}
 
 \subsection{Test Packages}
 
@@ -76,7 +76,7 @@ The test runner executes the runbook in replay mode using the scenario file as t
 
 \subsection{Test Assertions (\texttt{test.yaml})}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 assertions:
   outcome: passed           # "passed" | "failed" | "skipped"
   steps_passed: 5
@@ -94,7 +94,7 @@ assertions:
     - type: governance/blocked
       step_id: drop-table
       data.rule: denylist
-\end{minted}
+\end{verbatim}
 
 The \texttt{trace} assertions match events in order of occurrence. The \texttt{data.*} dotted paths dereference into the event's \texttt{data} object.
 
@@ -120,7 +120,7 @@ The runtime \texttt{Executor} interface must satisfy:
   \item Does not call any adapter method directly (events only).
 \end{itemize}
 
-\begin{minted}{go}
+\begin{verbatim}
 // ConformanceTest validates any Runtime implementation.
 func ConformanceTest(t *testing.T, rt Runtime) {
     t.Helper()
@@ -132,7 +132,7 @@ func ConformanceTest(t *testing.T, rt Runtime) {
     require.Equal(t, "run/completed", events[len(events)-1].Type)
     assertNoEventsAfterTerminal(t, events)
 }
-\end{minted}
+\end{verbatim}
 
 \subsection{Schema Contract Tests}
 
@@ -178,7 +178,7 @@ The extension host verifies:
 
 Integration tests spin up the gert runtime against fixture runbooks stored in \texttt{testdata/runbooks/} and assert on the resulting trace files. They are gated by the \texttt{integration} build tag and run in CI separately from unit tests.
 
-\begin{minted}{go}
+\begin{verbatim}
 //go:build integration
 
 func TestE2E_BranchingRunbook(t *testing.T) {
@@ -196,7 +196,7 @@ func TestE2E_BranchingRunbook(t *testing.T) {
         "data.step_id": "deploy-staging",
     })
 }
-\end{minted}
+\end{verbatim}
 
 \subsection{Fixture Runbook Corpus}
 
@@ -216,7 +216,7 @@ The integration test corpus includes fixtures covering:
 
 A shared test package \texttt{pkg/testutil} provides helpers:
 
-\begin{minted}{go}
+\begin{verbatim}
 package testutil
 
 // ReadTrace reads and parses all events from a run's trace.jsonl.
@@ -233,7 +233,7 @@ func AssertEventOrder(t *testing.T, events []engine.DurableEvent,
 // AssertNoEvent asserts no event matches the given type and predicates.
 func AssertNoEvent(t *testing.T, events []engine.DurableEvent,
     eventType string, predicates map[string]any)
-\end{minted}
+\end{verbatim}
 
 % ------------------------------------------------------------------ %
 \section{Regression Testing}
@@ -295,7 +295,7 @@ Performance benchmarks are written using Go's \texttt{testing.B} and run in CI w
 
 Extension developers can test their extension logic without spinning up the full gert runtime. The \texttt{pkg/exttest} package provides a test harness:
 
-\begin{minted}{go}
+\begin{verbatim}
 import "github.com/ormasoftchile/gert/v2/pkg/exttest"
 
 func TestMyExtension(t *testing.T) {
@@ -317,7 +317,7 @@ func TestMyExtension(t *testing.T) {
     assert.Equal(t, 0, resp.ExitCode)
     assert.Contains(t, resp.Stdout, "expected output")
 }
-\end{minted}
+\end{verbatim}
 
 \subsection{Harness Capabilities}
 
@@ -335,12 +335,12 @@ The test harness provides:
 
 For pure unit tests of extension logic (without spawning a subprocess), the transport layer is mockable:
 
-\begin{minted}{go}
+\begin{verbatim}
 // InProcessTransport runs the extension handler in-process for unit testing.
 type InProcessTransport struct {
     Handler ExtensionHandler
 }
-\end{minted}
+\end{verbatim}
 
 % ------------------------------------------------------------------ %
 \section{Acceptance Criteria}

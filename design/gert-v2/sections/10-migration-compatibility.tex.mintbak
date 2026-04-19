@@ -65,7 +65,7 @@ All other runbook semantics are preserved. Step execution behavior, governance p
 \subsection{Before and After Example}
 
 \textbf{v1 runbook (simple.runbook.yaml):}
-\begin{minted}{yaml}
+\begin{verbatim}
 apiVersion: runbook/v1
 
 meta:
@@ -101,10 +101,10 @@ flow:
       when: "{{ eq .decision \"yes\" }}"
       with:
         argv: ["systemctl", "restart", "{{ .service_name }}"]
-\end{minted}
+\end{verbatim}
 
 \textbf{v2 runbook (migrated):}
-\begin{minted}{yaml}
+\begin{verbatim}
 $schema: "https://schemas.gert.dev/runbook/v2.json"
 apiVersion: runbook/v2
 
@@ -143,7 +143,7 @@ flow:
       when: "{{ eq .decision \"yes\" }}"
       with:
         argv: ["systemctl", "restart", "{{ .service_name }}"]
-\end{minted}
+\end{verbatim}
 
 \subsection{Field Mapping Table}
 
@@ -174,7 +174,7 @@ flow:
 
 The \texttt{gert migrate} command automates runbook, tool, and provider migrations. It is extended in v2 to support v1→v2 migration.
 
-\begin{minted}{bash}
+\begin{verbatim}
 # Preview migration (dry-run)
 gert migrate --to-v2 --dry-run runbook.yaml
 
@@ -189,7 +189,7 @@ gert migrate --to-v2 --output - runbook.yaml
 
 # Check if migration is needed (exit 1 if needed, 0 if already v2)
 gert migrate --to-v2 --check runbook.yaml
-\end{minted}
+\end{verbatim}
 
 \subsection{Flags}
 
@@ -255,11 +255,11 @@ If migration fails (e.g., v2 validation error, ambiguous field conflict), the to
 
 Example error:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 ERROR: Migration failed for service-health-check.runbook.yaml
   Line 14: step "check_status" has invalid v2 field "with.argv"
   Suggestion: v2 uses "with.command" for CLI steps. Update manually.
-\end{minted}
+\end{verbatim}
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Provider and Tool Migration}
@@ -277,15 +277,15 @@ The v1 \texttt{tool/v0} schema is replaced by \texttt{tool/v2}. Key changes:
 \end{enumerate}
 
 \textbf{v1 tool definition:}
-\begin{minted}{yaml}
+\begin{verbatim}
 apiVersion: tool/v0
 name: kubectl
 executable: /usr/local/bin/kubectl
 args_template: "{{ .args }}"
-\end{minted}
+\end{verbatim}
 
 \textbf{v2 tool definition:}
-\begin{minted}{yaml}
+\begin{verbatim}
 $schema: "https://schemas.gert.dev/tool/v2.json"
 apiVersion: tool/v2
 
@@ -297,7 +297,7 @@ args_template: "{{ .args }}"
 capabilities:
   - exec:command
   - net:egress
-\end{minted}
+\end{verbatim}
 
 \paragraph{Migration tool support.} The \texttt{gert migrate --to-v2} command rewrites tool definitions automatically, but \textbf{requires manual review} for the \texttt{capabilities} field (the tool cannot infer required capabilities statically).
 
@@ -311,15 +311,15 @@ The v1 \texttt{provider/v0} schema is replaced by \texttt{provider/v2}. Key chan
 \end{enumerate}
 
 \textbf{v1 provider definition:}
-\begin{minted}{yaml}
+\begin{verbatim}
 apiVersion: provider/v0
 name: incident-id
 source: env
 env_var: INCIDENT_ID
-\end{minted}
+\end{verbatim}
 
 \textbf{v2 provider definition:}
-\begin{minted}{yaml}
+\begin{verbatim}
 $schema: "https://schemas.gert.dev/provider/v2.json"
 apiVersion: provider/v2
 
@@ -329,7 +329,7 @@ resolve_method: env
 provider/env:
   var_name: INCIDENT_ID
   required: true
-\end{minted}
+\end{verbatim}
 
 \paragraph{Migration tool support.} The \texttt{gert migrate --to-v2} command partially rewrites provider definitions but \textbf{requires manual namespace updates} for custom provider fields.
 
@@ -397,16 +397,16 @@ Extension authors must:
 
 The v2 trace format (§12.1) adds mandatory envelope fields. The v1 trace format had:
 
-\begin{minted}{json}
+\begin{verbatim}
 {"seq":1,"type":"run/started","timestamp":"...","data":{...}}
-\end{minted}
+\end{verbatim}
 
 The v2 trace format requires:
 
-\begin{minted}{json}
+\begin{verbatim}
 {"event_id":"...","run_id":"...","runbook_id":"...","timestamp":"...",
  "kind":"run/started","sequence":1,"payload":{...}}
-\end{minted}
+\end{verbatim}
 
 \paragraph{Field mapping:}
 \begin{center}
@@ -439,9 +439,9 @@ Compatibility mode will be removed in v2.1.
 
 Teams with historical v1 trace archives can migrate them to v2 format using:
 
-\begin{minted}{bash}
+\begin{verbatim}
 gert trace migrate --to-v2 .runbook/runs/*/trace.jsonl
-\end{minted}
+\end{verbatim}
 
 This rewrites all trace files in-place, adding the required v2 envelope fields.
 

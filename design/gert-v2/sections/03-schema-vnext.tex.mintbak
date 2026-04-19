@@ -158,7 +158,7 @@ migration.
 \subsection{\texttt{gert migrate} Behavior}
 \label{subsec:migrate}
 
-\begin{minted}{bash}
+\begin{verbatim}
 # Dry-run preview
 gert migrate --dry-run runbook.yaml
 
@@ -167,7 +167,7 @@ gert migrate runbook.yaml
 
 # Migrate a whole directory
 gert migrate ./runbooks/
-\end{minted}
+\end{verbatim}
 
 Migration rules applied automatically:
 \begin{enumerate}
@@ -244,14 +244,14 @@ In v1, tools were declared as a flat string array (\texttt{tools: [curl, nslooku
 In v2, \texttt{toolRefs} is a typed array that allows aliasing and explicit path
 overrides:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 toolRefs:
   - name: curl
   - name: nslookup
   - name: k8s
     path: ./tools/k8s.tool.yaml   # override default discovery
     alias: kubectl-wrapper        # optional local alias
-\end{minted}
+\end{verbatim}
 
 The default discovery path for \texttt{name: foo} is \texttt{tools/foo.tool.yaml}
 relative to the runbook file.  The \texttt{path} field overrides this.
@@ -261,7 +261,7 @@ that differs from the tool's declared \texttt{meta.name}.
 \subsection{Minimal Valid v2 Runbook}
 \label{subsec:minimal-runbook}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 $schema: "https://schemas.gert.dev/runbook/v2.json"
 apiVersion: runbook/v2
 id: hello-world
@@ -283,12 +283,12 @@ flow:
       outcome:
         category: resolved
         code: success
-\end{minted}
+\end{verbatim}
 
 \subsection{Complete Annotated Example}
 \label{subsec:full-example}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 $schema: "https://schemas.gert.dev/runbook/v2.json"
 apiVersion: runbook/v2
 id: service-health-check
@@ -403,7 +403,7 @@ flow:
                 outcome:
                   category: escalated
                   code: http_fail
-\end{minted}
+\end{verbatim}
 
 % ============================================================
 \section{Input and Output Declarations}
@@ -416,7 +416,7 @@ flow:
 Inputs declare variables that must be resolved before execution begins.  In v2
 the \texttt{inputs} map is a top-level field (promoted from \texttt{meta.inputs}).
 
-\begin{minted}{yaml}
+\begin{verbatim}
 inputs:
   <name>:
     type: string | number | boolean | secret
@@ -426,7 +426,7 @@ inputs:
     example: "..."
     pattern: "^[a-z]+"             # regex validation (string only)
     from: <binding>                 # resolution source
-\end{minted}
+\end{verbatim}
 
 \paragraph{type field}
 The \texttt{type} field (new in v2) declares the value's type.  Supported values:
@@ -468,13 +468,13 @@ With \texttt{type: include}, the caller's variable space is shared directly;
 explicit output declarations are reserved for the future \texttt{type: call}
 step type (post-v2.0 scope, isolated scope with explicit I/O mapping).
 
-\begin{minted}{yaml}
+\begin{verbatim}
 outputs:
   <name>:
     type: string | number | boolean | secret
     description: "..."
     from: captures.<captureName>    # must reference a capture variable
-\end{minted}
+\end{verbatim}
 
 The \texttt{from: captures.*} binding is the only supported form in v2.
 The named capture must be written by at least one step in the runbook; the
@@ -678,19 +678,19 @@ The following fields are available on every step type:
 \paragraph{Retry configuration}
 \label{subsec:retry}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 retry:
   max: 3              # maximum retry attempts (required)
   interval: "5s"      # initial wait between attempts
   backoff: linear     # linear | exponential (default: linear)
-\end{minted}
+\end{verbatim}
 
 \paragraph{Step contract}
 
 The \texttt{contract} field annotates a step with its behavioral properties for
 governance policy evaluation:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 contract:
   effects:
     - network.probe
@@ -700,7 +700,7 @@ contract:
   deterministic: true
   idempotent: false
   secrets: [auth_token]
-\end{minted}
+\end{verbatim}
 
 Effects are free-form strings matched against \texttt{governance.rules[].effects}.
 The \texttt{secrets} list names variables whose values must be redacted in traces.
@@ -803,7 +803,7 @@ convert run to a string.''}.
 
 \paragraph{Example: exec form (unchanged)}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: tail_logs
     type: cli
@@ -817,11 +817,11 @@ convert run to a string.''}.
       effects: [filesystem.read]
       reads: [log_file]
       writes: [output]
-\end{minted}
+\end{verbatim}
 
 \paragraph{Example: run string form with explicit shell}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: run_script
     type: cli
@@ -832,22 +832,22 @@ convert run to a string.''}.
       fi
     capture:
       stdout: script_output
-\end{minted}
+\end{verbatim}
 
 \paragraph{Example: run string form with auto shell}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: echo_env
     type: cli
     run: echo "Environment is {{ .env }}"
     capture:
       stdout: echo_result
-\end{minted}
+\end{verbatim}
 
 \paragraph{Example: run map form (multi-shell)}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: clear_cache
     type: cli
@@ -857,7 +857,7 @@ convert run to a string.''}.
       pwsh: Remove-Item -Recurse -Force C:\tmp\cache\{{ .service }}
     capture:
       exit_code: clear_result
-\end{minted}
+\end{verbatim}
 
 \subsection{Step Type: choice}
 \label{subsec:step-choice}
@@ -918,7 +918,7 @@ Each option is an object with:
 
 \paragraph{Example: Environment selection}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: select_environment
     type: choice
@@ -936,7 +936,7 @@ Each option is an object with:
         hint: Gradual rollout to 10% of production traffic
     variable: deploy_env
     default: staging
-\end{minted}
+\end{verbatim}
 
 The value \texttt{staging}, \texttt{production}, or \texttt{canary} is stored in
 \texttt{\{\{ .deploy\_env \}\}} and can be referenced by subsequent steps.
@@ -993,7 +993,7 @@ Each route is an object with:
 
 \paragraph{Example: Incident response fork}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: triage_decision
     type: decision
@@ -1012,7 +1012,7 @@ Each route is an object with:
         goto: escalate_to_oncall
         hint: Unclear root cause; needs senior diagnosis
     variable: chosen_path
-\end{minted}
+\end{verbatim}
 
 After the user selects a route, execution continues at the target runbook or
 step.  The \texttt{chosen\_path} variable contains the selected label
@@ -1104,7 +1104,7 @@ sub-processes.  Authors are responsible for ensuring ephemeral values are only
 passed to secure execution contexts.
 \end{quote}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - id: collect_credentials
   type: collector
   label: "Deploy credentials"
@@ -1125,7 +1125,7 @@ passed to secure execution contexts.
       options:
         - { value: "staging",    label: "Staging" }
         - { value: "production", label: "Production" }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Dynamic Forms}
 \label{par:dynamic-forms}
@@ -1208,7 +1208,7 @@ sub-fields:
 \end{tabular}
 \end{center}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # Basic multiline with hint
 - name: description
   type: text
@@ -1234,7 +1234,7 @@ sub-fields:
   validation:
     min_length: 20
     max_length: 500
-\end{minted}
+\end{verbatim}
 
 \paragraph{Structured multiline format validation}
 \label{par:text-format}
@@ -1265,7 +1265,7 @@ expressions that need to traverse the structure must use gert's
 \texttt{fromYAML}/\texttt{fromJSON} template functions.
 \end{quote}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # YAML-format multiline field
 - id: config_patch
   type: text
@@ -1284,7 +1284,7 @@ expressions that need to traverse the structure must use gert's
   required: true
   validation:
     format: json
-\end{minted}
+\end{verbatim}
 
 \texttt{validation.format} is silently ignored when \texttt{multiline} is
 \texttt{false} or absent — a validation warning is emitted at schema load
@@ -1308,7 +1308,7 @@ object constrains acceptable values:
 \end{tabular}
 \end{center}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - name: amount_usd
   type: number
   label: Amount (USD)
@@ -1332,7 +1332,7 @@ object constrains acceptable values:
     min: 1.0
     max: 10.0
     step: 0.1
-\end{minted}
+\end{verbatim}
 
 \subsubsection{Field type: \texttt{integer}}
 \label{subsubsec:field-integer}
@@ -1341,7 +1341,7 @@ Convenience shorthand for \texttt{number} with \texttt{step: 1}.  The stored
 variable value is always an integer.  Accepts the same \texttt{validation.min}
 and \texttt{validation.max} fields as \texttt{number}.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - name: instance_count
   type: integer
   label: Number of instances
@@ -1349,7 +1349,7 @@ and \texttt{validation.max} fields as \texttt{number}.
   validation:
     min: 1
     max: 100
-\end{minted}
+\end{verbatim}
 
 \subsubsection{Field type: \texttt{date}}
 \label{subsubsec:field-date}
@@ -1368,14 +1368,14 @@ The stored variable value is the ISO date string.
 \end{tabular}
 \end{center}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - name: start_date
   type: date
   label: Start date
   required: true
   validation:
     min: "2024-01-01"
-\end{minted}
+\end{verbatim}
 
 \subsubsection{Field type: \texttt{datetime}}
 \label{subsubsec:field-datetime}
@@ -1394,12 +1394,12 @@ RFC 3339 datetime input with explicit timezone offset or \texttt{Z} for UTC
 \end{tabular}
 \end{center}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - name: incident_detected_at
   type: datetime
   label: When was the incident first detected?
   required: true
-\end{minted}
+\end{verbatim}
 
 \subsubsection{Field type: \texttt{boolean}}
 \label{subsubsec:field-boolean}
@@ -1407,7 +1407,7 @@ RFC 3339 datetime input with explicit timezone offset or \texttt{Z} for UTC
 True/false checkbox.  The stored variable value is a boolean (\texttt{true}
 or \texttt{false}), not a string.  No additional validation fields are defined.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - name: background_check_completed
   type: boolean
   label: Background check completed?
@@ -1416,7 +1416,7 @@ or \texttt{false}), not a string.  No additional validation fields are defined.
   type: boolean
   label: No disqualifying issues found?
   required: true
-\end{minted}
+\end{verbatim}
 
 The value is available in templates as a boolean:
 \texttt{\{\{ if .background\_check\_completed \}\}…\{\{ end \}\}}.
@@ -1459,7 +1459,7 @@ must be present.
 \texttt{multiple: true} is set, the operator may select more than one option
 and the stored variable becomes an array of selected values.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # Static options
 - name: department
   type: select
@@ -1497,7 +1497,7 @@ and the stored variable becomes an array of selected values.
       label: Auth Service
     - value: payments
       label: Payments
-\end{minted}
+\end{verbatim}
 
 \subsubsection{Field type: \texttt{autocomplete}}
 \label{subsubsec:field-autocomplete}
@@ -1535,7 +1535,7 @@ the provider once with an empty query string to fetch all available options.
 The resulting list is then rendered as a standard dropdown.
 \end{quote}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # Live service search
 - name: affected_service
   type: autocomplete
@@ -1556,7 +1556,7 @@ The resulting list is then rendered as a standard dropdown.
     provider: hr-directory
     field: query
     min_chars: 2
-\end{minted}
+\end{verbatim}
 
 \paragraph{Approval gate}
 \label{subsec:approval-gate}
@@ -1583,7 +1583,7 @@ the SLA enforcement gap identified in the research brief.
 
 \paragraph{Example: Incident evidence collection}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: collect_evidence
     type: collector
@@ -1617,7 +1617,7 @@ the SLA enforcement gap identified in the research brief.
       roles: [DRI, incident-commander]
       timeout: 30m
       on_timeout: fail
-\end{minted}
+\end{verbatim}
 
 After the user provides the requested evidence and approval is granted, the
 collected values are available as \texttt{\{\{ .incident\_summary \}\}},
@@ -1644,7 +1644,7 @@ Benefits of the questionnaire pattern:
 
 \textbf{Example: Incident triage form} (4-field form with conditional logic using \texttt{when})
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: collect_incident_details
     type: collector
@@ -1679,7 +1679,7 @@ Benefits of the questionnaire pattern:
         type: boolean
         label: Customer-facing impact?
         when: "{{ or (eq .severity 'medium') (eq .severity 'critical') }}"
-\end{minted}
+\end{verbatim}
 
 \paragraph{Validation rules for \texttt{collector}}
 
@@ -1803,7 +1803,7 @@ error before execution begins.  The \texttt{on\_timeout} semantics remain
 unchanged: \texttt{fail} terminates the run, \texttt{continue} advances to the
 next step, and \texttt{branch:<id>} jumps to the named branch.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: legal_review
     type: approve
@@ -1818,7 +1818,7 @@ next step, and \texttt{branch:<id>} jumps to the named branch.
       effects: [approval.legal]
       reads: []
       writes: []
-\end{minted}
+\end{verbatim}
 
 \paragraph{Quorum Approval}
 
@@ -1839,7 +1839,7 @@ enables M-of-N approval semantics:
         step immediately fails because quorum is no longer reachable.)
 \end{itemize}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: security_quorum
     type: approve
@@ -1856,7 +1856,7 @@ enables M-of-N approval semantics:
       effects: [approval.security]
       reads: []
       writes: []
-\end{minted}
+\end{verbatim}
 
 \paragraph{Validation Rules}
 
@@ -1904,13 +1904,13 @@ mcp).
 Output capture in v2 adds a \texttt{json.<path>} form for JSON-structured tool
 outputs, eliminating the need for follow-up \texttt{cli} steps with \texttt{jq}:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 capture:
   pod_name: json.items[0].metadata.name
   status:   json.items[0].status.phase
-\end{minted}
+\end{verbatim}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: list_pods
     type: tool
@@ -1928,7 +1928,7 @@ capture:
       effects: [k8s.read]
       reads: [namespace]
       writes: [pod_count, first_pod]
-\end{minted}
+\end{verbatim}
 
 \subsection{Step Type: wait\_for\_event}
 \label{subsec:step-wait-for-event}
@@ -1971,7 +1971,7 @@ When the runtime reaches a \texttt{wait\_for\_event} step it:
 
 \paragraph{Example 1 — Prometheus alert webhook}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: wait_prometheus_alert
     type: wait_for_event
@@ -1991,11 +1991,11 @@ When the runtime reaches a \texttt{wait\_for\_event} step it:
       effects: []
       reads: []
       writes: [alert_value, alert_labels]
-\end{minted}
+\end{verbatim}
 
 \paragraph{Example 2 — Named channel / approval callback}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: wait_approval_callback
     type: wait_for_event
@@ -2012,7 +2012,7 @@ When the runtime reaches a \texttt{wait\_for\_event} step it:
       effects: []
       reads: [request_id]
       writes: [approved_by, decision]
-\end{minted}
+\end{verbatim}
 
 \paragraph{Transport Note}
 
@@ -2062,7 +2062,7 @@ to any steps that follow in the caller.
 \end{tabular}
 \end{center}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: run_db_checks
     type: include
@@ -2076,7 +2076,7 @@ to any steps that follow in the caller.
       effects: [db.read]
       reads: [target_db]
       writes: []
-\end{minted}
+\end{verbatim}
 
 \paragraph{Cycle Detection}
 The runtime builds a runbook dependency graph at load time by resolving all
@@ -2126,7 +2126,7 @@ At most one branch arm executes.  If no arm matches and no arm has an
 steps run.  The \texttt{else: true} marker (new in v2) designates a catch-all
 arm:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: route_on_env
     type: branch
@@ -2161,7 +2161,7 @@ arm:
               outcome:
                 category: escalated
                 code: unknown_env
-\end{minted}
+\end{verbatim}
 
 \subsection{Step Type: iterate}
 \label{subsec:step-iterate}
@@ -2191,7 +2191,7 @@ The loop variable \texttt{\{\{\ .iteration\ \}\}} (0-indexed) is always availabl
 In list mode, \texttt{\{\{\ .item\ \}\}} (or the \texttt{as} name) holds the
 current element.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # List iteration
 - iterate:
     id: check_all_services
@@ -2235,7 +2235,7 @@ current element.
           title: Wait 15s
           command: sleep
           args: ["15"]
-\end{minted}
+\end{verbatim}
 
 \subsection{Step Type: parallel}
 \label{subsec:step-parallel}
@@ -2260,7 +2260,7 @@ execution.  After the join, all \texttt{capture} values from all branches are
 merged into the caller's variable map.  Write conflicts (two branches writing the
 same variable) are resolved by last-writer-wins and a warning is emitted.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: parallel_checks
     type: parallel
@@ -2293,7 +2293,7 @@ same variable) are resolved by last-writer-wins and a warning is emitted.
     join:
       wait_for: all
       on_failure: fail
-\end{minted}
+\end{verbatim}
 
 \subsection{Step Type: assert}
 \label{subsec:step-assert}
@@ -2301,7 +2301,7 @@ same variable) are resolved by last-writer-wins and a warning is emitted.
 Evaluates a list of assertions against captured variables.  Fails the run if
 any assertion does not pass.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: verify_deployment
     type: assert
@@ -2317,7 +2317,7 @@ any assertion does not pass.
         subject: "{{ .api_response }}"
         path: "$.status"
         expected: "active"
-\end{minted}
+\end{verbatim}
 
 Assertion types: \texttt{contains}, \texttt{not\_contains}, \texttt{matches}
 (regex), \texttt{eq}, \texttt{ne}, \texttt{lt}, \texttt{gt}, \texttt{exit\_code},
@@ -2346,7 +2346,7 @@ The compensation steps execute in LIFO order relative to the sequence of
 Compensation steps share the same variable context as the point at which the
 \texttt{compensate} node was registered.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: scale_down
     type: tool
@@ -2375,7 +2375,7 @@ Compensation steps share the same variable context as the point at which the
               args:
                 deployment: "{{ .deployment }}"
                 replicas: "{{ .original_replicas }}"
-\end{minted}
+\end{verbatim}
 
 \subsection{Step Type: end}
 \label{subsec:step-end}
@@ -2383,7 +2383,7 @@ Compensation steps share the same variable context as the point at which the
 Declares a terminal outcome and halts execution.  Renamed from \texttt{router}
 in v1.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: resolved
     type: end
@@ -2393,7 +2393,7 @@ in v1.
       code: dns_healthy
       meta:
         resolution_time: "{{ .elapsed }}"
-\end{minted}
+\end{verbatim}
 
 % ============================================================
 \section{Tool Definition Schema (v2)}
@@ -2407,7 +2407,7 @@ replaced by \texttt{tool/v2}.
 \subsection{Tool Definition Field Inventory}
 \label{subsec:tool-fields}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 $schema: "https://schemas.gert.dev/tool/v2.json"
 apiVersion: tool/v2
 
@@ -2446,7 +2446,7 @@ actions:
       reads: [namespace]
     governance:
       action: allow
-\end{minted}
+\end{verbatim}
 
 \paragraph{New in v2}
 
@@ -2468,7 +2468,7 @@ actions:
 Provider definitions declare external input resolution services.
 In v2 the \texttt{provider/v0} version is replaced by \texttt{provider/v2}.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 $schema: "https://schemas.gert.dev/provider/v2.json"
 apiVersion: provider/v2
 
@@ -2498,7 +2498,7 @@ fields:
 
 capabilities:
   - input-resolution
-\end{minted}
+\end{verbatim}
 
 The \texttt{fields} map defines the provider's schema.  Each field name
 corresponds to a \texttt{from: <provider>.<field>} binding in a runbook input.
@@ -2532,7 +2532,7 @@ and GitHub Actions.  Extension fields must:
 
 \paragraph{At the runbook level}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 $schema: "https://schemas.gert.dev/runbook/v2.json"
 apiVersion: runbook/v2
 id: deploy-service
@@ -2541,18 +2541,18 @@ name: Deploy Service
 x-myorg-cost-center: "engineering-ops"
 x-myorg-change-id: "CHG-20260418-001"
 x-otel-service-name: "payment-service"
-\end{minted}
+\end{verbatim}
 
 \paragraph{At the step level}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 - step:
     id: deploy
     type: tool
     title: Deploy to production
     x-myorg-risk-level: high
     x-myorg-rollback-id: "{{ .deploy_id }}"
-\end{minted}
+\end{verbatim}
 
 \subsection{Extension Validation}
 
@@ -2573,7 +2573,7 @@ x-otel-service-name: "payment-service"
 
 \subsection{Extension Registration Format}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # .gert/extensions/myorg.yaml
 apiVersion: extension/v1
 namespace: myorg
@@ -2594,7 +2594,7 @@ fields:
     type: string
 
 applies-to: [runbook, step]
-\end{minted}
+\end{verbatim}
 
 The extension schema is merged into the live JSON~Schema when the extension is
 registered, enabling IDE auto-completion for extension fields as well.
@@ -2688,7 +2688,7 @@ Both validation phases produce structured error reports with:
   \item Suggested fix (where computable)
 \end{itemize}
 
-\begin{minted}{bash}
+\begin{verbatim}
 $ gert validate service-health.runbook.yaml
 [SEM-003] step "check_http": tool action "head" not declared in
           tools/curl.tool.yaml (declared actions: get, post, download)
@@ -2697,7 +2697,7 @@ $ gert validate service-health.runbook.yaml
           is only written on branch "DNS check" — may be unbound
           --> service-health.runbook.yaml:51:12
           hint: add a default value in vars: or guard with {{ if .dns_result }}
-\end{minted}
+\end{verbatim}
 
 % ============================================================
 \section{Schema Artifacts}
@@ -2727,7 +2727,7 @@ They are also embedded in the binary and served at
 
 \subsection{\texttt{gert schema export}}
 
-\begin{minted}{bash}
+\begin{verbatim}
 # Export runbook schema (default)
 gert schema export
 
@@ -2739,7 +2739,7 @@ gert schema export --kind bundle > gert-v2-schemas.json
 
 # Validate a document against the exported schema
 gert schema export | check-jsonschema --schemafile - runbook.yaml
-\end{minted}
+\end{verbatim}
 
 The \texttt{bundle} format is a JSON object with three keys:
 \texttt{runbook}, \texttt{tool}, and \texttt{provider}.
@@ -2779,7 +2779,7 @@ The gert VS~Code extension additionally provides:
 Each schema artifact carries a version manifest in its \texttt{\$id} and a
 \texttt{x-gert-version} annotation:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.gert.dev/runbook/v2.json",
@@ -2788,7 +2788,7 @@ Each schema artifact carries a version manifest in its \texttt{\$id} and a
   "title": "gert runbook v2",
   ...
 }
-\end{minted}
+\end{verbatim}
 
 Automated compatibility testing (part of the gert CI pipeline) runs every
 v1 example runbook through the v2 compatibility parser and asserts no regression,

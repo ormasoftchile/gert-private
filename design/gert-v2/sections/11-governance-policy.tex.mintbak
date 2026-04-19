@@ -27,11 +27,11 @@ the allowlist entry \texttt{curl}. Glob patterns are \emph{not} supported in v2.
 only). The empty list (\texttt{[]}) means all commands are permitted (permissive default).
 
 \textbf{Schema.}
-\begin{minted}{yaml}
+\begin{verbatim}
 meta:
   governance:
     allowed_commands: [kubectl, curl, jq, aws]
-\end{minted}
+\end{verbatim}
 
 \textbf{Evaluation point.} Runtime Core, immediately before subprocess fork (after template
 evaluation). See §\ref{sec:policy-eval}.
@@ -48,11 +48,11 @@ The denylist takes precedence over the allowlist: if a command appears in both, 
 \texttt{dd}, \texttt{shutdown}) without needing to enumerate all permitted commands.
 
 \textbf{Schema.}
-\begin{minted}{yaml}
+\begin{verbatim}
 meta:
   governance:
     denied_commands: [rm, dd, shutdown, reboot]
-\end{minted}
+\end{verbatim}
 
 \textbf{Evaluation point.} Runtime Core, same checkpoint as allowlist. Denylist check runs
 first.
@@ -70,7 +70,7 @@ environment before the command is executed.
 \texttt{AWS\_SECRET\_ACCESS\_KEY}, \texttt{GITHUB\_TOKEN}) by commands in the runbook.
 
 \textbf{Schema.}
-\begin{minted}{yaml}
+\begin{verbatim}
 meta:
   governance:
     deny_env_vars:
@@ -78,7 +78,7 @@ meta:
       - "*_TOKEN"
       - "AWS_*"
       - "GITHUB_*"
-\end{minted}
+\end{verbatim}
 
 \textbf{Evaluation point.} Runtime Core, immediately before subprocess fork. Applied to the
 full process environment (not just explicitly passed vars).
@@ -98,7 +98,7 @@ backreferences (\texttt{\$1}). The special replace value \texttt{[REDACTED]} is 
 conventional replacement for secrets.
 
 \textbf{Schema.}
-\begin{minted}{yaml}
+\begin{verbatim}
 meta:
   governance:
     redact:
@@ -108,7 +108,7 @@ meta:
         replace: "password: [REDACTED]"
       - pattern: "(?i)bearer\\s+[A-Za-z0-9._\\-]+"
         replace: "Bearer [REDACTED]"
-\end{minted}
+\end{verbatim}
 
 \textbf{Evaluation point.} Runtime Core, immediately after subprocess/tool output is captured,
 before capture variables are set and before any trace write.
@@ -172,7 +172,7 @@ is not supported in v2.0.
 
 Approval gates are declared in the step's \texttt{approvals} block:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 steps:
   - id: delete_database
     kind: cli
@@ -184,7 +184,7 @@ steps:
       on_timeout: fail   # or: escalate
       escalate_to: ["senior-sre", "director-of-eng"]
       message: "Deleting {{ .targetNamespace }} is irreversible. Confirm change window."
-\end{minted}
+\end{verbatim}
 
 \subsection{UX Contract}
 
@@ -205,7 +205,7 @@ presenting the approval request to authorized users and collecting decisions.
 
 An approver submits a decision by calling \texttt{RunHandle.Approve(ctx, ApprovalDecision)}:
 
-\begin{minted}{go}
+\begin{verbatim}
 type ApprovalDecision struct {
     StepID   string    // step to approve (must match current paused step)
     Actor    string    // identity of the approver (e.g., "alice@corp.com")
@@ -214,7 +214,7 @@ type ApprovalDecision struct {
     Comment  string    // optional justification
     At       time.Time // timestamp of decision
 }
-\end{minted}
+\end{verbatim}
 
 The runtime validates:
 \begin{itemize}
@@ -234,7 +234,7 @@ proceeds with normal step execution.
 
 Every approval decision is written to the trace as an immutable record:
 
-\begin{minted}{bash}
+\begin{verbatim}
 // governance/approvalRequired
 {
   "sequence": 14,
@@ -267,7 +267,7 @@ Every approval decision is written to the trace as an immutable record:
   "approvals": ["alice@corp.com", "bob@corp.com"],
   "at": "2026-04-18T10:07:00Z"
 }
-\end{minted}
+\end{verbatim}
 
 The trace provides a complete, tamper-evident audit record of who approved what and when.
 
@@ -315,7 +315,7 @@ Dennis's research confirms that Open Policy Agent (OPA) is the CNCF standard for
 policy-as-code in operational tooling. For \textbf{v2.1}, gert will introduce OPA
 integration at the following evaluation hooks:
 
-\begin{minted}{go}
+\begin{verbatim}
 // OPA evaluation hook interface (v2.1 target)
 type PolicyEngine interface {
     // EvaluatePreStep is called before each step pre-flight.
@@ -342,7 +342,7 @@ type PolicyDecision struct {
     // For approval gates: required roles computed by policy engine
     RequiredApprovers []string
 }
-\end{minted}
+\end{verbatim}
 
 The \texttt{PolicyEngine} interface will have two implementations in v2.1:
 \begin{enumerate}
@@ -382,13 +382,13 @@ replacing self-asserted identity for governed environments.
 
 Runbooks may declare a \texttt{requires\_role} field to restrict who may execute them:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 meta:
   governance:
     requires_role: "incident-responder"
     # or: requires_any_role: ["DRI", "incident-responder"]
     # or: requires_all_roles: ["DRI", "change-manager"]
-\end{minted}
+\end{verbatim}
 
 The Runtime Core evaluates this constraint during run initialization (pre-flight, before
 any step executes). If the actor's identity does not match, \texttt{governance/accessDenied}
@@ -400,13 +400,13 @@ Individual steps may declare \texttt{requires\_role} to restrict who may trigger
 This is distinct from approval gates (which require external approval) — step role restriction
 \emph{prevents} a step from executing unless the actor themselves holds the required role.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 steps:
   - id: promote_to_production
     kind: cli
     requires_role: "release-manager"
     command: "kubectl set image deployment/app app={{ .imageTag }}"
-\end{minted}
+\end{verbatim}
 
 \subsection{Separation of Duties}
 
@@ -431,12 +431,12 @@ For structured tool outputs (JSON objects returned by MCP tools), v2.1 will intr
 field marking: a tool definition may declare that a returned field contains sensitive data.
 The runtime will redact the field value without requiring a regex pattern.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # In .tool.yaml (v2.1 target)
 outputs:
   - name: api_key
     sensitive: true   # value redacted from trace and captures
-\end{minted}
+\end{verbatim}
 
 \subsection{Redaction Guarantees}
 
@@ -524,7 +524,7 @@ following invariants:
 
 \subsection{Extension Policy Rule Schema}
 
-\begin{minted}{go}
+\begin{verbatim}
 // PolicyRule is contributed by an extension and evaluated at pre-step checkpoint.
 type PolicyRule struct {
     ID          string       // unique within the extension's namespace
@@ -537,7 +537,7 @@ type PolicyRule struct {
     Action      PolicyAction // Deny or Warn
     Reason      string       // human-readable reason written to trace event
 }
-\end{minted}
+\end{verbatim}
 
 Extension-contributed policy is loaded during the Extension Host's \texttt{Load()} phase,
 before the first \texttt{Next()} call. Policy rules are static for the lifetime of a run;

@@ -101,7 +101,7 @@ RunDetails}. \\
 
 \paragraph{Request schema — \texttt{exec/start}:}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "1",
@@ -116,11 +116,11 @@ RunDetails}. \\
     "actorId": "ops@acme.example"
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Response schema — \texttt{exec/start}:}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "1",
@@ -131,13 +131,13 @@ RunDetails}. \\
     "traceFile": "./traces/run-abc123.jsonl"
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Error envelope:}
 
 All errors follow JSON-RPC 2.0 error format:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "1",
@@ -151,7 +151,7 @@ All errors follow JSON-RPC 2.0 error format:
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 See Section~\ref{sec:error-codes} for the canonical error code registry.
 
@@ -191,20 +191,20 @@ a running or completed gert execution.  It is served over \texttt{gert serve
 
 \paragraph{Subscribe message:}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "action": "subscribe",
   "runId": "run-abc123",
   "sinceSequence": 0  // Optional: replay from sequence number
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Event envelope:}
 
 Events are transmitted as JSON objects, one per WebSocket message.  The event
 envelope is identical to the trace event format defined in §12:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "eventType": "step/started",
   "timestamp": "2026-04-18T12:00:00Z",
@@ -216,7 +216,7 @@ envelope is identical to the trace event format defined in §12:
     "toolName": "acme.pd-lookup"
   }
 }
-\end{minted}
+\end{verbatim}
 
 All events carry:
 
@@ -235,13 +235,13 @@ All events carry:
 If the WebSocket connection is lost, the client may reconnect and provide
 \texttt{sinceSequence} to resume from the last received event:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "action": "subscribe",
   "runId": "run-abc123",
   "sinceSequence": 42  // Resume from event 43
 }
-\end{minted}
+\end{verbatim}
 
 The server will replay all events with \texttt{sequence > 42}.
 
@@ -271,7 +271,7 @@ project-level, or extension-contributed — implement this contract.
 
 \paragraph{Invocation request:}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "invocation-5",
@@ -291,11 +291,11 @@ project-level, or extension-contributed — implement this contract.
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Success response:}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "invocation-5",
@@ -315,11 +315,11 @@ project-level, or extension-contributed — implement this contract.
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Error response:}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "invocation-5",
@@ -336,11 +336,11 @@ project-level, or extension-contributed — implement this contract.
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Cancellation request:}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "cancel-5",
@@ -350,7 +350,7 @@ project-level, or extension-contributed — implement this contract.
     "reason": "run-cancelled"
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{MCP tool adapter:}
 
@@ -392,7 +392,7 @@ defined in §4 and summarized here for completeness.
 
 \paragraph{Initialize request:}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "1",
@@ -414,11 +414,11 @@ defined in §4 and summarized here for completeness.
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Initialize response:}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "1",
@@ -434,7 +434,7 @@ defined in §4 and summarized here for completeness.
     ]
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Heartbeat (ping/pong):}
 
@@ -502,7 +502,7 @@ X-Gert-Contract: events/v2
 If the client sends an unsupported contract version, the server responds with
 HTTP 400 and error:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "error": {
     "code": 4001,
@@ -513,18 +513,18 @@ HTTP 400 and error:
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{stdio-based contracts (tool, extension):}
 
 The contract version is declared in the first message exchanged (initialize or
 handshake):
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "protocolVersion": "2.0"
 }
-\end{minted}
+\end{verbatim}
 
 If the protocol version is unsupported, the responder returns error code
 \texttt{-32001} (protocol version not supported).
@@ -584,7 +584,7 @@ optional fields without breaking existing clients.
 
 Example:
 
-\begin{minted}{bash}
+\begin{verbatim}
 // Server adds a new optional field in exec/v2
 {
   "result": {
@@ -593,7 +593,7 @@ Example:
     "newOptionalField": "value"  // Clients ignore this
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Backward compatibility (servers):}
 
@@ -602,7 +602,7 @@ versions.  Servers MUST NOT require new optional fields.
 
 Example:
 
-\begin{minted}{bash}
+\begin{verbatim}
 // Client sends an old request format (before a new optional field was added)
 {
   "method": "exec/start",
@@ -612,7 +612,7 @@ Example:
   }
 }
 // Server accepts and defaults the missing field
-\end{minted}
+\end{verbatim}
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Error Codes}
@@ -668,7 +668,7 @@ integers organized by category.  Codes are stable across contract versions.
 
 \paragraph{Error envelope structure:}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "error": {
     "code": 2001,
@@ -683,7 +683,7 @@ integers organized by category.  Codes are stable across contract versions.
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Error code stability:}
 
@@ -736,7 +736,7 @@ Each test case is a YAML file with:
 
 \subsection{Running Contract Tests}
 
-\begin{minted}{bash}
+\begin{verbatim}
 $ gert contract test --adapter=vscode
 Running contract tests for adapter: vscode
   ✓ exec-v2/01-start-run (passed)
@@ -744,7 +744,7 @@ Running contract tests for adapter: vscode
   ✗ events-v2/01-subscribe (failed: missing 'sequence' field)
 
 Contract test results: 2 passed, 1 failed
-\end{minted}
+\end{verbatim}
 
 Adapter implementations SHOULD achieve 100\% pass rate before release.
 
@@ -842,11 +842,11 @@ schemas are used for:
 The gert project provides code generation tools to generate client libraries
 from the OpenAPI and JSON Schema definitions:
 
-\begin{minted}{bash}
+\begin{verbatim}
 $ gert codegen client --language=typescript --output=./clients/ts/
 Generated TypeScript client for exec/v2 and events/v2
 Files written to ./clients/ts/
-\end{minted}
+\end{verbatim}
 
 Official client libraries are provided for:
 

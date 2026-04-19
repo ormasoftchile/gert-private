@@ -59,60 +59,6 @@ Tool binary checksum verification before invocation &
 This threat model is derived from NIST SP 800-53 security controls~\cite{nist-sp800-53}
 and ISO/IEC 27001 guidance on privileged access management and audit logging~\cite{iso27001}.
 
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[scale=0.85, transform shape]
-  % ── Pipeline stages ──────────────────────────────────────────────────
-  \node[stepbox, minimum width=2.6cm, minimum height=0.8cm] (load)
-    at (0,0) {Runbook\\Load};
-  \node[stepbox, minimum width=2.6cm, minimum height=0.8cm,
-    right=2.0cm of load] (runstart) {Run\\Start};
-  \node[stepbox, minimum width=2.6cm, minimum height=0.8cm,
-    right=2.0cm of runstart] (dispatch) {Step\\Dispatch};
-  \node[stepbox, minimum width=2.6cm, minimum height=0.8cm,
-    right=2.0cm of dispatch] (execute) {Execute\\Step};
-
-  % ── Main flow arrows ─────────────────────────────────────────────────
-  \draw[gertarrow] (load)     -- (runstart);
-  \draw[gertarrow] (runstart) -- (dispatch);
-  \draw[gertarrow] (dispatch) -- (execute);
-
-  % ── Governance check labels above each stage ──────────────────────────
-  \node[catbox, minimum width=2.6cm, above=0.9cm of load,
-    font=\scriptsize\bfseries] (c1)
-    {deny\_env\_vars\\ext signature\\schema valid};
-  \node[catbox, minimum width=2.6cm, above=0.9cm of runstart,
-    font=\scriptsize\bfseries] (c2)
-    {requires\_approval\\actor role\\pre-flight policy};
-  \node[catbox, minimum width=2.6cm, above=0.9cm of dispatch,
-    font=\scriptsize\bfseries] (c3)
-    {allowlist / denylist\\output redaction\\step-level rules};
-
-  \draw[gertarrow, dashed, black!50] (c1) -- (load);
-  \draw[gertarrow, dashed, black!50] (c2) -- (runstart);
-  \draw[gertarrow, dashed, black!50] (c3) -- (dispatch);
-
-  % ── BLOCKED exits below each stage ───────────────────────────────────
-  \node[stepbox, fill=black!18, minimum width=2.6cm, below=1.0cm of load,
-    font=\small\bfseries] (b1) {BLOCKED};
-  \node[stepbox, fill=black!18, minimum width=2.6cm, below=1.0cm of runstart,
-    font=\small\bfseries] (b2) {BLOCKED};
-  \node[stepbox, fill=black!18, minimum width=2.6cm, below=1.0cm of dispatch,
-    font=\small\bfseries] (b3) {BLOCKED};
-
-  \draw[gertarrow, dashed] (load)     -- (b1)
-    node[midway, right, align=center, font=\scriptsize] {policy\\fail};
-  \draw[gertarrow, dashed] (runstart) -- (b2)
-    node[midway, right, align=center, font=\scriptsize] {approval\\denied};
-  \draw[gertarrow, dashed] (dispatch) -- (b3)
-    node[midway, right, align=center, font=\scriptsize] {rule\\violation};
-\end{tikzpicture}
-\caption{Governance enforcement points across the gert execution pipeline.
-  Each stage has dedicated policy checks; failure at any checkpoint halts
-  execution and emits a \texttt{governance/blocked} trace event.}
-\label{fig:governance-enforcement-points}
-\end{figure}
-
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Extension Trust Model}
 \label{sec:extension-trust}
@@ -159,7 +105,7 @@ Signature format is defined in Section~\ref{sec:extension-signature}.
 Remote/signed extensions must include a \texttt{signature:} block in
 \texttt{gert-extension.yaml}:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # gert-extension.yaml — signed extension
 apiVersion: extension/v2
 
@@ -178,7 +124,7 @@ trust_chain:
     issuer: "Acme Platform Team CA"
     notBefore: "2024-01-01T00:00:00Z"
     notAfter: "2025-01-01T00:00:00Z"
-\end{minted}
+\end{verbatim}
 
 \paragraph{Signature verification algorithm.}
 The signature is computed over the canonical JSON representation of the fields
@@ -205,7 +151,7 @@ If any step fails, the extension is rejected with a
 The \texttt{gert extension verify} command allows operators to manually verify
 an extension before installation:
 
-\begin{minted}{bash}
+\begin{verbatim}
 $ gert extension verify ./acme-extension/gert-extension.yaml \
     --trust-store /etc/gert/trusted-keys/
 Extension: acme.incident-pack v1.2.0
@@ -214,7 +160,7 @@ Issuer: Acme Platform Team CA
 Capabilities: tool-registration, network
 Trust level: remote/signed
 Verification: PASSED
-\end{minted}
+\end{verbatim}
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Process Isolation}
@@ -299,13 +245,13 @@ and then discarded.  Secrets never appear in trace logs or captured output.
 Input provider definitions declare which resolved values are sensitive via
 \texttt{sensitive: true} in the provider schema:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # vault.provider.yaml
 outputs:
   credentials:
     type: object
     sensitive: true
-\end{minted}
+\end{verbatim}
 
 When the host resolves \texttt{from: vault.credentials}, it marks the returned
 value as sensitive in memory.  This flag is respected by all downstream
@@ -315,7 +261,7 @@ consumers.
 Tool action definitions declare which input parameters accept sensitive data via
 \texttt{sensitive\_inputs}:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # my-tool.tool.yaml
 actions:
   deploy:
@@ -324,7 +270,7 @@ actions:
         type: string
         required: true
     sensitive_inputs: [api_key]
-\end{minted}
+\end{verbatim}
 
 When the host prepares the tool invocation envelope, it marks the
 \texttt{api\_key} field as sensitive.  The tool runtime redacts this field in
@@ -382,11 +328,11 @@ certificate and private key.
 
 Configuration:
 
-\begin{minted}{bash}
+\begin{verbatim}
 $ gert serve --http 0.0.0.0:8443 \
     --tls-cert /etc/gert/tls/cert.pem \
     --tls-key /etc/gert/tls/key.pem
-\end{minted}
+\end{verbatim}
 
 The host performs standard TLS 1.3 handshake with the client.  TLS 1.2 is
 supported for compatibility but TLS 1.1 and earlier are rejected.
@@ -402,20 +348,20 @@ requests.  The token is validated against a configured token store
 
 Example:
 
-\begin{minted}{bash}
+\begin{verbatim}
 $ gert serve --http :8443 --auth-mode bearer \
     --bearer-tokens /etc/gert/tokens.yaml
-\end{minted}
+\end{verbatim}
 
 The \texttt{tokens.yaml} file maps tokens to actor identities:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # tokens.yaml
 tokens:
   - token: "abc123..."
     actor: "ops@acme.example"
     roles: ["operator", "viewer"]
-\end{minted}
+\end{verbatim}
 
 \paragraph{Mutual TLS (mTLS).}
 The host requires clients to present a valid X.509 client certificate signed by
@@ -424,10 +370,10 @@ identity.
 
 Configuration:
 
-\begin{minted}{bash}
+\begin{verbatim}
 $ gert serve --http :8443 --auth-mode mtls \
     --tls-client-ca /etc/gert/tls/client-ca.pem
-\end{minted}
+\end{verbatim}
 
 mTLS is the recommended authentication mode for production deployments and
 enterprise environments.
@@ -515,7 +461,7 @@ Full control.  Includes all \textbf{operator} permissions plus:
 
 Roles are assigned in the workspace config (\texttt{gert-project.yaml}):
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # gert-project.yaml
 access:
   roles:
@@ -530,7 +476,7 @@ access:
     - role: viewer
       actors:
         - "*@acme.example"  # All Acme employees
-\end{minted}
+\end{verbatim}
 
 Actor patterns support wildcards for organization-wide grants.
 
@@ -539,14 +485,14 @@ Actor patterns support wildcards for organization-wide grants.
 The \texttt{governance.require\_approval} field in the runbook declares the
 role required to approve a step:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 steps:
   - id: delete_database
     cli: "kubectl delete database prod-db"
     approvals:
       min: 1
       roles: ["dba", "admin"]
-\end{minted}
+\end{verbatim}
 
 When the run reaches this step, it emits an
 \texttt{approval/required} trace event.  The step is paused.  Only actors with
@@ -606,7 +552,7 @@ must record:
 
 Example trace event:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "eventType": "governance/approval_received",
   "timestamp": "2026-04-18T12:00:00Z",
@@ -618,7 +564,7 @@ Example trace event:
   "signatureAlgorithm": "ed25519",
   "signaturePublicKey": "sha256:pubkey-fingerprint"
 }
-\end{minted}
+\end{verbatim}
 
 The signature covers the fields \texttt{runId}, \texttt{stepId},
 \texttt{actor}, \texttt{decision}, and \texttt{timestamp}.  The public key is
@@ -671,7 +617,7 @@ to mitigate these risks.
 Tool definitions may declare a \texttt{checksum:} field in
 \texttt{.tool.yaml}:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # kubectl.tool.yaml
 meta:
   name: kubectl
@@ -680,7 +626,7 @@ meta:
 checksum:
   algorithm: sha256
   digest: "a3b4c5d6e7f8..."
-\end{minted}
+\end{verbatim}
 
 Before invoking the tool, the host:
 
@@ -697,7 +643,7 @@ Before invoking the tool, the host:
 The \texttt{gert verify} command validates all tools and extensions in the
 workspace before execution:
 
-\begin{minted}{bash}
+\begin{verbatim}
 $ gert verify --workspace .
 Verifying tools...
   ✓ kubectl: checksum verified (sha256:a3b4c5...)
@@ -709,7 +655,7 @@ Verifying extensions...
   ✗ debug-tools: no signature (required for remote extensions)
 
 Verification: FAILED (2 errors)
-\end{minted}
+\end{verbatim}
 
 This command should be run in CI/CD pipelines before deploying runbooks to
 production.

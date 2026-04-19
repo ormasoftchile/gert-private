@@ -55,7 +55,7 @@ collisions (e.g., \texttt{acme.pd-lookup}).
 \section{Tool Definition Schema (v2)}
 \label{sec:tool-definition-schema}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # tools/my-service.tool.yaml
 apiVersion: tool/v2
 
@@ -98,7 +98,7 @@ actions:
     capture:
       stdout:
         format: json
-\end{minted}
+\end{verbatim}
 
 \subsection{Transport-Specific Fields}
 
@@ -136,7 +136,7 @@ Stdout is captured in full after process exit.  The exit code is checked:
 non-zero is mapped to a tool error.
 
 \paragraph{Error envelope.}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "error": {
     "code": "TOOL_NONZERO_EXIT",
@@ -148,7 +148,7 @@ non-zero is mapped to a tool error.
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 \subsection{stdio-jsonrpc Transport}
 
@@ -158,7 +158,7 @@ run.  The host waits for \texttt{startup.ready-pattern} on stdout/stderr before
 sending the first request.
 
 \paragraph{Invocation envelope.}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "<invocationId>",
@@ -174,10 +174,10 @@ sending the first request.
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Response envelope.}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "<invocationId>",
@@ -190,10 +190,10 @@ sending the first request.
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Error envelope.}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "<invocationId>",
@@ -207,7 +207,7 @@ sending the first request.
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 Error code ranges:
 
@@ -235,7 +235,7 @@ context object.  For \texttt{stdio} tools, relevant fields are injected as
 environment variables prefixed \texttt{GERT\_}; for \texttt{stdio-jsonrpc} and
 \texttt{mcp} tools, the context is transmitted in the invocation envelope.
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "context": {
     "runId":       "run-abc123",        // Globally unique run identifier
@@ -250,7 +250,7 @@ environment variables prefixed \texttt{GERT\_}; for \texttt{stdio-jsonrpc} and
     ]
   }
 }
-\end{minted}
+\end{verbatim}
 
 \section{Capability Gate}
 \label{sec:tool-capability-gate}
@@ -273,21 +273,21 @@ Before dispatching any tool invocation the host checks two conditions:
 Tool output is mapped to named step captures using the \texttt{capture:}
 declaration in the action definition.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 capture:
   dns_output: stdout          # Capture stdout as variable dns_output
   error_log:  stderr          # Capture stderr as variable error_log
   exit_code:  exitCode        # Capture numeric exit code
-\end{minted}
+\end{verbatim}
 
 For \texttt{json} output format, capture paths may use dot notation to extract
 nested fields:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 capture:
   incident_id: "stdout.incident.id"
   severity:    "stdout.incident.severity"
-\end{minted}
+\end{verbatim}
 
 \paragraph{Redaction.}
 Before any captured value is stored in the run state or emitted to the trace,
@@ -305,7 +305,7 @@ a single tool.
 
 \subsection{MCP Server Declaration}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # In runbook meta or .gert/config.yaml
 tools:
   mcp-servers:
@@ -315,7 +315,7 @@ tools:
       transport: mcp
       startup:
         timeout: "15s"
-\end{minted}
+\end{verbatim}
 
 \subsection{MCP Discovery}
 
@@ -333,7 +333,7 @@ On run startup the host:
 
 When a runbook step calls an MCP-backed tool, the host sends:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "5",
@@ -348,7 +348,7 @@ When a runbook step calls an MCP-backed tool, the host sends:
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 The \texttt{\_gert\_context} field is a gert extension to the MCP envelope.
 MCP servers that do not recognise it MUST ignore it.  The response follows the
@@ -394,7 +394,7 @@ command, or an API cancellation request), the host:
 
 The \texttt{tools/cancel} request envelope:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "cancel-5",
@@ -404,7 +404,7 @@ The \texttt{tools/cancel} request envelope:
     "reason": "run-cancelled"
   }
 }
-\end{minted}
+\end{verbatim}
 
 \section{Tool Versioning}
 \label{sec:tool-versioning}
@@ -415,8 +415,8 @@ and from a workspace override), the host selects by resolution order
 (Section~\ref{sec:tool-discovery}), not by version number.  Explicit version
 pinning is supported via the runbook's \texttt{requires:} block:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 requires:
   - package: github.com/acme/gert-tools
     version: ">=1.2.0 <2.0.0"
-\end{minted}
+\end{verbatim}

@@ -113,7 +113,7 @@ Each extension ships a \texttt{gert-extension.yaml} file alongside its
 executable.  The manifest declares identity, requested capabilities, transport,
 and compatibility constraints.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # gert-extension.yaml — Extension Manifest
 apiVersion: extension/v2
 
@@ -158,7 +158,7 @@ env-read-patterns:
 platform:                            # Optional OS/arch constraints
   os: ["linux", "darwin", "windows"]
   arch: ["amd64", "arm64"]
-\end{minted}
+\end{verbatim}
 
 Manifest validation is performed by the host before the process is started.
 An extension with an unsatisfied \texttt{compatibility.api-version} range is
@@ -183,22 +183,22 @@ entries taking precedence:
 
 The \texttt{.gert/extensions.yaml} workspace config format:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # .gert/extensions.yaml
 extensions:
   - path: "./extensions/acme-pack"   # directory containing gert-extension.yaml
   - path: "/opt/gert-extensions/audit-pack"
-\end{minted}
+\end{verbatim}
 
 The runbook \texttt{extensions:} field:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 apiVersion: runbook/v2
 meta:
   name: incident-triage
 extensions:
   - path: "./extensions/acme-pack"
-\end{minted}
+\end{verbatim}
 
 When the same extension appears in multiple discovery sources, the host
 deduplicates by \texttt{meta.name}.  If two distinct extensions share the same
@@ -218,7 +218,7 @@ the capabilities it is willing to grant and its own version identity.
 
 Request params:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "1",
@@ -240,11 +240,11 @@ Request params:
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 Success response:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "1",
@@ -260,7 +260,7 @@ Success response:
     ]
   }
 }
-\end{minted}
+\end{verbatim}
 
 Error codes for this method:
 
@@ -277,18 +277,18 @@ Sent after a successful \texttt{extension/initialized} notification.  The
 extension returns its contribution manifest, filtered to the granted capability
 set.
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "2",
   "method": "contributions/list",
   "params": {}
 }
-\end{minted}
+\end{verbatim}
 
 Response:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "2",
@@ -299,7 +299,7 @@ Response:
     "policyContributions": []
   }
 }
-\end{minted}
+\end{verbatim}
 
 \subsection{extension/ping (host \textrightarrow{} extension)}
 
@@ -307,30 +307,30 @@ Periodic health check.  The extension MUST respond within the host-configured
 ping timeout (default 5 seconds).  A non-response triggers a crash-recovery
 cycle (Section~\ref{sec:ext-crash}).
 
-\begin{minted}{json}
+\begin{verbatim}
 { "jsonrpc": "2.0", "id": "42", "method": "extension/ping", "params": {} }
-\end{minted}
+\end{verbatim}
 
 Response:
 
-\begin{minted}{json}
+\begin{verbatim}
 { "jsonrpc": "2.0", "id": "42", "result": { "status": "ok" } }
-\end{minted}
+\end{verbatim}
 
 \subsection{extension/shutdown (host \textrightarrow{} extension)}
 
 Graceful termination.  The extension SHOULD drain in-flight requests and
 release resources within the shutdown timeout (default 10 seconds).
 
-\begin{minted}{json}
+\begin{verbatim}
 { "jsonrpc": "2.0", "id": "99", "method": "extension/shutdown", "params": {} }
-\end{minted}
+\end{verbatim}
 
 Response (best-effort; host may not wait):
 
-\begin{minted}{json}
+\begin{verbatim}
 { "jsonrpc": "2.0", "id": "99", "result": { "status": "ok" } }
-\end{minted}
+\end{verbatim}
 
 If the extension does not exit within the shutdown timeout, the host sends
 SIGTERM followed by SIGKILL after a grace period.
@@ -406,7 +406,7 @@ dispatching any extension-initiated request (e.g., a tool registration during
 \texttt{contributions/list}) the host verifies the required capability is in
 the granted set.  Violations return:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "...",
@@ -419,7 +419,7 @@ the granted set.  Violations return:
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 File-path and network-host constraints are enforced by the host at the system
 call boundary using OS-level mechanisms where available (e.g., pledge/unveil on

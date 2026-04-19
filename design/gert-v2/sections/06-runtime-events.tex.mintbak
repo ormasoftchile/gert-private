@@ -55,92 +55,6 @@ Every event carries a mandatory envelope with the following fields. Consumers MU
 
 \paragraph{Event IDs.} The \texttt{event\_id} is a UUID v4 assigned at emission time. It is globally unique across all runs and all gert deployments. Event IDs are used for correlation in distributed tracing systems (§15) and for deduplication in event forwarding pipelines.
 
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[scale=0.85, transform shape]
-  % ── Time axis ────────────────────────────────────────────────────────
-  \draw[thick, black!50] (0, 0) -- (0, -9.8)
-    node[below, font=\small\itshape] {time};
-  \node[font=\small\itshape, above] at (0, 0.1) {$t_0$};
-
-  % ── Helper: event dot and label macro ───────────────────────────────
-  % Mandatory events on the left, optional on the right
-  % Format: \filldraw (dot) + \node (label)
-
-  % run/started
-  \filldraw[black!70] (0, 0) circle (3pt);
-  \node[stepbox, anchor=west, minimum width=4.2cm] at (0.25, 0)
-    {\texttt{run/started}};
-  \node[font=\scriptsize, anchor=west] at (4.8, 0) {mandatory};
-
-  % step/started (step 1)
-  \filldraw[black!70] (0, -1.4) circle (3pt);
-  \node[stepbox, anchor=west, minimum width=4.2cm] at (0.25, -1.4)
-    {\texttt{step/started} \textrm{\footnotesize(step~1)}};
-  \node[font=\scriptsize, anchor=west] at (4.8, -1.4) {mandatory};
-
-  % step/completed (step 1)
-  \filldraw[black!70] (0, -2.5) circle (3pt);
-  \node[stepbox, anchor=west, minimum width=4.2cm] at (0.25, -2.5)
-    {\texttt{step/completed} \textrm{\footnotesize(step~1)}};
-  \node[font=\scriptsize, anchor=west] at (4.8, -2.5) {mandatory};
-
-  % step/started (step 2 — governance)
-  \filldraw[black!70] (0, -3.9) circle (3pt);
-  \node[stepbox, anchor=west, minimum width=4.2cm] at (0.25, -3.9)
-    {\texttt{step/started} \textrm{\footnotesize(step~2)}};
-  \node[font=\scriptsize, anchor=west] at (4.8, -3.9) {mandatory};
-
-  % governance/awaiting\_approval
-  \filldraw[black!50] (0, -5.0) circle (3pt);
-  \node[stepbox, fill=black!10, anchor=west, minimum width=4.2cm]
-    at (0.25, -5.0)
-    {\texttt{gov/awaiting\_approval}};
-  \node[font=\scriptsize, anchor=west] at (4.8, -5.0) {conditional};
-
-  % governance/approved
-  \filldraw[black!50] (0, -6.1) circle (3pt);
-  \node[stepbox, fill=black!10, anchor=west, minimum width=4.2cm]
-    at (0.25, -6.1)
-    {\texttt{gov/approved}};
-  \node[font=\scriptsize, anchor=west] at (4.8, -6.1) {conditional};
-
-  % step/completed (step 2)
-  \filldraw[black!70] (0, -7.2) circle (3pt);
-  \node[stepbox, anchor=west, minimum width=4.2cm] at (0.25, -7.2)
-    {\texttt{step/completed} \textrm{\footnotesize(step~2)}};
-  \node[font=\scriptsize, anchor=west] at (4.8, -7.2) {mandatory};
-
-  % run/completed
-  \filldraw[black!70] (0, -8.6) circle (3pt);
-  \node[stepbox, anchor=west, minimum width=4.2cm] at (0.25, -8.6)
-    {\texttt{run/completed}};
-  \node[font=\scriptsize, anchor=west] at (4.8, -8.6) {mandatory};
-
-  % ── Suspend/resume aside ─────────────────────────────────────────────
-  \draw[gertarrow, dashed, black!40]
-    (0, -5.0) to[out=180, in=180] node[left, font=\scriptsize,
-      align=right] {step paused\\waiting for\\approval} (0, -6.1);
-
-  % ── Group brackets ────────────────────────────────────────────────────
-  \begin{scope}[on background layer]
-    \draw[gertfit] (-0.3, 0.3) rectangle (4.6, -2.9)
-      node[above right, font=\scriptsize\itshape, yshift=-0.3cm] {};
-    \node[font=\scriptsize\itshape, anchor=east] at (-0.4, -1.5)
-      {step 1};
-    \draw[gertfit] (-0.3, -3.6) rectangle (4.6, -7.6)
-      node[above right, font=\scriptsize\itshape, yshift=-0.3cm] {};
-    \node[font=\scriptsize\itshape, anchor=east] at (-0.4, -5.6)
-      {step 2};
-  \end{scope}
-\end{tikzpicture}
-\caption{Typical event sequence for a two-step run where the second step
-  requires governance approval. Mandatory events (solid dots) are emitted for
-  every run; conditional events (hollow region) appear only when the relevant
-  policy is triggered.}
-\label{fig:event-flow-timeline}
-\end{figure}
-
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Event Catalog}
 \label{sec:event-catalog}
@@ -155,7 +69,7 @@ The following subsections define every normative event kind in v2.0. Each defini
 \textbf{Emitted:} Once, as the first event in every execution. Must be the first line in the trace file.
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "runbook_id":    <string>,  // from meta.name or file path
   "version":       <string>,  // runbook schema version (e.g., "runbook/v2")
@@ -165,7 +79,7 @@ The following subsections define every normative event kind in v2.0. Each defini
   "client":        <string>,  // "cli" | "tui" | "web" | "vscode" | "mcp"
   "parent_run_id": <string>   // omitted if not an invoke child
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Semantics.} The \texttt{input\_hash} is the SHA256 hex digest of the JSON-serialized input dictionary with keys sorted lexicographically. This hash is used to detect input tampering in replay mode. The \texttt{parent\_run\_id} field is present only if this run was initiated by an \texttt{invoke} step in another run.
 
@@ -178,7 +92,7 @@ The following subsections define every normative event kind in v2.0. Each defini
 \textbf{Emitted:} Once, as the terminal event for a successful run (all steps passed or skipped).
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "outcome":     <string>,  // "success" | "failure" | "cancelled"
   "step_count":  <int>,     // total steps in the plan
@@ -187,7 +101,7 @@ The following subsections define every normative event kind in v2.0. Each defini
   "skipped":     <int>,     // steps skipped (branch/iterate)
   "duration_ms": <int64>    // wall-clock duration from run/started
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Semantics.} The \texttt{outcome} field distinguishes clean completion (\texttt{success}), error termination (\texttt{failure}), and operator-initiated halt (\texttt{cancelled}). If \texttt{outcome} is \texttt{failure}, the last event before this one should be a \texttt{step/failed} or \texttt{governance/blocked}.
 
@@ -200,13 +114,13 @@ The following subsections define every normative event kind in v2.0. Each defini
 \textbf{Emitted:} When a run is cancelled by operator action (SIGINT, API call, or approval rejection).
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "reason":        <string>,  // "user_interrupt" | "approval_rejected" | "timeout"
   "cancelled_by":  <string>,  // actor identity (omitted if SIGINT)
   "step_id":       <string>   // step that was active at cancellation time
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Semantics.} This event is followed immediately by \texttt{run/completed} with \texttt{outcome: "cancelled"}. The \texttt{reason} field disambiguates graceful operator cancellation (\texttt{user\_interrupt}) from governance-driven rejection (\texttt{approval\_rejected}).
 
@@ -221,14 +135,14 @@ The following subsections define every normative event kind in v2.0. Each defini
 \textbf{Emitted:} Immediately before a step executes (after governance checks pass).
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "step_id":   <string>,  // stable step identifier from runbook YAML
   "step_type": <string>,  // "cli" | "manual" | "tool" | "invoke" | "branch"
                           // | "iterate" | "parallel" | "compensate"
   "index":     <int>      // zero-based position in the ExecutionPlan
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Required:} YES. Every step that begins execution MUST emit this event.
 
@@ -239,14 +153,14 @@ The following subsections define every normative event kind in v2.0. Each defini
 \textbf{Emitted:} After a step exits successfully.
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "step_id":     <string>,
   "outcome":     <string>,  // "success" | "skipped"
   "duration_ms": <int64>,
   "exit_code":   <int>      // for cli/tool steps; 0 for manual/invoke
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Semantics.} An \texttt{outcome} of \texttt{skipped} occurs for steps in non-taken branch paths or exhausted iterate loops. Exit code is present only for \texttt{cli} and \texttt{tool} steps; for other step types it is always 0.
 
@@ -259,7 +173,7 @@ The following subsections define every normative event kind in v2.0. Each defini
 \textbf{Emitted:} When a step exits with a non-zero exit code or runtime error.
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "step_id":      <string>,
   "error_code":   <string>,  // "exit_nonzero" | "timeout" | "tool_error"
@@ -268,7 +182,7 @@ The following subsections define every normative event kind in v2.0. Each defini
   "retryable":    <bool>,    // true if retry policy allows retry
   "exit_code":    <int>      // for exit_nonzero; omitted otherwise
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Semantics.} The \texttt{retryable} field indicates whether the runtime will attempt a retry (requires a retry policy on the step). If \texttt{retryable} is true, this event will be followed by \texttt{step/retrying}.
 
@@ -281,13 +195,13 @@ The following subsections define every normative event kind in v2.0. Each defini
 \textbf{Emitted:} When a step is not executed due to control flow.
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "step_id": <string>,
   "reason":  <string>  // "branch_not_taken" | "iterate_exhausted"
                        // | "dry_run" | "cancelled"
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Required:} YES, for every step that is planned but not executed.
 
@@ -298,14 +212,14 @@ The following subsections define every normative event kind in v2.0. Each defini
 \textbf{Emitted:} Before each retry attempt (v2.1 feature; requires retry policy).
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "step_id":       <string>,
   "attempt":       <int>,     // 1 = first retry, 2 = second, etc.
   "max_attempts":  <int>,
   "backoff_ms":    <int64>    // delay before this retry
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Required:} YES, if retry is attempted. Optional in v2.0 (retry not yet implemented).
 
@@ -320,14 +234,14 @@ All governance events are normatively defined in §11. The following is a summar
 \textbf{Emitted:} When a command is evaluated against allowlist and denylist.
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "step_id":      <string>,
   "command":      <string>,  // base name (argv[0] stripped of path)
   "verdict":      <string>,  // "allowed" | "denied"
   "rule_matched": <string>   // "allowlist" | "denylist" | "default_allow"
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Required:} MAY be emitted. Recommended for audit trails but not required for basic operation.
 
@@ -338,7 +252,7 @@ All governance events are normatively defined in §11. The following is a summar
 \textbf{Emitted:} When a step's approval gate is entered.
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "step_id":         <string>,
   "approver_roles":  [<string>],  // roles that can approve
@@ -346,7 +260,7 @@ All governance events are normatively defined in §11. The following is a summar
   "timeout_seconds": <int>,       // 0 if no timeout
   "message":         <string>     // prompt text for approvers (redacted)
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Required:} YES, when approval gates are used.
 
@@ -357,7 +271,7 @@ All governance events are normatively defined in §11. The following is a summar
 \textbf{Emitted:} Each time an approver submits a decision.
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "step_id":  <string>,
   "approver": <string>,  // actor identity
@@ -365,7 +279,7 @@ All governance events are normatively defined in §11. The following is a summar
   "decision": <string>,  // "approved" | "rejected"
   "comment":  <string>   // optional justification (redacted)
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Required:} YES, for every approval decision (including rejections).
 
@@ -376,13 +290,13 @@ All governance events are normatively defined in §11. The following is a summar
 \textbf{Emitted:} When redaction rules match and modify captured output.
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "step_id":       <string>,
   "field_path":    <string>,  // "stdout" | "stderr" | "capture.var_name"
   "pattern_count": <int>      // number of patterns that matched (not the patterns)
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Semantics.} The actual redaction patterns are not logged to avoid accidentally revealing what sensitive data looks like. Only the fact that redaction occurred is recorded.
 
@@ -397,13 +311,13 @@ All governance events are normatively defined in §11. The following is a summar
 \textbf{Emitted:} When an extension successfully completes the handshake.
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "extension_id": <string>,  // from extension manifest
   "version":      <string>,  // semver version
   "capabilities": [<string>] // list of capability names granted
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Required:} MAY be emitted. Useful for debugging extension issues.
 
@@ -414,12 +328,12 @@ All governance events are normatively defined in §11. The following is a summar
 \textbf{Emitted:} When an extension process exits or is terminated.
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "extension_id": <string>,
   "reason":       <string>  // "clean_exit" | "crash" | "timeout" | "killed"
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Required:} MAY be emitted.
 
@@ -430,14 +344,14 @@ All governance events are normatively defined in §11. The following is a summar
 \textbf{Emitted:} When a tool call is dispatched (before the tool executes).
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "step_id":        <string>,
   "tool_name":      <string>,
   "transport":      <string>,  // "stdio" | "jsonrpc" | "mcp"
   "correlation_id": <string>   // UUID v4, links to tool/completed
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Required:} MAY be emitted. Recommended for observability.
 
@@ -448,7 +362,7 @@ All governance events are normatively defined in §11. The following is a summar
 \textbf{Emitted:} When a tool call returns.
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "step_id":        <string>,
   "tool_name":      <string>,
@@ -456,7 +370,7 @@ All governance events are normatively defined in §11. The following is a summar
   "exit_code":      <int>,
   "duration_ms":    <int64>
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Required:} MAY be emitted.
 
@@ -469,14 +383,14 @@ All governance events are normatively defined in §11. The following is a summar
 \textbf{Emitted:} When a manual step or input provider displays a prompt.
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "step_id":    <string>,  // omitted if prompt is from provider
   "prompt_id":  <string>,  // UUID v4 for correlation
   "input_type": <string>,  // "text" | "checklist" | "attachment"
   "prompt":     <string>   // prompt text (redacted)
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Required:} YES, for manual steps. MAY be emitted for provider prompts.
 
@@ -487,13 +401,13 @@ All governance events are normatively defined in §11. The following is a summar
 \textbf{Emitted:} When the operator submits a response.
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "step_id":   <string>,
   "prompt_id": <string>,  // matches input/prompted
   "redacted":  <bool>     // true if redaction rules matched the response
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Semantics.} The actual input value is not included in this event (it is recorded in the trace via \texttt{manual/completed} or \texttt{step/completed}). The \texttt{redacted} flag indicates whether the input passed through the redaction pipeline.
 
@@ -510,12 +424,12 @@ The following events are reserved for the saga/compensation pattern, which is ta
 \textbf{Emitted:} When a step fails and has registered compensation handlers.
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "failed_step_id":     <string>,
   "compensation_steps": [<string>]  // step IDs to execute in reverse order
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Required:} YES, if compensation is triggered (v2.1+).
 
@@ -526,11 +440,11 @@ The following events are reserved for the saga/compensation pattern, which is ta
 \textbf{Emitted:} After all compensation steps complete.
 
 \textbf{Payload:}
-\begin{minted}{json}
+\begin{verbatim}
 {
   "outcome": <string>  // "success" | "partial" | "failed"
 }
-\end{minted}
+\end{verbatim}
 
 \textbf{Required:} YES, if compensation is triggered (v2.1+).
 
@@ -548,14 +462,14 @@ Events flow through three channels, each with distinct delivery semantics and su
 
 \paragraph{Subscriber API.} Adapters call \texttt{RunHandle.Events()} to obtain a read-only event channel:
 
-\begin{minted}{go}
+\begin{verbatim}
 type RunHandle interface {
     // Events returns a read-only channel of events for this run.
     // The channel is closed when the run enters a terminal state.
     Events() <-chan Event
     // ... other methods ...
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Lifecycle.} The event channel is created at \texttt{Runtime.Start()} and closed when the run emits \texttt{run/completed} or \texttt{run/cancelled}. Subscribers must drain the channel to avoid blocking the runtime (though the runtime will discard events if the subscriber is too slow).
 
@@ -589,7 +503,7 @@ type RunHandle interface {
 
 Extensions and adapters can subscribe to events programmatically. The subscription API supports filtering by event kind prefix and by \texttt{run\_id}.
 
-\begin{minted}{go}
+\begin{verbatim}
 // EventSubscriber is the interface for subscribing to runtime events.
 type EventSubscriber interface {
     // Subscribe registers a subscription with optional filters.
@@ -608,7 +522,7 @@ type SubscribeOptions struct {
     // BufferSize is the channel buffer size. Default: 100.
     BufferSize int
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Example use cases.}
 \begin{itemize}
@@ -625,7 +539,7 @@ Events are serialized as JSON. The wire format is identical for the JSONL trace 
 
 \subsection{Concrete Example: \texttt{step/started}}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "event_id":    "a3f9c1e2-8d4b-4e1f-9a2c-3d5e6f7a8b9c",
   "run_id":      "20260418T143022-a3f9c1",
@@ -639,11 +553,11 @@ Events are serialized as JSON. The wire format is identical for the JSONL trace 
     "index":     2
   }
 }
-\end{minted}
+\end{verbatim}
 
 \subsection{Concrete Example: \texttt{governance/approval\_requested}}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "event_id":    "b1c2d3e4-5f6a-7b8c-9d0e-1f2a3b4c5d6e",
   "run_id":      "20260418T143022-a3f9c1",
@@ -659,7 +573,7 @@ Events are serialized as JSON. The wire format is identical for the JSONL trace 
     "message":         "Deploying to production. Confirm change window."
   }
 }
-\end{minted}
+\end{verbatim}
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Required vs.\ Optional Events}

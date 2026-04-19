@@ -28,7 +28,7 @@ needs it begins.
 Each provider is declared in a \texttt{.provider.yaml} file.  By convention,
 project-level providers live in \texttt{providers/<name>.provider.yaml}.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # providers/pagerduty.provider.yaml
 apiVersion: provider/v2
 
@@ -88,7 +88,7 @@ governance:
   env-read-patterns:
     - "PD_API_KEY"
     - "PD_*"
-\end{minted}
+\end{verbatim}
 
 \section{Resolution Protocol}
 \label{sec:provider-protocol}
@@ -97,64 +97,6 @@ governance:
 
 When the run engine encounters an input with a \texttt{from:} binding (e.g.,
 \texttt{from: pd.incident.title}), the following steps occur:
-
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[scale=0.85, transform shape]
-  % ── Main resolution pipeline (left to right) ─────────────────────────
-  \node[stepbox, minimum width=2.4cm] (binding)
-    at (0,0) {\texttt{from:}\\binding};
-  \node[stepbox, minimum width=2.4cm, right=1.6cm of binding] (prefix)
-    {Prefix\\Match};
-  \node[stepbox, minimum width=2.4cm, right=1.6cm of prefix] (start)
-    {Start\\Provider};
-  \node[stepbox, minimum width=2.4cm, right=1.6cm of start] (batch)
-    {Batch\\Collect};
-  \node[stepbox, minimum width=2.4cm, right=1.6cm of batch] (rpc)
-    {JSON-RPC\\Resolve};
-  \node[stepbox, minimum width=2.4cm, right=1.6cm of rpc] (merge)
-    {Merge\\Vars};
-
-  % ── Main flow ────────────────────────────────────────────────────────
-  \draw[gertarrow] (binding) -- (prefix);
-  \draw[gertarrow] (prefix)  -- (start);
-  \draw[gertarrow] (start)   -- (batch);
-  \draw[gertarrow] (batch)   -- (rpc);
-  \draw[gertarrow] (rpc)     -- (merge);
-
-  % ── Fallback: no prefix match ─────────────────────────────────────────
-  \node[stepbox, fill=black!10, minimum width=2.4cm,
-    below=1.4cm of prefix] (prompt) {Interactive\\Prompt};
-  \draw[gertarrow, dashed] (prefix) -- (prompt)
-    node[midway, right, font=\scriptsize] {no match};
-
-  % ── Fallback: unresolved binding ──────────────────────────────────────
-  \node[stepbox, fill=black!10, minimum width=2.4cm,
-    below=1.4cm of rpc] (fallback) {fallback:\\field value};
-  \draw[gertarrow, dashed] (rpc) -- (fallback)
-    node[midway, right, font=\scriptsize] {unresolved};
-
-  % ── Success terminal ──────────────────────────────────────────────────
-  \node[catbox, minimum width=2.4cm, right=1.6cm of merge] (done)
-    {Value\\Available};
-  \draw[gertarrow] (merge) -- (done);
-
-  % ── Fallbacks also route to done ─────────────────────────────────────
-  \draw[gertarrow, dashed] (prompt)   -| (done);
-  \draw[gertarrow, dashed] (fallback) -| (done);
-
-  % ── "already running" bypass ─────────────────────────────────────────
-  \draw[gertarrow, black!40]
-    (prefix) to[out=90, in=90]
-    node[above, font=\scriptsize] {already running} (batch);
-\end{tikzpicture}
-\caption{Input provider resolution pipeline. A \texttt{from:} binding triggers
-  a prefix lookup; if a matching provider is found its process is started (or
-  reused), inputs are batched, and a single \texttt{provider/resolve} JSON-RPC
-  call returns all values.  Unresolved bindings fall back to the
-  \texttt{fallback:} field or an interactive prompt.}
-\label{fig:provider-resolution-flow}
-\end{figure}
 
 \begin{enumerate}
   \item \textbf{Prefix match}: the framework scans registered providers for one
@@ -179,7 +121,7 @@ When the run engine encounters an input with a \texttt{from:} binding (e.g.,
 
 \subsection{Resolution Request Envelope}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "prov-1",
@@ -199,11 +141,11 @@ When the run engine encounters an input with a \texttt{from:} binding (e.g.,
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 \subsection{Resolution Response Envelope}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "prov-1",
@@ -221,14 +163,14 @@ When the run engine encounters an input with a \texttt{from:} binding (e.g.,
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 \subsection{Resolution Error Handling}
 
 If the provider returns a JSON-RPC error, or if a binding key is absent from
 the \texttt{resolved} map, the host applies the input's fallback strategy:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 # In runbook meta.inputs
 inputs:
   incident_title:
@@ -236,7 +178,7 @@ inputs:
     description: "Active incident title"
     fallback: prompt              # prompt | fail | default
     default: "Unknown incident"   # Used when fallback: default
-\end{minted}
+\end{verbatim}
 
 \begin{itemize}
   \item \texttt{fallback: prompt} (default): the host issues an interactive
@@ -277,12 +219,12 @@ available without a \texttt{.provider.yaml} file.
 
 Reads values from environment variables.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 inputs:
   api_key:
     from: env.ACME_API_KEY
     description: "API key for the Acme service"
-\end{minted}
+\end{verbatim}
 
 The \texttt{env.} prefix is followed by the exact environment variable name.
 If the variable is not set, resolution fails and the fallback strategy is
@@ -293,7 +235,7 @@ reads directly from the host's environment.
 
 Reads values from files on the local file system.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 inputs:
   ssh_key:
     from: "file.~/.ssh/id_rsa"
@@ -301,7 +243,7 @@ inputs:
   config_value:
     from: "file./etc/gert/config.json#/database/host"
     description: "Database host from config file"
-\end{minted}
+\end{verbatim}
 
 The path after \texttt{file.} is the file path.  An optional JSON Pointer
 fragment (\texttt{\#/path/to/field}) extracts a nested value from a JSON or
@@ -313,12 +255,12 @@ string.
 The interactive prompt provider is the default resolution strategy.  It is
 also the fallback for any failed provider resolution (unless overridden).
 
-\begin{minted}{yaml}
+\begin{verbatim}
 inputs:
   server_name:
     from: prompt
     description: "Server to check"
-\end{minted}
+\end{verbatim}
 
 In \texttt{real} and \texttt{debug} modes, the host presents a terminal prompt
 to the operator.  In \texttt{dry-run} and \texttt{replay} modes, the prompt
@@ -332,12 +274,12 @@ fails with an informative error directing the operator to supply the value via
 Reads values from the workspace configuration file
 (\texttt{.gert/config.yaml}).
 
-\begin{minted}{yaml}
+\begin{verbatim}
 inputs:
   default_region:
     from: workspace.defaults.region
     description: "AWS region from workspace config"
-\end{minted}
+\end{verbatim}
 
 The path after \texttt{workspace.} is a dot-notation key into the workspace
 configuration object.  This allows teams to centralise defaults without
@@ -363,7 +305,7 @@ dropdown menu or radio button group in a graphical form.
 When the run engine executes a \texttt{choice} step, it sends a
 \texttt{provider/choice} JSON-RPC request to the configured provider:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "choice-1",
@@ -385,12 +327,12 @@ When the run engine executes a \texttt{choice} step, it sends a
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Response envelope.}
 The provider returns the selected value:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "choice-1",
@@ -398,7 +340,7 @@ The provider returns the selected value:
     "selected": "us-west-2"
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Contract requirements.}
 \begin{itemize}
@@ -445,7 +387,7 @@ which node the run engine transitions to next.
 When the run engine executes a \texttt{decision} step, it sends a
 \texttt{provider/decision} JSON-RPC request:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "decision-1",
@@ -466,12 +408,12 @@ When the run engine executes a \texttt{decision} step, it sends a
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Response envelope.}
 The provider returns the selected route label:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "decision-1",
@@ -479,7 +421,7 @@ The provider returns the selected route label:
     "route": "p2-high"
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Contract requirements.}
 \begin{itemize}
@@ -516,7 +458,7 @@ run's state.
 When the run engine executes a \texttt{collector} step, it sends a
 \texttt{provider/collect} JSON-RPC request:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "collect-1",
@@ -564,12 +506,12 @@ When the run engine executes a \texttt{collector} step, it sends a
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Response envelope.}
 The provider returns the collected values and any uploaded artifacts:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "collect-1",
@@ -590,7 +532,7 @@ The provider returns the collected values and any uploaded artifacts:
     ]
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Contract requirements.}
 \begin{itemize}
@@ -733,7 +675,7 @@ an empty options list.
 
 \subsubsection*{\texttt{inputProvider/getOptions} Request}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "getopts-1",
@@ -754,7 +696,7 @@ an empty options list.
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Request fields.}
 \begin{itemize}
@@ -772,7 +714,7 @@ an empty options list.
 
 \subsubsection*{\texttt{inputProvider/getOptions} Response}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "getopts-1",
@@ -786,7 +728,7 @@ an empty options list.
     "cacheTtlSeconds": 300
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Response fields.}
 \begin{itemize}
@@ -818,7 +760,7 @@ RPC calls as the operator types, with debouncing handled by the UI layer.
 
 \subsubsection*{\texttt{inputProvider/search} Request}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "search-1",
@@ -834,7 +776,7 @@ RPC calls as the operator types, with debouncing handled by the UI layer.
     }
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Request fields.}
 \begin{itemize}
@@ -855,7 +797,7 @@ RPC calls as the operator types, with debouncing handled by the UI layer.
 
 \subsubsection*{\texttt{inputProvider/search} Response}
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "jsonrpc": "2.0",
   "id": "search-1",
@@ -867,7 +809,7 @@ RPC calls as the operator types, with debouncing handled by the UI layer.
     "hasMore": false
   }
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Response fields.}
 \begin{itemize}
@@ -956,7 +898,7 @@ provider.
 A \texttt{from:} binding may declare a priority-ordered chain of providers.
 The host attempts each provider in order and uses the first successful result.
 
-\begin{minted}{yaml}
+\begin{verbatim}
 inputs:
   api_token:
     from:
@@ -964,7 +906,7 @@ inputs:
       - vault.secret/acme/api-token # Fall back to Vault
       - prompt                      # Final fallback: ask the operator
     description: "API token for Acme service"
-\end{minted}
+\end{verbatim}
 
 Chaining is evaluated left-to-right.  A provider is considered to have failed
 if it returns an error, if the binding key is absent from the resolved map, or

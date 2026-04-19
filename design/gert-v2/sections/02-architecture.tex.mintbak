@@ -73,7 +73,7 @@ malformed Go template expressions) but intentionally defers deep semantic valida
 
 \paragraph{Interface.}
 
-\begin{minted}{go}
+\begin{verbatim}
 // Parser transforms raw YAML bytes into a validated ParsedRunbook.
 type Parser interface {
     // Parse reads YAML from r, validates against the v2 JSON Schema,
@@ -99,7 +99,7 @@ type ParsedRunbook struct {
     Tools      []string          // tool names (not yet discovered)
     Schema     SchemaRef         // version and $schema URL
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Dependencies.}
 The Parser depends only on the JSON Schema artifact (a static embedded file) and the expression
@@ -131,7 +131,7 @@ variables evaluated during execution. The plan encodes \emph{which steps exist} 
 preconditions they carry}, not which steps will actually run. This design keeps the planner pure and
 the runtime authoritative over control flow.
 
-\begin{minted}{go}
+\begin{verbatim}
 type Planner interface {
     // Plan resolves imports, discovers tools, validates bindings,
     // and returns a fully-resolved ExecutionPlan ready for the runtime.
@@ -165,7 +165,7 @@ type ResolvedStep struct {
     Depth    int           // chain depth (0 = root runbook)
     Origin   string        // source runbook path (for inlined include steps)
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Dependencies.}
 The Planner depends on the Parser (for import resolution), the Tool Registry (for
@@ -193,7 +193,7 @@ network transport.
 
 \paragraph{Interface.}
 
-\begin{minted}{go}
+\begin{verbatim}
 type Runtime interface {
     // Start initializes a run from a plan and returns a RunHandle.
     // The run does not advance until Next is called.
@@ -235,7 +235,7 @@ type RunOptions struct {
     Store       RunStore          // durable store for checkpointing
     OnEvent     func(Event)       // synchronous event hook (nil = use Events channel)
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Dependencies.}
 The Runtime Core depends on the Governance Engine, Tool Runtime (for tool invocation),
@@ -265,7 +265,7 @@ layer, defined in §04).
 
 \paragraph{Interface.}
 
-\begin{minted}{go}
+\begin{verbatim}
 type ExtensionHost interface {
     // Load discovers and launches all extensions declared in the project manifest.
     Load(ctx context.Context, manifest *ProjectManifest) error
@@ -283,7 +283,7 @@ type ExtensionHost interface {
     // These compose with host policy; host policy takes precedence on conflict.
     ContributedPolicyRules() []PolicyRule
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Dependencies.}
 The Extension Host depends on the extension manifest schema and the extension RPC transport
@@ -311,7 +311,7 @@ user input (approvals, evidence, cancellation) back to the \texttt{RunHandle}. A
 
 \paragraph{Interface.}
 
-\begin{minted}{go}
+\begin{verbatim}
 // Adapter is the interface every consumer of the Runtime Core must implement.
 type Adapter interface {
     // Attach binds the adapter to a RunHandle before the first Next call.
@@ -325,7 +325,7 @@ type Adapter interface {
 // The gert serve JSON-RPC layer implements Adapter over stdio.
 // The TUI (Bubble Tea) implements Adapter over a terminal.
 // Future: a web adapter implements Adapter over WebSocket.
-\end{minted}
+\end{verbatim}
 
 \paragraph{Dependencies.}
 Adapters depend on the \texttt{RunHandle} and \texttt{Event} types from the Runtime Core.
@@ -637,14 +637,14 @@ produces a warning (see validation table).
 The JSONL trace records which map entry was selected.  A \texttt{shell\_selected}
 field is written alongside the step's \texttt{step/started} event:
 
-\begin{minted}{json}
+\begin{verbatim}
 { "kind": "step/started", ..., "payload": {
     "step_id": "deploy-linux",
     "shell_selected": "bash",
     ...
   }
 }
-\end{minted}
+\end{verbatim}
 
 This field appears in the \texttt{step/started} payload whenever a shell-string or
 map-form CLI step begins.  For exec-form steps the field is omitted.
@@ -968,7 +968,7 @@ When the Event Dispatcher delivers a matching event to a \texttt{WAITING} run it
 
 \subsubsection*{Executor Pseudocode}
 
-\begin{minted}{bash}
+\begin{verbatim}
 // Suspend path
 ExecuteStep(step: WaitForEvent, run: Run):
   store.Persist(run)                          // 1. durable checkpoint
@@ -1008,7 +1008,7 @@ OnTimeout(run_id, event_id):
       run.state = RUNNING
       run.stepCursor = resolve(step-id)
       ExecuteNextStep(run)
-\end{minted}
+\end{verbatim}
 
 \subsubsection*{Run Persistence Requirement}
 
@@ -1101,7 +1101,7 @@ are:
 
 \paragraph{Go interface.}
 
-\begin{minted}{go}
+\begin{verbatim}
 type BusinessCalendar interface {
     // IsBusinessDay reports whether t falls on a business day (Mon–Fri, non-holiday)
     // in the given timezone.
@@ -1115,7 +1115,7 @@ type BusinessCalendar interface {
     // in the given timezone.  Returns 0 if end <= start.
     ElapsedBusinessDays(start, end time.Time, tz *time.Location) int
 }
-\end{minted}
+\end{verbatim}
 
 \paragraph{Built-in calendars for v2.0.}
 
@@ -1235,13 +1235,13 @@ Detection below).
 \paragraph{Deadlock detection.}
 After \emph{every} approval or rejection event, the runtime evaluates:
 
-\begin{minted}{text}
+\begin{verbatim}
 remaining_possible = len(pool) - len(rejections) - len(approvals)
 if (len(approvals) + remaining_possible) < required:
     // quorum is impossible — fail immediately
     step.state = FAILED
     emit(step/failed, {reason: "QuorumImpossible", ...})
-\end{minted}
+\end{verbatim}
 
 For \texttt{mode: all}, \texttt{required} is treated as \texttt{len(pool)} for this
 check. For \texttt{mode: any}, the check is skipped (one approval always suffices unless
@@ -1263,14 +1263,14 @@ Approval decisions are delivered via the Input Provider JSON-RPC interface. The
 \texttt{approve} step executor registers a pending input request of type
 \texttt{input/submitApproval} with the fields:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "run_id":   string,          // identifies the run
   "step_id":  string,          // identifies the approve step
   "decision": "approve"|"reject",
   "notes":    string           // optional
 }
-\end{minted}
+\end{verbatim}
 
 Before recording the decision, the runtime:
 \begin{enumerate}
@@ -1474,11 +1474,11 @@ Patterns \textbf{must} be valid RE2 expressions.  ECMA~262 features absent from 
 (lookahead, lookbehind, backreferences) are \textbf{rejected at schema load time} with
 a validation error naming the offending field:
 
-\begin{minted}{yaml}
+\begin{verbatim}
 error: step "gather-details", field "ticket_ref":
   validation.pattern uses lookahead (?=...) which is not supported in RE2;
   replace with an anchored RE2 equivalent
-\end{minted}
+\end{verbatim}
 
 Runbook authors targeting both the VS~Code extension (which uses a JavaScript regex
 engine) and the gert runtime (RE2) should restrict patterns to the safe common subset:
@@ -1570,11 +1570,11 @@ that declares \texttt{when}:
         validation error:
 \end{enumerate}
 
-\begin{minted}{yaml}
+\begin{verbatim}
 error: step "gather-details", field "region" (index 2):
   when expression references "country" which is bound by field at index 4;
   forward references in when expressions are not allowed
-\end{minted}
+\end{verbatim}
 
 \noindent
 Variables from the global scope (prior steps) and the run context are always valid
@@ -1586,7 +1586,7 @@ rejected.
 Typed storage ensures that template comparison operators in downstream steps work without
 manual coercion:
 
-\begin{minted}{json}
+\begin{verbatim}
 {{/* number/integer: .amount is float64, not a string */}}
 {{ if gt .amount 50000.0 }}HIGH_VALUE{{ end }}
 
@@ -1598,14 +1598,14 @@ manual coercion:
 
 {{/* date/datetime: .start_date is ISO 8601 string; parseable by time.Parse */}}
 {{ if lt .start_date "2026-07-01" }}BEFORE_CUTOVER{{ end }}
-\end{minted}
+\end{verbatim}
 
 \subsubsection*{Error Variable Schema}
 
 When a \texttt{collector} step exhausts its re-prompt attempts and fails, the executor
 populates the \texttt{gert.error} reserved run variable:
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "step_id":  "gather-approval-details",
   "kind":     "collector.validation_failed",
@@ -1616,7 +1616,7 @@ populates the \texttt{gert.error} reserved run variable:
     "department": "\"legal\" is not a valid option"
   }
 }
-\end{minted}
+\end{verbatim}
 
 The \texttt{gert.error} variable is a reserved JSON object populated on any step
 failure. A subsequent \texttt{branch} step may inspect it to route to an error-handling
@@ -1828,7 +1828,7 @@ The \textbf{Event Dispatcher} is a new runtime component that lives exclusively 
 
 \subsubsection*{Go Interface}
 
-\begin{minted}{go}
+\begin{verbatim}
 type EventDispatcher interface {
     // Register creates a listener for an inbound event on a waiting run.
     // Returns a one-time HMAC token (non-empty for webhook source only).
@@ -1853,7 +1853,7 @@ type ListenerRegistration struct {
     TimeoutAt      time.Time
     OnTimeout      TimeoutPolicy        // fail | continue | branch:<step-id>
 }
-\end{minted}
+\end{verbatim}
 
 \subsubsection*{Availability Constraint}
 
@@ -1865,7 +1865,7 @@ with the serve-mode error before attempting any state serialisation.
 
 \subsection{RPC Method Summary}
 
-\begin{minted}{bash}
+\begin{verbatim}
 exec/start          → Start a new run (returns RunID, first StepResult)
 exec/next           → Advance run by one step (returns StepResult)
 exec/approve        → Submit approval decision for current gate
@@ -1880,4 +1880,4 @@ event/<type>        → Notification from server to client (not a request)
 // HTTP endpoints (gert serve --http, Event Dispatcher)
 POST /events/{run-id}/{event-id}  → Deliver a webhook event to a waiting run
                                     (HMAC-SHA256 authenticated)
-\end{minted}
+\end{verbatim}

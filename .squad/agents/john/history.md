@@ -34,6 +34,14 @@ This is a LaTeX document using the MastersThesis class. Sections are in `design/
 
 ## Learnings
 
+- `type: extension` does not exist as a step type in gert v2. Extension is a field-annotation
+  convention only (`x-<namespace>:` prefix on runbook or step objects). Using `type: extension`
+  as a catch-all step type was incorrect.
+- **Outbound notify/send** steps (Slack, PagerDuty, email, external API calls) belong as
+  `type: tool` with the tool declared in `toolRefs`. This already works in the v2 schema.
+- **Inbound event receive** steps (wait for webhook, wait for SIEM alert, wait for callback)
+  are GAP-3: `type: wait_for_event` does not yet exist in the schema. Use a `type: cli` stub
+  with a `# GAP: no wait_for_event step type yet` comment as placeholder.
 
 ## Cross-Agent Notes from Ken's Architectural Review (2026-04-18)
 
@@ -166,3 +174,115 @@ as any other step type - compensation is orthogonal to user interaction.
 - Brian (Parser): Implement parser/validator for choice/decision/collector
 - Ken (Runtime): Implement execution semantics for three step types
 - Sam (VS Code): Implement UI rendering for interactive steps
+
+---
+
+## 2026-04-18 — Validation Methodology for Schema Stress Testing
+
+**Requested by:** ormasoftchile  
+**Output:** `.squad/tmp/john-validation-methodology.md` (38KB, 600 lines)
+
+Created a rigorous methodology for translating prose runbooks to gert v2 schema and validating completeness and fidelity. This provides a systematic framework for stress-testing the schema against real-world operational procedures.
+
+**Methodology components:**
+
+1. **Translation Protocol** — Step-by-step instructions for prose→schema translation:
+   - Step boundary identification (when does a new step begin?)
+   - Step type classification (12-question decision tree)
+   - Branching patterns (automatic vs. human-driven)
+   - Data flow modeling (inputs, captures, variables, scope)
+   - Failure/compensation paths (saga pattern, retry, continue-on-fail)
+   - Human interaction patterns (choice/decision/collector/approvals)
+   - Parallelism (fan-out/fan-in with join semantics)
+   - Nested runbooks (invoke with imports/outputs)
+
+2. **Completeness Criteria (C1–C10)** — Binary yes/no checks:
+   - C1: Step coverage (every action has a step)
+   - C2: Decision points (all branches/choices represented)
+   - C3: Data flow (all variables traced source→consumer)
+   - C4: Timing constraints (delays/timeouts/retries/polling)
+   - C5: Failure paths (error handling and compensation)
+   - C6: Human interaction (correct step types used)
+   - C7: Parallelism (explicitly declared where prose says "concurrent")
+   - C8: Nested runbooks (imports/invoke)
+   - C9: Governance (approval gates, effects, roles)
+   - C10: Terminal outcomes (all end states declared)
+
+3. **Fidelity Criteria (F1–F10)** — Semantic preservation checks:
+   - F1: Semantic equivalence (execution produces same outcomes)
+   - F2: No information loss (all behavioral details preserved)
+   - F3: Execution path preservation (all possible paths present)
+   - F4: Variable binding correctness (no unbound reads)
+   - F5: Step type precision (most specific type used)
+   - F6: Timing preservation (values match prose)
+   - F7: Governance alignment (approval/risk settings match)
+   - F8: Human prompt clarity (interactive steps are unambiguous)
+   - F9: Deterministic evaluation (conditions don't depend on hidden state)
+   - F10: Artifact integrity (evidence capture uses proper mechanisms)
+
+4. **Gap Classification (G1–G6):**
+   - G1: Missing step type (action has no direct step type)
+   - G2: Missing field (step type exists but lacks required field)
+   - G3: Missing flow construct (control flow pattern not expressible)
+   - G4: Missing interaction model (human pattern not supported)
+   - G5: Semantic loss (expressible but meaning degraded)
+   - G6: Verbosity/workaround (expressible but awkwardly)
+
+5. **Scoring Rubric:**
+   - Completeness Score = satisfied criteria / 10 × 100%
+   - Fidelity Score = satisfied criteria / 10 × 100%
+   - Gap inventory with severity ratings
+   - Composite verdict: PASS / PASS WITH NOTES / FAIL
+   - PASS requires: ≥90% on both scores + no CRITICAL gaps
+
+6. **Schema Improvement Signals:**
+   - Gap aggregation across multiple runbooks
+   - Threshold-based triggers for schema extensions
+   - Distinction between fixable gaps vs. acceptable design limitations
+   - Workflow for: triage → design → prototype → validate → document
+
+**Production readiness criteria defined:**
+- 10+ diverse runbooks translated
+- Average completeness ≥95%
+- Average fidelity ≥95%
+- Zero CRITICAL gaps
+- All HIGH gaps have workarounds
+
+**Includes:**
+- Two worked examples (one PASS, one PASS WITH NOTES)
+- Step type quick reference table
+- Printable validation checklist
+- Scorecard template (markdown table format)
+
+**Purpose:** This methodology gives us a binary answer to "can gert v2 express this runbook?" and provides actionable feedback for schema improvements. It bridges the gap between normative spec and real-world stress testing.
+
+**Decision inbox:** `.squad/decisions/inbox/john-validation-methodology.md` created for team review.
+
+
+---
+
+## 2026-04-18 — Schema Validation: 10-Runbook Translation Corpus
+
+Translated all 10 runbooks from Dennis corpus into gert v2 YAML with rigorous validation.
+Results: 1 PASS, 7 PASS WITH NOTES, 2 FAIL. Average 82% completeness, 73% fidelity.
+Schema NOT production-ready (4 CRITICAL gaps).
+
+Top 3 gaps: calendar-aware timeouts, dynamic approver resolution, cross-branch parallelism.
+Most problematic runbooks: R7 (financial approval), R8 (FDA release) — both FAIL.
+
+Output files:
+- /Volumes/Projects/gert/.squad/tmp/john-schema-translations.md
+- /Volumes/Projects/gert/.squad/tmp/john-translations-summary.md
+
+
+---
+
+## 2026-04-18 — Persist 10 Stress-Test Runbooks as Dev Fixtures
+
+**Requested by:** ormasoftchile  
+**Output:** design/gert-v2/testdata/runbooks/ (31 files)
+
+Persisted all 10 runbooks from Dennis corpus as permanent dev fixtures.
+Each directory: source.md, schema.yaml, assessment.md.
+R1-R3: verbatim from john-schema-translations.md. R4-R10: new best-effort translations.
+Verdicts: 1 PASS, 7 PASS WITH NOTES, 2 FAIL (R7, R8).

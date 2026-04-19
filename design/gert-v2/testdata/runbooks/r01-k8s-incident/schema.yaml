@@ -34,6 +34,15 @@ toolRefs:
   - name: kubectl
   - name: git
   - name: prometheus
+  - name: slack-notify
+    source: builtin://slack
+    actions: [send-message]
+  - name: pagerduty-notify
+    source: builtin://pagerduty
+    actions: [trigger-alert, resolve-alert]
+  - name: alertmanager-notify
+    source: builtin://alertmanager
+    actions: [resolve-alert]
 
 governance:
   rules:
@@ -48,18 +57,21 @@ governance:
 
 flow:
   # Step 1: Detect Alert
+  # INTENT: Pause execution until Prometheus fires an alert webhook for pod {{ .pod_name }}.
+  # GAP-3: No wait_for_event step type exists yet in gert v2. This step should block runbook
+  #        execution until an inbound webhook/event payload is received from the monitoring
+  #        system and its fields (timestamp, alert_id) are bound to runbook state.
+  #        Placeholder: cli step echoes a stub; real inputs arrive via webhook trigger binding.
   - step:
       id: detect_alert
-      type: extension
+      type: cli  # GAP: no wait_for_event step type yet — this step should pause execution
+                 # until an inbound webhook/event is received. Placeholder: cli polls instead.
       title: "Receive Prometheus webhook for pod {{ .pod_name }}"
-      extension:
-        name: prometheus-webhook
-        action: receive
+      cli:
+        command: echo "STUB: waiting for event - prometheus-alert"
       capture:
-        timestamp: json.timestamp
-        alert_id: json.alert_id
-      contract:
-        effects: ["monitoring.receive"]
+        timestamp: stdout
+        alert_id: stdout
 
   # Step 2: Gather Diagnostics (parallel)
   - step:
@@ -315,17 +327,20 @@ flow:
             # Branch: Escalate to On-Call (Steps 7a-7b)
             - step:
                 id: create_pagerduty_incident
-                type: extension
+                type: tool
                 title: Create PagerDuty incident
-                extension:
-                  name: pagerduty
-                  action: create-incident
+                tool:
+                  name: pagerduty-notify
+                  action: trigger-alert
                   args:
                     severity: high
                     title: "Pod {{ .pod_name }} unhealthy - unknown cause"
                     details: "{{ .pod_describe }}"
                 capture:
                   incident_id: json.incident_id
+                contract:
+                  effects: [pagerduty.write]
+                  reads: [pod_name, pod_describe]
 
             - step:
                 id: wait_acknowledgment
@@ -376,24 +391,30 @@ flow:
   # Step 10: Close Alert
   - step:
       id: close_alert
-      type: extension
+      type: tool
       title: Resolve AlertManager alert
-      extension:
-        name: prometheus-webhook
-        action: resolve
+      tool:
+        name: alertmanager-notify
+        action: resolve-alert
         args:
           alert_id: "{{ .alert_id }}"
+      contract:
+        effects: [alertmanager.write]
+        reads: [alert_id]
 
   - step:
       id: notify_slack
-      type: extension
+      type: tool
       title: Send Slack notification
-      extension:
-        name: slack
+      tool:
+        name: slack-notify
         action: send-message
         args:
           channel: "#incidents"
           message: "Incident resolved for pod {{ .pod_name }}"
+      contract:
+        effects: [slack.write]
+        reads: [pod_name]
 
   - step:
       id: complete

@@ -27,7 +27,41 @@ inputs:
 
 toolRefs:
   - name: aws
+    source: builtin://aws
+    actions: [revoke-sg-ingress, stop-instances, rotate-iam-keys, create-ebs-snapshots, export-cloudtrail, restore-security-groups, restrict-sg-egress]
   - name: okta
+    source: builtin://okta
+    actions: [disable-vpn-policy, force-password-reset-all, suspend-accounts, unsuspend-all-users]
+  - name: palo-alto
+    source: builtin://palo-alto
+    actions: [block-ips]
+  - name: auth-service
+    source: tool://auth-service
+    actions: [invalidate-all-tokens]
+  - name: internal-api
+    source: tool://internal-api
+    actions: [revoke-all-keys]
+  - name: credential-revoker
+    source: tool://credential-revoker
+    actions: [revoke-for-alert]
+  - name: log-exporter
+    source: tool://log-exporter
+    actions: [export]
+  - name: splunk
+    source: builtin://splunk
+    actions: [search-iocs]
+  - name: email-notify
+    source: builtin://email
+    actions: [send]
+  - name: pagerduty-notify
+    source: builtin://pagerduty
+    actions: [trigger-alert, resolve-alert]
+  - name: slack-notify
+    source: builtin://slack
+    actions: [send-message]
+  - name: incident-tracker
+    source: tool://incident-tracker
+    actions: [close]
 
 governance:
   rules:
@@ -40,16 +74,21 @@ governance:
 
 flow:
   # Step 1: Receive Security Alert
+  # INTENT: Pause execution until the SIEM fires a webhook for this incident.
+  # GAP-3: No wait_for_event step type exists yet in gert v2. This step should block
+  #        runbook execution until an inbound SIEM webhook payload is received and its
+  #        fields (alert_timestamp, incident_id) are bound to runbook state.
+  #        Placeholder: cli step echoes a stub; real inputs arrive via webhook trigger binding.
   - step:
       id: receive_alert
-      type: extension
+      type: cli  # GAP: no wait_for_event step type yet — this step should pause execution
+                 # until an inbound webhook/event is received. Placeholder: cli polls instead.
       title: Receive SIEM security alert
-      extension:
-        name: siem-webhook
-        action: receive
+      cli:
+        command: echo "STUB: waiting for event - siem-alert"
       capture:
-        alert_timestamp: json.timestamp
-        incident_id: json.incident_id
+        alert_timestamp: stdout
+        incident_id: stdout
 
   # Step 2: Security Officer Triage
   - step:
@@ -122,18 +161,22 @@ flow:
                   steps:
                     - step:
                         id: restore_network_access
-                        type: extension
+                        type: tool
                         title: Restore network access
-                        extension:
+                        tool:
                           name: aws
                           action: restore-security-groups
+                        contract:
+                          effects: [security.restore]
                     - step:
                         id: unsuspend_accounts
-                        type: extension
+                        type: tool
                         title: Unsuspend accounts
-                        extension:
+                        tool:
                           name: okta
                           action: unsuspend-all-users
+                        contract:
+                          effects: [credentials.restore]
 
             # Step 4c: Isolate affected systems (parallel)
             - step:
@@ -145,51 +188,54 @@ flow:
                     steps:
                       - step:
                           id: disable_sg_ingress
-                          type: extension
+                          type: tool
                           title: Disable AWS security group ingress
-                          extension:
+                          tool:
                             name: aws
                             action: revoke-sg-ingress
                             args:
                               systems: "{{ .affected_systems }}"
                           contract:
                             effects: ["security.isolate"]
+                            reads: [affected_systems]
 
                   - label: Shutdown EC2 instances
                     steps:
                       - step:
                           id: shutdown_instances
-                          type: extension
+                          type: tool
                           title: Shut down compromised EC2 instances
-                          extension:
+                          tool:
                             name: aws
                             action: stop-instances
                             args:
                               systems: "{{ .affected_systems }}"
                           contract:
                             effects: ["security.isolate"]
+                            reads: [affected_systems]
 
                   - label: Block IPs at firewall
                     steps:
                       - step:
                           id: block_ips
-                          type: extension
+                          type: tool
                           title: Block attacker IPs at firewall
-                          extension:
+                          tool:
                             name: palo-alto
                             action: block-ips
                             args:
                               alert_id: "{{ .alert_id }}"
                           contract:
                             effects: ["security.isolate"]
+                            reads: [alert_id]
 
                   - label: Disable VPN access
                     steps:
                       - step:
                           id: disable_vpn
-                          type: extension
+                          type: tool
                           title: Disable VPN access via Okta
-                          extension:
+                          tool:
                             name: okta
                             action: disable-vpn-policy
                           contract:
@@ -208,9 +254,9 @@ flow:
                     steps:
                       - step:
                           id: rotate_iam
-                          type: extension
+                          type: tool
                           title: Rotate AWS IAM keys
-                          extension:
+                          tool:
                             name: aws
                             action: rotate-iam-keys
                           contract:
@@ -219,9 +265,9 @@ flow:
                     steps:
                       - step:
                           id: invalidate_jwt
-                          type: extension
+                          type: tool
                           title: Invalidate JWT tokens
-                          extension:
+                          tool:
                             name: auth-service
                             action: invalidate-all-tokens
                           contract:
@@ -230,9 +276,9 @@ flow:
                     steps:
                       - step:
                           id: force_password_reset
-                          type: extension
+                          type: tool
                           title: Force password reset for all users
-                          extension:
+                          tool:
                             name: okta
                             action: force-password-reset-all
                           contract:
@@ -241,9 +287,9 @@ flow:
                     steps:
                       - step:
                           id: revoke_api_keys
-                          type: extension
+                          type: tool
                           title: Revoke all API keys
-                          extension:
+                          tool:
                             name: internal-api
                             action: revoke-all-keys
                           contract:
@@ -262,35 +308,42 @@ flow:
                     steps:
                       - step:
                           id: ebs_snapshots
-                          type: extension
+                          type: tool
                           title: Create EBS snapshots
-                          extension:
+                          tool:
                             name: aws
                             action: create-ebs-snapshots
                             args:
                               systems: "{{ .affected_systems }}"
+                          contract:
+                            effects: [aws.snapshot]
+                            reads: [affected_systems]
                   - label: CloudTrail export
                     steps:
                       - step:
                           id: export_cloudtrail
-                          type: extension
+                          type: tool
                           title: Export CloudTrail logs (7 days)
-                          extension:
+                          tool:
                             name: aws
                             action: export-cloudtrail
                             args:
                               days: 7
+                          contract:
+                            effects: [aws.export]
                   - label: Application logs
                     steps:
                       - step:
                           id: export_app_logs
-                          type: extension
+                          type: tool
                           title: Export application logs (24h)
-                          extension:
+                          tool:
                             name: log-exporter
                             action: export
                             args:
                               hours: 24
+                          contract:
+                            effects: [logs.export]
                 join:
                   wait_for: all
                   on_failure: continue # continue even if some snapshots fail
@@ -316,35 +369,42 @@ flow:
           steps:
             - step:
                 id: suspend_accounts_high
-                type: extension
+                type: tool
                 title: Suspend compromised accounts
-                extension:
+                tool:
                   name: okta
                   action: suspend-accounts
                   args:
                     alert_id: "{{ .alert_id }}"
+                contract:
+                  effects: [credentials.revoke]
+                  reads: [alert_id]
 
             - step:
                 id: revoke_creds_high
-                type: extension
+                type: tool
                 title: Revoke credentials for affected users
-                extension:
+                tool:
                   name: credential-revoker
                   action: revoke-for-alert
                   args:
                     alert_id: "{{ .alert_id }}"
+                contract:
+                  effects: [credentials.revoke]
+                  reads: [alert_id]
 
             - step:
                 id: isolate_hosts_high
-                type: extension
+                type: tool
                 title: Isolate affected hosts (block external traffic only)
-                extension:
+                tool:
                   name: aws
                   action: restrict-sg-egress
                   args:
                     systems: "{{ .affected_systems }}"
                 contract:
                   effects: ["security.isolate"]
+                  reads: [affected_systems]
 
         # Branch: Medium
         - condition: '{{ eq .severity "medium" }}'
@@ -389,13 +449,16 @@ flow:
                     steps:
                       - step:
                           id: suspend_accounts_medium_escalated
-                          type: extension
+                          type: tool
                           title: Suspend compromised accounts (escalated from medium)
-                          extension:
+                          tool:
                             name: okta
                             action: suspend-accounts
                             args:
                               alert_id: "{{ .alert_id }}"
+                          contract:
+                            effects: [credentials.revoke]
+                            reads: [alert_id]
 
         # Branch: Low
         - condition: '{{ eq .severity "low" }}'
@@ -412,13 +475,16 @@ flow:
 
             - step:
                 id: close_pagerduty_low
-                type: extension
+                type: tool
                 title: Close PagerDuty incident
-                extension:
-                  name: pagerduty
-                  action: resolve-incident
+                tool:
+                  name: pagerduty-notify
+                  action: resolve-alert
                   args:
                     incident_id: "{{ .incident_id }}"
+                contract:
+                  effects: [pagerduty.write]
+                  reads: [incident_id]
 
             - step:
                 id: end_low
@@ -440,15 +506,18 @@ flow:
           steps:
             - step:
                 id: analyze_iocs
-                type: extension
+                type: tool
                 title: Analyze logs for IOCs
-                extension:
+                tool:
                   name: splunk
                   action: search-iocs
                   args:
                     alert_id: "{{ .alert_id }}"
                 capture:
                   ioc_report: json.report_path
+                contract:
+                  effects: [splunk.read]
+                  reads: [alert_id]
 
         - label: Malware analysis
           steps:
@@ -498,15 +567,18 @@ flow:
   # Step 9: Stakeholder Notification
   - step:
       id: stakeholder_notification
-      type: extension
+      type: tool
       title: Notify stakeholders
-      extension:
-        name: email-sender
-        action: send-breach-notification
+      tool:
+        name: email-notify
+        action: send
         args:
           alert_id: "{{ .alert_id }}"
           severity: "{{ .severity }}"
           recipients: ["ciso@company.com", "cto@company.com", "ceo@company.com", "legal@company.com"]
+      contract:
+        effects: [email.write]
+        reads: [alert_id, severity]
 
   # Step 10: Legal/Compliance Assessment
   - step:
@@ -588,26 +660,32 @@ flow:
   # Step 13: Close Incident
   - step:
       id: close_incident
-      type: extension
+      type: tool
       title: Close incident and archive evidence
-      extension:
+      tool:
         name: incident-tracker
         action: close
         args:
           incident_id: "{{ .incident_id }}"
           status: contained
           create_followup: true
+      contract:
+        effects: [incident-tracker.write]
+        reads: [incident_id]
 
   - step:
       id: notify_security_team
-      type: extension
+      type: tool
       title: Notify security team of containment
-      extension:
-        name: slack
+      tool:
+        name: slack-notify
         action: send-message
         args:
           channel: "#security-incidents"
           message: "Incident {{ .alert_id }} contained. Severity: {{ .severity }}"
+      contract:
+        effects: [slack.write]
+        reads: [alert_id, severity]
 
   - step:
       id: complete

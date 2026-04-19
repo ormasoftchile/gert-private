@@ -4,19 +4,47 @@
 **Fidelity:** 8/10 (80%)  
 **Verdict:** PASS WITH NOTES
 
+## Corrections Applied (2026-04-19)
+
+### type:extension → type:tool / GAP stubs
+
+Four steps in this runbook originally used `type: extension` incorrectly. `type: extension` is **not
+a step type in gert v2** — it is a field-annotation convention (`x-<namespace>:` prefix) for attaching
+metadata to runbooks and steps. Using it as a step type was wrong.
+
+| Step ID | Was | Now | Reason |
+|---------|-----|-----|--------|
+| `detect_alert` | `type: extension` (prometheus-webhook receive) | `type: cli` GAP stub | Inbound event receive — no `wait_for_event` step type exists yet (GAP-3) |
+| `create_pagerduty_incident` | `type: extension` (pagerduty create-incident) | `type: tool` (pagerduty-notify) | Outbound notify — correctly expressed as a tool call |
+| `close_alert` | `type: extension` (prometheus-webhook resolve) | `type: tool` (alertmanager-notify) | Outbound API call — correctly expressed as a tool call |
+| `notify_slack` | `type: extension` (slack send-message) | `type: tool` (slack-notify) | Outbound notify — correctly expressed as a tool call |
+
+### The Real Gap: wait_for_event (GAP-3)
+
+`detect_alert` is a genuine schema gap. The step's intent is to block runbook execution until an
+inbound webhook payload arrives and binds its fields (timestamp, alert_id) to runbook state. The
+correct step type for this — `type: wait_for_event` — does not yet exist in the gert v2 schema.
+The placeholder uses `type: cli` with a stub echo command and a `# GAP:` comment.
+
+The `toolRefs` section was expanded to include:
+- `slack-notify` (builtin://slack)
+- `pagerduty-notify` (builtin://pagerduty)
+- `alertmanager-notify` (builtin://alertmanager)
+
 ## Gaps Found
 
 | Gap ID | Class | Severity | Description |
 |--------|-------|----------|-------------|
-| G1-001 | G1 | HIGH | No native webhook/notification step type; must use `type: extension` for Prometheus webhook receive/send and Slack notifications |
+| GAP-3  | G1 | HIGH | No `wait_for_event` step type — inbound webhook/event receive has no native representation; `detect_alert` uses a cli stub placeholder |
 | G2-001 | G2 | HIGH | No JSON path query language for conditions beyond basic template functions; conditions use string matching (`contains`) rather than structured JSON path queries |
 | G1-002 | G1 | MEDIUM | No terminal outcome steps in individual branches — each branch ends without explicit outcome declaration (only one `type: end` at the very end) |
 
 ## Translation Notes
 
-1. **Step 1 (Detect Alert):** Used `type: extension` with a hypothetical `prometheus-webhook`
-   extension. The schema doesn't have a built-in webhook receiver type. In practice this step
-   might be implicit (runbook triggered by webhook), but included for completeness.
+1. **Step 1 (Detect Alert):** Originally `type: extension` with a prometheus-webhook receive action.
+   Corrected to a `type: cli` GAP stub. The real implementation requires `type: wait_for_event`
+   (not yet specified). In practice, webhook payloads may arrive as runbook trigger inputs — but the
+   schema has no step-level mechanism to pause and wait for an inbound event mid-flow.
 
 2. **Step 2 (Gather Diagnostics):** Used `type: parallel` with three branches for concurrent
    kubectl commands. Independent diagnostics can run simultaneously.
@@ -38,11 +66,13 @@
 7. **Evidence Collection:** Used `cli` steps for tar + aws upload. The schema doesn't have a
    native artifact storage primitive beyond captures.
 
-8. **Slack Notification:** Used `type: extension` with hypothetical `slack` extension.
+8. **Slack/PagerDuty Notifications:** Corrected from `type: extension` to `type: tool` using
+   `slack-notify` and `pagerduty-notify` toolRefs.
 
 ## Recommended Schema Improvements
 
-- Add `type: webhook` step for both receiving and sending webhooks
+- Add `type: wait_for_event` step for blocking on inbound webhook/event (GAP-3)
 - Add `jsonpath()` template function or native JSON path syntax in conditions
 - Clarify whether every branch arm should have a `type: end` step or if convergence to a
   single end step is acceptable
+

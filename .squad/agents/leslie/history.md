@@ -490,3 +490,13 @@ All 43 Unicode errors eliminated. Final build: CLEAN.
 - `\resizebox{\linewidth}{!}{...}` is the right solution for wide horizontal chains.
 - `gertfit` + `on background layer` for bounding boxes around grouped nodes.
 - Loop-back arrows: `(node.east) -- ++(offset,0) |- (target.east)` gives clean right-side routing.
+
+## Learnings
+
+### fcolorbox override for minted error tokens
+To suppress Pygments Token.Error red boxes inside minted environments (e.g. from Go template syntax in YAML blocks), add this after the setminted blocks in main.tex:
+  \AtBeginEnvironment{minted}{\renewcommand{\fcolorbox}[4][]{#4}}
+This removes the red-bordered box without affecting minted own frame=leftline machinery.
+
+### Mixed YAML + Go template blocks must use {text}
+Any \begin{minted}{yaml} (or {json}) block whose content contains Go template expressions ({{ }}, {{ if }}, {{/* */}}) must be re-languaged to \begin{minted}{text}. The YAML/JSON Pygments lexers classify those characters as Token.Error, causing red boxes. text = no highlighting, clean monospace, no error tokens.

@@ -53,13 +53,13 @@ Following JSON~Schema~\cite{jsonschema-spec} best practice and the pattern used 
 Argo~Workflows, and Kubernetes~CRDs, every v2 document \emph{should} carry a
 \texttt{\$schema} field pointing to the canonical JSON~Schema URL:
 
-\begin{verbatim}
+\begin{minted}{yaml}
 $schema: "https://schemas.gert.dev/runbook/v2.json"
 apiVersion: runbook/v2
 id: service-health
 name: Service Health Check
 ...
-\end{verbatim}
+\end{minted}
 
 The \texttt{\$schema} field is optional at runtime (the runtime uses
 \texttt{apiVersion} for dispatch) but is \emph{strongly recommended} because:

@@ -62,6 +62,7 @@ def build_with_engine(engine: str, args: argparse.Namespace, project_dir: Path, 
             "latexmk",
             "-pdf",
             "-interaction=nonstopmode",
+            "-shell-escape",
             f"-outdir={build_dir}",
             args.main,
         ]
@@ -72,6 +73,7 @@ def build_with_engine(engine: str, args: argparse.Namespace, project_dir: Path, 
         cmd = [
             "pdflatex",
             "-interaction=nonstopmode",
+            "--shell-escape",
             f"-output-directory={build_dir}",
             args.main,
         ]

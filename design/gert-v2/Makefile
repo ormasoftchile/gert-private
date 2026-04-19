@@ -40,4 +40,4 @@ release: build
 	$(PYTHON) scripts/latex.py release --main $(MAIN) --build-dir $(BUILD_DIR)
 
 watch:
-	latexmk -pdf -pvc -interaction=nonstopmode -output-directory=$(BUILD_DIR) $(MAIN)
+	latexmk -pdf -pvc -interaction=nonstopmode -shell-escape -output-directory=$(BUILD_DIR) $(MAIN)

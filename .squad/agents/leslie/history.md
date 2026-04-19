@@ -34,6 +34,53 @@ This is a LaTeX document using the MastersThesis class. Sections are in `design/
 
 ## Learnings
 
+### 2026-04-19 — Architecture Overview + Execution Lifecycle Diagrams (324 pages, CLEAN)
+
+**Task:** Add two TikZ diagrams to §02: an architecture dependency graph and an execution lifecycle state machine.
+
+**Build result:** CLEAN — zero fatal errors, zero new warnings.
+
+**Page count:** 324 pages (up from 322, +2 pages for the two new diagrams).
+
+**Commit:** d5e5238 — `diagrams: add architecture overview and execution lifecycle diagrams`
+
+**Changes:**
+- `sections/02-architecture.tex`: inserted two figure environments.
+  1. `fig:architecture-overview` — placed immediately before `\section{Primary Components}`, after the chapter intro paragraphs. 11-node layered TikZ diagram: Runbook→Parser→Planner→Executor vertical pipeline; Runtime Core gertfit group (Executor + Step Handlers + Variable Store); services row (Tool Registry, Input Provider, Event Bus); RPC Server + Audit Log on the right. Used `arc-` prefixed node names to avoid future naming conflicts.
+  2. `fig:execution-lifecycle` — placed between `\section{Lifecycle Model}` and `\subsection{Run Start}`. Two stacked tikzpictures in a single figure: (a) run states — created→planning→ready→running with terminal states (completed/failed/cancelled) to the right and suspended/resuming loop below running with `bend left=60` return arc; (b) step states — pending→executing→completed with waiting\_for\_input bidirectional loop (`bend right=30`) and failed/skipped/compensating terminals. Used `rs-` and `ss-` prefixed node names.
+
+**Design notes:**
+- All nodes use `stepbox` style for consistency with existing §03 taxonomy diagram.
+- `gertfit` + `on background layer` scope renders Runtime Core box behind its child nodes.
+- "Runtime Core" label placed as a separate `\node[below=3pt of arc-rtcore]` node (text only, no draw) to avoid overlapping the planner→executor arrow at the top of the fit box.
+- Node scale: `[scale=0.9, transform shape]` on all tikzpictures to ensure diagrams fit within textwidth.
+- Used `rs-` and `ss-` name prefixes to avoid node name collisions between the two state machine sub-figures.
+- `rs-resuming to[bend left=60] (rs-running)` creates a left-side arc that stays clear of the main-path nodes (ready right edge ≈ 7.1cm, arc extends to ≈ 7.6cm).
+
+### 2026-04-19 — TikZ Preamble + Step-Type Taxonomy Diagram (322 pages, CLEAN)
+
+**Task:** Establish TikZ as the global diagramming standard; add the first diagram to §03.
+
+**Build result:** CLEAN — zero fatal errors.
+
+**Page count:** 322 pages (up from 273 pages, +49 pages since last build — reflects document growth across sessions).
+
+**Changes:**
+- `main.tex`: added TikZ preamble block after `\usepackage{tcolorbox}`. Libraries: arrows.meta, automata, positioning, shapes.geometric, fit, chains, calc, backgrounds. Styles: `stepbox` (monospace step node), `catbox` (bold category header), `gertarrow` (Stealth arrow), `gertfit` (dashed group box).
+- `sections/03-schema-vnext.tex`: added `fig:step-type-taxonomy` — 14 step types in 5 columns (Execution, User Input, Flow Control, Governance, Terminal), placed immediately before `\subsection{Common Step Fields}`.
+
+**Diagram design:** Five vertical column groups, each with a `catbox` header and `stepbox` leaves, bounded by `gertfit` dashed rectangles. `wait_for_event` accommodated with underscore in `\ttfamily`. No overfull hbox warnings from the new diagram.
+
+**Commit:** f68cd84 — `diagrams: establish TikZ as global diagramming standard`
+
+**Decision record:** `.squad/decisions/inbox/leslie-tikz-global-diagrams.md`
+
+**TikZ node style cheat-sheet (for future diagrams):**
+- `stepbox` — monospace step name box (white fill)
+- `catbox` — category header (gray fill, bold)
+- `gertarrow` — `->` with Stealth tip
+- `gertfit` — dashed rounded fit rectangle for grouping
+
 ### 2026-04-18 — wait_for_event Integration Build (273 pages, CLEAN)
 
 **Task:** Build after John (§03) and Ken (§02) added wait_for_event content.
@@ -296,3 +343,69 @@ All 43 Unicode errors eliminated. Final build: CLEAN.
 **Fixes required:** None — content compiled clean without modification.
 
 **Status:** ✅ COMPLETE — No fixes needed, document builds clean at 283 pages
+
+### 2026-04-18 — Diagram Audit & TikZ Feasibility Assessment (COMPLETE)
+
+**Task:** Audit current diagram state in gert v2 design (283 pages, 16 sections) and assess TikZ viability for a global diagramming standard.
+
+**Findings:**
+
+**Current State:** Zero diagrams. Document contains:
+- 232 verbatim code blocks (YAML/JSON/Go, not diagrams)
+- 60 tabular tables (data/matrices, not visual flow)
+- 0 TikZ pictures, includegraphics, or figure environments
+- **Prose references to missing diagrams:** 12 sections reference "as shown", "Figure", "see below", but diagrams are absent
+
+**Missing Diagrams Identified (5 types):**
+1. **CRITICAL: Architecture Dependency Graph** (§02) — 5-component system (Parser, Planner, Runtime Core, Extension Host, Adapters) with inward-flowing dependencies and Core Domain boundary
+2. **CRITICAL: Execution Lifecycle State Machine** (§02, §12) — 8 run states (INIT, QUEUED, RUNNING, WAITING, RESUMING, COMPLETED, FAILED, CANCELLED) with governance checkpoints
+3. **HIGH: Step Type Taxonomy & Control Flow** (§03) — 14 step types classified (execution vs control-flow vs special) with branching/nesting rules
+4. **HIGH: Governance Pre-Flight Checkpoint Flow** (§07, §11) — policy evaluation gates during load/run-start/step-execution
+5. **MEDIUM: Event Flow Timeline** (§06) — run/step/governance event sequence with optional vs required annotations
+
+**TikZ Compatibility: ✅ 100% FEASIBLE**
+- MastersThesis class: No conflicts (standard report-based)
+- pdflatex toolchain: Native TikZ support (no external tools needed)
+- Existing packages: xcolor, graphicx, amssymb, tcolorbox already loaded — all compatible
+- Recommended preamble: 50-line block with color palette + reusable TikZ styles (component, state, decision, arrow, edge-label)
+
+**Recommended TikZ Libraries:** shapes.geometric, arrows.meta, positioning, fit, backgrounds, calc
+
+**Suggested Rollout:**
+- Phase 1: Add preamble block to main.tex (copy-paste ready)
+- Phase 2: Implement Diagram 1 (architecture) in §02 — unblocks component interface decisions
+- Phase 3: Implement Diagram 2 (lifecycle) in §02+§12 — grounds event system and resumption logic
+- Phase 4: Implement Diagram 3 (step types) in §03 — clarifies schema and form builder constraints
+
+**Deliverable:** Complete audit written to `.squad/tmp/leslie-diagrams-audit.md` with:
+- Current inventory table (by section: verbatim count, tables, diagram refs)
+- Missing diagrams with location, current state, what's needed, why urgent
+- Packages already loaded (analysis)
+- Ready-to-paste TikZ preamble block
+- 3 urgent diagram types with ASCII sketches
+- TikZ compatibility checklist (all ✅)
+- Implementation roadmap (4 phases, 4 weeks estimate)
+
+**Status:** ✅ COMPLETE — Audit findings support immediate TikZ adoption. No blocking issues. Recommended preamble tested for compatibility (zero build impact).
+
+### 2026-04-19 — minted Package for Syntax Highlighting (324 pages, CLEAN)
+
+**Task:** Add minted-based YAML/Go/JSON syntax highlighting to the document.
+
+**Prerequisites:** Python 3.14.0 + Pygments 2.20.0 installed via `pip3 install Pygments --break-system-packages`. `pygmentize` at `/opt/homebrew/bin/pygmentize`.
+
+**Build result:** CLEAN — zero fatal errors, zero new warnings. Page count unchanged at 324 pages.
+
+**Changes:**
+- `main.tex`: added `\usepackage{minted}` block after the TikZ preamble. Global `\setminted` sets `fontsize=\small`, `breaklines=true`, `autogobble=true`. Per-language configs for `yaml`, `go`, `json` use `style=friendly`, `frame=leftline`, `framesep=6pt`, no line numbers. Added `\yinline{...}` convenience command for inline YAML.
+- `scripts/latex.py`: added `--shell-escape` to `pdflatex` invocation (required by minted); added `-shell-escape` to `latexmk` invocation.
+- `Makefile`: added `-shell-escape` to the `watch` target's `latexmk` call.
+- `sections/03-schema-vnext.tex`: converted first verbatim block (lines 56-62, runbook YAML header) from `\begin{verbatim}` to `\begin{minted}{yaml}` as proof-of-concept.
+
+**Decision record:** `.squad/decisions/inbox/leslie-minted-syntax-highlighting.md`
+
+**Notes for future minted conversions:**
+- Use `\begin{minted}{yaml}` for YAML, `\begin{minted}{go}` for Go, `\begin{minted}{json}` for JSON.
+- minted requires `--shell-escape` at build time — already set in `scripts/latex.py` and `Makefile`.
+- Remaining `verbatim` blocks in 03-schema-vnext.tex can be converted on-demand; no mass conversion until team verifies output.
+- `\yinline{...}` available for inline YAML snippets (uses `\mintinline{yaml}{...}`).

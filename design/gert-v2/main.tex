@@ -53,6 +53,39 @@
     inner sep=6pt
   }
 }
+% ── Syntax Highlighting (minted) ─────────────────────────────────────────────
+\usepackage{minted}
+\setminted{
+  fontsize=\small,
+  baselinestretch=1.1,
+  breaklines=true,
+  breakanywhere=false,
+  autogobble=true
+}
+\setminted[yaml]{
+  style=friendly,       % clean, readable colour scheme
+  linenos=false,
+  frame=leftline,
+  framesep=6pt,
+  rulecolor=\color{black!25}
+}
+\setminted[go]{
+  style=friendly,
+  linenos=false,
+  frame=leftline,
+  framesep=6pt,
+  rulecolor=\color{black!25}
+}
+\setminted[json]{
+  style=friendly,
+  linenos=false,
+  frame=leftline,
+  framesep=6pt,
+  rulecolor=\color{black!25}
+}
+% Convenience command for inline code
+\newcommand{\yinline}[1]{\mintinline{yaml}{#1}}
+
 \usepackage[backend=biber,style=numeric,sorting=nyt]{biblatex}
 \addbibresource{references.bib}
 

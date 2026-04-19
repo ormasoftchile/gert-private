@@ -1616,7 +1616,7 @@ rejected.
 Typed storage ensures that template comparison operators in downstream steps work without
 manual coercion:
 
-\begin{minted}{json}
+\begin{minted}{text}
 {{/* number/integer: .amount is float64, not a string */}}
 {{ if gt .amount 50000.0 }}HIGH_VALUE{{ end }}
 

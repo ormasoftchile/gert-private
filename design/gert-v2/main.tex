@@ -82,6 +82,8 @@
   framesep=6pt,
   rulecolor=\color{black!25}
 }
+% Suppress Pygments error-token red boxes (e.g. Go template syntax in YAML blocks)
+\AtBeginEnvironment{minted}{\renewcommand{\fcolorbox}[4][]{#4}}
 % Convenience command for inline code
 \newcommand{\yinline}[1]{\mintinline{yaml}{#1}}
 

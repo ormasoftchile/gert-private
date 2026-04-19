@@ -65,7 +65,7 @@ All other runbook semantics are preserved. Step execution behavior, governance p
 \subsection{Before and After Example}
 
 \textbf{v1 runbook (simple.runbook.yaml):}
-\begin{minted}{yaml}
+\begin{minted}{text}
 apiVersion: runbook/v1
 
 meta:
@@ -104,7 +104,7 @@ flow:
 \end{minted}
 
 \textbf{v2 runbook (migrated):}
-\begin{minted}{yaml}
+\begin{minted}{text}
 $schema: "https://schemas.gert.dev/runbook/v2.json"
 apiVersion: runbook/v2
 
@@ -277,7 +277,7 @@ The v1 \texttt{tool/v0} schema is replaced by \texttt{tool/v2}. Key changes:
 \end{enumerate}
 
 \textbf{v1 tool definition:}
-\begin{minted}{yaml}
+\begin{minted}{text}
 apiVersion: tool/v0
 name: kubectl
 executable: /usr/local/bin/kubectl
@@ -285,7 +285,7 @@ args_template: "{{ .args }}"
 \end{minted}
 
 \textbf{v2 tool definition:}
-\begin{minted}{yaml}
+\begin{minted}{text}
 $schema: "https://schemas.gert.dev/tool/v2.json"
 apiVersion: tool/v2
 

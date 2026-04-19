@@ -288,7 +288,7 @@ flow:
 \subsection{Complete Annotated Example}
 \label{subsec:full-example}
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 $schema: "https://schemas.gert.dev/runbook/v2.json"
 apiVersion: runbook/v2
 id: service-health-check
@@ -803,7 +803,7 @@ convert run to a string.''}.
 
 \paragraph{Example: exec form (unchanged)}
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 - step:
     id: tail_logs
     type: cli
@@ -821,7 +821,7 @@ convert run to a string.''}.
 
 \paragraph{Example: run string form with explicit shell}
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 - step:
     id: run_script
     type: cli
@@ -836,7 +836,7 @@ convert run to a string.''}.
 
 \paragraph{Example: run string form with auto shell}
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 - step:
     id: echo_env
     type: cli
@@ -847,7 +847,7 @@ convert run to a string.''}.
 
 \paragraph{Example: run map form (multi-shell)}
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 - step:
     id: clear_cache
     type: cli
@@ -1681,7 +1681,7 @@ Benefits of the questionnaire pattern:
 
 \textbf{Example: Incident triage form} (4-field form with conditional logic using \texttt{when})
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 - step:
     id: collect_incident_details
     type: collector
@@ -1991,7 +1991,7 @@ capture:
   status:   json.items[0].status.phase
 \end{minted}
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 - step:
     id: list_pods
     type: tool
@@ -2111,7 +2111,7 @@ When the runtime reaches a \texttt{wait\_for\_event} step it:
 
 \paragraph{Example 2 — Named channel / approval callback}
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 - step:
     id: wait_approval_callback
     type: wait_for_event
@@ -2178,7 +2178,7 @@ to any steps that follow in the caller.
 \end{tabular}
 \end{center}
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 - step:
     id: run_db_checks
     type: include
@@ -2276,7 +2276,7 @@ At most one branch arm executes.  If no arm matches and no arm has an
 steps run.  The \texttt{else: true} marker (new in v2) designates a catch-all
 arm:
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 - step:
     id: route_on_env
     type: branch
@@ -2376,7 +2376,7 @@ The loop variable \texttt{\{\{\ .iteration\ \}\}} (0-indexed) is always availabl
 In list mode, \texttt{\{\{\ .item\ \}\}} (or the \texttt{as} name) holds the
 current element.
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 # List iteration
 - iterate:
     id: check_all_services
@@ -2477,7 +2477,7 @@ execution.  After the join, all \texttt{capture} values from all branches are
 merged into the caller's variable map.  Write conflicts (two branches writing the
 same variable) are resolved by last-writer-wins and a warning is emitted.
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 - step:
     id: parallel_checks
     type: parallel
@@ -2556,7 +2556,7 @@ same variable) are resolved by last-writer-wins and a warning is emitted.
 Evaluates a list of assertions against captured variables.  Fails the run if
 any assertion does not pass.
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 - step:
     id: verify_deployment
     type: assert
@@ -2601,7 +2601,7 @@ The compensation steps execute in LIFO order relative to the sequence of
 Compensation steps share the same variable context as the point at which the
 \texttt{compensate} node was registered.
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 - step:
     id: scale_down
     type: tool
@@ -2671,7 +2671,7 @@ Compensation steps share the same variable context as the point at which the
 Declares a terminal outcome and halts execution.  Renamed from \texttt{router}
 in v1.
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 - step:
     id: resolved
     type: end
@@ -2695,7 +2695,7 @@ replaced by \texttt{tool/v2}.
 \subsection{Tool Definition Field Inventory}
 \label{subsec:tool-fields}
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 $schema: "https://schemas.gert.dev/tool/v2.json"
 apiVersion: tool/v2
 
@@ -2833,7 +2833,7 @@ x-otel-service-name: "payment-service"
 
 \paragraph{At the step level}
 
-\begin{minted}{yaml}
+\begin{minted}{text}
 - step:
     id: deploy
     type: tool

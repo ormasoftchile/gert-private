@@ -371,21 +371,33 @@ They must not import any package from the Parser, Planner, or Extension Host.
 
 \paragraph{Dependency Direction Summary.}
 
-\begin{verbatim}
-  Adapter Layer
-       |
-       v
-  Runtime Core  <---- Extension Host
-       |                    |
-       v                    v
-    Planner           Tool Runtime
-       |
-       v
-    Parser
-       |
-       v
-  Schema / JSON Schema artifact
-\end{verbatim}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.0cm and 1.5cm]
+  %% ── Vertical spine (Adapter → Runtime Core → Planner → Parser → Schema) ─────
+  \node[stepbox]                          (dd-adapter) {Adapter Layer};
+  \node[stepbox, below=of dd-adapter]     (dd-rtcore)  {Runtime Core};
+  \node[stepbox, below=of dd-rtcore]      (dd-planner) {Planner};
+  \node[stepbox, below=of dd-planner]     (dd-parser)  {Parser};
+  \node[stepbox, below=of dd-parser]      (dd-schema)  {Schema / JSON Schema};
+
+  %% ── Peer column (Extension Host + Tool Runtime, right of spine) ──────────────
+  \node[stepbox, right=2.5cm of dd-rtcore]  (dd-exthost) {Extension Host};
+  \node[stepbox, below=of dd-exthost]       (dd-toolrt)  {Tool Runtime};
+
+  %% ── Arrows ───────────────────────────────────────────────────────────────────
+  \draw[gertarrow] (dd-adapter)  -- (dd-rtcore);
+  %% Extension Host <-> Runtime Core: peer relationship, both arrows shown
+  \draw[gertarrow] (dd-exthost)  to[bend right=12] (dd-rtcore);
+  \draw[gertarrow] (dd-rtcore)   to[bend right=12] (dd-exthost);
+  \draw[gertarrow] (dd-exthost)  -- (dd-toolrt);
+  \draw[gertarrow] (dd-rtcore)   -- (dd-planner);
+  \draw[gertarrow] (dd-planner)  -- (dd-parser);
+  \draw[gertarrow] (dd-parser)   -- (dd-schema);
+\end{tikzpicture}
+\caption{Component dependency direction. Arrows point from dependent to dependency. No upward arrows exist.}
+\label{fig:dep-direction}
+\end{figure}
 
 No upward arrow exists. The Parser knows nothing about the Runtime. The Runtime knows nothing
 about adapters. The Extension Host is a peer of the Runtime Core, contributing tools and policy

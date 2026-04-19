@@ -3899,3 +3899,126 @@ Cross-team roles:
 - **Brian** (Parser Engineer) implements in parser/validator
 - **Ken** (Runtime Engineer) implements execution semantics
 - **Sam** (VS Code Engineer) implements UI rendering
+# Decision Inbox: testutil Scaffold Complete
+
+**Author:** Barbara (Integrations Specialist)
+**Date:** 2026-04-19
+**Phase:** 0 — Foundation
+
+---
+
+## Deliverables Created
+
+`/Volumes/Projects/gert/v2/pkg/testutil/` contains 6 files:
+
+| File | Purpose |
+|------|---------|
+| `fake_step_executor.go` | FakeStepExecutor — controllable StepExecutor for unit tests |
+| `fake_event_dispatcher.go` | FakeEventDispatcher — consume-semantics event injection for wait_for_event tests |
+| `time_controller.go` | TimeController — fake time + timer firing for deterministic timeout tests |
+| `concurrent_event_collector.go` | ConcurrentEventCollector — thread-safe trace event collection for parallel step tests |
+| `golden.go` | AssertGoldenTrace + NormalizeTrace — golden JSONL trace comparison with -update flag |
+| `spec_tag.go` | Tag() + SpecTag — AST-discoverable spec-coverage annotations |
+
+---
+
+## Design Decisions
+
+### Stub types (forward-compatible)
+`testutil` defines local stub types for `Step`, `StepResult`, and `TraceEvent` with TODO comments.
+These must be replaced with real imports once `pkg/schema`, `pkg/engine`, and `pkg/trace` exist (Brian/Ken Phase 0 deliverables).
+No build tags needed — the stubs are self-contained.
+
+### FakeEventDispatcher — consume semantics
+Implements the locked decision (2026-04-19): first waiter wins. Events not consumed by a waiter are queued. DrainAll() unblocks all waiters and clears the queue. WaitOnChannel() is the preferred API when the channel name is known at call-site.
+
+### Golden traces
+Stored in `testdata/golden/*.jsonl`. Regenerate with `go test -update`. NormalizeTrace() stubs out timestamps (→ `<timestamp>`) and rebases seq numbers for deterministic diffs.
+
+### SpecTag
+No-op at runtime. The spec-coverage tool locates `testutil.Tag(file, section, rule)` calls via static AST analysis and produces a coverage matrix.
+
+---
+
+## Build Status
+
+```
+cd /Volumes/Projects/gert/v2 && go build ./pkg/testutil/...  ✅ passes
+```
+
+---
+
+## Blocking Notes
+
+- `FakeStepExecutor.Execute` signature uses local stub `Step`/`StepResult` — swap for `schema.Step`/`engine.StepResult` when Brian's pkg/engine lands.
+- `AssertGoldenTrace` uses local stub `TraceEvent` — swap for `trace.TraceEvent` when pkg/trace lands.
+- `FakeEventDispatcher.Wait()` uses a catch-all channel key; prefer `WaitOnChannel()` once engine dispatches with explicit channel names.
+# Decision: pkg/platform Interface
+
+**By:** Ken (Software Architect)  
+**Date:** 2026-04-19  
+**Status:** IMPLEMENTED  
+**Priority:** P1
+
+---
+
+## Context
+
+v2 targets Unix-first (Linux/macOS Tier 1) with Windows as Tier 2 for v2.0. Several runtime behaviors are OS-specific: temp directory paths, path separators, POSIX signal availability, executable suffixes, newline conventions, and trace-file append atomicity. Without a dedicated abstraction, these differences would be scattered across the codebase and untestable without a real OS.
+
+---
+
+## Decision
+
+Introduce `pkg/platform` as the single injection point for all OS-specific behavior. All code that touches platform differences **must** receive a `Platform` value; it must not call `runtime.GOOS` or OS primitives directly.
+
+---
+
+## Platform Interface Scope
+
+| Method | Abstracts |
+|---|---|
+| `TempDir()` | `os.TempDir()` — different default locations on Windows |
+| `NormalizePath(path)` | Backslash → forward-slash on Windows; no-op on Unix |
+| `AllowedSignals()` | OS signal allow-list for `wait_for_event source: signal` |
+| `OpenAppend(path)` | Atomic append semantics (see below) |
+| `NewlineNormalizer(w)` | CRLF → LF for JSON-RPC framing on Windows |
+| `ExecSuffix()` | `""` on Unix, `".exe"` on Windows |
+| `DefaultShell()` | `"/bin/sh"` on Unix, `"cmd.exe"` on Windows |
+
+---
+
+## Windows Workaround: Trace Append Atomicity
+
+Unix guarantees atomic append with `O_APPEND` at the kernel level (POSIX). Windows has no equivalent: `FILE_APPEND_DATA` access is not atomic for concurrent writers.
+
+**v2.0 workaround (Windows Tier 2):** `realPlatform.OpenAppend` on Windows calls `os.OpenFile` with `O_APPEND|O_WRONLY|O_CREATE` and a `// TODO` comment pointing to decisions.md. This is acceptable because:
+
+1. Windows is Tier 2 — advisory CI only, not blocking for v2.0 releases.
+2. Single-run-per-process is the v2.0 concurrency model, so cross-process append races are unlikely in normal operation.
+3. The TODO is visible and will be addressed in v2.1 when Windows is promoted to Tier 1.
+
+**v2.1 target:** Replace with a mutex-protected `WriteCloser` that uses a per-path `sync.Mutex` to serialize writes within a process, plus documentation that cross-process atomicity is unsupported on Windows.
+
+---
+
+## FakePlatform as Test Double
+
+`FakePlatform` (returned by `NewFakePlatform()`) is the canonical test double for all code that depends on `Platform`. Its defaults mimic a Unix environment:
+
+- `TempDirPath`: `"/tmp"`
+- `Signals`: full Linux/macOS allow-list
+- `ExecSuffixStr`: `""`
+- `ShellPath`: `"/bin/sh"`
+
+Tests that need Windows-like behavior override the exported fields directly — no subclassing or mocking framework required.
+
+`OpenAppend` writes to `FakePlatform.AppendBuf` (`bytes.Buffer`) and increments `AppendCallCount`, enabling assertions on both content and invocation count without touching the filesystem.
+
+---
+
+## Rationale
+
+- All platform differences are in one place → easy to audit during Windows Tier 1 promotion.
+- `FakePlatform` makes every consumer unit-testable hermetically.
+- Interface is narrow (7 methods) — adding a method requires an explicit decision, preventing scope creep.

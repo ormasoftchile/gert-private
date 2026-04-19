@@ -671,3 +671,53 @@ executor contract subsection.
 5. **Replay determinism depends on event sequencing guarantees.** If parallel branches emit in non-deterministic order, replay cannot re-emit the same trace. Breaks golden trace testing and audit trail reproducibility.
 
 6. **Missing trace events create audit gaps.** The wait_for_event step has no event/received. Trace shows "started" and "completed" but not *when* the external event arrived or *what* its payload was. Audit trail gap for compliance.
+
+
+---
+
+## 2026-04-19 — 6 Architectural Decisions Locked
+
+**Status:** COMPLETE
+
+**By:** Cristian (Coordinator) — accepted all 6 enabler-gap decisions from Ken's analysis
+
+**What was locked:**
+1. ✅ Event Sequencing for Parallel Blocks → branch-order deterministic
+2. ✅ Nested Parallel Blocks → forbidden in v2.0
+3. ✅ Event Consumption Semantics for wait_for_event → consume semantics
+4. ✅ Trace Event for Event Arrival → add event/received
+5. ✅ Windows Support Tier → Tier 2 for v2.0
+6. ✅ Signal Source Support → OS-specific allow-list
+
+**Spec updates applied:**
+- **§06-runtime-events.md:** Added `event/received` and `step/resumed` event definitions to external event catalog. Emitting order: `event/received` before `step/resumed`.
+- **§03-schema-vnext.md:**
+  - Signal allow-list added to `wait_for_event.event.source: signal` section (Linux/macOS: SIGINT, SIGTERM, SIGUSR1, SIGUSR2, SIGHUP; Windows: SIGINT only)
+  - Nested parallel constraint added to `parallel` step type: "Nested parallel steps are forbidden in v2.0. Semantic validation MUST reject with error parallel/nested-forbidden."
+
+**Impact:** Phase 0 can now proceed with contract clarity. Phase 3+ has deterministic event ordering and audit trail guarantees. Phase 1 semantic validation rules are defined.
+
+**Decisions locked in:** .squad/decisions.md (all 6 entries prepended with ✅ LOCKED and locked-by line added)
+
+### 2026-04-19 — Phase 0: pkg/platform interface created
+
+**What was done:**
+
+Created `v2/pkg/platform/` — the OS abstraction layer for all platform-dependent behavior in gert v2.
+
+**Files created:**
+- `v2/pkg/platform/platform.go` — `Platform` interface (7 methods: TempDir, NormalizePath, AllowedSignals, OpenAppend, NewlineNormalizer, ExecSuffix, DefaultShell)
+- `v2/pkg/platform/real.go` — `Real()` production implementation; uses `runtime.GOOS` for all branching; `crlfWriter` for Windows newline normalization; `O_APPEND|O_WRONLY|O_CREATE` for Unix atomic append; TODO comment for Windows mutex-protected append (Tier 2)
+- `v2/pkg/platform/fake.go` — `FakePlatform` test double with configurable fields; `OpenAppend` writes to in-memory `bytes.Buffer`; `NewFakePlatform()` constructor defaults to Unix environment
+- `v2/pkg/platform/platform_test.go` — 4 passing tests: ExecSuffix (real), AllowedSignals (real), AllowedSignals (fake), NewlineNormalizer (fake + real)
+
+**Also created:**
+- `v2/go.mod` — minimal module file (github.com/ormasoftchile/gert/v2, go 1.24)
+- Added ./v2 to /Volumes/Projects/gert/go.work
+- `.squad/decisions/inbox/ken-platform-interface.md` — documents interface scope, Windows append workaround, FakePlatform rationale
+
+**Key outcomes:**
+- `go build ./v2/pkg/platform/...` — clean
+- `go test ./v2/pkg/platform/...` — 4/4 PASS
+- All platform-dependent behavior is now injectable — enables hermetic unit tests across all v2 consumers
+- Locked decisions (Windows Tier 2, OS-specific signal allow-list) are encoded directly in real.go

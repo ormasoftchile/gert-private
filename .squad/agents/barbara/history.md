@@ -325,3 +325,26 @@ Builtin Tool Stubs (Phase 6 deliverables):
 - Brian (Parser): Implement parser/validator for choice/decision/collector
 - Ken (Runtime): Implement execution semantics for three step types
 - Sam (VS Code): Implement UI rendering for interactive steps
+
+---
+
+## 2026-04-19 — Phase 0: pkg/testutil Scaffold
+
+**Task:** Build v2 test infrastructure scaffold for TDD (requested by Cristian).
+
+**Deliverables:** `v2/pkg/testutil/` — 6 files, `go build ./pkg/testutil/...` passes cleanly.
+
+| File | What it provides |
+|------|-----------------|
+| `fake_step_executor.go` | FakeStepExecutor — register per-step handlers, record calls, RegisterSuccess/Failure/Delay helpers |
+| `fake_event_dispatcher.go` | FakeEventDispatcher — consume semantics, WaitOnChannel, WaitersCount, DrainAll |
+| `time_controller.go` | TimeController — fake Now/Advance/NewTimer/Since for deterministic timeout tests |
+| `concurrent_event_collector.go` | ConcurrentEventCollector — thread-safe Collect/Events/EventsForStep/Count/Reset |
+| `golden.go` | AssertGoldenTrace + NormalizeTrace — golden JSONL traces in testdata/golden/, -update flag |
+| `spec_tag.go` | Tag() + SpecTag — AST-discoverable spec-coverage annotations |
+
+**Stub types:** Step, StepResult, TraceEvent defined locally with TODO comments. Replace with real imports when Brian's pkg/schema/pkg/engine and pkg/trace land.
+
+**Decision inbox written:** `.squad/decisions/inbox/barbara-testutil-scaffold.md`
+
+**All fake dependencies (FakeStepExecutor, FakeEventDispatcher, TimeController) are in place for TDD.** Ken can write platform tests against these fakes immediately. Brian can wire FakeStepExecutor into engine unit tests once he defines the real Step/StepResult types.

@@ -1,5 +1,5 @@
 \chapter{Input Provider Framework}
-\label{chap:input-providers}
+\label{ch:input-providers}
 
 The input provider framework governs how gert resolves dynamic input values
 at run time.  When a runbook declares an input with a \texttt{from:} binding,
@@ -357,6 +357,15 @@ The provider returns the selected value:
   \item Providers MAY render options in the order provided, or MAY sort them
         alphabetically by label for improved usability.  The canonical order is
         declared in the runbook YAML.
+  \item \texttt{multiple: true} (optional, default \texttt{false}) — when set, the
+        provider MUST allow the operator to select one or more values.  The
+        \texttt{selected} response field MUST be a JSON array of strings rather than a
+        single string.  The run engine stores the result as a JSON array of strings; see
+        §\ref{sec:collector_field_validation} for storage semantics.
+  \item \texttt{options\_from} (optional) — mutually exclusive with the static
+        \texttt{options} array.  When present, the run engine calls
+        \texttt{inputProvider/getOptions} to fetch options dynamically before dispatching
+        the \texttt{provider/choice} request; see §\ref{sec:dynamic-options-protocol}.
 \end{itemize}
 
 \paragraph{Built-in prompt provider behaviour.}
@@ -521,13 +530,37 @@ The provider returns the collected values and any uploaded artifacts:
   \item The \texttt{fields} array declares the form structure.  Each field has:
         \begin{itemize}
           \item \texttt{name}: the variable name where the value will be stored.
-          \item \texttt{type}: one of \texttt{text}, \texttt{file}, \texttt{url},
-                \texttt{number}, or \texttt{date}.
+          \item \texttt{type}: one of \texttt{text}, \texttt{number},
+                \texttt{integer}, \texttt{date}, \texttt{datetime},
+                \texttt{boolean}, \texttt{select}, \texttt{file},
+                \texttt{image}, or \texttt{url}.  Full per-type validation and
+                variable-storage rules are defined in
+                §\ref{sec:collector_field_validation}.
           \item \texttt{label}: human-readable prompt text.
           \item \texttt{required}: boolean flag.
-          \item Type-specific constraints: \texttt{accept} (MIME types for file
-                uploads), \texttt{maxSizeBytes} (file size limit), \texttt{multiline}
-                (for text fields).
+          \item Type-specific constraints:
+                \begin{itemize}
+                  \item \texttt{validation.min}, \texttt{validation.max},
+                        \texttt{validation.step} — numeric bounds for
+                        \texttt{number} and \texttt{integer} fields.
+                  \item \texttt{validation.min}, \texttt{validation.max} — date
+                        bounds for \texttt{date} and \texttt{datetime} fields
+                        (ISO~8601 strings; lexicographic comparison is correct
+                        for ISO dates).
+                  \item \texttt{options} array or \texttt{options\_from} binding
+                        — required for \texttt{select} fields; see
+                        §\ref{sec:dynamic-options-protocol}.
+                  \item \texttt{multiple: true|false} (default \texttt{false})
+                        — enables multi-select for \texttt{select} fields.
+                  \item \texttt{validation.min\_selections},
+                        \texttt{validation.max\_selections} — array length
+                        bounds for multi-select fields.
+                  \item \texttt{multiline: true|false} — UI hint for
+                        \texttt{text} fields; no effect on validation or
+                        variable storage.
+                  \item \texttt{accept} (MIME types) and \texttt{maxSizeBytes}
+                        — for \texttt{file} and \texttt{image} fields.
+                \end{itemize}
         \end{itemize}
   \item Providers MUST return all required fields in the \texttt{values} map.
         If a required field is missing, the run engine fails the step with a
@@ -569,8 +602,121 @@ The provider returns the collected values and any uploaded artifacts:
 The built-in \texttt{prompt} provider displays each field as a terminal prompt.
 For \texttt{type: text} with \texttt{multiline: true}, it opens the operator's
 configured editor (\texttt{\$EDITOR}).  For \texttt{type: file}, it prompts for
-a file path and copies the file to the local artifact store.  In
-\texttt{dry-run} mode, all values are read from the scenario file.
+a file path and copies the file to the local artifact store.  For
+\texttt{type: select}, it presents a numbered list (single-select) or a
+checkbox list (multi-select).  For \texttt{type: boolean}, it prompts with a
+\texttt{[y/N]} confirmation.  For \texttt{type: number}, \texttt{integer},
+\texttt{date}, and \texttt{datetime}, it accepts free-text input and validates
+the format before accepting.  In \texttt{dry-run} mode, all values are read
+from the scenario file.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Dynamic Options Protocol}
+\label{sec:dynamic-options-protocol}
+% ─────────────────────────────────────────────────────────────────────────────
+
+When a \texttt{select} field in a \texttt{collector} step, or a \texttt{choice} step,
+declares \texttt{options\_from.provider}, the run engine must fetch the option list
+dynamically from that provider before rendering the field or dispatching the interactive
+step request.
+
+\subsubsection*{Fetch Sequence}
+
+\begin{enumerate}
+  \item \textbf{Provider lookup} — the run engine resolves the provider ID from
+        \texttt{options\_from.provider} in \texttt{ExecutionPlan.Providers}.  If the
+        provider is not registered, the step fails immediately with
+        \texttt{options\_from.unknown\_provider}.
+  \item \textbf{Provider start} — if the provider process is not yet running, it is
+        started using the normal \texttt{stdio-jsonrpc} startup sequence.
+  \item \textbf{Options request} — the run engine sends an
+        \texttt{inputProvider/getOptions} JSON-RPC request to the provider, including
+        the current variable scope so the provider can filter or compute options
+        contextually.
+  \item \textbf{Option list received} — the run engine treats the returned
+        \texttt{options} array as if it had been declared statically in the runbook.
+        Validation and rendering proceed identically to the static-options path.
+\end{enumerate}
+
+Failure to fetch options (provider error, network error, or timeout) fails the step
+immediately with \texttt{options\_from.fetch\_failed}.  There is no silent fallback to
+an empty options list.
+
+\subsubsection*{\texttt{inputProvider/getOptions} Request}
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "getopts-1",
+  "method": "inputProvider/getOptions",
+  "params": {
+    "providerId": "employee-directory",
+    "field":      "managers",
+    "stepId":     "assign-manager",
+    "variables": {
+      "department": "engineering",
+      "region":     "us-west"
+    },
+    "context": {
+      "runId":  "run-abc123",
+      "stepId": "assign-manager",
+      "userId": "ops@acme.example",
+      "mode":   "real"
+    }
+  }
+}
+\end{verbatim}
+
+\paragraph{Request fields.}
+\begin{itemize}
+  \item \texttt{providerId} — the provider ID declared in
+        \texttt{options\_from.provider}.
+  \item \texttt{field} — the \texttt{options\_from.field} value; allows a single
+        provider to serve multiple distinct option lists (e.g.\ \texttt{managers},
+        \texttt{engineers}, \texttt{directors}).
+  \item \texttt{stepId} — the step making the request (for audit and debugging).
+  \item \texttt{variables} — the current run variable scope at the time the step is
+        reached.  The provider MAY use these to filter or compute options contextually
+        (e.g.\ return only managers in the operator's department).
+  \item \texttt{context} — standard execution context (run ID, actor, mode).
+\end{itemize}
+
+\subsubsection*{\texttt{inputProvider/getOptions} Response}
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "getopts-1",
+  "result": {
+    "options": [
+      { "value": "alice",   "label": "Alice Chen (Staff Eng)" },
+      { "value": "bob",     "label": "Bob Okafor (Principal)" },
+      { "value": "charlie", "label": "Charlie Park (Director)",
+                             "hint": "Manages infrastructure" }
+    ],
+    "cacheTtlSeconds": 300
+  }
+}
+\end{verbatim}
+
+\paragraph{Response fields.}
+\begin{itemize}
+  \item \texttt{options} — array of \texttt{\{value, label\}} objects.  Each
+        \texttt{value} is the string stored in the run variable on selection;
+        \texttt{label} is the human-readable text.  An optional \texttt{hint} field
+        provides secondary descriptive text.
+  \item \texttt{cacheTtlSeconds} (optional) — if non-zero, the run engine caches the
+        returned option list in memory for the remainder of the run (capped at the
+        declared TTL).  This avoids repeated RPC calls when the same dynamic field
+        appears in multiple steps of a single run.  A value of \texttt{0} disables
+        caching for this response.
+\end{itemize}
+
+\paragraph{Capability declaration.}
+Providers that implement \texttt{inputProvider/getOptions} MUST declare the capability
+in their handshake response.  If the run engine encounters an \texttt{options\_from}
+binding and the matched provider does not advertise \texttt{getOptions: true}, the step
+fails with \texttt{options\_from.capability\_not\_supported}.
 
 \subsection{Provider Capability Matrix}
 \label{subsec:provider-capability-matrix}
@@ -579,14 +725,14 @@ Not all providers support all interactive step types.  The following table
 shows which step types each built-in provider supports:
 
 \begin{center}
-\begin{tabular}{|l|c|c|c|c|}
+\begin{tabular}{|l|c|c|c|c|c|}
 \hline
-\textbf{Provider} & \textbf{Input Resolution} & \textbf{choice} & \textbf{decision} & \textbf{collector} \\
+\textbf{Provider} & \textbf{Input Resolution} & \textbf{choice} & \textbf{decision} & \textbf{collector} & \textbf{getOptions} \\
 \hline
-\texttt{prompt}   & Yes & Yes & Yes & Yes \\
-\texttt{env}      & Yes & No  & No  & No  \\
-\texttt{file}     & Yes & No  & No  & No  \\
-\texttt{workspace}& Yes & No  & No  & No  \\
+\texttt{prompt}   & Yes & Yes & Yes & Yes & No  \\
+\texttt{env}      & Yes & No  & No  & No  & No  \\
+\texttt{file}     & Yes & No  & No  & No  & No  \\
+\texttt{workspace}& Yes & No  & No  & No  & No  \\
 \hline
 \end{tabular}
 \end{center}
@@ -606,7 +752,8 @@ during the handshake phase:
       "resolution": true,
       "choice": true,
       "decision": false,
-      "collector": true
+      "collector": true,
+      "getOptions": true
     }
   }
 }

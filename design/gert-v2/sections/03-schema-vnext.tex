@@ -553,7 +553,7 @@ v2 defines fourteen step types:
 \texttt{cli}              & Execute a local command (\S\ref{subsec:step-cli}) \\
 \texttt{choice}           & Operator selects from predefined options (\S\ref{subsec:step-choice}) \\
 \texttt{decision}         & Operator selects an execution path (\S\ref{subsec:step-decision}) \\
-\texttt{collector}        & Operator provides unstructured input/files (\S\ref{subsec:step-collector}) \\
+\texttt{collector}        & Operator provides structured input across 9 field types (\S\ref{subsec:step-collector}) \\
 \texttt{approve}          & Standalone approval gate with quorum and business-day timeout (\S\ref{subsec:step-approve}) \\
 \texttt{tool}             & Invoke a declared tool action (\S\ref{subsec:step-tool}) \\
 \texttt{wait\_for\_event} & Pause until an inbound event arrives (\S\ref{subsec:step-wait-for-event}) \\
@@ -681,13 +681,20 @@ steps via variable substitution.
 \hline
 \textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
 \hline
-\texttt{prompt}   & string  & Yes & Question or prompt displayed to user \\
-\texttt{options}  & array   & Yes & List of option objects \\
-\texttt{variable} & string  & Yes & Variable name to store selected value \\
-\texttt{default}  & string  & No  & Default option value if user skips \\
+\texttt{prompt}         & string  & Yes & Question or prompt displayed to user \\
+\texttt{options}        & array   & Yes & List of option objects \\
+\texttt{variable}       & string  & Yes & Variable name to store selected value \\
+\texttt{default}        & string  & No  & Default option value if user skips \\
+\texttt{multiple}       & bool    & No  & Allow selecting more than one option (default: false) \\
+\texttt{min\_selections} & integer & No  & Minimum number of selections when \texttt{multiple: true} \\
+\texttt{max\_selections} & integer & No  & Maximum number of selections when \texttt{multiple: true} \\
 \hline
 \end{tabular}
 \end{center}
+
+When \texttt{multiple: true} the stored variable becomes an array of selected values
+rather than a single string.  The first selected value is used when a downstream
+template expression expects a scalar.
 
 \paragraph{Option structure}
 
@@ -712,6 +719,10 @@ Each option is an object with:
   \item All \texttt{option.value} entries must be unique within a step.
   \item If \texttt{default} is provided, it must match one of the option values.
   \item The \texttt{variable} name follows standard identifier rules (alphanumeric + underscore).
+  \item When \texttt{multiple: true}, \texttt{min\_selections} and \texttt{max\_selections}
+        are optional but recommended to constrain the selection count.
+  \item \texttt{min\_selections} must be $\geq 1$; \texttt{max\_selections} must be
+        $\leq$ the total number of options and $\geq$ \texttt{min\_selections}.
 \end{itemize}
 
 \paragraph{Example: Environment selection}
@@ -820,10 +831,13 @@ step.  The \texttt{chosen\_path} variable contains the selected label
 \subsection{Step Type: collector}
 \label{subsec:step-collector}
 
-Prompts the user to provide unstructured input: free-form text, file attachments,
-screenshots, or multi-field forms.  The collected data is stored as named
-variables or artifacts for downstream steps or evidence capture.  This replaces
-the overly-generic \texttt{manual} step type from early v2 drafts.
+Prompts the user to provide structured input across a rich set of field types:
+free-form text, numbers, dates, booleans, dropdowns, file attachments, and more.
+All fields in a single \texttt{collector} step are presented and submitted
+atomically — the operator fills them all in and confirms once.
+The collected values are stored as named variables or artifacts for downstream
+steps and evidence capture.  This replaces the overly-generic \texttt{manual}
+step type from early v2 drafts.
 
 \begin{center}
 \begin{tabular}{lllp{5cm}}
@@ -831,7 +845,7 @@ the overly-generic \texttt{manual} step type from early v2 drafts.
 \textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
 \hline
 \texttt{prompt}     & string  & Yes & Markdown instructions displayed to user \\
-\texttt{fields}     & array   & Yes & List of field objects to collect \\
+\texttt{fields}     & array   & Yes & List of field objects to collect (minimum 1) \\
 \texttt{approvals}  & object  & No  & Approval gate config (\S\ref{subsec:approval-gate}) \\
 \hline
 \end{tabular}
@@ -846,24 +860,268 @@ Each field is an object with:
 \hline
 \textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
 \hline
-\texttt{name}     & string  & Yes & Variable name to store collected value \\
-\texttt{type}     & enum    & Yes & \texttt{text}, \texttt{multiline}, \texttt{file}, \texttt{image}, \texttt{url} \\
-\texttt{label}    & string  & Yes & Prompt or label text shown to user \\
-\texttt{required} & bool    & No  & If true, user must provide a value (default: false) \\
-\texttt{hint}     & string  & No  & Additional context or validation help \\
+\texttt{name}       & string  & Yes & Variable name to store collected value \\
+\texttt{type}       & enum    & Yes & Field type — see field type inventory below \\
+\texttt{label}      & string  & Yes & Prompt or label text shown to user \\
+\texttt{required}   & bool    & No  & If true, user must provide a value (default: false) \\
+\texttt{hint}       & string  & No  & Additional context or validation help \\
+\texttt{default}    & any     & No  & Pre-filled default value (must match field type) \\
+\texttt{validation} & object  & No  & Type-specific validation constraints \\
+\texttt{options}    & array   & No  & Option list for \texttt{select} type \\
+\texttt{options\_from} & object & No & Dynamic option list provider for \texttt{select} type \\
+\texttt{multiple}   & bool    & No  & Allow multiple selections for \texttt{select} type (default: false) \\
+\texttt{multiline}  & bool    & No  & Enable multi-line textarea for \texttt{text} type (default: false) \\
 \hline
 \end{tabular}
 \end{center}
 
-\paragraph{Field types}
+\paragraph{Field type inventory}
+\label{par:collector-field-types}
 
-\begin{itemize}
-  \item \texttt{text}: Single-line text input.
-  \item \texttt{multiline}: Multi-line text area (e.g., for notes or summaries).
-  \item \texttt{file}: File attachment; stored as artifact with SHA256 hash.
-  \item \texttt{image}: Image/screenshot attachment; stored as artifact.
-  \item \texttt{url}: URL input with basic validation (must be valid URL).
-\end{itemize}
+\texttt{collector} supports nine field types:
+
+\begin{center}
+\begin{tabular}{lp{4.5cm}p{4.5cm}}
+\hline
+\textbf{Type} & \textbf{Description} & \textbf{Notes} \\
+\hline
+\texttt{text}     & Single-line or multi-line text input & Set \texttt{multiline: true} for textarea \\
+\texttt{number}   & Integer or float numeric input & Supports \texttt{validation.min}, \texttt{max}, \texttt{step} \\
+\texttt{integer}  & Integer-only numeric input & Shorthand for \texttt{number} with \texttt{step: 1} \\
+\texttt{date}     & ISO 8601 date (YYYY-MM-DD) & UI hint: date picker \\
+\texttt{datetime} & RFC 3339 datetime with timezone & UI hint: datetime picker \\
+\texttt{boolean}  & True/false checkbox & Stored as boolean in variable space \\
+\texttt{select}   & Dropdown or option list & Set \texttt{multiple: true} for multi-select \\
+\texttt{file}     & File attachment & Stored as artifact with SHA256 hash \\
+\texttt{image}    & Image/screenshot attachment & Stored as artifact \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsubsection{Field type: \texttt{text}}
+\label{subsubsec:field-text}
+
+Single-line text input by default.  Set \texttt{multiline: true} to render a
+multi-line textarea — appropriate for descriptions, reproduction steps, or
+any field where newlines are meaningful.
+
+\begin{verbatim}
+- name: description
+  type: text
+  label: Incident description
+  multiline: true
+  required: true
+  hint: Describe what happened, when, and which services were affected
+\end{verbatim}
+
+\subsubsection{Field type: \texttt{number}}
+\label{subsubsec:field-number}
+
+Integer or floating-point numeric input.  The optional \texttt{validation}
+object constrains acceptable values:
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Validation field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{min}  & number  & No & Minimum acceptable value (inclusive) \\
+\texttt{max}  & number  & No & Maximum acceptable value (inclusive) \\
+\texttt{step} & number  & No & Granularity; set to \texttt{1} to enforce integers \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{verbatim}
+- name: amount_usd
+  type: number
+  label: Amount (USD)
+  required: true
+  validation:
+    min: 0
+    max: 10000000
+- name: port_number
+  type: number
+  label: Port number
+  required: true
+  validation:
+    min: 1
+    max: 65535
+    step: 1
+- name: severity_score
+  type: number
+  label: Severity score (1.0 – 10.0)
+  required: true
+  validation:
+    min: 1.0
+    max: 10.0
+    step: 0.1
+\end{verbatim}
+
+\subsubsection{Field type: \texttt{integer}}
+\label{subsubsec:field-integer}
+
+Convenience shorthand for \texttt{number} with \texttt{step: 1}.  The stored
+variable value is always an integer.  Accepts the same \texttt{validation.min}
+and \texttt{validation.max} fields as \texttt{number}.
+
+\begin{verbatim}
+- name: instance_count
+  type: integer
+  label: Number of instances
+  required: true
+  validation:
+    min: 1
+    max: 100
+\end{verbatim}
+
+\subsubsection{Field type: \texttt{date}}
+\label{subsubsec:field-date}
+
+ISO 8601 date input (\texttt{YYYY-MM-DD}).  The UI renders a date picker.
+The stored variable value is the ISO date string.
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Validation field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{min} & ISO date string & No & Earliest acceptable date (inclusive) \\
+\texttt{max} & ISO date string & No & Latest acceptable date (inclusive) \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{verbatim}
+- name: start_date
+  type: date
+  label: Start date
+  required: true
+  validation:
+    min: "2024-01-01"
+\end{verbatim}
+
+\subsubsection{Field type: \texttt{datetime}}
+\label{subsubsec:field-datetime}
+
+RFC 3339 datetime input with explicit timezone offset or \texttt{Z} for UTC
+(e.g.\ \texttt{2026-04-19T14:30:00-05:00}).  The UI renders a datetime picker.
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Validation field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{min} & RFC 3339 string & No & Earliest acceptable datetime (inclusive) \\
+\texttt{max} & RFC 3339 string & No & Latest acceptable datetime (inclusive) \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{verbatim}
+- name: incident_detected_at
+  type: datetime
+  label: When was the incident first detected?
+  required: true
+\end{verbatim}
+
+\subsubsection{Field type: \texttt{boolean}}
+\label{subsubsec:field-boolean}
+
+True/false checkbox.  The stored variable value is a boolean (\texttt{true}
+or \texttt{false}), not a string.  No additional validation fields are defined.
+
+\begin{verbatim}
+- name: background_check_completed
+  type: boolean
+  label: Background check completed?
+  required: true
+- name: no_disqualifying_issues
+  type: boolean
+  label: No disqualifying issues found?
+  required: true
+\end{verbatim}
+
+The value is available in templates as a boolean:
+\texttt{\{\{ if .background\_check\_completed \}\}…\{\{ end \}\}}.
+
+\subsubsection{Field type: \texttt{select}}
+\label{subsubsec:field-select}
+
+Dropdown or option list.  Options are defined inline via \texttt{options}
+(static list) or loaded at runtime via \texttt{options\_from} (dynamic list
+from a provider).  Exactly one of \texttt{options} or \texttt{options\_from}
+must be present.
+
+\paragraph{options — static list}
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{value} & string & Yes & Value stored in variable when selected \\
+\texttt{label} & string & Yes & Display text shown to user \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{options\_from — dynamic provider}
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{provider} & string & Yes & Name of the input provider to query \\
+\texttt{field}    & string & No  & Provider response field to use as option list \\
+\hline
+\end{tabular}
+\end{center}
+
+\texttt{options} and \texttt{options\_from} are mutually exclusive.  When
+\texttt{multiple: true} is set, the operator may select more than one option
+and the stored variable becomes an array of selected values.
+
+\begin{verbatim}
+# Static options
+- name: department
+  type: select
+  label: Department
+  required: true
+  options:
+    - value: engineering
+      label: Engineering
+    - value: sales
+      label: Sales
+    - value: marketing
+      label: Marketing
+    - value: finance
+      label: Finance
+
+# Dynamic options from provider
+- name: budget_line_item
+  type: select
+  label: Budget line item
+  required: true
+  options_from:
+    provider: finance-system
+    field: budget_line_items
+
+# Multi-select
+- name: affected_services
+  type: select
+  label: Affected services
+  required: true
+  multiple: true
+  options:
+    - value: api-gateway
+      label: API Gateway
+    - value: auth-service
+      label: Auth Service
+    - value: payments
+      label: Payments
+\end{verbatim}
 
 \paragraph{Approval gate}
 \label{subsec:approval-gate}
@@ -900,8 +1158,9 @@ the SLA enforcement gap identified in the research brief.
       Include screenshots, error logs, and a summary of impact.
     fields:
       - name: incident_summary
-        type: multiline
+        type: text
         label: Incident summary
+        multiline: true
         required: true
         hint: Describe what happened, when, and what services were affected
       - name: error_log
@@ -929,6 +1188,84 @@ After the user provides the requested evidence and approval is granted, the
 collected values are available as \texttt{\{\{ .incident\_summary \}\}},
 \texttt{\{\{ .error\_log \}\}}, etc.  File and image attachments are stored as
 artifacts in the execution trace with SHA256 hashes for tamper-evidence.
+
+\paragraph{Questionnaire Pattern}
+\label{par:questionnaire-pattern}
+
+A \texttt{collector} step with multiple \texttt{fields} is the canonical way
+to present a questionnaire in gert v2.  All fields are presented and submitted
+atomically: the operator fills in the entire form and confirms once, rather than
+answering questions in sequential individual steps.  This pattern is preferred
+over a series of single-field \texttt{collector} steps when the questions are
+logically related and should be answered together.
+
+Benefits of the questionnaire pattern:
+\begin{itemize}
+  \item Single approval gate covers all related data.
+  \item Atomic submission — partial forms cannot leave variables in inconsistent state.
+  \item Cleaner audit trail: one evidence entry per logical form.
+  \item Better UX: operator sees the full context before filling in any field.
+\end{itemize}
+
+\textbf{Example: Incident triage form} (4-field questionnaire using the new field types)
+
+\begin{verbatim}
+- step:
+    id: triage_form
+    type: collector
+    title: Incident triage
+    prompt: |
+      Complete the incident triage form. All fields are required.
+    fields:
+      - name: severity
+        type: integer
+        label: Severity score (1 = low, 5 = critical)
+        required: true
+        validation:
+          min: 1
+          max: 5
+      - name: environment
+        type: select
+        label: Affected environment
+        required: true
+        options:
+          - value: production
+            label: Production
+          - value: staging
+            label: Staging
+          - value: development
+            label: Development
+      - name: affected_service
+        type: text
+        label: Affected service name
+        required: true
+      - name: reproduction_steps
+        type: text
+        label: Reproduction steps
+        multiline: true
+        required: false
+        hint: Step-by-step instructions to reproduce the issue
+\end{verbatim}
+
+\paragraph{Validation rules for \texttt{collector}}
+
+\begin{itemize}
+  \item A \texttt{collector} step \textbf{MUST} have at least one field in
+        \texttt{fields}.  An empty \texttt{fields} array is a schema validation
+        error.  Structural validation enforces \texttt{minItems: 1} on the
+        \texttt{fields} array.
+  \item Each field \texttt{name} must be a valid identifier (alphanumeric and
+        underscore, must start with a letter).  Field names must be unique
+        within a step.
+  \item For \texttt{select} fields, exactly one of \texttt{options} or
+        \texttt{options\_from} must be present.
+  \item For \texttt{number} fields, if both \texttt{validation.min} and
+        \texttt{validation.max} are present, \texttt{min} must be
+        $\leq$ \texttt{max}.
+  \item For \texttt{date} and \texttt{datetime} fields, if both
+        \texttt{validation.min} and \texttt{validation.max} are present,
+        \texttt{min} must be chronologically $\leq$ \texttt{max}.
+\end{itemize}
 
 \subsection{Step Type: approve}
 \label{subsec:step-approve}

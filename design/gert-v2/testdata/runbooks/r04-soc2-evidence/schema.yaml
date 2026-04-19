@@ -87,18 +87,24 @@ flow:
         Provide the most recent risk assessment for the audit period.
       fields:
         - name: risk_assessment_date
-          type: text
-          label: Date of most recent risk assessment (YYYY-MM-DD)
+          type: date
+          label: Date of most recent risk assessment
           required: true
         - name: risk_register
           type: file
           label: Risk register file (upload)
           required: true
         - name: mitigation_status
-          type: text
+          type: select
           label: Mitigation status
           required: true
-          hint: "Options: Complete, In Progress, Planned" # GAP: no dropdown field type
+          options:
+            - value: complete
+              label: Complete
+            - value: in_progress
+              label: In Progress
+            - value: planned
+              label: Planned
       approvals:
         min: 1
         roles: [compliance-officer]
@@ -195,16 +201,16 @@ flow:
         Evidence archive SHA256: {{ .evidence_hash }}
       fields:
         - name: all_controls_evidenced
-          type: text
-          label: "All 15 controls have evidence? (yes/no)"
+          type: boolean
+          label: All 15 controls have evidence?
           required: true
         - name: no_missing_files
-          type: text
-          label: "No evidence files missing or corrupted? (yes/no)"
+          type: boolean
+          label: No evidence files missing or corrupted?
           required: true
         - name: date_ranges_covered
-          type: text
-          label: "Evidence covers required date ranges? (yes/no)"
+          type: boolean
+          label: Evidence covers required date ranges?
           required: true
         - name: attestation
           type: text

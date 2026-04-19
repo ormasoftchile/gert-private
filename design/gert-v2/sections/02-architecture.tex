@@ -400,9 +400,15 @@ For each step, the runtime executes the following sequence:
         jumping to the selected runbook or label. Optionally store selection in variable
         for audit trail.
   \item \textbf{collector:} Emit \texttt{CollectorRequired} event with field schema. Block
-        until \texttt{SubmitEvidence()} is called with multi-field form data. SHA256-hash
-        each file/image attachment. Store text fields as variables, artifacts in evidence
-        store.
+        until \texttt{SubmitEvidence()} is called with multi-field form data. Validate each
+        submitted value against its declared field type and constraints (see
+        §\ref{sec:collector_field_validation}). SHA256-hash each \texttt{file} or
+        \texttt{image} attachment. Store typed values as run variables: \texttt{number} and
+        \texttt{integer} as JSON numbers, \texttt{boolean} as JSON boolean, multi-select
+        \texttt{select} and \texttt{choice} as JSON arrays of strings, single-select
+        \texttt{select} as a JSON string, \texttt{date} and \texttt{datetime} as ISO 8601
+        strings, \texttt{text} and \texttt{url} as JSON strings. Store \texttt{file} and
+        \texttt{image} artifacts in the evidence store (not in run variables).
   \item \textbf{include:} Resolve the referenced runbook. Validate the include graph for
         cycles (load-time DFS — fail fast if cyclic). Evaluate \texttt{include.when} if
         present; skip all steps if false. Apply \texttt{include.with} overrides to the
@@ -996,6 +1002,167 @@ incoming approval/rejection without consulting the calendar, and the timeout sch
 checks \texttt{now >= deadline} without consulting the quorum state. Whichever condition
 fires first wins: quorum reached → step proceeds; deadline fired → \texttt{on\_timeout}
 policy governs the outcome.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Collector Field Validation Contract}
+\label{sec:collector_field_validation}
+% ─────────────────────────────────────────────────────────────────────────────
+
+When the executor receives evidence from a \texttt{SubmitEvidence} call for a
+\texttt{collector} step, it validates each field value against the field's declared type
+and constraints \emph{before} writing any value to run state or the trace.
+
+\subsubsection*{Validation Algorithm}
+
+For each field in submission order:
+
+\begin{enumerate}
+  \item \textbf{Required check} — if the field is \texttt{required: true} and the
+        submitted value is absent or empty, record a validation error.
+  \item \textbf{Type coercion and format check} — attempt to parse or coerce the value
+        to the declared type (see per-type rules below). A parse failure is a validation
+        error.
+  \item \textbf{Constraint check} — evaluate \texttt{validation.min},
+        \texttt{validation.max}, \texttt{validation.step}, and option-list membership as
+        applicable. A constraint violation is a validation error.
+  \item \textbf{Re-prompt} — if any field produced a validation error, the executor sends
+        a new \texttt{CollectorRequired} event back to the input provider with an
+        \texttt{errors} map populated (field name → human-readable error message). The
+        provider SHOULD re-render the form highlighting the invalid fields. The re-prompt
+        counts as one retry attempt.
+  \item \textbf{Max retries} — if validation still fails after \textbf{3} re-prompt
+        attempts, the executor fails the step: \texttt{step.state = FAILED}, writes a
+        \texttt{step/failed} trace event, and populates the \texttt{gert.error} reserved
+        run variable with structured error detail (see below).
+\end{enumerate}
+
+\subsubsection*{Per-Type Validation and Storage Rules}
+
+\begin{center}
+\small
+\begin{tabular}{|l|p{5.0cm}|p{3.6cm}|}
+\hline
+\textbf{Type} & \textbf{Validation} & \textbf{Variable Storage} \\
+\hline
+\texttt{text}
+  & No constraint beyond the required check.
+    \texttt{multiline: true} is a UI hint only; no effect on validation or storage.
+  & JSON string \\
+\hline
+\texttt{number}
+  & Parse as IEEE~754 float64 (reject non-numeric input).
+    Check \texttt{validation.min} and \texttt{validation.max} (both inclusive).
+    Check \texttt{validation.step}: \texttt{(value - min) \% step < epsilon}.
+  & JSON number (\texttt{float64}) \\
+\hline
+\texttt{integer}
+  & Parse as int64; reject fractional input.
+    Same \texttt{min}/\texttt{max}/\texttt{step} checks as \texttt{number}.
+  & JSON number (\texttt{int64}) \\
+\hline
+\texttt{date}
+  & Must match \texttt{YYYY-MM-DD} (RFC~3339 full-date).
+    Validate \texttt{validation.min}/\texttt{max} as date strings (lexicographic
+    comparison is correct for ISO dates).
+    Wall clock at submission time; timezone UTC.
+  & JSON string (\texttt{YYYY-MM-DD}) \\
+\hline
+\texttt{datetime}
+  & Must be valid RFC~3339 (ISO~8601 with time offset).
+    Validate \texttt{validation.min}/\texttt{max} as RFC~3339 strings; normalise to
+    UTC before comparison.
+    Wall clock at submission time.
+  & JSON string (RFC~3339, e.g.\ \texttt{2026-04-18T14:00:00Z}) \\
+\hline
+\texttt{boolean}
+  & Truthy/falsy coercion:
+    \texttt{true}, \texttt{"true"}, \texttt{1}, \texttt{"yes"} → \texttt{true};
+    \texttt{false}, \texttt{"false"}, \texttt{0}, \texttt{"no"} → \texttt{false}.
+    Any other value is a validation error.  No min/max constraints.
+  & JSON boolean \\
+\hline
+\texttt{select}
+(\texttt{multiple: false})
+  & Submitted value must exactly match one of the declared
+    \texttt{options[*].value} strings.  If \texttt{options\_from} was used,
+    validation is against the dynamically fetched list (§\ref{sec:dynamic-options-protocol}).
+  & JSON string \\
+\hline
+\texttt{select}
+(\texttt{multiple: true})
+  & All submitted values must be members of the options list.
+    Validate \texttt{validation.min\_selections} and
+    \texttt{validation.max\_selections} if declared.
+    Duplicate values within the submission array are a validation error.
+  & JSON array of strings \\
+\hline
+\texttt{choice}
+(\texttt{multiple: true})
+  & Same rules as \texttt{select} with \texttt{multiple: true}, applied to the
+    \texttt{choice} step type.
+  & JSON array of strings \\
+\hline
+\texttt{file},
+\texttt{image}
+  & File size and MIME type constraints (see §\ref{subsec:collector-contract}).
+    SHA-256 computed by executor after artifact is stored.
+  & Artifact reference (evidence store; not a plain variable) \\
+\hline
+\texttt{url}
+  & Must parse as a valid URL (scheme required; HTTP and HTTPS accepted by
+    default; custom schemes allowed).
+  & JSON string \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsubsection*{\texttt{multiline: true} Hint}
+
+The \texttt{multiline: true} flag on a \texttt{text} field is a \textbf{UI hint only}.
+The executor treats the submitted value as a plain string regardless of this flag.
+Input providers SHOULD render a multi-line textarea (or open \texttt{\$EDITOR}) rather
+than a single-line input box when \texttt{multiline: true} is set.
+
+\subsubsection*{Variable Storage — Downstream Expression Semantics}
+
+Typed storage ensures that template comparison operators in downstream steps work without
+manual coercion:
+
+\begin{verbatim}
+{{/* number/integer: .amount is float64, not a string */}}
+{{ if gt .amount 50000.0 }}HIGH_VALUE{{ end }}
+
+{{/* boolean: .confirmed is bool, not "yes"/"no" */}}
+{{ if .confirmed }}PROCEED{{ end }}
+
+{{/* select/multiple or choice/multiple: .systems is []string */}}
+{{ if has .systems "payments-api" }}CRITICAL{{ end }}
+
+{{/* date/datetime: .start_date is ISO 8601 string; parseable by time.Parse */}}
+{{ if lt .start_date "2026-07-01" }}BEFORE_CUTOVER{{ end }}
+\end{verbatim}
+
+\subsubsection*{Error Variable Schema}
+
+When a \texttt{collector} step exhausts its re-prompt attempts and fails, the executor
+populates the \texttt{gert.error} reserved run variable:
+
+\begin{verbatim}
+{
+  "step_id":  "gather-approval-details",
+  "kind":     "collector.validation_failed",
+  "attempts": 3,
+  "fields": {
+    "amount":     "value 49000 is below minimum 50000",
+    "start_date": "2025-12-01 is before minimum 2026-01-01",
+    "department": "\"legal\" is not a valid option"
+  }
+}
+\end{verbatim}
+
+The \texttt{gert.error} variable is a reserved JSON object populated on any step
+failure. A subsequent \texttt{branch} step may inspect it to route to an error-handling
+path. Each new step failure overwrites the previous value.
 
 \subsection{Cancellation}
 

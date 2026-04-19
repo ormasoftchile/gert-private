@@ -45,28 +45,44 @@ flow:
           required: true
           hint: Must be @company.com
         - name: start_date
-          type: text
-          label: Start date (YYYY-MM-DD)
+          type: date
+          label: Start date
           required: true
         - name: department
-          type: text
+          type: select
           label: Department
           required: true
-          hint: "Options: Engineering, Sales, Marketing, Finance" # GAP: no dropdown/autocomplete field type
+          options:
+            - value: Engineering
+              label: Engineering
+            - value: Sales
+              label: Sales
+            - value: Marketing
+              label: Marketing
+            - value: Finance
+              label: Finance
         - name: manager
           type: text
           label: Manager name
           required: true
-          hint: Use autocomplete from employee directory # GAP: no autocomplete field type
+          hint: Use autocomplete from employee directory
         - name: job_title
           type: text
           label: Job title
           required: true
         - name: office_location
-          type: text
+          type: select
           label: Office location
           required: true
-          hint: "Options: SF, NYC, London, Remote" # GAP: no dropdown field type
+          options:
+            - value: SF
+              label: San Francisco
+            - value: NYC
+              label: New York City
+            - value: London
+              label: London
+            - value: Remote
+              label: Remote
 
   # Step 2: Manager Approval
   - step:
@@ -84,8 +100,8 @@ flow:
         Approve this hire?
       fields:
         - name: manager_approved
-          type: text
-          label: "Type 'yes' to approve"
+          type: boolean
+          label: Approve this hire?
           required: true
       approvals:
         min: 1
@@ -103,16 +119,16 @@ flow:
         Verify background check status in HireRight portal for {{ .full_name }}.
       fields:
         - name: background_check_completed
-          type: text
-          label: Background check completed? (yes/no)
+          type: boolean
+          label: Background check completed?
           required: true
         - name: no_disqualifying_issues
-          type: text
-          label: No disqualifying issues? (yes/no)
+          type: boolean
+          label: No disqualifying issues?
           required: true
         - name: report_uploaded
-          type: text
-          label: Report uploaded to employee folder? (yes/no)
+          type: boolean
+          label: Report uploaded to employee folder?
           required: true
       approvals:
         min: 1
@@ -201,11 +217,12 @@ flow:
                     required: true
                     hint: "MacBook Pro for eng, MacBook Air for others"
                   - name: shipping_address
-                    type: multiline
+                    type: text
+                    multiline: true
                     label: Shipping address
                     required: true
                   - name: estimated_delivery
-                    type: text
+                    type: date
                     label: Estimated delivery date
                     required: true
                 approvals:
@@ -226,12 +243,12 @@ flow:
                   Schedule 30-minute IT onboarding call on {{ .full_name }}'s first day.
                 fields:
                   - name: calendar_invite_sent
-                    type: text
-                    label: Calendar invite sent? (yes/no)
+                    type: boolean
+                    label: Calendar invite sent?
                     required: true
                   - name: zoom_link_included
-                    type: text
-                    label: Zoom link included? (yes/no)
+                    type: boolean
+                    label: Zoom link included?
                     required: true
                 approvals:
                   min: 1
@@ -251,16 +268,16 @@ flow:
         {{ .full_name }} must complete security training in the LMS.
       fields:
         - name: security_training_completed
-          type: text
-          label: Security awareness training completed? (yes/no)
+          type: boolean
+          label: Security awareness training completed?
           required: true
         - name: phishing_simulation_completed
-          type: text
-          label: Phishing simulation completed? (yes/no)
+          type: boolean
+          label: Phishing simulation completed?
           required: true
         - name: aup_signed
-          type: text
-          label: Acceptable use policy signed? (yes/no)
+          type: boolean
+          label: Acceptable use policy signed?
           required: true
       approvals:
         min: 1
@@ -359,8 +376,8 @@ flow:
         Confirm access is appropriate for employee's role?
       fields:
         - name: access_confirmed
-          type: text
-          label: "Type 'yes' to confirm"
+          type: boolean
+          label: Access is appropriate for employee's role?
           required: true
       approvals:
         min: 1

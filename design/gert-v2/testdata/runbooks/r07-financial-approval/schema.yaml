@@ -38,27 +38,42 @@ flow:
           label: Vendor name
           required: true
         - name: amount
-          type: text
-          label: Amount (USD, e.g. 75000)
+          type: number
+          label: Amount (USD)
           required: true
+          validation:
+            min: 50000
         - name: business_justification
-          type: multiline
+          type: text
           label: Business justification
+          multiline: true
           required: true
         - name: budget_line_item
-          type: text
+          type: select
           label: Budget line item
           required: true
-          hint: "Select from approved budget line items" # GAP: no dropdown from finance system
+          options_from:
+            provider: finance-system
+            field: budget_line_items
         - name: requested_delivery_date
-          type: text
-          label: Requested delivery date (YYYY-MM-DD)
+          type: date
+          label: Requested delivery date
           required: true
         - name: department
-          type: text
+          type: select
           label: Department
           required: true
-          hint: "Options: Engineering, Sales, Marketing, Finance, Operations" # GAP: no dropdown
+          options:
+            - value: Engineering
+              label: Engineering
+            - value: Sales
+              label: Sales
+            - value: Marketing
+              label: Marketing
+            - value: Finance
+              label: Finance
+            - value: Operations
+              label: Operations
       approvals:
         min: 1
         roles: [requester]
@@ -80,12 +95,13 @@ flow:
         Approve purchase as necessary for business?
       fields:
         - name: manager_approved
-          type: text
-          label: "Type 'yes' to approve"
+          type: boolean
+          label: Approve purchase as necessary for business?
           required: true
         - name: manager_comments
-          type: multiline
+          type: text
           label: Comments
+          multiline: true
           required: false
       approvals:
         min: 1
@@ -110,20 +126,20 @@ flow:
         Confirm budget availability and procurement policy compliance?
       fields:
         - name: budget_confirmed
-          type: text
-          label: Budget line item has sufficient funds? (yes/no)
+          type: boolean
+          label: Budget line item has sufficient funds?
           required: true
         - name: vendor_approved
-          type: text
-          label: Vendor is on approved vendor list? (yes/no)
+          type: boolean
+          label: Vendor is on approved vendor list?
           required: true
         - name: policy_compliant
-          type: text
-          label: Purchase complies with procurement policy? (yes/no)
+          type: boolean
+          label: Purchase complies with procurement policy?
           required: true
         - name: finance_approved
-          type: text
-          label: "Type 'yes' to approve"
+          type: boolean
+          label: Approve this purchase?
           required: true
       approvals:
         min: 1
@@ -158,8 +174,8 @@ flow:
                   Approve this purchase?
                 fields:
                   - name: director_approved
-                    type: text
-                    label: "Type 'yes' to approve"
+                    type: boolean
+                    label: Approve this purchase?
                     required: true
                 approvals:
                   min: 1
@@ -185,8 +201,8 @@ flow:
                   Approve this purchase?
                 fields:
                   - name: vp_approved
-                    type: text
-                    label: "Type 'yes' to approve"
+                    type: boolean
+                    label: Approve this purchase?
                     required: true
                 approvals:
                   min: 1
@@ -212,8 +228,8 @@ flow:
                   Approve this purchase?
                 fields:
                   - name: cfo_approved
-                    type: text
-                    label: "Type 'yes' to approve"
+                    type: boolean
+                    label: Approve this purchase?
                     required: true
                 approvals:
                   min: 1
@@ -239,8 +255,8 @@ flow:
                   Approve this capital expenditure?
                 fields:
                   - name: board_approved
-                    type: text
-                    label: "Type 'yes' to approve"
+                    type: boolean
+                    label: Approve this capital expenditure?
                     required: true
                 approvals:
                   mode: quorum

@@ -87,3 +87,12 @@ Wrote `/Volumes/Projects/gert/.squad/tmp/brian-implementability-notes.md` coveri
 - **For Ken**: §02 needs interface definitions matching the interfaces in the implementability brief.
 - **For John**: `DurableEvent.data` is `json.RawMessage` — needs discriminated union JSON Schema per event type.
 - **For Leslie**: §08 uses `\begin{tabular}` and `[label=\arabic*.]` — confirm `enumitem` is in the preamble.
+
+## Learnings
+
+### TikZ Diagram Replacement (2026-04)
+
+- Replaced verbatim ASCII art dependency graph in sections/02-architecture.tex with a proper TikZ figure using stepbox and gertarrow styles.
+- The edit tool failed to match verbatim blocks due to whitespace; used Python string replacement instead.
+- build/ is in .gitignore; commit only main.pdf at repo root, not build/main.pdf.
+- Bidirectional Runtime Core <-> Extension Host peer relationship shown with two bent arrows (to[bend right=12]) in each direction.

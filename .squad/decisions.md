@@ -1707,3 +1707,81 @@ Integrating now ensures:
 - **Impact:** Document structure now ready for full writing sprint
 - **Risk:** None (stubs are non-breaking)
 - **Reversibility:** High (stubs can be removed or reorganized without affecting compilation)
+
+---
+
+## 2026-04-19T20:55:18Z: No v1 Compatibility at All
+
+**By:** Cristian (via Copilot directive)
+
+**What:** v1 compatibility mode is explicitly out of scope for gert v2. The v2 design space is unconstrained by backward-compatibility requirements.
+
+**Why:** User request. Frees implementation to pursue clean v2 API, trace format, and config schema without legacy baggage.
+
+**Impact:**
+- v2 API can diverge from v1 entirely
+- Trace format and config schema can start fresh
+- Simplifies spec and reduces implementation scope
+
+---
+
+## 2026-04-19T21:00:00Z: Q2 — Concurrency Model
+
+**By:** Barbara (Software Architect)
+
+**Decision:** Sequential step execution by default. Goroutine-per-branch for `type: parallel` steps only, with join semantics (`wait_for: all|any|majority`).
+
+**Rationale:** 
+- Spec mandates "one goroutine per run — step execution loop runs on a single goroutine; steps execute sequentially" (§02 Concurrency Model)
+- The `parallel` step type requires fan-out for explicit parallel blocks, but is bounded to those blocks
+- Sequential-by-default preserves deterministic replay; parallel-only-when-declared keeps trace writer and governance enforcement simple
+
+**Constraints:**
+- `parallel` step type requires goroutine-per-branch with channel-based coordination at join
+- `RunHandle` remains NOT safe for concurrent use — only the parallel executor spawns internal goroutines
+- Trace writer must be protected by mutex for concurrent branch writes; events must carry branch context for ordering
+
+**Implementation Path:**
+1. Default execution loop: single goroutine calling `Next()` sequentially
+2. When `parallel` step reached: spawn N goroutines (one per branch), each with its own mini-executor
+3. Join waits on WaitGroup; collect results via channels
+4. Merge captures post-join with last-writer-wins (spec: "warning emitted" on conflict)
+
+**Impact:** High. Enables parallel workflows without complexity explosion; keeps safety guarantees strong.
+
+---
+
+## 2026-04-19T21:00:00Z: Q3 — Trace Format
+
+**By:** Barbara (Software Architect)
+
+**Decision:** NDJSON (newline-delimited JSON) with per-event HMAC-SHA256 signature field when signing key is configured.
+
+**Rationale:**
+- Spec mandates append-only JSONL (`trace.jsonl`) with atomic single-write crash safety (§12 Trace File Format)
+- HMAC-SHA256 tampering detection is already specified ("When a signing key is configured, the runtime appends a `sig` field containing the HMAC-SHA256 of the canonical JSON")
+- NDJSON enables line-by-line streaming for `gert verify`, golden trace diffing in `gert test`, and trivial tooling (jq, grep)
+- Binary formats would break these use cases
+
+**Constraints:**
+- Large payloads truncated to 4KB per field before encoding (per spec) to keep writes under PIPE_BUF for atomicity
+- `gert verify` must re-compute HMAC per line and compare; deletion tampering requires external append-only guarantee (filesystem, immutable storage)
+- Golden trace comparison in `gert test` should normalize volatile fields (timestamps, event_id) before diff
+
+**Implementation Path:**
+1. Continue with existing JSONL envelope format from §12
+2. Add `sig` field when `GERT_TRACE_KEY` is set
+3. Implement canonical JSON serialization (sorted keys, no whitespace) for consistent HMAC
+4. `gert verify` reads line-by-line, recomputes HMAC, reports mismatches
+
+**Impact:** High. Trace verification, compliance, and tooling now have solid foundation.
+
+---
+
+## 2026-04-19: Leslie's Pronouns
+
+**By:** Cristian (user correction via Copilot)
+
+**What:** Leslie is a man — use he/him pronouns when referring to him.
+
+**Why:** User correction — captured for team memory.

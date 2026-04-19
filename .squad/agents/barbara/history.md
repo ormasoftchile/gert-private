@@ -34,6 +34,30 @@ This is a LaTeX document using the MastersThesis class. Sections are in `design/
 
 ## Learnings
 
+### 2026-04-18 — Implementation plan authored (PLAN.md)
+
+**What was done:**
+Produced the authoritative v2 build roadmap at `design/gert-v2/PLAN.md`. Read all 16 spec files (§00–§15) and the v1 codebase structure before writing. The plan is 675 lines covering:
+- Problem & approach (3 paragraphs)
+- 8 non-negotiable build principles
+- Phase overview table (15 phases: 0–14)
+- Per-phase detail for all 15 phases: goal, deliverables (concrete Go packages/files), spec references, entry criteria, exit criteria, open questions
+- Cross-cutting concerns: security threading, observability threading, testing strategy, v2.1 deferment tracking
+- Risk register: 8 risks with likelihood, impact, and mitigation
+
+**Key design decisions made in the plan:**
+- **15 phases (0–14)**: Foundation → Parser → Planner → Runtime Core → Governance → Step Types → Tool Runtime → Extension Host → Input Providers → gert serve → Adapters → Evidence/Replay → Observability+Security → Migration → Testing
+- **Q2 and Q3 identified as Phase 3 blockers**: concurrency model and trace format compat must be in `.squad/decisions.md` before any Phase 3 code is written
+- **14 step types** (not 8 or 12): includes `wait_for_event`, `approve`, `assert`, `compensate` (stub), `parallel` (stub) per §03
+- **Phase 5 blast-radius note**: 14 step types is large; team should consider splitting into 5a (execution/terminal) + 5b (interactive/control flow/governance)
+- **v2.1 deferment list** explicitly documented with `// TODO(v2.1)` stub convention: saga/compensation, parallel execution, retry policy, OPA integration, gRPC transport, v1 shim removal
+
+**Top 3 risks flagged:**
+1. Q2 (concurrency model) left unresolved through Phase 3 — critical blocker
+2. 14 step types in Phase 5 — large blast radius if shared executor contract assumption is wrong
+3. `gert migrate` 95% lossless target — may not be achievable without production runbook survey
+
+**Commit:** `0cf4c79` — `docs: add gert v2 implementation plan`
 
 ## Cross-Agent Notes from Ken's Architectural Review (2026-04-18)
 

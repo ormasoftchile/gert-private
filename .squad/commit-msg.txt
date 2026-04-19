@@ -1,0 +1,8 @@
+decisions: resolve Q2/Q3 blockers, capture v1-compat directive
+
+- No v1 compatibility (Cristian directive)
+- Q2: sequential execution + goroutine-per-branch for explicit parallel steps
+- Q3: NDJSON trace.jsonl with per-event HMAC-SHA256
+- Planning session logged
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>

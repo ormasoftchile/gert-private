@@ -912,3 +912,88 @@ All three Phase 1 agents completed their deliverables:
 **Decisions merged:** All 3 inbox decisions consolidated into `.squad/decisions.md`
 
 **Phase 2 ready to proceed.** Brian will implement concrete planner logic; Barbara will add integration tests; Ken will review and iterate on architecture.
+
+---
+
+## 2026-04-19: Phase 2 Architectural Review — REJECTED
+
+**Status:** ⚠️ REJECTED — 2 critical defects require fixes
+
+**Files reviewed:**
+- `v2/internal/planner/planner.go` (356 lines)
+- `v2/internal/planner/planner_test.go` (649 lines)
+- `v2/pkg/testutil/fake_runbook_loader.go` (52 lines)
+- `v2/pkg/testutil/fake_tool_registry.go` (59 lines)
+- `v2/pkg/planner/planner.go` (interface definitions)
+- `v2/pkg/engine/run.go` (ExecutionPlan definition)
+
+**Verification commands:**
+```bash
+go test ./internal/planner/... -v -count=1  # 13/13 PASS
+go vet ./...                                 # No warnings
+```
+
+**Critical Defects Found:**
+
+1. **Missing interface guard** (`planner.go`)
+   - No `var _ plannerPkg.Planner = (*impl)(nil)` to verify interface conformance
+   - **Assigned to:** Barbara (infrastructure pattern)
+
+2. **Cycle detection blocks valid diamond dependencies** (`planner.go:260-268`)
+   - Uses permanent `seen` marking — never clears
+   - Incorrectly rejects: `root → [branch A: shared.yaml, branch B: shared.yaml]`
+   - Should only reject ancestor cycles (A→B→A), not sibling references
+   - **Assigned to:** John (graph traversal semantics)
+   - **Fix:** Use `defer delete(pc.seen, inclPath)` for backtracking
+
+**What's Correct:**
+- Interface signature matches `pkg/planner.Planner` ✅
+- Max depth passed by value (correct) ✅
+- Tool lookup signature matches fake implementations ✅
+- Error wrapping with `Unwrap()` for `errors.Is()` ✅
+- ExecutionPlan has all required fields ✅
+- Topo sort uses declaration order (per §02 spec) ✅
+- Barbara's fakes have interface guards ✅
+
+**Non-blocking suggestions for Phase 3:**
+- Add `testutil.Tag()` links in tests (spec traceability)
+- Add diamond-dependency test case after fix
+- Clarify or remove `rawSpec` fallback (parser should guarantee typed specs)
+
+**Verdict written to:** `.squad/decisions/inbox/ken-phase2-review.md`
+
+## 2026-04-20: Phase 2 Re-Review — APPROVED
+
+**Status:** ✅ APPROVED — Both defects verified fixed
+
+**Defect Fixes Verified:**
+
+1. **D1 (Barbara)** — Interface guard added at line 19:
+   ```go
+   var _ plannerPkg.Planner = (*impl)(nil)
+   ```
+   Correctly uses `impl` type and `plannerPkg.Planner` interface. Compiles successfully.
+
+2. **D2 (John)** — DFS backtracking implemented at lines 270-271:
+   ```go
+   pc.seen[inclPath] = true
+   defer delete(pc.seen, inclPath)
+   ```
+   `defer delete` appears immediately after `pc.seen[inclPath] = true` with no intervening code. Inside correct function scope (`resolveInclude`).
+
+**New Test Verified:**
+
+- `TestPlanner_DiamondDependency` — Tests A→B→D and A→C→D pattern
+- Verifies no cycle error AND correct plan output (2 steps)
+- Test PASSES
+
+**Regression Check:**
+- All 14 tests pass (13 original + 1 new)
+- True cycle detection still works (`TestPlanner_ImportCycleDetected`, `TestPlan_ImportCycleDetection`)
+
+**Non-blocking Suggestions for Phase 3:**
+- Add `testutil.Tag()` links for spec traceability
+- Clarify or remove `rawSpec` fallback
+- Consider additional edge case tests (triple-diamond, mixed diamond+cycle)
+
+**Verdict written to:** `.squad/decisions/inbox/ken-phase2-rereview.md`

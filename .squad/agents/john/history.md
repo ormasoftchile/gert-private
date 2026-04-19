@@ -464,3 +464,40 @@ testdata runbooks where applicable.
   no testdata changes for P2-C.
 
 **Decision inbox:** .squad/decisions/inbox/john-field-types-p2.md
+
+---
+
+## Task: Fix D2 — Cycle detection uses permanent marking
+**Requested by:** Cristian
+
+### What was done
+- Fixed `resolveInclude` in `v2/internal/planner/planner.go`: replaced permanent marking with DFS backtracking via `defer delete(pc.seen, inclPath)` after `pc.seen[inclPath] = true`. Diamond deps (A→B→D, A→C→D) now resolve correctly; true cycles still caught.
+- Added `TestPlanner_DiamondDependency` to `v2/internal/planner/planner_test.go`: A includes B and C, both include D — no false cycle error, D step inlined twice.
+- All 14 planner tests pass.
+
+---
+
+## 2026-04-19T22:57:27Z — Phase 2 Defect D2: Cycle Detection Fix (Completed)
+
+**Status:** ✅ COMPLETE
+
+### Phase Context
+
+Phase 2 architectural review (Ken) identified two critical defects blocking approval:
+1. **D1 (Barbara):** Missing compile-time interface guard in planner.go
+2. **D2 (John):** Cycle detection incorrectly rejects diamond dependencies
+
+Both defects have been resolved. Phase 2 ready for re-review.
+
+### Orchestration Log
+
+- `.squad/orchestration-log/2026-04-19T22:57:27Z-barbara-phase2-d1.md` — D1 fix (interface guard)
+- `.squad/orchestration-log/2026-04-19T22:57:27Z-john-phase2-d2.md` — D2 fix (cycle detection backtracking)
+- `.squad/log/2026-04-19T22:57:27Z-phase2-fixes.md` — Session summary
+
+### Status
+
+- Build: Clean
+- Tests: 14/14 pass
+- Vet: No warnings
+- Next gate: Ken's re-review

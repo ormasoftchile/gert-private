@@ -477,3 +477,26 @@ Both are thread-safe (sync.Mutex), have compile-time interface guards.
 ### Build result
 `go build ./...` clean
 `go vet ./...` clean
+
+---
+
+## 2026-04-18 — D1: Compile-time interface guard (internal/planner)
+
+**Requested by:** Cristian (Ken rejection fix)
+
+### Task
+Add compile-time interface guard to `v2/internal/planner/planner.go`.
+
+### Finding
+- Concrete struct: `impl`
+- Interface import alias: `plannerPkg` (`github.com/ormasoftchile/gert/v2/pkg/planner`)
+
+### Change
+Added after imports in `v2/internal/planner/planner.go`:
+```go
+var _ plannerPkg.Planner = (*impl)(nil)
+```
+
+### Build result
+`go build ./...` clean
+`go vet ./...` clean

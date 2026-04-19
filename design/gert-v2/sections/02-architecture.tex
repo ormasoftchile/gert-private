@@ -11,6 +11,54 @@ Every component boundary is enforced by a Go interface; no component imports a p
 the dependency graph.
 
 % ─────────────────────────────────────────────────────────────────────────────
+% Figure: Architecture dependency graph
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[node distance=1.0cm and 1.5cm, scale=0.9, transform shape]
+  %% ── Pipeline (top to bottom) ────────────────────────────────────────────────
+  \node[stepbox]                          (arc-runbook)   {Runbook (YAML)};
+  \node[stepbox, below=of arc-runbook]    (arc-parser)    {Parser};
+  \node[stepbox, below=of arc-parser]     (arc-planner)   {Planner};
+  \node[stepbox, below=1.5cm of arc-planner] (arc-executor) {Executor};
+
+  %% ── RPC Server and Audit Log (right side) ───────────────────────────────────
+  \node[stepbox, right=2.5cm of arc-executor]      (arc-rpcserver) {RPC Server};
+  \node[stepbox, below=1.0cm of arc-rpcserver]     (arc-auditlog)  {Audit Log (JSONL)};
+
+  %% ── Runtime Core sub-components ─────────────────────────────────────────────
+  \node[stepbox, below left=1.3cm  and 1.8cm of arc-executor]  (arc-handlers) {Step Handlers};
+  \node[stepbox, below right=1.3cm and 1.8cm of arc-executor]  (arc-varstore) {Variable Store};
+
+  %% ── Services (driven by Step Handlers) ──────────────────────────────────────
+  \node[stepbox] at ([xshift=-3.5cm, yshift=-3.7cm] arc-executor) (arc-toolreg)  {Tool Registry};
+  \node[stepbox] at ([xshift=-0.5cm, yshift=-3.7cm] arc-executor) (arc-inputprov){Input Provider};
+  \node[stepbox] at ([xshift=+2.5cm, yshift=-3.7cm] arc-executor) (arc-eventbus) {Event Bus};
+
+  %% ── Runtime Core grouping box ────────────────────────────────────────────────
+  \begin{scope}[on background layer]
+    \node[gertfit, fit=(arc-executor)(arc-handlers)(arc-varstore)] (arc-rtcore) {};
+  \end{scope}
+  \node[below=3pt of arc-rtcore, font=\small\sffamily\itshape, color=black!50]
+       {Runtime Core};
+
+  %% ── Arrows ───────────────────────────────────────────────────────────────────
+  \draw[gertarrow] (arc-runbook)   -- (arc-parser);
+  \draw[gertarrow] (arc-parser)    -- (arc-planner);
+  \draw[gertarrow] (arc-planner)   -- (arc-executor);
+  \draw[gertarrow] (arc-rpcserver) -- (arc-executor);
+  \draw[gertarrow] (arc-executor)  -- (arc-auditlog);
+  \draw[gertarrow] (arc-executor)  -- (arc-handlers);
+  \draw[gertarrow] (arc-executor)  -- (arc-varstore);
+  \draw[gertarrow] (arc-handlers)  -- (arc-toolreg);
+  \draw[gertarrow] (arc-handlers)  -- (arc-inputprov);
+  \draw[gertarrow] (arc-handlers)  -- (arc-eventbus);
+\end{tikzpicture}
+\caption{gert v2 architecture --- component dependency overview.}
+\label{fig:architecture-overview}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
 \section{Primary Components}
 % ─────────────────────────────────────────────────────────────────────────────
 
@@ -750,6 +798,73 @@ When \texttt{Next} returns \texttt{io.EOF}:
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Lifecycle Model}
 % ─────────────────────────────────────────────────────────────────────────────
+
+% Figure: Execution lifecycle state machines
+\begin{figure}[htbp]
+\centering
+%% ── Run lifecycle ─────────────────────────────────────────────────────────────
+\textit{\small Run lifecycle states:}\\[6pt]
+\begin{tikzpicture}[node distance=0.8cm and 1.0cm, scale=0.9, transform shape]
+  %% Main path
+  \node[stepbox]                              (rs-created)   {created};
+  \node[stepbox, right=0.8cm of rs-created]  (rs-planning)  {planning};
+  \node[stepbox, right=0.8cm of rs-planning] (rs-ready)     {ready};
+  \node[stepbox, right=0.8cm of rs-ready]    (rs-running)   {running};
+
+  %% Terminal states (right of running)
+  \node[stepbox, right=1.5cm of rs-running]         (rs-completed) {completed};
+  \node[stepbox, below=0.8cm of rs-completed]       (rs-failed)    {failed};
+  \node[stepbox, below=0.8cm of rs-failed]          (rs-cancelled) {cancelled};
+
+  %% Suspension path (below running)
+  \node[stepbox, below=1.3cm of rs-running]         (rs-suspended) {suspended};
+  \node[stepbox, below=0.9cm of rs-suspended]       (rs-resuming)  {resuming};
+
+  %% Arrows — main path
+  \draw[gertarrow] (rs-created)   -- (rs-planning);
+  \draw[gertarrow] (rs-planning)  -- (rs-ready);
+  \draw[gertarrow] (rs-ready)     -- (rs-running);
+  \draw[gertarrow] (rs-running)   -- (rs-completed);
+  \draw[gertarrow] (rs-running)   -- (rs-failed);
+  \draw[gertarrow] (rs-running)   to[out=-45, in=170] (rs-cancelled);
+
+  %% Arrows — suspension cycle
+  \draw[gertarrow] (rs-running)   -- (rs-suspended);
+  \draw[gertarrow] (rs-suspended) -- (rs-resuming);
+  \draw[gertarrow] (rs-resuming)  to[bend left=60] (rs-running);
+\end{tikzpicture}
+
+\medskip
+
+%% ── Step lifecycle ────────────────────────────────────────────────────────────
+\textit{\small Step lifecycle states:}\\[6pt]
+\begin{tikzpicture}[node distance=0.8cm and 1.0cm, scale=0.9, transform shape]
+  %% Main path
+  \node[stepbox]                               (ss-pending)      {pending};
+  \node[stepbox, right=1.2cm of ss-pending]    (ss-executing)    {executing};
+  \node[stepbox, right=1.8cm of ss-executing]  (ss-completed)    {completed};
+
+  %% Waiting for input (below executing, loops back)
+  \node[stepbox, below=1.3cm of ss-executing]  (ss-waiting) {waiting\_for\_input};
+
+  %% Terminal / error states (right of waiting)
+  \node[stepbox, right=1.8cm of ss-waiting]    (ss-failed)       {failed};
+  \node[stepbox, below=0.8cm of ss-failed]     (ss-skipped)      {skipped};
+  \node[stepbox, below=0.8cm of ss-skipped]    (ss-compensating) {compensating};
+
+  %% Arrows
+  \draw[gertarrow] (ss-pending)   -- (ss-executing);
+  \draw[gertarrow] (ss-executing) -- (ss-completed);
+  \draw[gertarrow] (ss-executing) -- (ss-waiting);
+  \draw[gertarrow] (ss-waiting)   to[bend right=30] (ss-executing);
+  \draw[gertarrow] (ss-executing) to[out=-30, in=165] (ss-failed);
+  \draw[gertarrow] (ss-executing) to[out=-45, in=170] (ss-skipped);
+  \draw[gertarrow] (ss-executing) to[out=-55, in=175] (ss-compensating);
+\end{tikzpicture}
+
+\caption{Execution lifecycle --- run states (top) and step states (bottom).}
+\label{fig:execution-lifecycle}
+\end{figure}
 
 \subsection{Run Start}
 

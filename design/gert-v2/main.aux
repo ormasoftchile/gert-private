@@ -93,419 +93,425 @@
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
 \newlabel{ch:architecture}{{3}{8}{Architecture}{chapter.25}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {3.1}Primary Components}{8}{section.26}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.1.1}Parser}{8}{subsection.27}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Responsibility.}{8}{section*.28}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Interface.}{8}{section*.29}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Dependencies.}{9}{section*.30}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Key Invariants.}{9}{section*.31}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.1.2}Planner}{10}{subsection.32}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Responsibility.}{10}{section*.33}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{What is an ExecutionPlan?}{10}{section*.34}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Dependencies.}{11}{section*.35}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Key Invariants.}{11}{section*.36}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.1.3}Runtime Core}{11}{subsection.37}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Responsibility.}{11}{section*.38}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Interface.}{12}{section*.39}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Dependencies.}{13}{section*.40}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Key Invariants.}{13}{section*.41}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.1.4}Extension Host}{13}{subsection.42}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Responsibility.}{13}{section*.43}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Interface.}{14}{section*.44}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Dependencies.}{14}{section*.45}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Key Invariants.}{14}{section*.46}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.1.5}API / Adapter Layer}{14}{subsection.47}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Responsibility.}{14}{section*.48}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Interface.}{15}{section*.49}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Dependencies.}{15}{section*.50}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Key Invariants.}{15}{section*.51}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Dependency Direction Summary.}{16}{section*.52}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {3.2}Data Flow}{16}{section.53}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.1}Phase 1: Parse}{16}{subsection.54}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.2}Phase 2: Plan}{16}{subsection.55}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.3}Phase 3: Run Initialization}{17}{subsection.61}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.4}Phase 4: Step Execution Loop}{17}{subsection.69}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.5}CLI Step Executor Contract}{21}{subsection.81}\protected@file@percent }
-\newlabel{sec:cli_executor_contract}{{3.2.5}{21}{CLI Step Executor Contract}{subsection.81}{}}
-\@writefile{toc}{\contentsline {paragraph}{Automatic detection (\texttt  {shell: auto}, the default).}{21}{section*.83}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Explicit shell (\texttt  {shell: bash | sh | pwsh | cmd}).}{21}{section*.84}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Invocation patterns.}{22}{section*.85}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Template expansion.}{22}{section*.86}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Security note — shell injection.}{22}{section*.87}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Phase 1 — Plan-time key validation.}{22}{section*.89}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Phase 2 — Run-time shell selection.}{22}{section*.90}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Audit record.}{23}{section*.94}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Template expansion.}{23}{section*.95}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.6}Include Step Executor Contract}{25}{subsection.98}\protected@file@percent }
-\newlabel{sec:include_executor_contract}{{3.2.6}{25}{Include Step Executor Contract}{subsection.98}{}}
-\newlabel{sec:include_cycle_detection}{{3.2.6}{26}{Cycle Detection}{section*.107}{}}
-\@writefile{toc}{\contentsline {paragraph}{Load-time validation.}{26}{section*.108}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Runtime note.}{26}{section*.109}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Future: Sub-Procedure Call.}{26}{section*.110}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.7}Phase 5: Run Completion}{27}{subsection.117}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {3.3}Lifecycle Model}{27}{section.123}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.1}Run Start}{27}{subsection.124}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.2}Step Advancement}{27}{subsection.127}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.3}Pause and Resume}{27}{subsection.128}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.4}Wait-for-Event Executor Contract}{28}{subsection.129}\protected@file@percent }
-\newlabel{sec:wait_for_event_contract}{{3.3.4}{28}{Wait-for-Event Executor Contract}{subsection.129}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.5}Approve Step Executor Contract}{32}{subsection.151}\protected@file@percent }
-\newlabel{sec:approve_executor_contract}{{3.3.5}{32}{Approve Step Executor Contract}{subsection.151}{}}
-\newlabel{sec:business_calendar}{{3.3.5}{32}{GAP-1: Business Calendar Engine}{section*.152}{}}
-\@writefile{toc}{\contentsline {paragraph}{Motivation.}{32}{section*.153}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Component responsibilities.}{32}{section*.154}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Go interface.}{32}{section*.155}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Built-in calendars for v2.0.}{33}{section*.156}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Timeout calculation at activation.}{33}{section*.157}\protected@file@percent }
-\newlabel{sec:quorum_tracker}{{3.3.5}{34}{GAP-2: Quorum Approval Tracker}{section*.158}{}}
-\@writefile{toc}{\contentsline {paragraph}{Motivation.}{34}{section*.159}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Approval state per step instance.}{34}{section*.160}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Progression rules.}{35}{section*.161}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Deadlock detection.}{35}{section*.162}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Audit trail.}{35}{section*.163}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Input Provider integration.}{36}{section*.164}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.6}Collector Field Validation Contract}{37}{subsection.175}\protected@file@percent }
-\newlabel{sec:collector_field_validation}{{3.3.6}{37}{Collector Field Validation Contract}{subsection.175}{}}
-\@writefile{toc}{\contentsline {paragraph}{RE2 vs ECMA~262.}{40}{section*.191}\protected@file@percent }
-\newlabel{sec:conditional-field-eval}{{3.3.6}{40}{Conditional Field Evaluation Contract}{section*.192}{}}
-\@writefile{toc}{\contentsline {paragraph}{Evaluation model.}{40}{section*.193}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Input provider integration.}{41}{section*.197}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Variable binding on skip.}{41}{section*.198}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Load-time validation — forward reference check.}{42}{section*.199}\protected@file@percent }
-\newlabel{sec:ephemeral-field-handling}{{3.3.6}{43}{Ephemeral Field Handling}{section*.205}{}}
-\@writefile{toc}{\contentsline {paragraph}{Audit redaction.}{43}{section*.206}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Go interface contract.}{43}{section*.207}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Tool step compatibility.}{44}{section*.208}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Suspension/resume constraint.}{44}{section*.209}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.7}Cancellation}{44}{subsection.210}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.8}Crash Recovery}{45}{subsection.215}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {3.4}Concurrency Model}{45}{section.216}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.4.1}Per-Process Run Isolation}{45}{subsection.217}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Rationale.}{45}{section*.218}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.4.2}Goroutine Model}{45}{subsection.219}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.4.3}Thread Safety at Component Boundaries}{46}{subsection.220}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {3.5}\texttt  {gert serve} Integration}{46}{section.221}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.1}Architectural Position}{46}{subsection.222}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.2}Event Forwarding}{47}{subsection.228}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.3}Crash Recovery in \texttt  {gert serve}}{47}{subsection.229}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.4}Event Dispatcher}{47}{subsection.230}\protected@file@percent }
-\newlabel{sec:event_dispatcher}{{3.5.4}{47}{Event Dispatcher}{subsection.230}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.5}RPC Method Summary}{49}{subsection.234}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.1}Primary Components}{8}{section.27}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1.1}Parser}{8}{subsection.28}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Responsibility.}{8}{section*.29}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Interface.}{8}{section*.30}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3.1}{\ignorespaces gert v2 architecture --- component dependency overview.}}{9}{figure.caption.26}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:architecture-overview}{{3.1}{9}{gert v2 architecture --- component dependency overview}{figure.caption.26}{}}
+\@writefile{toc}{\contentsline {paragraph}{Dependencies.}{10}{section*.31}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Key Invariants.}{10}{section*.32}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1.2}Planner}{11}{subsection.33}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Responsibility.}{11}{section*.34}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{What is an ExecutionPlan?}{11}{section*.35}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Dependencies.}{12}{section*.36}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Key Invariants.}{12}{section*.37}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1.3}Runtime Core}{12}{subsection.38}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Responsibility.}{12}{section*.39}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Interface.}{13}{section*.40}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Dependencies.}{14}{section*.41}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Key Invariants.}{14}{section*.42}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1.4}Extension Host}{14}{subsection.43}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Responsibility.}{14}{section*.44}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Interface.}{15}{section*.45}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Dependencies.}{15}{section*.46}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Key Invariants.}{15}{section*.47}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1.5}API / Adapter Layer}{15}{subsection.48}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Responsibility.}{15}{section*.49}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Interface.}{16}{section*.50}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Dependencies.}{16}{section*.51}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Key Invariants.}{16}{section*.52}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Dependency Direction Summary.}{17}{section*.53}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.2}Data Flow}{17}{section.54}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.1}Phase 1: Parse}{17}{subsection.55}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.2}Phase 2: Plan}{17}{subsection.56}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.3}Phase 3: Run Initialization}{18}{subsection.62}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.4}Phase 4: Step Execution Loop}{18}{subsection.70}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.5}CLI Step Executor Contract}{22}{subsection.82}\protected@file@percent }
+\newlabel{sec:cli_executor_contract}{{3.2.5}{22}{CLI Step Executor Contract}{subsection.82}{}}
+\@writefile{toc}{\contentsline {paragraph}{Automatic detection (\texttt  {shell: auto}, the default).}{22}{section*.84}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Explicit shell (\texttt  {shell: bash | sh | pwsh | cmd}).}{22}{section*.85}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Invocation patterns.}{23}{section*.86}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Template expansion.}{23}{section*.87}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Security note — shell injection.}{23}{section*.88}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Phase 1 — Plan-time key validation.}{23}{section*.90}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Phase 2 — Run-time shell selection.}{23}{section*.91}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Audit record.}{24}{section*.95}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Template expansion.}{24}{section*.96}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.6}Include Step Executor Contract}{26}{subsection.99}\protected@file@percent }
+\newlabel{sec:include_executor_contract}{{3.2.6}{26}{Include Step Executor Contract}{subsection.99}{}}
+\newlabel{sec:include_cycle_detection}{{3.2.6}{27}{Cycle Detection}{section*.108}{}}
+\@writefile{toc}{\contentsline {paragraph}{Load-time validation.}{27}{section*.109}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Runtime note.}{27}{section*.110}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Future: Sub-Procedure Call.}{27}{section*.111}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.7}Phase 5: Run Completion}{28}{subsection.118}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.3}Lifecycle Model}{28}{section.124}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.1}Run Start}{28}{subsection.126}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.2}Step Advancement}{28}{subsection.129}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.3}Pause and Resume}{28}{subsection.130}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3.2}{\ignorespaces Execution lifecycle --- run states (top) and step states (bottom).}}{29}{figure.caption.125}\protected@file@percent }
+\newlabel{fig:execution-lifecycle}{{3.2}{29}{Execution lifecycle --- run states (top) and step states (bottom)}{figure.caption.125}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.4}Wait-for-Event Executor Contract}{30}{subsection.131}\protected@file@percent }
+\newlabel{sec:wait_for_event_contract}{{3.3.4}{30}{Wait-for-Event Executor Contract}{subsection.131}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.5}Approve Step Executor Contract}{34}{subsection.153}\protected@file@percent }
+\newlabel{sec:approve_executor_contract}{{3.3.5}{34}{Approve Step Executor Contract}{subsection.153}{}}
+\newlabel{sec:business_calendar}{{3.3.5}{34}{GAP-1: Business Calendar Engine}{section*.154}{}}
+\@writefile{toc}{\contentsline {paragraph}{Motivation.}{34}{section*.155}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Component responsibilities.}{34}{section*.156}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Go interface.}{34}{section*.157}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Built-in calendars for v2.0.}{35}{section*.158}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Timeout calculation at activation.}{35}{section*.159}\protected@file@percent }
+\newlabel{sec:quorum_tracker}{{3.3.5}{36}{GAP-2: Quorum Approval Tracker}{section*.160}{}}
+\@writefile{toc}{\contentsline {paragraph}{Motivation.}{36}{section*.161}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Approval state per step instance.}{36}{section*.162}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Progression rules.}{37}{section*.163}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Deadlock detection.}{37}{section*.164}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Audit trail.}{37}{section*.165}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Input Provider integration.}{38}{section*.166}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.6}Collector Field Validation Contract}{39}{subsection.177}\protected@file@percent }
+\newlabel{sec:collector_field_validation}{{3.3.6}{39}{Collector Field Validation Contract}{subsection.177}{}}
+\@writefile{toc}{\contentsline {paragraph}{RE2 vs ECMA~262.}{42}{section*.193}\protected@file@percent }
+\newlabel{sec:conditional-field-eval}{{3.3.6}{42}{Conditional Field Evaluation Contract}{section*.194}{}}
+\@writefile{toc}{\contentsline {paragraph}{Evaluation model.}{42}{section*.195}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Input provider integration.}{43}{section*.199}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Variable binding on skip.}{43}{section*.200}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Load-time validation — forward reference check.}{44}{section*.201}\protected@file@percent }
+\newlabel{sec:ephemeral-field-handling}{{3.3.6}{45}{Ephemeral Field Handling}{section*.207}{}}
+\@writefile{toc}{\contentsline {paragraph}{Audit redaction.}{45}{section*.208}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Go interface contract.}{45}{section*.209}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Tool step compatibility.}{46}{section*.210}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Suspension/resume constraint.}{46}{section*.211}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.7}Cancellation}{46}{subsection.212}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.8}Crash Recovery}{47}{subsection.217}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.4}Concurrency Model}{47}{section.218}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4.1}Per-Process Run Isolation}{47}{subsection.219}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Rationale.}{47}{section*.220}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4.2}Goroutine Model}{47}{subsection.221}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4.3}Thread Safety at Component Boundaries}{48}{subsection.222}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.5}\texttt  {gert serve} Integration}{48}{section.223}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.1}Architectural Position}{48}{subsection.224}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.2}Event Forwarding}{49}{subsection.230}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.3}Crash Recovery in \texttt  {gert serve}}{49}{subsection.231}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.4}Event Dispatcher}{49}{subsection.232}\protected@file@percent }
+\newlabel{sec:event_dispatcher}{{3.5.4}{49}{Event Dispatcher}{subsection.232}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5.5}RPC Method Summary}{51}{subsection.236}\protected@file@percent }
 \abx@aux@cite{0}{jsonschema-spec}
 \abx@aux@segm{0}{0}{jsonschema-spec}
-\@writefile{toc}{\contentsline {chapter}{\numberline {4}Schema vNext}{50}{chapter.235}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {4}Schema vNext}{52}{chapter.237}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{ch:schema}{{4}{50}{Schema vNext}{chapter.235}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {4.1}Schema Identity and Versioning}{50}{section.236}\protected@file@percent }
-\newlabel{sec:schema-identity}{{4.1}{50}{Schema Identity and Versioning}{section.236}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1.1}apiVersion Values}{50}{subsection.237}\protected@file@percent }
-\newlabel{subsec:apiversion}{{4.1.1}{50}{apiVersion Values}{subsection.237}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1.2}Self-Description via \$schema}{51}{subsection.238}\protected@file@percent }
-\newlabel{subsec:self-description}{{4.1.2}{51}{Self-Description via \$schema}{subsection.238}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1.3}Versioning Strategy}{51}{subsection.239}\protected@file@percent }
-\newlabel{subsec:versioning-strategy}{{4.1.3}{51}{Versioning Strategy}{subsection.239}{}}
-\@writefile{toc}{\contentsline {paragraph}{What constitutes a breaking change}{52}{section*.240}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1.4}Compatibility Contract: v1 → v2}{53}{subsection.241}\protected@file@percent }
-\newlabel{subsec:compatibility-contract}{{4.1.4}{53}{Compatibility Contract: v1 → v2}{subsection.241}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1.5}\texttt  {gert migrate} Behavior}{54}{subsection.242}\protected@file@percent }
-\newlabel{subsec:migrate}{{4.1.5}{54}{\texttt {gert migrate} Behavior}{subsection.242}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {4.2}Core Runbook Fields (v2)}{54}{section.252}\protected@file@percent }
-\newlabel{sec:core-fields}{{4.2}{54}{Core Runbook Fields (v2)}{section.252}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.1}Top-Level Field Inventory}{54}{subsection.253}\protected@file@percent }
-\newlabel{subsec:field-inventory}{{4.2.1}{54}{Top-Level Field Inventory}{subsection.253}{}}
-\@writefile{toc}{\contentsline {paragraph}{id field}{55}{section*.254}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{kind values}{55}{section*.255}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.2}toolRefs}{56}{subsection.256}\protected@file@percent }
-\newlabel{subsec:toolrefs}{{4.2.2}{56}{toolRefs}{subsection.256}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.3}Minimal Valid v2 Runbook}{56}{subsection.257}\protected@file@percent }
-\newlabel{subsec:minimal-runbook}{{4.2.3}{56}{Minimal Valid v2 Runbook}{subsection.257}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.4}Complete Annotated Example}{57}{subsection.258}\protected@file@percent }
-\newlabel{subsec:full-example}{{4.2.4}{57}{Complete Annotated Example}{subsection.258}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {4.3}Input and Output Declarations}{60}{section.259}\protected@file@percent }
-\newlabel{sec:inputs-outputs}{{4.3}{60}{Input and Output Declarations}{section.259}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.1}Input Declarations}{60}{subsection.260}\protected@file@percent }
-\newlabel{subsec:inputs}{{4.3.1}{60}{Input Declarations}{subsection.260}{}}
-\@writefile{toc}{\contentsline {paragraph}{type field}{60}{section*.261}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{from: binding syntax}{61}{section*.262}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.2}Output Declarations}{61}{subsection.263}\protected@file@percent }
-\newlabel{subsec:outputs}{{4.3.2}{61}{Output Declarations}{subsection.263}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.3}Expression Language}{61}{subsection.264}\protected@file@percent }
-\newlabel{subsec:expressions}{{4.3.3}{61}{Expression Language}{subsection.264}{}}
-\@writefile{toc}{\contentsline {paragraph}{Built-in template functions (v2 additions)}{62}{section*.267}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{\texttt  {fromYAML} and \texttt  {fromJSON}}{62}{section*.268}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Template errors}{63}{section*.269}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {4.4}Step Types (v2 Inventory)}{63}{section.270}\protected@file@percent }
-\newlabel{sec:step-types}{{4.4}{63}{Step Types (v2 Inventory)}{section.270}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.1}Common Step Fields}{64}{subsection.271}\protected@file@percent }
-\newlabel{subsec:common-fields}{{4.4.1}{64}{Common Step Fields}{subsection.271}{}}
-\newlabel{subsec:retry}{{4.4.1}{65}{Retry configuration}{section*.272}{}}
-\@writefile{toc}{\contentsline {paragraph}{Retry configuration}{65}{section*.272}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Step contract}{65}{section*.273}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.2}Step Type: cli}{66}{subsection.274}\protected@file@percent }
-\newlabel{subsec:step-cli}{{4.4.2}{66}{Step Type: cli}{subsection.274}{}}
-\@writefile{toc}{\contentsline {paragraph}{Run form: string}{67}{section*.275}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Run form: map}{67}{section*.276}\protected@file@percent }
-\@writefile{toc}{\contentsline {subparagraph}{Map key resolution order}{68}{section*.277}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Example: exec form (unchanged)}{68}{section*.281}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Example: run string form with explicit shell}{69}{section*.282}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Example: run string form with auto shell}{69}{section*.283}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Example: run map form (multi-shell)}{69}{section*.284}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.3}Step Type: choice}{70}{subsection.285}\protected@file@percent }
-\newlabel{subsec:step-choice}{{4.4.3}{70}{Step Type: choice}{subsection.285}{}}
-\@writefile{toc}{\contentsline {paragraph}{Option structure}{70}{section*.286}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Constraints}{70}{section*.287}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Example: Environment selection}{71}{section*.288}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.4}Step Type: decision}{71}{subsection.289}\protected@file@percent }
-\newlabel{subsec:step-decision}{{4.4.4}{71}{Step Type: decision}{subsection.289}{}}
-\@writefile{toc}{\contentsline {paragraph}{Route structure}{72}{section*.290}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Constraints}{72}{section*.291}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Example: Incident response fork}{72}{section*.292}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.5}Step Type: collector}{73}{subsection.293}\protected@file@percent }
-\newlabel{subsec:step-collector}{{4.4.5}{73}{Step Type: collector}{subsection.293}{}}
-\@writefile{toc}{\contentsline {paragraph}{Field structure}{73}{section*.294}\protected@file@percent }
-\newlabel{par:ephemeral-fields}{{4.4.5}{75}{Ephemeral fields}{section*.295}{}}
-\@writefile{toc}{\contentsline {paragraph}{Ephemeral fields}{75}{section*.295}\protected@file@percent }
-\newlabel{par:dynamic-forms}{{4.4.5}{76}{Dynamic Forms}{section*.296}{}}
-\@writefile{toc}{\contentsline {paragraph}{Dynamic Forms}{76}{section*.296}\protected@file@percent }
-\newlabel{par:collector-field-types}{{4.4.5}{77}{Field type inventory}{section*.302}{}}
-\@writefile{toc}{\contentsline {paragraph}{Field type inventory}{77}{section*.302}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Field type: \texttt  {text}}{77}{section*.303}\protected@file@percent }
-\newlabel{subsubsec:field-text}{{4.4.5}{77}{Field type: \texttt {text}}{section*.303}{}}
-\@writefile{toc}{\contentsline {paragraph}{Text field validation constraints}{77}{section*.304}\protected@file@percent }
-\newlabel{par:text-format}{{4.4.5}{79}{Structured multiline format validation}{section*.305}{}}
-\newlabel{sec:collector_field_validation}{{4.4.5}{79}{Structured multiline format validation}{section*.305}{}}
-\@writefile{toc}{\contentsline {paragraph}{Structured multiline format validation}{79}{section*.305}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Field type: \texttt  {number}}{80}{section*.306}\protected@file@percent }
-\newlabel{subsubsec:field-number}{{4.4.5}{80}{Field type: \texttt {number}}{section*.306}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Field type: \texttt  {integer}}{81}{section*.307}\protected@file@percent }
-\newlabel{subsubsec:field-integer}{{4.4.5}{81}{Field type: \texttt {integer}}{section*.307}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Field type: \texttt  {date}}{81}{section*.308}\protected@file@percent }
-\newlabel{subsubsec:field-date}{{4.4.5}{81}{Field type: \texttt {date}}{section*.308}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Field type: \texttt  {datetime}}{82}{section*.309}\protected@file@percent }
-\newlabel{subsubsec:field-datetime}{{4.4.5}{82}{Field type: \texttt {datetime}}{section*.309}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Field type: \texttt  {boolean}}{82}{section*.310}\protected@file@percent }
-\newlabel{subsubsec:field-boolean}{{4.4.5}{82}{Field type: \texttt {boolean}}{section*.310}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Field type: \texttt  {select}}{83}{section*.311}\protected@file@percent }
-\newlabel{subsubsec:field-select}{{4.4.5}{83}{Field type: \texttt {select}}{section*.311}{}}
-\@writefile{toc}{\contentsline {paragraph}{options — static list}{83}{section*.312}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{options\_from — dynamic provider}{83}{section*.313}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Field type: \texttt  {autocomplete}}{84}{section*.314}\protected@file@percent }
-\newlabel{subsubsec:field-autocomplete}{{4.4.5}{84}{Field type: \texttt {autocomplete}}{section*.314}{}}
-\newlabel{subsec:approval-gate}{{4.4.5}{86}{Approval gate}{section*.315}{}}
-\@writefile{toc}{\contentsline {paragraph}{Approval gate}{86}{section*.315}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Example: Incident evidence collection}{86}{section*.316}\protected@file@percent }
-\newlabel{par:questionnaire-pattern}{{4.4.5}{87}{Questionnaire Pattern}{section*.317}{}}
-\@writefile{toc}{\contentsline {paragraph}{Questionnaire Pattern}{87}{section*.317}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Validation rules for \texttt  {collector}}{88}{section*.318}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.6}Step Type: approve}{90}{subsection.319}\protected@file@percent }
-\newlabel{subsec:step-approve}{{4.4.6}{90}{Step Type: approve}{subsection.319}{}}
-\@writefile{toc}{\contentsline {paragraph}{approvals block}{91}{section*.320}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Business-Day Timeout}{92}{section*.321}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Quorum Approval}{93}{section*.322}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Validation Rules}{94}{section*.323}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.7}Step Type: tool}{94}{subsection.330}\protected@file@percent }
-\newlabel{subsec:step-tool}{{4.4.7}{94}{Step Type: tool}{subsection.330}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.8}Step Type: wait\_for\_event}{96}{subsection.331}\protected@file@percent }
-\newlabel{subsec:step-wait-for-event}{{4.4.8}{96}{Step Type: wait\_for\_event}{subsection.331}{}}
-\@writefile{toc}{\contentsline {paragraph}{Example 1 — Prometheus alert webhook}{97}{section*.336}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Example 2 — Named channel / approval callback}{98}{section*.337}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Transport Note}{98}{section*.338}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Security Note}{99}{section*.339}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.9}Step Type: include}{99}{subsection.340}\protected@file@percent }
-\newlabel{subsec:step-include}{{4.4.9}{99}{Step Type: include}{subsection.340}{}}
-\@writefile{toc}{\contentsline {paragraph}{Cycle Detection}{100}{section*.341}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Difference from Sub-Procedure Call}{100}{section*.342}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.10}Step Type: branch}{100}{subsection.343}\protected@file@percent }
-\newlabel{subsec:step-branch}{{4.4.10}{100}{Step Type: branch}{subsection.343}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.11}Step Type: iterate}{102}{subsection.344}\protected@file@percent }
-\newlabel{subsec:step-iterate}{{4.4.11}{102}{Step Type: iterate}{subsection.344}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.12}Step Type: parallel}{104}{subsection.345}\protected@file@percent }
-\newlabel{subsec:step-parallel}{{4.4.12}{104}{Step Type: parallel}{subsection.345}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.13}Step Type: assert}{105}{subsection.346}\protected@file@percent }
-\newlabel{subsec:step-assert}{{4.4.13}{105}{Step Type: assert}{subsection.346}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.14}Step Type: compensate}{106}{subsection.347}\protected@file@percent }
-\newlabel{subsec:step-compensate}{{4.4.14}{106}{Step Type: compensate}{subsection.347}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.15}Step Type: end}{107}{subsection.348}\protected@file@percent }
-\newlabel{subsec:step-end}{{4.4.15}{107}{Step Type: end}{subsection.348}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {4.5}Tool Definition Schema (v2)}{107}{section.349}\protected@file@percent }
-\newlabel{sec:tool-schema}{{4.5}{107}{Tool Definition Schema (v2)}{section.349}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.5.1}Tool Definition Field Inventory}{107}{subsection.350}\protected@file@percent }
-\newlabel{subsec:tool-fields}{{4.5.1}{107}{Tool Definition Field Inventory}{subsection.350}{}}
-\@writefile{toc}{\contentsline {paragraph}{New in v2}{109}{section*.351}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {4.6}Provider Definition Schema (v2)}{109}{section.352}\protected@file@percent }
-\newlabel{sec:provider-schema}{{4.6}{109}{Provider Definition Schema (v2)}{section.352}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {4.7}Namespace Convention for Extensions}{110}{section.353}\protected@file@percent }
-\newlabel{sec:namespaces}{{4.7}{110}{Namespace Convention for Extensions}{section.353}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.7.1}The Extension Field Problem}{110}{subsection.354}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.7.2}Convention: \texttt  {x-<namespace>:} at the Field Level}{110}{subsection.355}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{At the runbook level}{111}{section*.359}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{At the step level}{111}{section*.360}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.7.3}Extension Validation}{111}{subsection.361}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.7.4}Extension Registration Format}{111}{subsection.365}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {4.8}Structural vs.\ Semantic Validation}{112}{section.366}\protected@file@percent }
-\newlabel{sec:validation}{{4.8}{112}{Structural vs.\ Semantic Validation}{section.366}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.8.1}Phase 1: Structural Validation}{112}{subsection.367}\protected@file@percent }
-\newlabel{subsec:structural}{{4.8.1}{112}{Phase 1: Structural Validation}{subsection.367}{}}
-\@writefile{toc}{\contentsline {paragraph}{Implementation note for Brian}{113}{section*.368}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.8.2}Phase 2: Semantic Validation}{113}{subsection.369}\protected@file@percent }
-\newlabel{subsec:semantic}{{4.8.2}{113}{Phase 2: Semantic Validation}{subsection.369}{}}
-\@writefile{toc}{\contentsline {paragraph}{Error reporting}{114}{section*.381}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {4.9}Schema Artifacts}{115}{section.382}\protected@file@percent }
-\newlabel{sec:schema-artifacts}{{4.9}{115}{Schema Artifacts}{section.382}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.9.1}Shipped Artifacts}{115}{subsection.383}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.9.2}\texttt  {gert schema export}}{115}{subsection.384}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.9.3}VS Code Integration}{115}{subsection.385}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.9.4}Schema Version Manifest}{116}{subsection.386}\protected@file@percent }
-\@writefile{toc}{\contentsline {chapter}{\numberline {5}Extension Runtime}{117}{chapter.387}\protected@file@percent }
+\newlabel{ch:schema}{{4}{52}{Schema vNext}{chapter.237}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4.1}Schema Identity and Versioning}{52}{section.238}\protected@file@percent }
+\newlabel{sec:schema-identity}{{4.1}{52}{Schema Identity and Versioning}{section.238}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1.1}apiVersion Values}{52}{subsection.239}\protected@file@percent }
+\newlabel{subsec:apiversion}{{4.1.1}{52}{apiVersion Values}{subsection.239}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1.2}Self-Description via \$schema}{53}{subsection.240}\protected@file@percent }
+\newlabel{subsec:self-description}{{4.1.2}{53}{Self-Description via \$schema}{subsection.240}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1.3}Versioning Strategy}{53}{subsection.241}\protected@file@percent }
+\newlabel{subsec:versioning-strategy}{{4.1.3}{53}{Versioning Strategy}{subsection.241}{}}
+\@writefile{toc}{\contentsline {paragraph}{What constitutes a breaking change}{54}{section*.242}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1.4}Compatibility Contract: v1 → v2}{55}{subsection.243}\protected@file@percent }
+\newlabel{subsec:compatibility-contract}{{4.1.4}{55}{Compatibility Contract: v1 → v2}{subsection.243}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1.5}\texttt  {gert migrate} Behavior}{56}{subsection.244}\protected@file@percent }
+\newlabel{subsec:migrate}{{4.1.5}{56}{\texttt {gert migrate} Behavior}{subsection.244}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4.2}Core Runbook Fields (v2)}{56}{section.254}\protected@file@percent }
+\newlabel{sec:core-fields}{{4.2}{56}{Core Runbook Fields (v2)}{section.254}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.1}Top-Level Field Inventory}{56}{subsection.255}\protected@file@percent }
+\newlabel{subsec:field-inventory}{{4.2.1}{56}{Top-Level Field Inventory}{subsection.255}{}}
+\@writefile{toc}{\contentsline {paragraph}{id field}{57}{section*.256}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{kind values}{57}{section*.257}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.2}toolRefs}{58}{subsection.258}\protected@file@percent }
+\newlabel{subsec:toolrefs}{{4.2.2}{58}{toolRefs}{subsection.258}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.3}Minimal Valid v2 Runbook}{58}{subsection.259}\protected@file@percent }
+\newlabel{subsec:minimal-runbook}{{4.2.3}{58}{Minimal Valid v2 Runbook}{subsection.259}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.4}Complete Annotated Example}{59}{subsection.260}\protected@file@percent }
+\newlabel{subsec:full-example}{{4.2.4}{59}{Complete Annotated Example}{subsection.260}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4.3}Input and Output Declarations}{62}{section.261}\protected@file@percent }
+\newlabel{sec:inputs-outputs}{{4.3}{62}{Input and Output Declarations}{section.261}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.1}Input Declarations}{62}{subsection.262}\protected@file@percent }
+\newlabel{subsec:inputs}{{4.3.1}{62}{Input Declarations}{subsection.262}{}}
+\@writefile{toc}{\contentsline {paragraph}{type field}{62}{section*.263}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{from: binding syntax}{63}{section*.264}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.2}Output Declarations}{63}{subsection.265}\protected@file@percent }
+\newlabel{subsec:outputs}{{4.3.2}{63}{Output Declarations}{subsection.265}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.3}Expression Language}{63}{subsection.266}\protected@file@percent }
+\newlabel{subsec:expressions}{{4.3.3}{63}{Expression Language}{subsection.266}{}}
+\@writefile{toc}{\contentsline {paragraph}{Built-in template functions (v2 additions)}{64}{section*.269}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{\texttt  {fromYAML} and \texttt  {fromJSON}}{64}{section*.270}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Template errors}{65}{section*.271}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4.4}Step Types (v2 Inventory)}{65}{section.272}\protected@file@percent }
+\newlabel{sec:step-types}{{4.4}{65}{Step Types (v2 Inventory)}{section.272}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.1}{\ignorespaces Step type taxonomy — 14 types organized by category.}}{66}{figure.caption.273}\protected@file@percent }
+\newlabel{fig:step-type-taxonomy}{{4.1}{66}{Step type taxonomy — 14 types organized by category}{figure.caption.273}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.1}Common Step Fields}{67}{subsection.274}\protected@file@percent }
+\newlabel{subsec:common-fields}{{4.4.1}{67}{Common Step Fields}{subsection.274}{}}
+\newlabel{subsec:retry}{{4.4.1}{67}{Retry configuration}{section*.275}{}}
+\@writefile{toc}{\contentsline {paragraph}{Retry configuration}{67}{section*.275}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Step contract}{67}{section*.276}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.2}Step Type: cli}{68}{subsection.277}\protected@file@percent }
+\newlabel{subsec:step-cli}{{4.4.2}{68}{Step Type: cli}{subsection.277}{}}
+\@writefile{toc}{\contentsline {paragraph}{Run form: string}{69}{section*.278}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Run form: map}{69}{section*.279}\protected@file@percent }
+\@writefile{toc}{\contentsline {subparagraph}{Map key resolution order}{70}{section*.280}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Example: exec form (unchanged)}{70}{section*.284}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Example: run string form with explicit shell}{71}{section*.285}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Example: run string form with auto shell}{71}{section*.286}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Example: run map form (multi-shell)}{71}{section*.287}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.3}Step Type: choice}{72}{subsection.288}\protected@file@percent }
+\newlabel{subsec:step-choice}{{4.4.3}{72}{Step Type: choice}{subsection.288}{}}
+\@writefile{toc}{\contentsline {paragraph}{Option structure}{72}{section*.289}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Constraints}{72}{section*.290}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Example: Environment selection}{73}{section*.291}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.4}Step Type: decision}{73}{subsection.292}\protected@file@percent }
+\newlabel{subsec:step-decision}{{4.4.4}{73}{Step Type: decision}{subsection.292}{}}
+\@writefile{toc}{\contentsline {paragraph}{Route structure}{74}{section*.293}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Constraints}{74}{section*.294}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Example: Incident response fork}{74}{section*.295}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.5}Step Type: collector}{75}{subsection.296}\protected@file@percent }
+\newlabel{subsec:step-collector}{{4.4.5}{75}{Step Type: collector}{subsection.296}{}}
+\@writefile{toc}{\contentsline {paragraph}{Field structure}{75}{section*.297}\protected@file@percent }
+\newlabel{par:ephemeral-fields}{{4.4.5}{77}{Ephemeral fields}{section*.298}{}}
+\@writefile{toc}{\contentsline {paragraph}{Ephemeral fields}{77}{section*.298}\protected@file@percent }
+\newlabel{par:dynamic-forms}{{4.4.5}{78}{Dynamic Forms}{section*.299}{}}
+\@writefile{toc}{\contentsline {paragraph}{Dynamic Forms}{78}{section*.299}\protected@file@percent }
+\newlabel{par:collector-field-types}{{4.4.5}{79}{Field type inventory}{section*.305}{}}
+\@writefile{toc}{\contentsline {paragraph}{Field type inventory}{79}{section*.305}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Field type: \texttt  {text}}{79}{section*.306}\protected@file@percent }
+\newlabel{subsubsec:field-text}{{4.4.5}{79}{Field type: \texttt {text}}{section*.306}{}}
+\@writefile{toc}{\contentsline {paragraph}{Text field validation constraints}{79}{section*.307}\protected@file@percent }
+\newlabel{par:text-format}{{4.4.5}{81}{Structured multiline format validation}{section*.308}{}}
+\newlabel{sec:collector_field_validation}{{4.4.5}{81}{Structured multiline format validation}{section*.308}{}}
+\@writefile{toc}{\contentsline {paragraph}{Structured multiline format validation}{81}{section*.308}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Field type: \texttt  {number}}{82}{section*.309}\protected@file@percent }
+\newlabel{subsubsec:field-number}{{4.4.5}{82}{Field type: \texttt {number}}{section*.309}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Field type: \texttt  {integer}}{83}{section*.310}\protected@file@percent }
+\newlabel{subsubsec:field-integer}{{4.4.5}{83}{Field type: \texttt {integer}}{section*.310}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Field type: \texttt  {date}}{83}{section*.311}\protected@file@percent }
+\newlabel{subsubsec:field-date}{{4.4.5}{83}{Field type: \texttt {date}}{section*.311}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Field type: \texttt  {datetime}}{84}{section*.312}\protected@file@percent }
+\newlabel{subsubsec:field-datetime}{{4.4.5}{84}{Field type: \texttt {datetime}}{section*.312}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Field type: \texttt  {boolean}}{84}{section*.313}\protected@file@percent }
+\newlabel{subsubsec:field-boolean}{{4.4.5}{84}{Field type: \texttt {boolean}}{section*.313}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Field type: \texttt  {select}}{85}{section*.314}\protected@file@percent }
+\newlabel{subsubsec:field-select}{{4.4.5}{85}{Field type: \texttt {select}}{section*.314}{}}
+\@writefile{toc}{\contentsline {paragraph}{options — static list}{85}{section*.315}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{options\_from — dynamic provider}{85}{section*.316}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Field type: \texttt  {autocomplete}}{86}{section*.317}\protected@file@percent }
+\newlabel{subsubsec:field-autocomplete}{{4.4.5}{86}{Field type: \texttt {autocomplete}}{section*.317}{}}
+\newlabel{subsec:approval-gate}{{4.4.5}{88}{Approval gate}{section*.318}{}}
+\@writefile{toc}{\contentsline {paragraph}{Approval gate}{88}{section*.318}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Example: Incident evidence collection}{88}{section*.319}\protected@file@percent }
+\newlabel{par:questionnaire-pattern}{{4.4.5}{89}{Questionnaire Pattern}{section*.320}{}}
+\@writefile{toc}{\contentsline {paragraph}{Questionnaire Pattern}{89}{section*.320}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Validation rules for \texttt  {collector}}{90}{section*.321}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.6}Step Type: approve}{92}{subsection.322}\protected@file@percent }
+\newlabel{subsec:step-approve}{{4.4.6}{92}{Step Type: approve}{subsection.322}{}}
+\@writefile{toc}{\contentsline {paragraph}{approvals block}{93}{section*.323}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Business-Day Timeout}{94}{section*.324}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Quorum Approval}{95}{section*.325}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Validation Rules}{96}{section*.326}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.7}Step Type: tool}{96}{subsection.333}\protected@file@percent }
+\newlabel{subsec:step-tool}{{4.4.7}{96}{Step Type: tool}{subsection.333}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.8}Step Type: wait\_for\_event}{98}{subsection.334}\protected@file@percent }
+\newlabel{subsec:step-wait-for-event}{{4.4.8}{98}{Step Type: wait\_for\_event}{subsection.334}{}}
+\@writefile{toc}{\contentsline {paragraph}{Example 1 — Prometheus alert webhook}{99}{section*.339}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Example 2 — Named channel / approval callback}{100}{section*.340}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Transport Note}{100}{section*.341}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Security Note}{101}{section*.342}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.9}Step Type: include}{101}{subsection.343}\protected@file@percent }
+\newlabel{subsec:step-include}{{4.4.9}{101}{Step Type: include}{subsection.343}{}}
+\@writefile{toc}{\contentsline {paragraph}{Cycle Detection}{102}{section*.344}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Difference from Sub-Procedure Call}{102}{section*.345}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.10}Step Type: branch}{102}{subsection.346}\protected@file@percent }
+\newlabel{subsec:step-branch}{{4.4.10}{102}{Step Type: branch}{subsection.346}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.11}Step Type: iterate}{104}{subsection.347}\protected@file@percent }
+\newlabel{subsec:step-iterate}{{4.4.11}{104}{Step Type: iterate}{subsection.347}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.12}Step Type: parallel}{106}{subsection.348}\protected@file@percent }
+\newlabel{subsec:step-parallel}{{4.4.12}{106}{Step Type: parallel}{subsection.348}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.13}Step Type: assert}{107}{subsection.349}\protected@file@percent }
+\newlabel{subsec:step-assert}{{4.4.13}{107}{Step Type: assert}{subsection.349}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.14}Step Type: compensate}{108}{subsection.350}\protected@file@percent }
+\newlabel{subsec:step-compensate}{{4.4.14}{108}{Step Type: compensate}{subsection.350}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4.15}Step Type: end}{109}{subsection.351}\protected@file@percent }
+\newlabel{subsec:step-end}{{4.4.15}{109}{Step Type: end}{subsection.351}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4.5}Tool Definition Schema (v2)}{109}{section.352}\protected@file@percent }
+\newlabel{sec:tool-schema}{{4.5}{109}{Tool Definition Schema (v2)}{section.352}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5.1}Tool Definition Field Inventory}{109}{subsection.353}\protected@file@percent }
+\newlabel{subsec:tool-fields}{{4.5.1}{109}{Tool Definition Field Inventory}{subsection.353}{}}
+\@writefile{toc}{\contentsline {paragraph}{New in v2}{111}{section*.354}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4.6}Provider Definition Schema (v2)}{111}{section.355}\protected@file@percent }
+\newlabel{sec:provider-schema}{{4.6}{111}{Provider Definition Schema (v2)}{section.355}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4.7}Namespace Convention for Extensions}{112}{section.356}\protected@file@percent }
+\newlabel{sec:namespaces}{{4.7}{112}{Namespace Convention for Extensions}{section.356}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.7.1}The Extension Field Problem}{112}{subsection.357}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.7.2}Convention: \texttt  {x-<namespace>:} at the Field Level}{112}{subsection.358}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{At the runbook level}{113}{section*.362}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{At the step level}{113}{section*.363}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.7.3}Extension Validation}{113}{subsection.364}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.7.4}Extension Registration Format}{113}{subsection.368}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4.8}Structural vs.\ Semantic Validation}{114}{section.369}\protected@file@percent }
+\newlabel{sec:validation}{{4.8}{114}{Structural vs.\ Semantic Validation}{section.369}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.8.1}Phase 1: Structural Validation}{114}{subsection.370}\protected@file@percent }
+\newlabel{subsec:structural}{{4.8.1}{114}{Phase 1: Structural Validation}{subsection.370}{}}
+\@writefile{toc}{\contentsline {paragraph}{Implementation note for Brian}{115}{section*.371}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.8.2}Phase 2: Semantic Validation}{115}{subsection.372}\protected@file@percent }
+\newlabel{subsec:semantic}{{4.8.2}{115}{Phase 2: Semantic Validation}{subsection.372}{}}
+\@writefile{toc}{\contentsline {paragraph}{Error reporting}{116}{section*.384}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4.9}Schema Artifacts}{117}{section.385}\protected@file@percent }
+\newlabel{sec:schema-artifacts}{{4.9}{117}{Schema Artifacts}{section.385}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.9.1}Shipped Artifacts}{117}{subsection.386}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.9.2}\texttt  {gert schema export}}{117}{subsection.387}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.9.3}VS Code Integration}{117}{subsection.388}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.9.4}Schema Version Manifest}{118}{subsection.389}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {5}Extension Runtime}{119}{chapter.390}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{ch:extension}{{5}{117}{Extension Runtime}{chapter.387}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.1}Architecture Overview}{117}{section.388}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {5.2}Capability Taxonomy}{118}{section.396}\protected@file@percent }
-\newlabel{sec:ext-capabilities}{{5.2}{118}{Capability Taxonomy}{section.396}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.3}Extension Manifest Format}{118}{section.398}\protected@file@percent }
-\newlabel{sec:ext-manifest}{{5.3}{118}{Extension Manifest Format}{section.398}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.4}Extension Discovery}{119}{section.399}\protected@file@percent }
-\newlabel{sec:ext-discovery}{{5.4}{119}{Extension Discovery}{section.399}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.5}Handshake and Lifecycle Protocol}{120}{section.404}\protected@file@percent }
-\newlabel{sec:ext-handshake}{{5.5}{120}{Handshake and Lifecycle Protocol}{section.404}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.5.1}extension/initialize (host \textrightarrow {} extension)}{120}{subsection.405}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.5.2}contributions/list (host \textrightarrow {} extension)}{122}{subsection.406}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.5.3}extension/ping (host \textrightarrow {} extension)}{122}{subsection.407}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.5.4}extension/shutdown (host \textrightarrow {} extension)}{123}{subsection.408}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.5.5}Lifecycle State Machine}{123}{subsection.409}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {5.6}Versioning and Compatibility}{124}{section.418}\protected@file@percent }
-\newlabel{sec:ext-versioning}{{5.6}{124}{Versioning and Compatibility}{section.418}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.7}Sandboxing and Process Isolation}{124}{section.419}\protected@file@percent }
-\newlabel{sec:ext-sandbox}{{5.7}{124}{Sandboxing and Process Isolation}{section.419}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.7.1}Process Isolation}{124}{subsection.420}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.7.2}Capability Enforcement}{125}{subsection.421}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.7.3}Timeout and Crash Handling}{125}{subsection.422}\protected@file@percent }
-\newlabel{sec:ext-crash}{{5.7.3}{125}{Timeout and Crash Handling}{subsection.422}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {5.1}{\ignorespaces Extension capability taxonomy (v2).}}{127}{table.caption.397}\protected@file@percent }
-\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
-\newlabel{tab:capabilities}{{5.1}{127}{Extension capability taxonomy (v2)}{table.caption.397}{}}
+\newlabel{ch:extension}{{5}{119}{Extension Runtime}{chapter.390}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.1}Architecture Overview}{119}{section.391}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5.2}Capability Taxonomy}{120}{section.399}\protected@file@percent }
+\newlabel{sec:ext-capabilities}{{5.2}{120}{Capability Taxonomy}{section.399}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.3}Extension Manifest Format}{120}{section.401}\protected@file@percent }
+\newlabel{sec:ext-manifest}{{5.3}{120}{Extension Manifest Format}{section.401}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.4}Extension Discovery}{121}{section.402}\protected@file@percent }
+\newlabel{sec:ext-discovery}{{5.4}{121}{Extension Discovery}{section.402}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.5}Handshake and Lifecycle Protocol}{122}{section.407}\protected@file@percent }
+\newlabel{sec:ext-handshake}{{5.5}{122}{Handshake and Lifecycle Protocol}{section.407}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5.1}extension/initialize (host \textrightarrow {} extension)}{122}{subsection.408}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5.2}contributions/list (host \textrightarrow {} extension)}{124}{subsection.409}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5.3}extension/ping (host \textrightarrow {} extension)}{124}{subsection.410}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5.4}extension/shutdown (host \textrightarrow {} extension)}{125}{subsection.411}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5.5}Lifecycle State Machine}{125}{subsection.412}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5.6}Versioning and Compatibility}{126}{section.421}\protected@file@percent }
+\newlabel{sec:ext-versioning}{{5.6}{126}{Versioning and Compatibility}{section.421}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.7}Sandboxing and Process Isolation}{126}{section.422}\protected@file@percent }
+\newlabel{sec:ext-sandbox}{{5.7}{126}{Sandboxing and Process Isolation}{section.422}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.7.1}Process Isolation}{126}{subsection.423}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.7.2}Capability Enforcement}{127}{subsection.424}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.7.3}Timeout and Crash Handling}{127}{subsection.425}\protected@file@percent }
+\newlabel{sec:ext-crash}{{5.7.3}{127}{Timeout and Crash Handling}{subsection.425}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5.1}{\ignorespaces Extension capability taxonomy (v2).}}{129}{table.caption.400}\protected@file@percent }
+\newlabel{tab:capabilities}{{5.1}{129}{Extension capability taxonomy (v2)}{table.caption.400}{}}
 \abx@aux@cite{0}{jsonrpc-spec}
 \abx@aux@segm{0}{0}{jsonrpc-spec}
 \abx@aux@cite{0}{mcp-spec}
 \abx@aux@segm{0}{0}{mcp-spec}
-\@writefile{toc}{\contentsline {chapter}{\numberline {6}Tool Runtime}{128}{chapter.423}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {6}Tool Runtime}{130}{chapter.426}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{ch:tools}{{6}{128}{Tool Runtime}{chapter.423}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {6.1}Tool Discovery}{128}{section.424}\protected@file@percent }
-\newlabel{sec:tool-discovery}{{6.1}{128}{Tool Discovery}{section.424}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.1.1}Name Resolution Order}{129}{subsection.432}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {6.2}Tool Definition Schema (v2)}{129}{section.437}\protected@file@percent }
-\newlabel{sec:tool-definition-schema}{{6.2}{129}{Tool Definition Schema (v2)}{section.437}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.1}Transport-Specific Fields}{130}{subsection.438}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{stdio}{130}{section*.439}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{stdio-jsonrpc}{131}{section*.440}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{mcp}{131}{section*.441}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {6.3}Transport Layer}{131}{section.442}\protected@file@percent }
-\newlabel{sec:tool-transport}{{6.3}{131}{Transport Layer}{section.442}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.1}stdio Transport}{131}{subsection.443}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Process establishment.}{131}{section*.444}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Invocation envelope.}{131}{section*.445}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Response envelope.}{131}{section*.446}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Error envelope.}{131}{section*.447}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.2}stdio-jsonrpc Transport}{132}{subsection.448}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Process establishment.}{132}{section*.449}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Invocation envelope.}{132}{section*.450}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Response envelope.}{132}{section*.451}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Error envelope.}{133}{section*.452}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.3}MCP Transport}{133}{subsection.453}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {6.4}Invocation Context}{134}{section.454}\protected@file@percent }
-\newlabel{sec:tool-context}{{6.4}{134}{Invocation Context}{section.454}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {6.5}Capability Gate}{134}{section.455}\protected@file@percent }
-\newlabel{sec:tool-capability-gate}{{6.5}{134}{Capability Gate}{section.455}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {6.6}Output Capture}{134}{section.458}\protected@file@percent }
-\newlabel{sec:tool-output}{{6.6}{134}{Output Capture}{section.458}{}}
-\@writefile{toc}{\contentsline {paragraph}{Redaction.}{135}{section*.459}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {6.7}MCP Tool Integration}{135}{section.460}\protected@file@percent }
-\newlabel{sec:mcp-tools}{{6.7}{135}{MCP Tool Integration}{section.460}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.7.1}MCP Server Declaration}{135}{subsection.461}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.7.2}MCP Discovery}{135}{subsection.462}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.7.3}MCP Tool Invocation}{136}{subsection.467}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.7.4}MCP vs stdio-jsonrpc Differences}{136}{subsection.468}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {6.8}Cancellation and Timeout}{137}{section.469}\protected@file@percent }
-\newlabel{sec:tool-cancellation}{{6.8}{137}{Cancellation and Timeout}{section.469}{}}
-\@writefile{toc}{\contentsline {paragraph}{Per-tool timeout.}{137}{section*.470}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Cancellation propagation.}{137}{section*.471}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {6.9}Tool Versioning}{138}{section.476}\protected@file@percent }
-\newlabel{sec:tool-versioning}{{6.9}{138}{Tool Versioning}{section.476}{}}
-\@writefile{toc}{\contentsline {chapter}{\numberline {7}Runtime Events and Determinism}{139}{chapter.477}\protected@file@percent }
+\newlabel{ch:tools}{{6}{130}{Tool Runtime}{chapter.426}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6.1}Tool Discovery}{130}{section.427}\protected@file@percent }
+\newlabel{sec:tool-discovery}{{6.1}{130}{Tool Discovery}{section.427}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1.1}Name Resolution Order}{131}{subsection.435}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6.2}Tool Definition Schema (v2)}{131}{section.440}\protected@file@percent }
+\newlabel{sec:tool-definition-schema}{{6.2}{131}{Tool Definition Schema (v2)}{section.440}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.1}Transport-Specific Fields}{132}{subsection.441}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{stdio}{132}{section*.442}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{stdio-jsonrpc}{133}{section*.443}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{mcp}{133}{section*.444}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6.3}Transport Layer}{133}{section.445}\protected@file@percent }
+\newlabel{sec:tool-transport}{{6.3}{133}{Transport Layer}{section.445}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.1}stdio Transport}{133}{subsection.446}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Process establishment.}{133}{section*.447}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Invocation envelope.}{133}{section*.448}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Response envelope.}{133}{section*.449}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Error envelope.}{133}{section*.450}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.2}stdio-jsonrpc Transport}{134}{subsection.451}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Process establishment.}{134}{section*.452}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Invocation envelope.}{134}{section*.453}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Response envelope.}{134}{section*.454}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Error envelope.}{135}{section*.455}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.3}MCP Transport}{135}{subsection.456}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6.4}Invocation Context}{136}{section.457}\protected@file@percent }
+\newlabel{sec:tool-context}{{6.4}{136}{Invocation Context}{section.457}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6.5}Capability Gate}{136}{section.458}\protected@file@percent }
+\newlabel{sec:tool-capability-gate}{{6.5}{136}{Capability Gate}{section.458}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6.6}Output Capture}{136}{section.461}\protected@file@percent }
+\newlabel{sec:tool-output}{{6.6}{136}{Output Capture}{section.461}{}}
+\@writefile{toc}{\contentsline {paragraph}{Redaction.}{137}{section*.462}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6.7}MCP Tool Integration}{137}{section.463}\protected@file@percent }
+\newlabel{sec:mcp-tools}{{6.7}{137}{MCP Tool Integration}{section.463}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.7.1}MCP Server Declaration}{137}{subsection.464}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.7.2}MCP Discovery}{137}{subsection.465}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.7.3}MCP Tool Invocation}{138}{subsection.470}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.7.4}MCP vs stdio-jsonrpc Differences}{138}{subsection.471}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6.8}Cancellation and Timeout}{139}{section.472}\protected@file@percent }
+\newlabel{sec:tool-cancellation}{{6.8}{139}{Cancellation and Timeout}{section.472}{}}
+\@writefile{toc}{\contentsline {paragraph}{Per-tool timeout.}{139}{section*.473}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Cancellation propagation.}{139}{section*.474}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6.9}Tool Versioning}{140}{section.479}\protected@file@percent }
+\newlabel{sec:tool-versioning}{{6.9}{140}{Tool Versioning}{section.479}{}}
+\@writefile{toc}{\contentsline {chapter}{\numberline {7}Runtime Events and Determinism}{141}{chapter.480}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{ch:events}{{7}{139}{Runtime Events and Determinism}{chapter.477}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {7.1}Event System Design}{139}{section.478}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.1.1}Role of Events}{139}{subsection.479}\protected@file@percent }
+\newlabel{ch:events}{{7}{141}{Runtime Events and Determinism}{chapter.480}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {7.1}Event System Design}{141}{section.481}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1.1}Role of Events}{141}{subsection.482}\protected@file@percent }
 \abx@aux@cite{0}{rfc3339}
 \abx@aux@segm{0}{0}{rfc3339}
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.1.2}Delivery Semantics}{140}{subsection.480}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{At-least-once delivery.}{140}{section*.481}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{In-order per run.}{140}{section*.482}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Replay determinism.}{140}{section*.483}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {7.2}Event Envelope}{140}{section.484}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Sequence numbers.}{141}{section*.485}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Timestamps.}{141}{section*.486}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Event IDs.}{141}{section*.487}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {7.3}Event Catalog}{141}{section.488}\protected@file@percent }
-\newlabel{sec:event-catalog}{{7.3}{141}{Event Catalog}{section.488}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.3.1}Run Lifecycle Events}{142}{subsection.489}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {run/started}}{142}{section*.490}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {run/completed}}{142}{section*.491}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {run/cancelled}}{143}{section*.492}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.3.2}Step Lifecycle Events}{143}{subsection.493}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {step/started}}{143}{section*.494}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {step/completed}}{143}{section*.495}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {step/failed}}{144}{section*.496}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {step/skipped}}{144}{section*.497}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {step/retrying}}{145}{section*.498}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.3.3}Governance Events}{145}{subsection.499}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {governance/command\_checked}}{145}{section*.500}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {governance/approval\_requested}}{146}{section*.501}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {governance/approval\_received}}{146}{section*.502}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {governance/redaction\_applied}}{146}{section*.503}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.3.4}Extension and Tool Events}{147}{subsection.504}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {extension/loaded}}{147}{section*.505}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {extension/unloaded}}{147}{section*.506}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {tool/invoked}}{147}{section*.507}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {tool/completed}}{148}{section*.508}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.3.5}Human-in-the-Loop Events}{148}{subsection.509}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {input/prompted}}{148}{section*.510}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {input/received}}{149}{section*.511}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.3.6}Saga and Compensation Events (v2.1+)}{149}{subsection.512}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {saga/compensation\_triggered}}{149}{section*.513}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {saga/compensation\_completed}}{149}{section*.514}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {7.4}Event Channels}{150}{section.515}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.4.1}In-Process Event Bus}{150}{subsection.516}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Purpose.}{150}{section*.517}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Implementation.}{150}{section*.518}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Subscriber API.}{150}{section*.519}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Lifecycle.}{150}{section*.520}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.4.2}WebSocket Broadcast (HTTP Adapter)}{150}{subsection.521}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Purpose.}{150}{section*.522}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Implementation.}{151}{section*.523}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Wire format.}{151}{section*.524}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Delivery semantics.}{151}{section*.525}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.4.3}JSONL Trace File}{151}{subsection.526}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Purpose.}{151}{section*.527}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Implementation.}{151}{section*.528}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Format.}{151}{section*.529}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {7.5}Event Subscriptions}{151}{section.530}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.5.1}Programmatic Subscription API}{151}{subsection.531}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Example use cases.}{152}{section*.532}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {7.6}Wire Format}{152}{section.533}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.6.1}Concrete Example: \texttt  {step/started}}{152}{subsection.534}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.6.2}Concrete Example: \texttt  {governance/approval\_requested}}{153}{subsection.535}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {7.7}Required vs.\ Optional Events}{153}{section.536}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Adapter compatibility.}{154}{section*.537}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {7.8}Determinism and Replay Semantics}{154}{section.538}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.8.1}Replay Mode}{154}{subsection.539}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Replay guarantees.}{154}{section*.540}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.8.2}Non-determinism Boundaries}{155}{subsection.541}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1.2}Delivery Semantics}{142}{subsection.483}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{At-least-once delivery.}{142}{section*.484}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{In-order per run.}{142}{section*.485}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Replay determinism.}{142}{section*.486}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7.2}Event Envelope}{142}{section.487}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Sequence numbers.}{143}{section*.488}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Timestamps.}{143}{section*.489}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Event IDs.}{143}{section*.490}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7.3}Event Catalog}{143}{section.491}\protected@file@percent }
+\newlabel{sec:event-catalog}{{7.3}{143}{Event Catalog}{section.491}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3.1}Run Lifecycle Events}{144}{subsection.492}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {run/started}}{144}{section*.493}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {run/completed}}{144}{section*.494}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {run/cancelled}}{145}{section*.495}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3.2}Step Lifecycle Events}{145}{subsection.496}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {step/started}}{145}{section*.497}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {step/completed}}{145}{section*.498}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {step/failed}}{146}{section*.499}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {step/skipped}}{146}{section*.500}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {step/retrying}}{147}{section*.501}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3.3}Governance Events}{147}{subsection.502}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {governance/command\_checked}}{147}{section*.503}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {governance/approval\_requested}}{148}{section*.504}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {governance/approval\_received}}{148}{section*.505}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {governance/redaction\_applied}}{148}{section*.506}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3.4}Extension and Tool Events}{149}{subsection.507}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {extension/loaded}}{149}{section*.508}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {extension/unloaded}}{149}{section*.509}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {tool/invoked}}{149}{section*.510}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {tool/completed}}{150}{section*.511}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3.5}Human-in-the-Loop Events}{150}{subsection.512}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {input/prompted}}{150}{section*.513}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {input/received}}{151}{section*.514}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3.6}Saga and Compensation Events (v2.1+)}{151}{subsection.515}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {saga/compensation\_triggered}}{151}{section*.516}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {saga/compensation\_completed}}{151}{section*.517}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7.4}Event Channels}{152}{section.518}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.4.1}In-Process Event Bus}{152}{subsection.519}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Purpose.}{152}{section*.520}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Implementation.}{152}{section*.521}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Subscriber API.}{152}{section*.522}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Lifecycle.}{152}{section*.523}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.4.2}WebSocket Broadcast (HTTP Adapter)}{152}{subsection.524}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Purpose.}{152}{section*.525}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Implementation.}{153}{section*.526}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Wire format.}{153}{section*.527}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Delivery semantics.}{153}{section*.528}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.4.3}JSONL Trace File}{153}{subsection.529}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Purpose.}{153}{section*.530}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Implementation.}{153}{section*.531}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Format.}{153}{section*.532}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7.5}Event Subscriptions}{153}{section.533}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.5.1}Programmatic Subscription API}{153}{subsection.534}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Example use cases.}{154}{section*.535}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7.6}Wire Format}{154}{section.536}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.6.1}Concrete Example: \texttt  {step/started}}{154}{subsection.537}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.6.2}Concrete Example: \texttt  {governance/approval\_requested}}{155}{subsection.538}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7.7}Required vs.\ Optional Events}{155}{section.539}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Adapter compatibility.}{156}{section*.540}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7.8}Determinism and Replay Semantics}{156}{section.541}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.8.1}Replay Mode}{156}{subsection.542}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Replay guarantees.}{156}{section*.543}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.8.2}Non-determinism Boundaries}{157}{subsection.544}\protected@file@percent }
 \abx@aux@cite{0}{aws-ssm-runbooks}
 \abx@aux@segm{0}{0}{aws-ssm-runbooks}
 \abx@aux@cite{0}{pagerduty-automation}
@@ -516,58 +522,58 @@
 \abx@aux@segm{0}{0}{nist-sp800-53}
 \abx@aux@cite{0}{iso27001}
 \abx@aux@segm{0}{0}{iso27001}
-\@writefile{toc}{\contentsline {chapter}{\numberline {8}Security and Trust}{156}{chapter.542}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {8}Security and Trust}{158}{chapter.545}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{ch:security}{{8}{156}{Security and Trust}{chapter.542}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {8.1}Threat Model}{156}{section.543}\protected@file@percent }
-\newlabel{sec:threat-model}{{8.1}{156}{Threat Model}{section.543}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {8.2}Extension Trust Model}{156}{section.545}\protected@file@percent }
-\newlabel{sec:extension-trust}{{8.2}{156}{Extension Trust Model}{section.545}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.2.1}Trust Levels}{156}{subsection.546}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Local trusted.}{156}{section*.547}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {8.1}{\ignorespaces Threat model and mitigations for gert v2.}}{157}{table.caption.544}\protected@file@percent }
-\newlabel{tab:threat-model}{{8.1}{157}{Threat model and mitigations for gert v2}{table.caption.544}{}}
-\@writefile{toc}{\contentsline {paragraph}{Project-scoped.}{157}{section*.548}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Remote/signed.}{157}{section*.549}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.2.2}Extension Signature Format}{158}{subsection.550}\protected@file@percent }
-\newlabel{sec:extension-signature}{{8.2.2}{158}{Extension Signature Format}{subsection.550}{}}
-\@writefile{toc}{\contentsline {paragraph}{Signature verification algorithm.}{158}{section*.551}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.2.3}Extension Verification Command}{159}{subsection.557}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {8.3}Process Isolation}{159}{section.558}\protected@file@percent }
-\newlabel{sec:process-isolation}{{8.3}{159}{Process Isolation}{section.558}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.3.1}Isolation Mechanisms}{159}{subsection.559}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Separate OS process.}{159}{section*.560}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Filesystem access control.}{159}{section*.561}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Network access control.}{160}{section*.562}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Environment variable isolation.}{160}{section*.563}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Crash isolation.}{160}{section*.564}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {8.4}Credential and Secret Handling}{161}{section.569}\protected@file@percent }
-\newlabel{sec:credential-handling}{{8.4}{161}{Credential and Secret Handling}{section.569}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.4.1}Secret Resolution and Redaction}{161}{subsection.570}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Input provider sensitivity marking.}{161}{section*.571}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Tool sensitive inputs.}{161}{section*.572}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Mandatory redaction.}{162}{section*.573}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.4.2}Secret Storage Policy}{162}{subsection.574}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {8.5}Transport Security}{162}{section.575}\protected@file@percent }
-\newlabel{sec:transport-security}{{8.5}{162}{Transport Security}{section.575}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.5.1}TLS Requirements}{162}{subsection.578}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Localhost exception.}{162}{section*.579}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Non-localhost listeners.}{163}{section*.580}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.5.2}Client Authentication}{163}{subsection.581}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Bearer token authentication.}{163}{section*.582}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Mutual TLS (mTLS).}{163}{section*.583}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.5.3}WebSocket Security}{164}{subsection.584}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.5.4}Extension JSON-RPC Transport}{164}{subsection.585}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {8.6}RBAC for \texttt  {gert serve}}{164}{section.586}\protected@file@percent }
-\newlabel{sec:rbac}{{8.6}{164}{RBAC for \texttt {gert serve}}{section.586}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.6.1}Actor Identity}{164}{subsection.587}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.6.2}Roles}{165}{subsection.588}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Viewer.}{165}{section*.589}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Operator.}{165}{section*.590}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Admin.}{165}{section*.591}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.6.3}Role Assignment}{166}{subsection.592}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.6.4}Approval Authorizer Role}{166}{subsection.593}\protected@file@percent }
+\newlabel{ch:security}{{8}{158}{Security and Trust}{chapter.545}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {8.1}Threat Model}{158}{section.546}\protected@file@percent }
+\newlabel{sec:threat-model}{{8.1}{158}{Threat Model}{section.546}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {8.2}Extension Trust Model}{158}{section.548}\protected@file@percent }
+\newlabel{sec:extension-trust}{{8.2}{158}{Extension Trust Model}{section.548}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.2.1}Trust Levels}{158}{subsection.549}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Local trusted.}{158}{section*.550}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {8.1}{\ignorespaces Threat model and mitigations for gert v2.}}{159}{table.caption.547}\protected@file@percent }
+\newlabel{tab:threat-model}{{8.1}{159}{Threat model and mitigations for gert v2}{table.caption.547}{}}
+\@writefile{toc}{\contentsline {paragraph}{Project-scoped.}{159}{section*.551}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Remote/signed.}{159}{section*.552}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.2.2}Extension Signature Format}{160}{subsection.553}\protected@file@percent }
+\newlabel{sec:extension-signature}{{8.2.2}{160}{Extension Signature Format}{subsection.553}{}}
+\@writefile{toc}{\contentsline {paragraph}{Signature verification algorithm.}{160}{section*.554}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.2.3}Extension Verification Command}{161}{subsection.560}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8.3}Process Isolation}{161}{section.561}\protected@file@percent }
+\newlabel{sec:process-isolation}{{8.3}{161}{Process Isolation}{section.561}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.3.1}Isolation Mechanisms}{161}{subsection.562}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Separate OS process.}{161}{section*.563}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Filesystem access control.}{161}{section*.564}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Network access control.}{162}{section*.565}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Environment variable isolation.}{162}{section*.566}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Crash isolation.}{162}{section*.567}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8.4}Credential and Secret Handling}{163}{section.572}\protected@file@percent }
+\newlabel{sec:credential-handling}{{8.4}{163}{Credential and Secret Handling}{section.572}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.4.1}Secret Resolution and Redaction}{163}{subsection.573}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Input provider sensitivity marking.}{163}{section*.574}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Tool sensitive inputs.}{163}{section*.575}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Mandatory redaction.}{164}{section*.576}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.4.2}Secret Storage Policy}{164}{subsection.577}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8.5}Transport Security}{164}{section.578}\protected@file@percent }
+\newlabel{sec:transport-security}{{8.5}{164}{Transport Security}{section.578}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.5.1}TLS Requirements}{164}{subsection.581}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Localhost exception.}{164}{section*.582}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Non-localhost listeners.}{165}{section*.583}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.5.2}Client Authentication}{165}{subsection.584}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Bearer token authentication.}{165}{section*.585}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Mutual TLS (mTLS).}{165}{section*.586}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.5.3}WebSocket Security}{166}{subsection.587}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.5.4}Extension JSON-RPC Transport}{166}{subsection.588}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8.6}RBAC for \texttt  {gert serve}}{166}{section.589}\protected@file@percent }
+\newlabel{sec:rbac}{{8.6}{166}{RBAC for \texttt {gert serve}}{section.589}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.6.1}Actor Identity}{166}{subsection.590}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.6.2}Roles}{167}{subsection.591}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Viewer.}{167}{section*.592}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Operator.}{167}{section*.593}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Admin.}{167}{section*.594}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.6.3}Role Assignment}{168}{subsection.595}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.6.4}Approval Authorizer Role}{168}{subsection.596}\protected@file@percent }
 \abx@aux@cite{0}{soc2-aicpa}
 \abx@aux@segm{0}{0}{soc2-aicpa}
 \abx@aux@cite{0}{iso27001}
@@ -576,348 +582,348 @@
 \abx@aux@segm{0}{0}{hipaa-security-rule}
 \abx@aux@cite{0}{rfc3339}
 \abx@aux@segm{0}{0}{rfc3339}
-\@writefile{toc}{\contentsline {section}{\numberline {8.7}Audit Non-Repudiation}{167}{section.599}\protected@file@percent }
-\newlabel{sec:audit-nonrepudiation}{{8.7}{167}{Audit Non-Repudiation}{section.599}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.7.1}Governance Decision Recording}{167}{subsection.600}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.7.2}Trace File Integrity (HMAC Chaining)}{168}{subsection.601}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.7.3}SHA256 Evidence Capture}{169}{subsection.606}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {8.8}Supply Chain Security}{169}{section.607}\protected@file@percent }
-\newlabel{sec:supply-chain}{{8.8}{169}{Supply Chain Security}{section.607}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.8.1}Tool Binary Checksums}{169}{subsection.608}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.8.2}\texttt  {gert verify} Command}{170}{subsection.613}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {8.8.3}Extension Signature Verification}{170}{subsection.614}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {8.9}Security Recommendations}{170}{section.615}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8.7}Audit Non-Repudiation}{169}{section.602}\protected@file@percent }
+\newlabel{sec:audit-nonrepudiation}{{8.7}{169}{Audit Non-Repudiation}{section.602}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.7.1}Governance Decision Recording}{169}{subsection.603}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.7.2}Trace File Integrity (HMAC Chaining)}{170}{subsection.604}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.7.3}SHA256 Evidence Capture}{171}{subsection.609}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8.8}Supply Chain Security}{171}{section.610}\protected@file@percent }
+\newlabel{sec:supply-chain}{{8.8}{171}{Supply Chain Security}{section.610}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.8.1}Tool Binary Checksums}{171}{subsection.611}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.8.2}\texttt  {gert verify} Command}{172}{subsection.616}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.8.3}Extension Signature Verification}{172}{subsection.617}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8.9}Security Recommendations}{172}{section.618}\protected@file@percent }
 \abx@aux@cite{0}{nist-sp800-53}
 \abx@aux@segm{0}{0}{nist-sp800-53}
 \abx@aux@cite{0}{testify-library}
 \abx@aux@segm{0}{0}{testify-library}
-\@writefile{toc}{\contentsline {chapter}{\numberline {9}Testing and Acceptance}{172}{chapter.624}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {9}Testing and Acceptance}{174}{chapter.627}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{ch:testing}{{9}{172}{Testing and Acceptance}{chapter.624}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {9.1}Test Framework}{172}{section.625}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.1.1}Standard Library and testify}{172}{subsection.626}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.1.2}Test Packages}{173}{subsection.627}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {9.2}The \texttt  {gert test} Feature}{173}{section.628}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.2.1}Scenario Replay Testing}{173}{subsection.629}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.2.2}Test Assertions (\texttt  {test.yaml})}{174}{subsection.630}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.2.3}v1 Scenario Compatibility}{174}{subsection.631}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {9.3}Contract Tests}{175}{section.632}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.3.1}Core Runtime Contract}{175}{subsection.633}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.3.2}Schema Contract Tests}{175}{subsection.634}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.3.3}Extension Manifest and Handshake Tests}{176}{subsection.635}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.3.4}Tool Invocation Envelope Tests}{176}{subsection.636}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.3.5}Event Bus Determinism Tests}{176}{subsection.637}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {9.4}Integration Test Strategy}{177}{section.638}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.4.1}End-to-End Fixture Runs}{177}{subsection.639}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.4.2}Fixture Runbook Corpus}{177}{subsection.640}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.4.3}Trace Assertion Helpers}{178}{subsection.641}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {9.5}Regression Testing}{178}{section.642}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.5.1}v1 Runbook Corpus as Fixtures}{178}{subsection.643}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.5.2}Golden Trace Comparisons}{179}{subsection.648}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {9.6}Performance Acceptance Criteria}{179}{section.653}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {9.7}Extension Test Harness}{180}{section.654}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.7.1}Overview}{180}{subsection.655}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.7.2}Harness Capabilities}{180}{subsection.656}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.7.3}Mocking the Extension Transport}{181}{subsection.657}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {9.8}Acceptance Criteria}{181}{section.658}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {9.9}CI/CD Integration}{182}{section.667}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.9.1}PR Gate (every pull request)}{182}{subsection.668}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.9.2}Integration Gate (merge to main)}{182}{subsection.674}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {9.9.3}Nightly Gate}{182}{subsection.678}\protected@file@percent }
-\@writefile{toc}{\contentsline {chapter}{\numberline {10}Open Questions}{183}{chapter.682}\protected@file@percent }
+\newlabel{ch:testing}{{9}{174}{Testing and Acceptance}{chapter.627}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {9.1}Test Framework}{174}{section.628}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.1.1}Standard Library and testify}{174}{subsection.629}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.1.2}Test Packages}{175}{subsection.630}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9.2}The \texttt  {gert test} Feature}{175}{section.631}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.2.1}Scenario Replay Testing}{175}{subsection.632}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.2.2}Test Assertions (\texttt  {test.yaml})}{176}{subsection.633}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.2.3}v1 Scenario Compatibility}{176}{subsection.634}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9.3}Contract Tests}{177}{section.635}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.3.1}Core Runtime Contract}{177}{subsection.636}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.3.2}Schema Contract Tests}{177}{subsection.637}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.3.3}Extension Manifest and Handshake Tests}{178}{subsection.638}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.3.4}Tool Invocation Envelope Tests}{178}{subsection.639}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.3.5}Event Bus Determinism Tests}{178}{subsection.640}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9.4}Integration Test Strategy}{179}{section.641}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.4.1}End-to-End Fixture Runs}{179}{subsection.642}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.4.2}Fixture Runbook Corpus}{179}{subsection.643}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.4.3}Trace Assertion Helpers}{180}{subsection.644}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9.5}Regression Testing}{180}{section.645}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.5.1}v1 Runbook Corpus as Fixtures}{180}{subsection.646}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.5.2}Golden Trace Comparisons}{181}{subsection.651}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9.6}Performance Acceptance Criteria}{181}{section.656}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9.7}Extension Test Harness}{182}{section.657}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.7.1}Overview}{182}{subsection.658}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.7.2}Harness Capabilities}{182}{subsection.659}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.7.3}Mocking the Extension Transport}{183}{subsection.660}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9.8}Acceptance Criteria}{183}{section.661}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9.9}CI/CD Integration}{184}{section.670}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.9.1}PR Gate (every pull request)}{184}{subsection.671}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.9.2}Integration Gate (merge to main)}{184}{subsection.677}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.9.3}Nightly Gate}{184}{subsection.681}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {10}Open Questions}{185}{chapter.685}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{ch:questions}{{10}{183}{Open Questions}{chapter.682}{}}
+\newlabel{ch:questions}{{10}{185}{Open Questions}{chapter.685}{}}
 \abx@aux@cite{0}{aws-step-functions}
 \abx@aux@segm{0}{0}{aws-step-functions}
 \abx@aux@cite{0}{pagerduty-automation}
 \abx@aux@segm{0}{0}{pagerduty-automation}
 \abx@aux@cite{0}{aws-step-functions}
 \abx@aux@segm{0}{0}{aws-step-functions}
-\@writefile{toc}{\contentsline {chapter}{\numberline {11}Migration and Compatibility}{189}{chapter.695}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {11}Migration and Compatibility}{191}{chapter.698}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\@writefile{toc}{\contentsline {section}{\numberline {11.1}v1 → v2 Compatibility Matrix}{189}{section.696}\protected@file@percent }
-\newlabel{sec:compat-matrix}{{11.1}{189}{v1 → v2 Compatibility Matrix}{section.696}{}}
-\@writefile{toc}{\contentsline {paragraph}{Key takeaways:}{190}{section*.697}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {11.2}Schema Migration: Runbook YAML}{191}{section.698}\protected@file@percent }
-\newlabel{sec:runbook-migration}{{11.2}{191}{Schema Migration: Runbook YAML}{section.698}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.2.1}Breaking Changes Summary}{191}{subsection.699}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.2.2}Before and After Example}{191}{subsection.703}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.2.3}Field Mapping Table}{194}{subsection.704}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {11.3}Automated Migration Tool}{194}{section.705}\protected@file@percent }
-\newlabel{sec:migrate-tool}{{11.3}{194}{Automated Migration Tool}{section.705}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.3.1}Command Specification}{194}{subsection.706}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.3.2}Flags}{195}{subsection.707}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.3.3}Migration Algorithm}{195}{subsection.708}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.3.4}Diff Report}{196}{subsection.720}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.3.5}Error Handling}{196}{subsection.721}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {11.4}Provider and Tool Migration}{197}{section.725}\protected@file@percent }
-\newlabel{sec:provider-tool-migration}{{11.4}{197}{Provider and Tool Migration}{section.725}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.4.1}Tool Definitions (\texttt  {.tool.yaml})}{197}{subsection.726}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Migration tool support.}{197}{section*.730}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.4.2}Provider Definitions (\texttt  {.provider.yaml})}{198}{subsection.731}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Migration tool support.}{198}{section*.734}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {11.5}Extension Migration}{198}{section.735}\protected@file@percent }
-\newlabel{sec:extension-migration}{{11.5}{198}{Extension Migration}{section.735}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.5.1}Handshake Protocol Changes}{198}{subsection.736}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.5.2}Extension Compatibility Shim}{199}{subsection.740}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.5.3}Extension Author Checklist}{199}{subsection.741}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {11.6}Trace Format Migration}{200}{section.747}\protected@file@percent }
-\newlabel{sec:trace-migration}{{11.6}{200}{Trace Format Migration}{section.747}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.6.1}Breaking Changes in JSONL Trace}{200}{subsection.748}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Field mapping:}{200}{section*.749}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.6.2}Trace Replay Compatibility}{200}{subsection.750}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.6.3}Trace Archive Migration Tool}{201}{subsection.755}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {11.7}Rollout Strategy}{201}{section.756}\protected@file@percent }
-\newlabel{sec:rollout-strategy}{{11.7}{201}{Rollout Strategy}{section.756}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.7.1}Recommended Adoption Path}{201}{subsection.757}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Phase 1: Read-Only Validation (Week 1-2)}{201}{section*.758}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Phase 2: Schema Migration (Week 3-4)}{201}{section*.763}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Phase 3: Extension and Tool Migration (Week 5-6)}{202}{section*.768}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Phase 4: Integration Migration (Week 7-8)}{202}{section*.773}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.7.2}Parallel Operation}{202}{subsection.778}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.7.3}Timeline}{202}{subsection.779}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {11.8}v1 Compatibility Shim}{203}{section.780}\protected@file@percent }
-\newlabel{sec:v1-shim}{{11.8}{203}{v1 Compatibility Shim}{section.780}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.8.1}Decision: Provide a v1 Compatibility Shim for 6 Months}{203}{subsection.781}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Rationale:}{203}{section*.782}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.8.2}Shim Behavior}{203}{subsection.783}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.8.3}Shim Removal}{204}{subsection.788}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {11.9}Open Questions and Risks}{204}{section.789}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.9.1}Open Questions}{204}{subsection.790}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {11.9.2}Migration Risks}{204}{subsection.794}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {11.10}Summary}{205}{section.798}\protected@file@percent }
-\@writefile{toc}{\contentsline {chapter}{\numberline {12}Governance and Policy}{206}{chapter.799}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11.1}v1 → v2 Compatibility Matrix}{191}{section.699}\protected@file@percent }
+\newlabel{sec:compat-matrix}{{11.1}{191}{v1 → v2 Compatibility Matrix}{section.699}{}}
+\@writefile{toc}{\contentsline {paragraph}{Key takeaways:}{192}{section*.700}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11.2}Schema Migration: Runbook YAML}{193}{section.701}\protected@file@percent }
+\newlabel{sec:runbook-migration}{{11.2}{193}{Schema Migration: Runbook YAML}{section.701}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.2.1}Breaking Changes Summary}{193}{subsection.702}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.2.2}Before and After Example}{193}{subsection.706}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.2.3}Field Mapping Table}{196}{subsection.707}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11.3}Automated Migration Tool}{196}{section.708}\protected@file@percent }
+\newlabel{sec:migrate-tool}{{11.3}{196}{Automated Migration Tool}{section.708}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.3.1}Command Specification}{196}{subsection.709}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.3.2}Flags}{197}{subsection.710}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.3.3}Migration Algorithm}{197}{subsection.711}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.3.4}Diff Report}{198}{subsection.723}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.3.5}Error Handling}{198}{subsection.724}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11.4}Provider and Tool Migration}{199}{section.728}\protected@file@percent }
+\newlabel{sec:provider-tool-migration}{{11.4}{199}{Provider and Tool Migration}{section.728}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.4.1}Tool Definitions (\texttt  {.tool.yaml})}{199}{subsection.729}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Migration tool support.}{199}{section*.733}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.4.2}Provider Definitions (\texttt  {.provider.yaml})}{200}{subsection.734}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Migration tool support.}{200}{section*.737}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11.5}Extension Migration}{200}{section.738}\protected@file@percent }
+\newlabel{sec:extension-migration}{{11.5}{200}{Extension Migration}{section.738}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.5.1}Handshake Protocol Changes}{200}{subsection.739}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.5.2}Extension Compatibility Shim}{201}{subsection.743}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.5.3}Extension Author Checklist}{201}{subsection.744}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11.6}Trace Format Migration}{202}{section.750}\protected@file@percent }
+\newlabel{sec:trace-migration}{{11.6}{202}{Trace Format Migration}{section.750}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.6.1}Breaking Changes in JSONL Trace}{202}{subsection.751}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Field mapping:}{202}{section*.752}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.6.2}Trace Replay Compatibility}{202}{subsection.753}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.6.3}Trace Archive Migration Tool}{203}{subsection.758}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11.7}Rollout Strategy}{203}{section.759}\protected@file@percent }
+\newlabel{sec:rollout-strategy}{{11.7}{203}{Rollout Strategy}{section.759}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.7.1}Recommended Adoption Path}{203}{subsection.760}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Phase 1: Read-Only Validation (Week 1-2)}{203}{section*.761}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Phase 2: Schema Migration (Week 3-4)}{203}{section*.766}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Phase 3: Extension and Tool Migration (Week 5-6)}{204}{section*.771}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Phase 4: Integration Migration (Week 7-8)}{204}{section*.776}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.7.2}Parallel Operation}{204}{subsection.781}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.7.3}Timeline}{204}{subsection.782}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11.8}v1 Compatibility Shim}{205}{section.783}\protected@file@percent }
+\newlabel{sec:v1-shim}{{11.8}{205}{v1 Compatibility Shim}{section.783}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.8.1}Decision: Provide a v1 Compatibility Shim for 6 Months}{205}{subsection.784}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Rationale:}{205}{section*.785}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.8.2}Shim Behavior}{205}{subsection.786}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.8.3}Shim Removal}{206}{subsection.791}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11.9}Open Questions and Risks}{206}{section.792}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.9.1}Open Questions}{206}{subsection.793}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.9.2}Migration Risks}{206}{subsection.797}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11.10}Summary}{207}{section.801}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {12}Governance and Policy}{208}{chapter.802}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\@writefile{toc}{\contentsline {section}{\numberline {12.1}Governance Primitives}{206}{section.800}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.1.1}Command Allowlist (\texttt  {allowed\_commands})}{206}{subsection.801}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.1.2}Command Denylist (\texttt  {denied\_commands})}{207}{subsection.802}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.1.3}Environment Variable Blocking (\texttt  {deny\_env\_vars})}{207}{subsection.803}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.1.4}Output Redaction (\texttt  {redact})}{208}{subsection.804}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.1.5}Approval Gates}{208}{subsection.805}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {12.2}Policy Evaluation Model}{209}{section.806}\protected@file@percent }
-\newlabel{sec:policy-eval}{{12.2}{209}{Policy Evaluation Model}{section.806}{}}
-\@writefile{toc}{\contentsline {paragraph}{Order of precedence.}{209}{section*.807}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {12.3}Approval Gate Design}{209}{section.812}\protected@file@percent }
-\newlabel{sec:approval-gate}{{12.3}{209}{Approval Gate Design}{section.812}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.3.1}Schema Declaration}{209}{subsection.813}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.3.2}UX Contract}{210}{subsection.814}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.3.3}Approval Decision Protocol}{210}{subsection.819}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.3.4}Approval Recording in the Trace}{211}{subsection.820}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.3.5}Timeout and Escalation}{212}{subsection.821}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {12.4}Policy-as-Code Direction}{213}{section.822}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.4.1}v2.0: Structured YAML Policy Blocks}{213}{subsection.823}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.4.2}v2.1+: OPA Integration Hooks}{213}{subsection.824}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {12.5}RBAC Model}{214}{section.827}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.5.1}Identity Establishment}{214}{subsection.828}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.5.2}Runbook-Level Access Control}{215}{subsection.829}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.5.3}Step-Level Role Restriction}{215}{subsection.830}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.5.4}Separation of Duties}{215}{subsection.831}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {12.6}Redaction}{216}{section.832}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.6.1}Pattern-Based Redaction}{216}{subsection.833}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.6.2}Explicit Field Marking (v2.1)}{216}{subsection.834}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.6.3}Redaction Guarantees}{216}{subsection.835}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {12.7}Audit Trail Requirements}{216}{section.836}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.7.1}Trace Integrity}{217}{subsection.837}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.7.2}Compliance Alignment}{217}{subsection.838}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {12.8}Extension-Contributed Policy}{218}{section.839}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {12.8.1}Extension Policy Rule Schema}{218}{subsection.844}\protected@file@percent }
-\@writefile{toc}{\contentsline {chapter}{\numberline {13}Evidence, Tracing, and Resumption}{219}{chapter.845}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {12.1}Governance Primitives}{208}{section.803}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.1.1}Command Allowlist (\texttt  {allowed\_commands})}{208}{subsection.804}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.1.2}Command Denylist (\texttt  {denied\_commands})}{209}{subsection.805}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.1.3}Environment Variable Blocking (\texttt  {deny\_env\_vars})}{209}{subsection.806}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.1.4}Output Redaction (\texttt  {redact})}{210}{subsection.807}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.1.5}Approval Gates}{210}{subsection.808}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {12.2}Policy Evaluation Model}{211}{section.809}\protected@file@percent }
+\newlabel{sec:policy-eval}{{12.2}{211}{Policy Evaluation Model}{section.809}{}}
+\@writefile{toc}{\contentsline {paragraph}{Order of precedence.}{211}{section*.810}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {12.3}Approval Gate Design}{211}{section.815}\protected@file@percent }
+\newlabel{sec:approval-gate}{{12.3}{211}{Approval Gate Design}{section.815}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.3.1}Schema Declaration}{211}{subsection.816}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.3.2}UX Contract}{212}{subsection.817}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.3.3}Approval Decision Protocol}{212}{subsection.822}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.3.4}Approval Recording in the Trace}{213}{subsection.823}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.3.5}Timeout and Escalation}{214}{subsection.824}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {12.4}Policy-as-Code Direction}{215}{section.825}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.4.1}v2.0: Structured YAML Policy Blocks}{215}{subsection.826}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.4.2}v2.1+: OPA Integration Hooks}{215}{subsection.827}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {12.5}RBAC Model}{216}{section.830}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.5.1}Identity Establishment}{216}{subsection.831}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.5.2}Runbook-Level Access Control}{217}{subsection.832}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.5.3}Step-Level Role Restriction}{217}{subsection.833}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.5.4}Separation of Duties}{217}{subsection.834}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {12.6}Redaction}{218}{section.835}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.6.1}Pattern-Based Redaction}{218}{subsection.836}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.6.2}Explicit Field Marking (v2.1)}{218}{subsection.837}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.6.3}Redaction Guarantees}{218}{subsection.838}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {12.7}Audit Trail Requirements}{218}{section.839}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.7.1}Trace Integrity}{219}{subsection.840}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.7.2}Compliance Alignment}{219}{subsection.841}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {12.8}Extension-Contributed Policy}{220}{section.842}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {12.8.1}Extension Policy Rule Schema}{220}{subsection.847}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {13}Evidence, Tracing, and Resumption}{221}{chapter.848}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\@writefile{toc}{\contentsline {section}{\numberline {13.1}Trace File Format}{219}{section.846}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.1.1}File Location and Naming}{219}{subsection.847}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.1.2}JSONL Envelope}{220}{subsection.848}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {step/failed}}{222}{section*.849}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {step/skipped}}{222}{section*.850}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {step/retrying}}{222}{section*.851}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {tool/invoked}}{223}{section*.852}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {tool/responded}}{223}{section*.853}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {manual/prompted}}{223}{section*.854}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {manual/completed}}{223}{section*.855}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {governance/blocked}}{224}{section*.856}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {governance/approved}}{224}{section*.857}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {run/completed}}{224}{section*.858}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {run/failed}}{225}{section*.859}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\texttt  {checkpoint}}{225}{section*.860}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.1.3}Crash Safety}{225}{subsection.861}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.1.4}Tamper Evidence}{226}{subsection.862}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {13.2}Evidence Capture}{226}{section.863}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.2.1}What Constitutes Evidence}{226}{subsection.864}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.2.2}SHA256 Hashing}{227}{subsection.865}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.2.3}File Attachments}{227}{subsection.866}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.2.4}Evidence Retention}{228}{subsection.869}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {13.3}Run State Snapshots}{228}{section.870}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.3.1}Checkpoint Model}{228}{subsection.871}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.3.2}Atomic Snapshot Write}{229}{subsection.872}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.3.3}Minimum Resumption State}{229}{subsection.873}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {13.4}Run Resumption}{230}{section.874}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.4.1}The \texttt  {gert exec --resume} Contract}{230}{subsection.875}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.4.2}Resumability by Step Type}{230}{subsection.883}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.4.3}Idempotency Guidance}{231}{subsection.884}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.4.4}Partial Step Resumption}{231}{subsection.885}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {13.5}Replay Mode}{232}{section.889}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.5.1}Overview}{232}{subsection.890}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.5.2}Scenario File Format}{232}{subsection.891}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.5.3}Replay Semantics}{233}{subsection.892}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.5.4}Determinism Requirement}{233}{subsection.893}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {13.6}OpenTelemetry Integration}{233}{section.894}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.6.1}Rationale}{233}{subsection.895}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.6.2}Span Hierarchy}{234}{subsection.896}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.6.3}Span Attributes}{235}{subsection.897}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.6.4}Relationship to JSONL Trace}{235}{subsection.898}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {13.6.5}Configuration}{235}{subsection.899}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {13.7}Implementation Notes for Go}{236}{section.900}\protected@file@percent }
-\@writefile{toc}{\contentsline {chapter}{\numberline {14}Adapter Contracts}{238}{chapter.901}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {13.1}Trace File Format}{221}{section.849}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.1.1}File Location and Naming}{221}{subsection.850}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.1.2}JSONL Envelope}{222}{subsection.851}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {step/failed}}{224}{section*.852}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {step/skipped}}{224}{section*.853}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {step/retrying}}{224}{section*.854}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {tool/invoked}}{225}{section*.855}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {tool/responded}}{225}{section*.856}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {manual/prompted}}{225}{section*.857}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {manual/completed}}{225}{section*.858}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {governance/blocked}}{226}{section*.859}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {governance/approved}}{226}{section*.860}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {run/completed}}{226}{section*.861}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {run/failed}}{227}{section*.862}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\texttt  {checkpoint}}{227}{section*.863}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.1.3}Crash Safety}{227}{subsection.864}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.1.4}Tamper Evidence}{228}{subsection.865}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {13.2}Evidence Capture}{228}{section.866}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.2.1}What Constitutes Evidence}{228}{subsection.867}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.2.2}SHA256 Hashing}{229}{subsection.868}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.2.3}File Attachments}{229}{subsection.869}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.2.4}Evidence Retention}{230}{subsection.872}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {13.3}Run State Snapshots}{230}{section.873}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.3.1}Checkpoint Model}{230}{subsection.874}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.3.2}Atomic Snapshot Write}{231}{subsection.875}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.3.3}Minimum Resumption State}{231}{subsection.876}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {13.4}Run Resumption}{232}{section.877}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.4.1}The \texttt  {gert exec --resume} Contract}{232}{subsection.878}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.4.2}Resumability by Step Type}{232}{subsection.886}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.4.3}Idempotency Guidance}{233}{subsection.887}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.4.4}Partial Step Resumption}{233}{subsection.888}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {13.5}Replay Mode}{234}{section.892}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.5.1}Overview}{234}{subsection.893}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.5.2}Scenario File Format}{234}{subsection.894}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.5.3}Replay Semantics}{235}{subsection.895}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.5.4}Determinism Requirement}{235}{subsection.896}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {13.6}OpenTelemetry Integration}{235}{section.897}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.6.1}Rationale}{235}{subsection.898}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.6.2}Span Hierarchy}{236}{subsection.899}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.6.3}Span Attributes}{237}{subsection.900}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.6.4}Relationship to JSONL Trace}{237}{subsection.901}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {13.6.5}Configuration}{237}{subsection.902}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {13.7}Implementation Notes for Go}{238}{section.903}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {14}Adapter Contracts}{240}{chapter.904}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\@writefile{toc}{\contentsline {section}{\numberline {14.1}What is an Adapter Contract?}{238}{section.902}\protected@file@percent }
-\newlabel{sec:adapter-contract-definition}{{14.1}{238}{What is an Adapter Contract?}{section.902}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {14.1}What is an Adapter Contract?}{240}{section.905}\protected@file@percent }
+\newlabel{sec:adapter-contract-definition}{{14.1}{240}{What is an Adapter Contract?}{section.905}{}}
 \abx@aux@cite{0}{vscode-extension-api}
 \abx@aux@segm{0}{0}{vscode-extension-api}
-\@writefile{toc}{\contentsline {paragraph}{Example consumers:}{239}{section*.907}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {14.2}Contract Categories}{239}{section.908}\protected@file@percent }
-\newlabel{sec:contract-categories}{{14.2}{239}{Contract Categories}{section.908}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {14.2.1}JSON-RPC Execution Contract (\texttt  {exec/v2})}{239}{subsection.909}\protected@file@percent }
-\newlabel{sec:jsonrpc-exec-contract}{{14.2.1}{239}{JSON-RPC Execution Contract (\texttt {exec/v2})}{subsection.909}{}}
-\@writefile{toc}{\contentsline {paragraph}{Contract version:}{239}{section*.910}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Transport:}{239}{section*.911}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Methods:}{239}{table.caption.913}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Request schema — \texttt  {exec/start}:}{239}{section*.914}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {14.1}{\ignorespaces JSON-RPC execution contract methods (\texttt  {exec/v2}).}}{240}{table.caption.913}\protected@file@percent }
-\newlabel{tab:exec-methods}{{14.1}{240}{JSON-RPC execution contract methods (\texttt {exec/v2})}{table.caption.913}{}}
-\@writefile{toc}{\contentsline {paragraph}{Response schema — \texttt  {exec/start}:}{240}{section*.915}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Error envelope:}{241}{section*.916}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Stability guarantee:}{241}{section*.917}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {14.2.2}WebSocket Event Stream Contract (\texttt  {events/v2})}{241}{subsection.918}\protected@file@percent }
-\newlabel{sec:ws-event-contract}{{14.2.2}{241}{WebSocket Event Stream Contract (\texttt {events/v2})}{subsection.918}{}}
-\@writefile{toc}{\contentsline {paragraph}{Contract version:}{241}{section*.919}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Transport:}{242}{section*.920}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Connection lifecycle:}{242}{section*.921}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Subscribe message:}{242}{section*.926}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Event envelope:}{242}{section*.927}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Reconnection protocol:}{243}{section*.928}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Stability guarantee:}{243}{section*.929}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {14.2.3}Tool Invocation Contract (\texttt  {tool/v2})}{243}{subsection.930}\protected@file@percent }
-\newlabel{sec:tool-invocation-contract}{{14.2.3}{243}{Tool Invocation Contract (\texttt {tool/v2})}{subsection.930}{}}
-\@writefile{toc}{\contentsline {paragraph}{Contract version:}{243}{section*.931}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Transport:}{243}{section*.932}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Invocation request:}{244}{section*.933}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Success response:}{244}{section*.934}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Error response:}{245}{section*.935}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Cancellation request:}{245}{section*.936}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{MCP tool adapter:}{246}{section*.937}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Stability guarantee:}{246}{section*.942}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {14.2.4}Extension Handshake Contract (\texttt  {extension/v2})}{246}{subsection.943}\protected@file@percent }
-\newlabel{sec:extension-handshake-contract}{{14.2.4}{246}{Extension Handshake Contract (\texttt {extension/v2})}{subsection.943}{}}
-\@writefile{toc}{\contentsline {paragraph}{Contract version:}{246}{section*.944}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Transport:}{246}{section*.945}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Initialize request:}{246}{section*.946}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Initialize response:}{247}{section*.947}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Heartbeat (ping/pong):}{247}{section*.948}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Stability guarantee:}{248}{section*.949}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {14.3}Contract Versioning}{248}{section.950}\protected@file@percent }
-\newlabel{sec:contract-versioning}{{14.3}{248}{Contract Versioning}{section.950}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {14.3.1}Version Declaration}{248}{subsection.951}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{HTTP-based contracts (JSON-RPC, WebSocket):}{248}{section*.952}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{stdio-based contracts (tool, extension):}{249}{section*.953}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {14.3.2}Breaking vs. Non-Breaking Changes}{249}{subsection.954}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Non-breaking changes (minor version, no contract version bump):}{249}{section*.955}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Breaking changes (major version bump):}{250}{section*.956}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {14.3.3}Deprecation Policy}{250}{subsection.957}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {14.3.4}Forward and Backward Compatibility}{251}{subsection.958}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Forward compatibility (clients):}{251}{section*.959}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Backward compatibility (servers):}{251}{section*.960}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {14.4}Error Codes}{251}{section.961}\protected@file@percent }
-\newlabel{sec:error-codes}{{14.4}{251}{Error Codes}{section.961}{}}
-\@writefile{toc}{\contentsline {paragraph}{Error envelope structure:}{251}{section*.963}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Error code stability:}{252}{section*.964}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {14.5}Contract Test Suite}{252}{section.965}\protected@file@percent }
-\newlabel{sec:contract-test-suite}{{14.5}{252}{Contract Test Suite}{section.965}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {14.5.1}Test Suite Structure}{252}{subsection.966}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {14.5.2}Running Contract Tests}{253}{subsection.967}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {14.5.3}Contract Test CI Integration}{253}{subsection.968}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Example consumers:}{241}{section*.910}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {14.2}Contract Categories}{241}{section.911}\protected@file@percent }
+\newlabel{sec:contract-categories}{{14.2}{241}{Contract Categories}{section.911}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {14.2.1}JSON-RPC Execution Contract (\texttt  {exec/v2})}{241}{subsection.912}\protected@file@percent }
+\newlabel{sec:jsonrpc-exec-contract}{{14.2.1}{241}{JSON-RPC Execution Contract (\texttt {exec/v2})}{subsection.912}{}}
+\@writefile{toc}{\contentsline {paragraph}{Contract version:}{241}{section*.913}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Transport:}{241}{section*.914}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Methods:}{241}{table.caption.916}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Request schema — \texttt  {exec/start}:}{241}{section*.917}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {14.1}{\ignorespaces JSON-RPC execution contract methods (\texttt  {exec/v2}).}}{242}{table.caption.916}\protected@file@percent }
+\newlabel{tab:exec-methods}{{14.1}{242}{JSON-RPC execution contract methods (\texttt {exec/v2})}{table.caption.916}{}}
+\@writefile{toc}{\contentsline {paragraph}{Response schema — \texttt  {exec/start}:}{242}{section*.918}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Error envelope:}{243}{section*.919}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Stability guarantee:}{243}{section*.920}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {14.2.2}WebSocket Event Stream Contract (\texttt  {events/v2})}{243}{subsection.921}\protected@file@percent }
+\newlabel{sec:ws-event-contract}{{14.2.2}{243}{WebSocket Event Stream Contract (\texttt {events/v2})}{subsection.921}{}}
+\@writefile{toc}{\contentsline {paragraph}{Contract version:}{243}{section*.922}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Transport:}{244}{section*.923}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Connection lifecycle:}{244}{section*.924}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Subscribe message:}{244}{section*.929}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Event envelope:}{244}{section*.930}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Reconnection protocol:}{245}{section*.931}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Stability guarantee:}{245}{section*.932}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {14.2.3}Tool Invocation Contract (\texttt  {tool/v2})}{245}{subsection.933}\protected@file@percent }
+\newlabel{sec:tool-invocation-contract}{{14.2.3}{245}{Tool Invocation Contract (\texttt {tool/v2})}{subsection.933}{}}
+\@writefile{toc}{\contentsline {paragraph}{Contract version:}{245}{section*.934}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Transport:}{245}{section*.935}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Invocation request:}{246}{section*.936}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Success response:}{246}{section*.937}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Error response:}{247}{section*.938}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Cancellation request:}{247}{section*.939}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{MCP tool adapter:}{248}{section*.940}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Stability guarantee:}{248}{section*.945}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {14.2.4}Extension Handshake Contract (\texttt  {extension/v2})}{248}{subsection.946}\protected@file@percent }
+\newlabel{sec:extension-handshake-contract}{{14.2.4}{248}{Extension Handshake Contract (\texttt {extension/v2})}{subsection.946}{}}
+\@writefile{toc}{\contentsline {paragraph}{Contract version:}{248}{section*.947}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Transport:}{248}{section*.948}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Initialize request:}{248}{section*.949}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Initialize response:}{249}{section*.950}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Heartbeat (ping/pong):}{249}{section*.951}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Stability guarantee:}{250}{section*.952}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {14.3}Contract Versioning}{250}{section.953}\protected@file@percent }
+\newlabel{sec:contract-versioning}{{14.3}{250}{Contract Versioning}{section.953}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {14.3.1}Version Declaration}{250}{subsection.954}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{HTTP-based contracts (JSON-RPC, WebSocket):}{250}{section*.955}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{stdio-based contracts (tool, extension):}{251}{section*.956}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {14.3.2}Breaking vs. Non-Breaking Changes}{251}{subsection.957}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Non-breaking changes (minor version, no contract version bump):}{251}{section*.958}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Breaking changes (major version bump):}{252}{section*.959}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {14.3.3}Deprecation Policy}{252}{subsection.960}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {14.3.4}Forward and Backward Compatibility}{253}{subsection.961}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Forward compatibility (clients):}{253}{section*.962}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Backward compatibility (servers):}{253}{section*.963}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {14.4}Error Codes}{253}{section.964}\protected@file@percent }
+\newlabel{sec:error-codes}{{14.4}{253}{Error Codes}{section.964}{}}
+\@writefile{toc}{\contentsline {paragraph}{Error envelope structure:}{253}{section*.966}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Error code stability:}{254}{section*.967}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {14.5}Contract Test Suite}{254}{section.968}\protected@file@percent }
+\newlabel{sec:contract-test-suite}{{14.5}{254}{Contract Test Suite}{section.968}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {14.5.1}Test Suite Structure}{254}{subsection.969}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {14.5.2}Running Contract Tests}{255}{subsection.970}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {14.5.3}Contract Test CI Integration}{255}{subsection.971}\protected@file@percent }
 \abx@aux@cite{0}{openapi-spec}
 \abx@aux@segm{0}{0}{openapi-spec}
-\@writefile{toc}{\contentsline {section}{\numberline {14.6}Reference Implementations}{254}{section.969}\protected@file@percent }
-\newlabel{sec:reference-implementations}{{14.6}{254}{Reference Implementations}{section.969}{}}
-\@writefile{toc}{\contentsline {paragraph}{VS Code extension.}{254}{section*.970}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Built-in tools.}{254}{section*.971}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{MCP adapter.}{254}{section*.972}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {14.7}Contract Stability Guarantees}{254}{section.973}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {14.6}Reference Implementations}{256}{section.972}\protected@file@percent }
+\newlabel{sec:reference-implementations}{{14.6}{256}{Reference Implementations}{section.972}{}}
+\@writefile{toc}{\contentsline {paragraph}{VS Code extension.}{256}{section*.973}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Built-in tools.}{256}{section*.974}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{MCP adapter.}{256}{section*.975}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {14.7}Contract Stability Guarantees}{256}{section.976}\protected@file@percent }
 \abx@aux@cite{0}{jsonschema-spec}
 \abx@aux@segm{0}{0}{jsonschema-spec}
-\@writefile{toc}{\contentsline {section}{\numberline {14.8}Contract Documentation and Tooling}{255}{section.979}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {14.8.1}OpenAPI Specifications}{255}{subsection.980}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {14.8.2}JSON Schema Validation}{255}{subsection.981}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {14.8.3}Client Library Generation}{255}{subsection.982}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {14.2}{\ignorespaces Canonical error code registry for adapter contracts.}}{256}{table.caption.962}\protected@file@percent }
-\newlabel{tab:error-codes}{{14.2}{256}{Canonical error code registry for adapter contracts}{table.caption.962}{}}
-\@writefile{toc}{\contentsline {chapter}{\numberline {15}Input Provider Framework}{257}{chapter.983}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {14.8}Contract Documentation and Tooling}{257}{section.982}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {14.8.1}OpenAPI Specifications}{257}{subsection.983}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {14.8.2}JSON Schema Validation}{257}{subsection.984}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {14.8.3}Client Library Generation}{257}{subsection.985}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {14.2}{\ignorespaces Canonical error code registry for adapter contracts.}}{258}{table.caption.965}\protected@file@percent }
+\newlabel{tab:error-codes}{{14.2}{258}{Canonical error code registry for adapter contracts}{table.caption.965}{}}
+\@writefile{toc}{\contentsline {chapter}{\numberline {15}Input Provider Framework}{259}{chapter.986}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{ch:input-providers}{{15}{257}{Input Provider Framework}{chapter.983}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {15.1}Design Goals}{257}{section.984}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {15.2}Provider Definition Schema}{257}{section.985}\protected@file@percent }
-\newlabel{sec:provider-definition-schema}{{15.2}{257}{Provider Definition Schema}{section.985}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {15.3}Resolution Protocol}{259}{section.986}\protected@file@percent }
-\newlabel{sec:provider-protocol}{{15.3}{259}{Resolution Protocol}{section.986}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {15.3.1}Resolution Flow}{259}{subsection.987}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {15.3.2}Resolution Request Envelope}{260}{subsection.994}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {15.3.3}Resolution Response Envelope}{260}{subsection.995}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {15.3.4}Resolution Error Handling}{261}{subsection.996}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {15.3.5}Resolution Caching}{262}{subsection.997}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {15.4}Built-in Providers}{262}{section.998}\protected@file@percent }
-\newlabel{sec:builtin-providers}{{15.4}{262}{Built-in Providers}{section.998}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {15.4.1}env}{262}{subsection.999}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {15.4.2}file}{262}{subsection.1000}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {15.4.3}prompt}{263}{subsection.1001}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {15.4.4}workspace}{263}{subsection.1002}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {15.5}Interactive Step Type Contracts}{264}{section.1003}\protected@file@percent }
-\newlabel{sec:interactive-step-contracts}{{15.5}{264}{Interactive Step Type Contracts}{section.1003}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {15.5.1}Choice Step Contract}{264}{subsection.1004}\protected@file@percent }
-\newlabel{subsec:choice-contract}{{15.5.1}{264}{Choice Step Contract}{subsection.1004}{}}
-\@writefile{toc}{\contentsline {paragraph}{Request envelope.}{264}{section*.1005}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Response envelope.}{265}{section*.1006}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Contract requirements.}{265}{section*.1007}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Built-in prompt provider behaviour.}{265}{section*.1008}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {15.5.2}Decision (Router) Step Contract}{266}{subsection.1009}\protected@file@percent }
-\newlabel{subsec:decision-contract}{{15.5.2}{266}{Decision (Router) Step Contract}{subsection.1009}{}}
-\@writefile{toc}{\contentsline {paragraph}{Request envelope.}{266}{section*.1010}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Response envelope.}{266}{section*.1011}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Contract requirements.}{267}{section*.1012}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Built-in prompt provider behaviour.}{267}{section*.1013}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {15.5.3}Collector Step Contract}{267}{subsection.1014}\protected@file@percent }
-\newlabel{subsec:collector-contract}{{15.5.3}{267}{Collector Step Contract}{subsection.1014}{}}
-\@writefile{toc}{\contentsline {paragraph}{Request envelope.}{267}{section*.1015}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Response envelope.}{269}{section*.1016}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Contract requirements.}{269}{section*.1017}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Built-in prompt provider behaviour.}{272}{section*.1018}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {15.5.4}Dynamic Options Protocol}{272}{subsection.1019}\protected@file@percent }
-\newlabel{sec:dynamic-options-protocol}{{15.5.4}{272}{Dynamic Options Protocol}{subsection.1019}{}}
-\@writefile{toc}{\contentsline {paragraph}{Request fields.}{273}{section*.1026}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Response fields.}{274}{section*.1028}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Capability declaration.}{274}{section*.1029}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {15.5.5}Autocomplete Search Protocol}{274}{subsection.1030}\protected@file@percent }
-\newlabel{sec:autocomplete-search-protocol}{{15.5.5}{274}{Autocomplete Search Protocol}{subsection.1030}{}}
-\@writefile{toc}{\contentsline {paragraph}{Request fields.}{275}{section*.1032}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Response fields.}{276}{section*.1034}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Timeout contract.}{276}{section*.1035}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{CLI degradation.}{276}{section*.1036}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Capability declaration.}{276}{section*.1037}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {15.5.6}Provider Capability Matrix}{277}{subsection.1038}\protected@file@percent }
-\newlabel{subsec:provider-capability-matrix}{{15.5.6}{277}{Provider Capability Matrix}{subsection.1038}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {15.6}Provider Composition}{278}{section.1039}\protected@file@percent }
-\newlabel{sec:provider-composition}{{15.6}{278}{Provider Composition}{section.1039}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {15.7}Provider Lifecycle}{278}{section.1040}\protected@file@percent }
-\newlabel{sec:provider-lifecycle}{{15.7}{278}{Provider Lifecycle}{section.1040}{}}
-\@writefile{toc}{\contentsline {paragraph}{Process model.}{278}{section*.1041}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Startup.}{278}{section*.1042}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Shutdown.}{278}{section*.1043}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Crash handling.}{279}{section*.1044}\protected@file@percent }
+\newlabel{ch:input-providers}{{15}{259}{Input Provider Framework}{chapter.986}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {15.1}Design Goals}{259}{section.987}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {15.2}Provider Definition Schema}{259}{section.988}\protected@file@percent }
+\newlabel{sec:provider-definition-schema}{{15.2}{259}{Provider Definition Schema}{section.988}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {15.3}Resolution Protocol}{261}{section.989}\protected@file@percent }
+\newlabel{sec:provider-protocol}{{15.3}{261}{Resolution Protocol}{section.989}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {15.3.1}Resolution Flow}{261}{subsection.990}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {15.3.2}Resolution Request Envelope}{262}{subsection.997}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {15.3.3}Resolution Response Envelope}{262}{subsection.998}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {15.3.4}Resolution Error Handling}{263}{subsection.999}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {15.3.5}Resolution Caching}{264}{subsection.1000}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {15.4}Built-in Providers}{264}{section.1001}\protected@file@percent }
+\newlabel{sec:builtin-providers}{{15.4}{264}{Built-in Providers}{section.1001}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {15.4.1}env}{264}{subsection.1002}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {15.4.2}file}{264}{subsection.1003}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {15.4.3}prompt}{265}{subsection.1004}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {15.4.4}workspace}{265}{subsection.1005}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {15.5}Interactive Step Type Contracts}{266}{section.1006}\protected@file@percent }
+\newlabel{sec:interactive-step-contracts}{{15.5}{266}{Interactive Step Type Contracts}{section.1006}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {15.5.1}Choice Step Contract}{266}{subsection.1007}\protected@file@percent }
+\newlabel{subsec:choice-contract}{{15.5.1}{266}{Choice Step Contract}{subsection.1007}{}}
+\@writefile{toc}{\contentsline {paragraph}{Request envelope.}{266}{section*.1008}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Response envelope.}{267}{section*.1009}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Contract requirements.}{267}{section*.1010}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Built-in prompt provider behaviour.}{267}{section*.1011}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {15.5.2}Decision (Router) Step Contract}{268}{subsection.1012}\protected@file@percent }
+\newlabel{subsec:decision-contract}{{15.5.2}{268}{Decision (Router) Step Contract}{subsection.1012}{}}
+\@writefile{toc}{\contentsline {paragraph}{Request envelope.}{268}{section*.1013}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Response envelope.}{268}{section*.1014}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Contract requirements.}{269}{section*.1015}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Built-in prompt provider behaviour.}{269}{section*.1016}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {15.5.3}Collector Step Contract}{269}{subsection.1017}\protected@file@percent }
+\newlabel{subsec:collector-contract}{{15.5.3}{269}{Collector Step Contract}{subsection.1017}{}}
+\@writefile{toc}{\contentsline {paragraph}{Request envelope.}{269}{section*.1018}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Response envelope.}{271}{section*.1019}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Contract requirements.}{271}{section*.1020}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Built-in prompt provider behaviour.}{274}{section*.1021}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {15.5.4}Dynamic Options Protocol}{274}{subsection.1022}\protected@file@percent }
+\newlabel{sec:dynamic-options-protocol}{{15.5.4}{274}{Dynamic Options Protocol}{subsection.1022}{}}
+\@writefile{toc}{\contentsline {paragraph}{Request fields.}{275}{section*.1029}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Response fields.}{276}{section*.1031}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Capability declaration.}{276}{section*.1032}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {15.5.5}Autocomplete Search Protocol}{276}{subsection.1033}\protected@file@percent }
+\newlabel{sec:autocomplete-search-protocol}{{15.5.5}{276}{Autocomplete Search Protocol}{subsection.1033}{}}
+\@writefile{toc}{\contentsline {paragraph}{Request fields.}{277}{section*.1035}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Response fields.}{278}{section*.1037}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Timeout contract.}{278}{section*.1038}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{CLI degradation.}{278}{section*.1039}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Capability declaration.}{278}{section*.1040}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {15.5.6}Provider Capability Matrix}{279}{subsection.1041}\protected@file@percent }
+\newlabel{subsec:provider-capability-matrix}{{15.5.6}{279}{Provider Capability Matrix}{subsection.1041}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {15.6}Provider Composition}{280}{section.1042}\protected@file@percent }
+\newlabel{sec:provider-composition}{{15.6}{280}{Provider Composition}{section.1042}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {15.7}Provider Lifecycle}{280}{section.1043}\protected@file@percent }
+\newlabel{sec:provider-lifecycle}{{15.7}{280}{Provider Lifecycle}{section.1043}{}}
+\@writefile{toc}{\contentsline {paragraph}{Process model.}{280}{section*.1044}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Startup.}{280}{section*.1045}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Shutdown.}{280}{section*.1046}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Crash handling.}{281}{section*.1047}\protected@file@percent }
 \abx@aux@cite{0}{google-sre-book}
 \abx@aux@segm{0}{0}{google-sre-book}
 \abx@aux@cite{0}{otel-spec}
@@ -926,89 +932,89 @@
 \abx@aux@segm{0}{0}{w3c-trace-context}
 \abx@aux@cite{0}{rfc3339}
 \abx@aux@segm{0}{0}{rfc3339}
-\@writefile{toc}{\contentsline {chapter}{\numberline {16}Observability and Diagnostics}{280}{chapter.1045}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {16}Observability and Diagnostics}{282}{chapter.1048}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\@writefile{toc}{\contentsline {section}{\numberline {16.1}Observability Model}{280}{section.1046}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.1.1}Metrics: Aggregated Performance Indicators}{280}{subsection.1047}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {16.1}Observability Model}{282}{section.1049}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.1.1}Metrics: Aggregated Performance Indicators}{282}{subsection.1050}\protected@file@percent }
 \abx@aux@cite{0}{otel-spec}
 \abx@aux@segm{0}{0}{otel-spec}
 \abx@aux@cite{0}{jaeger-docs}
 \abx@aux@segm{0}{0}{jaeger-docs}
 \abx@aux@cite{0}{zipkin-docs}
 \abx@aux@segm{0}{0}{zipkin-docs}
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.1.2}Distributed Tracing: Execution Flow Visualization}{281}{subsection.1048}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.1.2}Distributed Tracing: Execution Flow Visualization}{283}{subsection.1051}\protected@file@percent }
 \abx@aux@cite{0}{rfc3339}
 \abx@aux@segm{0}{0}{rfc3339}
 \abx@aux@cite{0}{otel-spec}
 \abx@aux@segm{0}{0}{otel-spec}
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.1.3}Structured Logging: Detailed Contextual Events}{282}{subsection.1049}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {16.2}OpenTelemetry Integration}{282}{section.1050}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.2.1}Span Hierarchy and Attributes}{282}{subsection.1051}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Root Span: \texttt  {gert.run}}{283}{section*.1052}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Child Span: \texttt  {gert.step}}{283}{section*.1060}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Grandchild Span: \texttt  {gert.tool.invoke}}{284}{section*.1070}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Grandchild Span: \texttt  {gert.input.resolve}}{284}{section*.1080}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Grandchild Span: \texttt  {gert.governance.check}}{284}{section*.1086}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.1.3}Structured Logging: Detailed Contextual Events}{284}{subsection.1052}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {16.2}OpenTelemetry Integration}{284}{section.1053}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.2.1}Span Hierarchy and Attributes}{284}{subsection.1054}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Root Span: \texttt  {gert.run}}{285}{section*.1055}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Child Span: \texttt  {gert.step}}{285}{section*.1063}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Grandchild Span: \texttt  {gert.tool.invoke}}{286}{section*.1073}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Grandchild Span: \texttt  {gert.input.resolve}}{286}{section*.1083}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Grandchild Span: \texttt  {gert.governance.check}}{286}{section*.1089}\protected@file@percent }
 \abx@aux@cite{0}{w3c-trace-context}
 \abx@aux@segm{0}{0}{w3c-trace-context}
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.2.2}Span Status and Error Handling}{285}{subsection.1092}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.2.3}Context Propagation}{286}{subsection.1098}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{W3C Trace Context Headers}{286}{section*.1099}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Baggage}{286}{section*.1100}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.2.4}OTLP Exporter Configuration}{286}{subsection.1103}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{OTLP Export (Production)}{287}{section*.1104}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Console Export (Development)}{287}{section*.1105}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.2.5}Sampling Strategy}{287}{subsection.1106}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {16.3}Metrics Catalog}{288}{section.1107}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.3.1}Run Metrics}{288}{subsection.1108}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {16.1}{\ignorespaces Run-level metrics}}{288}{table.caption.1109}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.3.2}Step Metrics}{288}{subsection.1110}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {16.2}{\ignorespaces Step-level metrics}}{288}{table.caption.1111}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.3.3}Tool Invocation Metrics}{288}{subsection.1112}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {16.3}{\ignorespaces Tool invocation metrics}}{289}{table.caption.1113}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.3.4}Approval Metrics}{289}{subsection.1114}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {16.4}{\ignorespaces Approval metrics}}{289}{table.caption.1115}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.3.5}Extension Metrics}{289}{subsection.1116}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {16.5}{\ignorespaces Extension metrics}}{289}{table.caption.1117}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.3.6}Metrics Endpoint}{289}{subsection.1118}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.3.7}Push-Based Metrics (OTLP)}{290}{subsection.1119}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {16.4}Structured Logging}{290}{section.1120}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.2.2}Span Status and Error Handling}{287}{subsection.1095}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.2.3}Context Propagation}{288}{subsection.1101}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{W3C Trace Context Headers}{288}{section*.1102}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Baggage}{288}{section*.1103}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.2.4}OTLP Exporter Configuration}{288}{subsection.1106}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{OTLP Export (Production)}{289}{section*.1107}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Console Export (Development)}{289}{section*.1108}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.2.5}Sampling Strategy}{289}{subsection.1109}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {16.3}Metrics Catalog}{290}{section.1110}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.3.1}Run Metrics}{290}{subsection.1111}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {16.1}{\ignorespaces Run-level metrics}}{290}{table.caption.1112}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.3.2}Step Metrics}{290}{subsection.1113}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {16.2}{\ignorespaces Step-level metrics}}{290}{table.caption.1114}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.3.3}Tool Invocation Metrics}{290}{subsection.1115}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {16.3}{\ignorespaces Tool invocation metrics}}{291}{table.caption.1116}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.3.4}Approval Metrics}{291}{subsection.1117}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {16.4}{\ignorespaces Approval metrics}}{291}{table.caption.1118}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.3.5}Extension Metrics}{291}{subsection.1119}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {16.5}{\ignorespaces Extension metrics}}{291}{table.caption.1120}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.3.6}Metrics Endpoint}{291}{subsection.1121}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.3.7}Push-Based Metrics (OTLP)}{292}{subsection.1122}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {16.4}Structured Logging}{292}{section.1123}\protected@file@percent }
 \abx@aux@cite{0}{rfc3339}
 \abx@aux@segm{0}{0}{rfc3339}
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.4.1}Log Line Format}{291}{subsection.1121}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.4.2}Required Fields}{291}{subsection.1132}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.4.3}Contextual Fields (When Applicable)}{291}{subsection.1133}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.4.4}Log Levels}{292}{subsection.1134}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.4.5}Sensitive Data Handling}{292}{subsection.1135}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.4.6}Log Output Configuration}{293}{subsection.1143}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.4.7}Log Aggregation and Correlation}{293}{subsection.1144}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {16.5}Health and Readiness Endpoints}{293}{section.1145}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.5.1}Liveness Endpoint}{294}{subsection.1146}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.5.2}Readiness Endpoint}{294}{subsection.1153}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.5.3}Kubernetes Probe Configuration}{295}{subsection.1167}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {16.6}Diagnostics Commands}{295}{section.1190}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.6.1}\texttt  {gert diagnose}}{295}{subsection.1191}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.6.2}\texttt  {gert trace show}}{297}{subsection.1197}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.6.3}\texttt  {gert trace export}}{297}{subsection.1198}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.6.4}\texttt  {gert run list}}{298}{subsection.1199}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {16.7}Integration Recipes}{298}{section.1213}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.7.1}Prometheus + Grafana}{298}{subsection.1214}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.7.2}Jaeger (Distributed Tracing)}{299}{subsection.1222}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.7.3}Loki + Grafana (Log Aggregation)}{300}{subsection.1223}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.7.4}Datadog / New Relic (OTLP-Compatible SaaS)}{300}{subsection.1243}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {16.8}Observability for CI/CD Pipelines}{301}{section.1244}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.8.1}JSON Output Mode}{301}{subsection.1245}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.8.2}GitHub Actions Example}{302}{subsection.1256}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {16.8.3}GitLab CI Example}{302}{subsection.1274}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.4.1}Log Line Format}{293}{subsection.1124}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.4.2}Required Fields}{293}{subsection.1135}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.4.3}Contextual Fields (When Applicable)}{293}{subsection.1136}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.4.4}Log Levels}{294}{subsection.1137}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.4.5}Sensitive Data Handling}{294}{subsection.1138}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.4.6}Log Output Configuration}{295}{subsection.1146}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.4.7}Log Aggregation and Correlation}{295}{subsection.1147}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {16.5}Health and Readiness Endpoints}{295}{section.1148}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.5.1}Liveness Endpoint}{296}{subsection.1149}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.5.2}Readiness Endpoint}{296}{subsection.1156}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.5.3}Kubernetes Probe Configuration}{297}{subsection.1170}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {16.6}Diagnostics Commands}{297}{section.1193}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.6.1}\texttt  {gert diagnose}}{297}{subsection.1194}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.6.2}\texttt  {gert trace show}}{299}{subsection.1200}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.6.3}\texttt  {gert trace export}}{299}{subsection.1201}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.6.4}\texttt  {gert run list}}{300}{subsection.1202}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {16.7}Integration Recipes}{300}{section.1216}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.7.1}Prometheus + Grafana}{300}{subsection.1217}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.7.2}Jaeger (Distributed Tracing)}{301}{subsection.1225}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.7.3}Loki + Grafana (Log Aggregation)}{302}{subsection.1226}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.7.4}Datadog / New Relic (OTLP-Compatible SaaS)}{302}{subsection.1246}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {16.8}Observability for CI/CD Pipelines}{303}{section.1247}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.8.1}JSON Output Mode}{303}{subsection.1248}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.8.2}GitHub Actions Example}{304}{subsection.1259}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {16.8.3}GitLab CI Example}{304}{subsection.1277}\protected@file@percent }
 \abx@aux@cite{0}{otel-spec}
 \abx@aux@segm{0}{0}{otel-spec}
 \abx@aux@cite{0}{w3c-trace-context}
 \abx@aux@segm{0}{0}{w3c-trace-context}
 \abx@aux@cite{0}{google-sre-book}
 \abx@aux@segm{0}{0}{google-sre-book}
-\@writefile{toc}{\contentsline {section}{\numberline {16.9}Summary}{303}{section.1287}\protected@file@percent }
-\@writefile{toc}{\contentsline {chapter}{References}{304}{chapter*.1288}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {16.9}Summary}{305}{section.1290}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{References}{306}{chapter*.1291}\protected@file@percent }
 \abx@aux@read@bbl@mdfivesum{8FAD753F383F59D1C02408B5176A2E01}
 \abx@aux@defaultrefcontext{0}{aws-step-functions}{nyt/global//global/global/global}
 \abx@aux@defaultrefcontext{0}{aws-ssm-runbooks}{nyt/global//global/global/global}
@@ -1039,4 +1045,4 @@
 \abx@aux@defaultrefcontext{0}{w3c-trace-context}{nyt/global//global/global/global}
 \abx@aux@defaultrefcontext{0}{jsonschema-spec}{nyt/global//global/global/global}
 \abx@aux@defaultrefcontext{0}{zipkin-docs}{nyt/global//global/global/global}
-\gdef \@abspage@last{322}
+\gdef \@abspage@last{324}

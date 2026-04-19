@@ -71,7 +71,7 @@ evaluator (for template syntax validation). It has no runtime dependencies.
 \paragraph{Responsibility.}
 The Planner transforms a \texttt{ParsedRunbook} into an \texttt{ExecutionPlan}: a resolved, ordered,
 dependency-annotated representation of every step the runtime will execute. The Planner resolves imports
-(recursively parsing and inlining invoked runbooks), discovers and validates tool definitions, resolves
+(recursively parsing and inlining included runbooks), discovers and validates tool definitions, resolves
 input provider bindings to their declared sources, and produces the static step ordering. It does
 \emph{not} evaluate dynamic conditions (branch predicates, iterate count expressions) — those are
 runtime concerns.
@@ -101,7 +101,7 @@ type PlanOptions struct {
 type ExecutionPlan struct {
     RunID       string
     RunbookPath string
-    Steps       []ResolvedStep       // ordered; includes inlined invoke steps
+    Steps       []ResolvedStep       // ordered; includes inlined include steps
     Tools       map[string]*ToolDef  // name -> resolved tool definition
     Providers   map[string]*ProviderDef // binding name -> provider
     Governance  *GovernancePolicy
@@ -111,11 +111,11 @@ type ExecutionPlan struct {
 // ResolvedStep is a single step in the plan, fully resolved.
 type ResolvedStep struct {
     ID       string
-    Kind     StepKind      // cli, choice, decision, collector, tool, invoke, branch, iterate
+    Kind     StepKind      // cli, choice, decision, collector, tool, include, branch, iterate
     Spec     StepSpec      // kind-specific parameters (resolved, not templated)
     Contract *contract.Contract  // effects/reads/writes/idempotent/deterministic
     Depth    int           // chain depth (0 = root runbook)
-    Origin   string        // source runbook path (for inlined invoke steps)
+    Origin   string        // source runbook path (for inlined include steps)
 }
 \end{verbatim}
 
@@ -403,8 +403,13 @@ For each step, the runtime executes the following sequence:
         until \texttt{SubmitEvidence()} is called with multi-field form data. SHA256-hash
         each file/image attachment. Store text fields as variables, artifacts in evidence
         store.
-  \item \textbf{invoke:} Inlined at plan time; at runtime the invoke body steps are already
-        present in the plan at \texttt{Depth+1}. No special dispatch required.
+  \item \textbf{include:} Resolve the referenced runbook. Validate the include graph for
+        cycles (load-time DFS — fail fast if cyclic). Evaluate \texttt{include.when} if
+        present; skip all steps if false. Apply \texttt{include.with} overrides to the
+        current variable scope. Inline-expand the referenced runbook's steps into the
+        current execution queue at \texttt{Depth+1}. The include step itself does not
+        appear in the run trace; expanded steps run as if defined inline, each carrying
+        an \texttt{Origin} breadcrumb: \texttt{[included from: <path>]}.
   \item \textbf{branch:} Evaluate branch predicates (expression evaluator) against current
         variables. Select the matching branch arm. Write \texttt{event/branchResolved}
         trace event. Advance step cursor to the first step of the resolved arm.
@@ -441,9 +446,10 @@ user input. \texttt{choice} stores selected option as variable. \texttt{decision
 control flow by routing to a runbook or label. \texttt{collector} captures multi-field
 form data and artifacts (files, images). All three write evidence to trace. \\
 \hline
-\textbf{Control Flow} & branch, iterate, invoke & Alter execution path or loop body. \texttt{branch}
+\textbf{Control Flow} & branch, iterate, include & Alter execution path or loop body. \texttt{branch}
 evaluates predicates at runtime. \texttt{iterate} repeats a body until a condition is false.
-\texttt{invoke} is resolved at plan time; body steps appear inline with incremented depth. \\
+\texttt{include} resolves and inline-expands a referenced runbook's steps into the current
+execution queue; the include step itself is not emitted to the trace. \\
 \hline
 \textbf{Synchronisation} & wait\_for\_event & Suspend the run until an external event arrives via
 webhook, message queue, OS signal, or named in-process channel. Persists full run state to durable
@@ -458,8 +464,76 @@ pool. Optionally enforces a business-day timeout (GAP-1) and M-of-N quorum track
 \end{tabular}
 \end{center}
 
-Note that \texttt{invoke} is somewhat special: it is a control flow step conceptually, but its
-inlining happens during the Plan phase, so at runtime it does not require special dispatch logic.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Include Step Executor Contract}
+\label{sec:include_executor_contract}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The \texttt{include} step is the v2.0 inline composition primitive. It expands a referenced
+runbook's steps directly into the caller's execution queue — no new run context, no isolated
+variable scope, no separate audit entry.
+
+\subsubsection*{Executor Algorithm}
+
+When the executor reaches a \texttt{type: include} step it performs the following in order:
+
+\begin{enumerate}
+  \item \textbf{Resolve} the referenced runbook by relative path or registry ID.
+  \item \textbf{Cycle check} — validate the include graph (see below). Fail with a hard error
+        if any cycle is detected. This check must have already passed at load time; the
+        executor re-asserts it as a defence-in-depth guard.
+  \item \textbf{Evaluate \texttt{include.when}} — if the condition is present and evaluates to
+        \texttt{false}, skip: emit no steps and advance past the include step.
+  \item \textbf{Apply \texttt{include.with} overrides} to the current variable scope. These
+        bindings are visible to all steps that follow (included or caller-defined).
+  \item \textbf{Inline expand} — replace the include step in the execution queue with the
+        referenced runbook's steps, each at \texttt{Depth+1} with their \texttt{Origin} field
+        set to the referenced runbook path.
+  \item \textbf{Continue execution} — the expanded steps execute as if they had been defined
+        inline in the caller runbook.
+\end{enumerate}
+
+\subsubsection*{Key Architectural Properties}
+
+\begin{itemize}
+  \item \textbf{No new run context.} The included steps execute within the caller's run;
+        \texttt{RunID}, variable scope, and audit log are all shared.
+  \item \textbf{No separate audit entry for the include step itself.} Expanded steps appear
+        in the caller's audit log each carrying an \texttt{Origin} breadcrumb of the form:
+        \texttt{[included from: ./shared/db-preflight.runbook.yaml]}.
+  \item \textbf{Shared variable scope.} Variable mutations made by included steps are
+        visible to all subsequent steps in the caller, and vice versa.
+  \item \textbf{Include step invisible in trace.} Only the expanded steps appear in the run
+        trace. The include step itself is not emitted as a trace event.
+\end{itemize}
+
+\subsubsection*{Cycle Detection}
+\label{sec:include_cycle_detection}
+
+\paragraph{Load-time validation.}
+When a runbook is loaded, the runtime builds a directed include graph over the full
+transitive closure of all \texttt{type: include} references. A depth-first search (DFS)
+with a visited set detects back-edges. A cycle found at any depth is a hard error:
+
+\begin{verbatim}
+cyclic include: A.yaml -> B.yaml -> A.yaml
+\end{verbatim}
+
+Cyclic include graphs are rejected before execution begins. This check covers both direct
+and transitive includes.
+
+\paragraph{Runtime note.}
+Because cycles are validated at load time, the executor never needs to guard against
+infinite include loops at execution time. The executor-level re-assertion in step 2 above
+is a defence-in-depth check, not the primary enforcement point.
+
+\paragraph{Future: Sub-Procedure Call.}
+\texttt{type: include} is the v2.0 composition primitive: inline expansion into a shared
+variable scope. A future \texttt{type: call} step type would provide isolated scope with
+explicit input/output mapping, analogous to a function call. This pattern is deferred
+post-v2.0; \texttt{type: include} covers the primary composition use case for the v2.0
+release.
 
 \subsubsection*{Step Post-flight (all step types)}
 \begin{enumerate}
@@ -637,7 +711,7 @@ serialised run snapshot written in step 1 above MUST include:
 \begin{itemize}
   \item Current step index and depth.
   \item All variable bindings (including \texttt{gert.event.*} tokens).
-  \item Call stack (for \texttt{invoke}-inlined steps).
+  \item Call stack (for \texttt{include}-inlined steps).
   \item The active event listener registration (run ID, event ID, source, filter, timeout
         deadline as an absolute timestamp).
 \end{itemize}

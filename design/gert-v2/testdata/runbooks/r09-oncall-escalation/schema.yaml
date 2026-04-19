@@ -392,11 +392,12 @@ flow:
 
   - step:
       id: invoke_incident_response
-      type: invoke
+      type: include
       title: Invoke incident response runbook
-      invoke:
+      # NOTE: type:include shares caller variable space — if isolation needed, use future type:call (not in v2.0)
+      include:
         runbook: incident-response/generic-incident-response.yaml
-        inputs:
+        with:
           alert_id: "{{ .alert_id }}"
           service: "{{ .affected_service }}"
 

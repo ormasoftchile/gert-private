@@ -51,15 +51,16 @@ flow:
         audit_dir: stdout
 
   # Steps 2-8: Control sub-runbooks (CC1.1 through CC6.8)
-  # GAP: 15 sequential invoke steps is verbose; schema lacks bulk invocation syntax (invoke_many)
+  # GAP: 15 sequential include steps is verbose; schema lacks bulk inclusion syntax (include_many)
+  # NOTE: type:include shares caller variable space — if isolation needed, use future type:call (not in v2.0)
 
   - step:
       id: collect_cc1_1
-      type: invoke
+      type: include
       title: "CC1.1: Access Reviews"
-      invoke:
+      include:
         runbook: soc2/cc1.1-access-reviews.yaml
-        inputs:
+        with:
           audit_id: "{{ .audit_id }}"
           period_start: "{{ .audit_period_start }}"
           period_end: "{{ .audit_period_end }}"
@@ -68,11 +69,11 @@ flow:
 
   - step:
       id: collect_cc1_2
-      type: invoke
+      type: include
       title: "CC1.2: Password Policy"
-      invoke:
+      include:
         runbook: soc2/cc1.2-password-policy.yaml
-        inputs:
+        with:
           audit_id: "{{ .audit_id }}"
           period_start: "{{ .audit_period_start }}"
       capture:
@@ -104,11 +105,11 @@ flow:
 
   - step:
       id: collect_cc3_1
-      type: invoke
+      type: include
       title: "CC3.1: Security Monitoring"
-      invoke:
+      include:
         runbook: soc2/cc3.1-security-monitoring.yaml
-        inputs:
+        with:
           audit_id: "{{ .audit_id }}"
           period_start: "{{ .audit_period_start }}"
       capture:
@@ -116,11 +117,11 @@ flow:
 
   - step:
       id: collect_cc4_1
-      type: invoke
+      type: include
       title: "CC4.1: Change Management"
-      invoke:
+      include:
         runbook: soc2/cc4.1-change-management.yaml
-        inputs:
+        with:
           audit_id: "{{ .audit_id }}"
           period_start: "{{ .audit_period_start }}"
       capture:
@@ -128,25 +129,25 @@ flow:
 
   - step:
       id: collect_cc5_1
-      type: invoke
+      type: include
       title: "CC5.1: Incident Response"
-      invoke:
+      include:
         runbook: soc2/cc5.1-incident-response.yaml
-        inputs:
+        with:
           audit_id: "{{ .audit_id }}"
           period_start: "{{ .audit_period_start }}"
       capture:
         cc5_1_evidence: outputs.evidence_path
 
   # CC6.1-CC6.8: logical/physical access, encryption, network security, etc.
-  # GAP: 8 more invoke steps omitted for brevity but would follow same pattern
+  # GAP: 8 more include steps omitted for brevity but would follow same pattern
   - step:
       id: collect_cc6_controls
-      type: invoke
+      type: include
       title: "CC6.1-CC6.8: Logical and Physical Access Controls"
-      invoke:
+      include:
         runbook: soc2/cc6-access-controls-bundle.yaml
-        inputs:
+        with:
           audit_id: "{{ .audit_id }}"
           period_start: "{{ .audit_period_start }}"
       capture:

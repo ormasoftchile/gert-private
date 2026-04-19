@@ -1,12 +1,12 @@
 # Fdb version 4
-["biber main"] 1776561802.59385 "main.bcf" "main.bbl" "main" 1776561817.05926 0
-  "main.bcf" 1776561816.86137 113267 143b66ad86b009575cae36960cbbd68b "pdflatex"
+["biber main"] 1776561802.59385 "main.bcf" "main.bbl" "main" 1776562503.07494 0
+  "main.bcf" 1776562502.88604 113267 143b66ad86b009575cae36960cbbd68b "pdflatex"
   "references.bib" 1776545576.38548 13980 a0ff6ab02621788d3bad54915253c3d4 ""
   (generated)
   "main.bbl"
   "main.blg"
   (rewritten before read)
-["pdflatex"] 1776561812.8061 "/Volumes/Projects/gert/design/gert-v2/main.tex" "main.pdf" "main" 1776561817.06504 0
+["pdflatex"] 1776562498.95797 "/Volumes/Projects/gert/design/gert-v2/main.tex" "main.pdf" "main" 1776562503.07519 0
   "/Volumes/Projects/gert/design/gert-v2/main.tex" 1776549499.92489 1894 581b957eeb5c6d666e8b7800f590bb2e ""
   "/usr/local/texlive/2025/texmf-dist/fonts/enc/dvips/cm-super/cm-super-t1.enc" 1136849721 2971 def0b6c1f0b107b3b936def894055589 ""
   "/usr/local/texlive/2025/texmf-dist/fonts/enc/dvips/cm-super/cm-super-ts1.enc" 1136849721 2900 1537cc8184ad1792082cd229ecc269f4 ""
@@ -193,16 +193,16 @@
   "/usr/local/texlive/2025/texmf-var/web2c/pdftex/pdflatex.fmt" 1741450574 3345740 46b66fdb0378f7bf5921b5eabf1762b8 ""
   "/usr/local/texlive/2025/texmf.cnf" 1741450484 577 418a7058ec8e006d8704f60ecd22c938 ""
   "MastersThesis.cls" 1776542593.77403 18643 cdae49dc545332c18e910c04c312fe6d ""
-  "main.aux" 1776561816.83434 97224 56d56588b1a50879e9164e0d7b4c7072 "pdflatex"
-  "main.bbl" 1776561803.93853 36402 8fad753f383f59d1c02408b5176a2e01 "biber main"
-  "main.out" 1776561816.85236 75930 ac8dfa96e6e51b8547d46c2d11ff94ea "pdflatex"
-  "main.run.xml" 1776561816.86218 2305 52095dfad395b381e9a32937e764a41c "pdflatex"
+  "main.aux" 1776562502.8594 98124 0446e9838e6d9a2e2d0af7ba6f60b2bb "pdflatex"
+  "main.bbl" 1776561998.91748 36402 8fad753f383f59d1c02408b5176a2e01 "biber main"
+  "main.out" 1776562502.8787 76185 bbe33175112d45963d4ffefa03a8cc06 "pdflatex"
+  "main.run.xml" 1776562502.88704 2305 52095dfad395b381e9a32937e764a41c "pdflatex"
   "main.tex" 1776549499.92489 1894 581b957eeb5c6d666e8b7800f590bb2e ""
-  "main.toc" 1776561816.86226 51581 6ad2e36a0a4160001b1c607603a28f08 "pdflatex"
+  "main.toc" 1776562502.88713 52040 2276e93494b3b8a328ba103c89a956b1 "pdflatex"
   "sections/00-overview.tex" 1776545621.07928 7283 900b5a59875432eabea46a976a8da8a6 ""
   "sections/01-goals-and-nongoals.tex" 1776545674.38756 7324 e6f9e46373f79c77dcec6f116ef49d15 ""
-  "sections/02-architecture.tex" 1776561735.6376 59566 c5bb617c8751a9e957b4092385515947 ""
-  "sections/03-schema-vnext.tex" 1776561780.61496 71444 331b650567a6fcf41b149930c730b500 ""
+  "sections/02-architecture.tex" 1776562482.96977 63892 f81ff07521da74026bfaeff4580a5b0a ""
+  "sections/03-schema-vnext.tex" 1776562498.80643 73171 d15e150800ddb4e75efd1763a2b0a96e ""
   "sections/04-extension-runtime.tex" 1776549291.21699 15715 132194392e909ef7b7e60b704e4026e2 ""
   "sections/05-tool-runtime.tex" 1776549293.94642 14250 71c50701653ca94191cd495d9e88e859 ""
   "sections/06-runtime-events.tex" 1776549301.22236 33449 c515df4506765427a12b2fc9df8db304 ""

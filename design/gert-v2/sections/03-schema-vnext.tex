@@ -223,16 +223,16 @@ The v2 runbook document has the following top-level fields:
 \paragraph{id field}
 The \texttt{id} is a slug: lowercase alphanumeric with hyphens, matching
 \texttt{\^{}[a-z][a-z0-9-]*[a-z0-9]\$}.  It uniquely identifies a runbook within
-a project and is used by the \texttt{invoke} step and the trace record.  It must
+a project and is used by the \texttt{include} step and the trace record.  It must
 be stable across renames; changing it is a breaking change for any runbook that
-invokes it by id.
+includes it by id.
 
 \paragraph{kind values}
 \begin{itemize}
   \item \texttt{mitigation} — Incident response procedure; governance defaults
         to \texttt{require-approval} for destructive effects.
   \item \texttt{reference} — Documentation-first runbook; dry-run by default.
-  \item \texttt{composable} — Sub-runbook intended for invoke from other
+  \item \texttt{composable} — Sub-runbook intended for include from other
         runbooks; not directly executable from CLI.
   \item \texttt{rca} — Root-cause analysis template.
 \end{itemize}
@@ -463,8 +463,10 @@ runtime will reject the runbook at semantic validation time.
 \subsection{Output Declarations}
 \label{subsec:outputs}
 
-Outputs declare values that a composable runbook exposes to its caller via the
-\texttt{invoke} step's output extraction.
+Outputs declare values that a composable runbook exposes to its callers.
+With \texttt{type: include}, the caller's variable space is shared directly;
+explicit output declarations are reserved for the future \texttt{type: call}
+step type (post-v2.0 scope, isolated scope with explicit I/O mapping).
 
 \begin{verbatim}
 outputs:
@@ -555,7 +557,7 @@ v2 defines fourteen step types:
 \texttt{approve}          & Standalone approval gate with quorum and business-day timeout (\S\ref{subsec:step-approve}) \\
 \texttt{tool}             & Invoke a declared tool action (\S\ref{subsec:step-tool}) \\
 \texttt{wait\_for\_event} & Pause until an inbound event arrives (\S\ref{subsec:step-wait-for-event}) \\
-\texttt{invoke}           & Call another runbook as a sub-procedure (\S\ref{subsec:step-invoke}) \\
+\texttt{include}          & Expand another runbook inline into the current run path (\S\ref{subsec:step-include}) \\
 \texttt{branch}           & Conditional fan-out to labelled step sequences (\S\ref{subsec:step-branch}) \\
 \texttt{iterate}          & Loop over a collection (\S\ref{subsec:step-iterate}) \\
 \texttt{parallel}         & Fan-out concurrent branches with join semantics (\S\ref{subsec:step-parallel}) \\
@@ -1228,44 +1230,69 @@ HMAC token when the endpoint is opened; the token is available as
 system (e.g.\ embedding in a Prometheus alertmanager receiver URL).  The token
 is single-use and expires when the endpoint closes (on resume or timeout).
 
-\subsection{Step Type: invoke}
-\label{subsec:step-invoke}
+\subsection{Step Type: include}
+\label{subsec:step-include}
 
-Invokes another runbook inline as a sub-procedure.  The invoked runbook's
-outputs are mapped into the caller's variable space.
+Expands another runbook's steps \emph{inline} into the current run path at the
+point of the \texttt{include} step.  This is \textbf{not} a sub-procedure call:
+the included runbook shares the caller's variable space entirely — no isolated
+scope, no input/output mapping.  All included steps appear in the caller's
+execution trace and audit log as if they were defined inline.
+
+The \texttt{include.with} map injects variable overrides into the shared scope
+before expansion; these values are immediately visible to the included steps and
+to any steps that follow in the caller.
 
 \begin{center}
-\begin{tabular}{lllp{5cm}}
+\begin{tabular}{lllp{5.5cm}}
 \hline
 \textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
 \hline
-\texttt{invoke.runbook}  & string & Yes & Import alias or relative path \\
-\texttt{invoke.inputs}   & map    & No  & Input bindings (template-expanded values) \\
-\texttt{invoke.outputs}  & map    & No  & Output extraction: local-var → output-name \\
-\texttt{invoke.gate}     & object & No  & Stop-if conditions on child outcome \\
+\texttt{include.runbook}  & string & Yes & Path or ID of the runbook to include. Relative paths resolve from the including runbook's location. \\
+\texttt{include.with}     & map    & No  & Variable overrides injected into the shared scope before expansion (key: variable name, value: expression). Applied in order, visible to included steps. \\
+\texttt{include.when}     & string & No  & Boolean expression. If false, the include is skipped entirely (no steps expanded). \\
 \hline
 \end{tabular}
 \end{center}
 
 \begin{verbatim}
-imports:
-  connectivity: ./connectivity-check.runbook.yaml
-
-flow:
-  - step:
-      id: run_connectivity
-      type: invoke
-      title: Run connectivity check
-      invoke:
-        runbook: connectivity
-        inputs:
-          service_name: "{{ .hostname }}"
-          incident_id:  "{{ .incident_id }}"
-        outputs:
-          conn_status: health_status   # local var ← child output
-        gate:
-          stop_if: [escalated]
+- step:
+    id: run_db_checks
+    type: include
+    title: "Run database pre-flight checks"
+    include:
+      runbook: ./shared/db-preflight.runbook.yaml
+      with:
+        db_host: "{{ .target_db }}"
+        check_mode: read-only
+    contract:
+      effects: [db.read]
+      reads: [target_db]
+      writes: []
 \end{verbatim}
+
+\paragraph{Cycle Detection}
+The runtime builds a runbook dependency graph at load time by resolving all
+\texttt{include.runbook} references transitively.  A cycle exists when a runbook
+directly or transitively includes itself.  Cyclic includes are a hard validation
+error; the runtime rejects the runbook set and reports the full include chain:
+
+\begin{verbatim}
+cyclic include detected: A -> B -> A
+\end{verbatim}
+
+The validator reports every edge in the offending cycle so the operator can
+identify the exact chain.
+
+\paragraph{Difference from Sub-Procedure Call}
+\texttt{type: include} shares the caller's variable space; there is no input
+mapping and no output extraction.  The included steps appear inline in the run
+trace — there is no sub-run, no separate audit entry, and no scope boundary.
+
+If isolation \emph{is} needed (separate variable scope, explicit input/output
+mapping), that is the responsibility of a future step type
+(\texttt{type: call} or \texttt{type: delegate}).  That capability is
+\textbf{not in v2.0 scope}.
 
 \subsection{Step Type: branch}
 \label{subsec:step-branch}
@@ -1814,9 +1841,8 @@ AST and loaded tool/provider definitions.  Semantic checks include:
 \begin{enumerate}
   \item \textbf{Step ID uniqueness} — All step IDs in the flat walk of the tree
         must be unique within the runbook.
-  \item \textbf{Invoke target resolution} — Every \texttt{invoke.runbook} value
-        must resolve to a declared \texttt{imports} alias or a relative file path
-        that exists on disk.
+  \item \textbf{Include target resolution} — Every \texttt{include.runbook} value
+        must resolve to a relative file path that exists on disk.
   \item \textbf{Branch condition variable references} — Each \texttt{condition}
         template references only variables that are in scope at that point in the
         execution tree (declared as \texttt{inputs}, \texttt{vars}, or captured
@@ -1829,8 +1855,8 @@ AST and loaded tool/provider definitions.  Semantic checks include:
   \item \textbf{Provider binding resolution} — Every \texttt{inputs.*.from:
         <provider>.<field>} must resolve to a loaded provider whose field
         manifest declares that field name.
-  \item \textbf{Circular invoke detection} — The invoke graph must be a DAG;
-        any cycle is a semantic error.
+  \item \textbf{Cyclic include detection} — The include graph must be a DAG;
+        any cycle is a semantic error reported as \texttt{cyclic include detected: A → B → A}.
   \item \textbf{Capture write-before-read} — A step that reads a captured
         variable via a template must have a reachable predecessor step that
         writes it; a warning is emitted if the write is only on some branches.

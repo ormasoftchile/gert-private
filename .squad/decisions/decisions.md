@@ -1,3208 +1,3803 @@
-# Squad Decisions
+# Gert v2 Decisions
 
-**Last updated:** 2026-04-18T22:04:25Z
-**Total decisions:** 30 (Wave 2 merged; §02 updated; LaTeX fixes applied)
-
----
-
-# 2026-04-18: Architecture Section Synchronized with New Step Types
-
-**Date:** 2026-04-18  
-**Author:** Ken (Software Architect)  
-**Status:** Implemented  
-**Sections affected:** §02 (Architecture)
-
-## Context
-
-John (Schema Lead) replaced the generic `manual` step type with three specialized interactive step types in §03 (Schema):
-
-1. **`choice`** — User selects from a fixed option list; result stored as a named variable
-2. **`decision`** — User picks an execution path; control flow routes to a different runbook or labeled section
-3. **`collector`** — User provides unstructured input (text, files, images, URLs); multi-field forms
-
-The architecture section (§02) still referenced the old `manual` step type in five locations, creating a cross-section inconsistency.
-
-## Decision
-
-Updated all references to `manual` in §02 to reflect the new step type taxonomy. Added comprehensive step type classification table organizing all eight step types into three categories: Execution (cli, tool), Interactive (choice, decision, collector), and Control Flow (branch, iterate, invoke).
-
-## Changes Made
-
-1. **Step Type Enumeration (Line 114):** Updated to include choice, decision, collector
-2. **SubmitEvidence Interface Comment (Lines 167-168):** Clarified distinct behaviors for each interactive type
-3. **Step Dispatch Logic (Lines 393-405):** Three distinct bullets for choice, decision, and collector
-4. **Pause and Resume (Line 454):** Replaced "manual step" with "interactive steps"
-5. **RPC Method Summary (Line 579):** Updated to reflect interactive steps
-6. **NEW: Step Type Classification Table (After Line 414):** Added table categorizing all step types
-
-## Cross-Section Consistency Verified
-
-Aligns with §03 (Schema), §06 (Events), §11 (Governance), and §14 (Providers).
-
-**Status:** ✅ COMPLETE — §02 fully consistent with §03 and design document
+**Last Updated:** 2026-04-19T21:09:46Z
 
 ---
 
-# 2026-04-18: LaTeX Build Fixes — 79 Issues Resolved
+## barbara-correctness-strategy
 
-**Author:** Leslie (LaTeX Specialist)  
-**Date:** 2026-04-18  
-**Status:** Resolved  
+# Decision Inbox: Gert v2 Correctness Strategy
 
-## Summary
-
-Fixed critical LaTeX compilation errors blocking document build. Total: 79 issues resolved (23 lstlisting errors + 13 undefined references + 43 Unicode character errors).
-
-## Issues Fixed
-
-### 1. Missing `listings` Package (23 errors)
-
-**Problem:** Section §15 contains 23 lstlisting environments; package not loaded in main.tex.
-
-**Fix:** Added `\usepackage{listings}` to main.tex after xcolor.
-
-### 2. Undefined Chapter References (13 warnings)
-
-**Problem:** Missing chapter labels and inconsistent prefixes (some used `chap:` instead of `ch:`).
-
-**Fix:** Added `\label{ch:*}` after all `\chapter{}` commands; standardized to `ch:` prefix.
-
-**Affected sections:** §02, §03, §04, §05, §06, §07, §08, §14
-
-### 3. Unicode Character Errors (43 errors)
-
-**Problem:** Checkmarks, crosses, and box-drawing characters used in §07, §13, §15 caused compilation failures.
-
-**Fix:** Added `\usepackage{newunicodechar}` and `\usepackage{amssymb}` with character mappings.
-
-## Final Build Status
-
-✅ **CLEAN BUILD**
-
-- **Total errors:** 0
-- **Total undefined references:** 0
-- **Exit code:** 0 (success)
-- **Page count:** 260 pages
-- **PDF size:** 949 KB
-- **Bibliography:** 29/29 citations resolved
-
-**Status:** ✅ COMPLETE — Document builds clean, all 260 pages
+**By:** Barbara (Integrations Specialist)  
+**Date:** 2026-04-19  
+**Status:** PROPOSED (awaiting team review)
 
 ---
 
-# 2026-04-06_00-37-37: exec/next outcome mapping is fixed
+## Decision: Spec-Driven Development with Tagged Test Compliance
 
-**By:** ormasoftchile (via Copilot)
+### What
 
-**What:** advanceExecution() now correctly maps outcomeCode ('success'/'failure') from exec/next HTTP response. 'resolved' category maps to 'success', 'escalated' maps to 'failure'. The team can self-verify runbook runner changes using `cd web && npx playwright test`.
+Implement a comprehensive correctness strategy for gert v2 that makes the spec executable through tagged tests and enforces compliance at every phase gate.
 
-**Why:** Critical for autonomous dev loop — team can run tests without asking user. All 12 Playwright tests now pass in 5.5 seconds (R1–R12 green, R13/R14 intentionally skipped).
+**Core components:**
 
-**Files changed:**
-- web/src/views/runbookRunner.ts (mapOutcomeCategory, advanceExecution outcome extraction, run/completed handler fix)
+1. **Spec tagging convention:** All tests validating spec rules carry `// spec: {file} §{section} — {RULE_TEXT}` comments
+2. **Spec coverage tool:** Phase 0 deliverable `gert dev spec-coverage` cross-references spec MUST rules with test tags, reports coverage, enforces ≥95% by Phase 13
+3. **TDD workflow:** Brian's mandatory loop: read spec → extract MUST rules → write failing tagged tests → implement → pass → verify coverage → submit to Ken
+4. **Golden trace testing:** Deterministic JSONL trace comparison starting Phase 3, with HMAC verification in Phase 11+
+5. **Phase gates:** 6-part exit criteria including spec compliance checklist and Ken's architectural review
+6. **Ken as spec reviewer:** Ken approves each phase only when spec alignment, test coverage, and interface contracts are verified
 
-**Status:** ✅ Complete — 12/12 tests passing, ready for team verification
+### Why
 
----
+**Problem:** Without explicit spec-to-test traceability, implementations drift from specifications, spec rules become documentation instead of contracts, and correctness is subjective.
 
-# Hisoka QA Report — Bug B & Bug C Fixes
+**Solution:** Make every spec rule executable and measurable. Spec coverage becomes a quantifiable metric (currently 89%, target 95%). Ken's review becomes systematic (check coverage report, verify tagged tests exist for sampled rules).
 
-**Date**: 2026-04-06  
-**Author**: Hisoka (QA Lead)  
-**Runbook**: `examples/windows-diagnostic/runbooks/network-health-check.runbook.yaml`
+**Benefits:**
+- **Auditability:** Any stakeholder can run `gert dev spec-coverage` and see which spec rules are/aren't tested
+- **Regression prevention:** Golden traces catch unintended behavior changes across phases
+- **Spec drift detection:** Coverage tool flags new MUST rules with no tests (or tests with no corresponding spec rules)
+- **Review efficiency:** Ken focuses on uncovered rules and sampled verification, not exhaustive manual checks
+- **Compliance confidence:** By Phase 13, ≥95% coverage guarantees spec compliance is verified, not assumed
 
----
+### Constraints
 
-## Bug B — Unresolved Template Variables in Step Labels
+- **Phase 0 dependency:** Spec coverage tool must be delivered in Phase 0 or strategy is unenforceable
+- **Discipline required:** Brian must tag all spec tests (no shortcuts); Ken must review coverage reports
+- **Golden trace determinism:** Only works for scenarios without real time/randomness/network I/O
+- **HMAC golden traces:** Require `GERT_TRACE_KEY` to be set consistently for test runs
 
-### Root Cause
+### Implementation Path
 
-The `buildStepSummaries` function in `ext/serve/pkg/serve/serve.go` returned **raw unresolved
-Go template strings** (e.g., `{{ .primary_host }}`, `{{ .dns_server }}`) in `result.steps`
-sent by `exec/start`. The frontend used these as the initial titles for the left "RUNBOOK
-INSTRUCTIONS" panel and "WORKFLOW MAP", with no resolution applied.
+**Phase 0:**
+1. Implement `internal/dev/speccoverage/` package
+2. Add `gert dev spec-coverage` subcommand
+3. Extract MUST/MUST NOT/SHALL from all spec files (CommonMark parser)
+4. Cross-reference with `// spec:` tags in all `*_test.go` files
+5. Add CI warning (non-blocking) for coverage <95%
 
-**Why some steps resolved and others didn't:**
-- Steps that **executed** had their titles updated via `stepDetails` from `exec/next` responses
-  (which call `ResolveTemplatePublic` at runtime with variables in scope).
-- Branch steps that were **never taken** (e.g., `ping_pass`) never got `stepDetails` populated,
-  so they kept showing raw templates.
-- Variables in `meta.vars` (e.g., `dns_server = "8.8.8.8"`) were resolvable at exec/start time
-  but weren't being resolved.
-- Variables without defaults (e.g., `primary_host` — a `from: prompt` input) and iterate-scoped
-  variables (e.g., `target`, `port`) could not be resolved at start time.
+**Phase 1-12:**
+1. Brian follows TDD workflow for all new code
+2. Ken reviews spec coverage report before approving each phase
+3. Phase exit checklist includes "spec coverage verified"
 
-### Fix
+**Phase 13:**
+1. CI gate enforces ≥95% spec coverage (blocking)
+2. All acceptance corpus scenarios have golden traces
+3. Ken's final review confirms zero uncovered MUST rules (or documented exceptions)
 
-**Backend** (`ext/serve/pkg/serve/serve.go`):
-- Added `resolveStepSummaries` as a `*Server` method that calls `s.resolve(st.Title)` for each
-  step, resolving whatever variables ARE available in the engine state at exec/start time.
-- Replaced all 6 callers of `buildStepSummaries` in server methods with `s.resolveStepSummaries`.
+### Impact
 
-**Frontend** (`web/src/views/runbookRunner.ts`):
-- Added `sanitizeTitle()` helper that replaces remaining `{{ .varName }}` patterns with `(unset)`.
-- Applied to `renderStepsAsProse`, `renderWorkflowMap`, and `renderActiveStepPanel`.
+**High.** This is the foundation of gert v2's quality strategy. Without it:
+- Spec compliance is aspirational, not enforceable
+- Ken's review is subjective and unbounded
+- Regression risk is high (no golden anchors)
+- Audit/compliance claims (SOC 2, ISO 27001) are unverifiable
 
-**Net effect**: `dns_server` resolves to "8.8.8.8". For truly unresolvable vars
-(`primary_host`, `port`, `target` at start time), `ResolveTemplatePublic` with `missingkey=zero`
-converts them to `<no value>` which is then stripped to `""` (see Bug C fix), resulting in
-clean empty strings. The `sanitizeTitle` `(unset)` fallback acts as a safety net.
-
----
-
-## Bug C — `<no value>` on Step 14 Instructions
-
-### Root Cause
-
-`primary_host` is declared as an `inputs` field with `from: prompt` and **no default value**.
-At execution time for the `network_summary` step, `ResolveTemplatePublic` was called on the
-instructions template containing `{{ .primary_host }}`. With `missingkey=zero`, Go templates
-render nil map values as the literal string `"<no value>"`, which appeared verbatim in the
-displayed instructions panel.
-
-The comment on `ResolveTemplatePublic` already stated intent to "never return `<no value>`"
-but only guarded against the whole string being `"<no value>"`, not substrings.
-
-### Fix
-
-**Backend** (`pkg/engine/engine.go`):
-- In `ResolveTemplatePublic`, added `strings.ReplaceAll(result, "<no value>", "")` on both
-  return paths (the fast path via `resolveTemplate` and the `missingkey=zero` retry path).
+**With this strategy:**
+- Spec compliance is measurable: "95% of spec rules have tests"
+- Phase gates are objective: "checklist 100%, coverage ≥80%, Ken approved"
+- Regression detection is automated: golden trace diffs in CI
+- Audit evidence is concrete: spec tag → test file → CI run log
 
 ---
 
-## Commits
+## For Team Review
 
-- `5eca8a8` — fix: resolve step titles at exec/start and strip `<no value>` + frontend sanitizer
-- `17c8ce1` — build: rebuild gert binary with Bug B/C fixes
+**Questions for Cristian:**
+1. Is Phase 0 delivery of spec coverage tool acceptable, or does it need to exist before any other work starts?
+2. Should the 95% coverage target be adjustable per phase, or is it a hard Phase 13 gate?
+3. Are there spec sections that should be excluded from coverage tracking (e.g., informational sections, non-normative examples)?
 
----
+**Questions for Ken:**
+1. Does the spec tagging format meet your review needs, or should it include additional metadata (risk level, priority)?
+2. Should the coverage tool also track test → spec orphans (tests tagged to non-existent spec rules)?
+3. What's the escalation path if Brian and Ken disagree on whether a spec rule requires a test?
 
-## Test Results
-
-- Playwright suite: **13/13 passed, 2 skipped** (expected skips)
-- All runbook-runner and tool-catalog tests green
-- Screenshot (`knov-after.png`) confirms:
-  - No raw `{{ .xxx }}` template expressions in step labels ✓
-  - No `<no value>` in instructions panel ✓
-  - `dns_server` = "8.8.8.8" correctly resolved in step 4 title ✓
-
----
-
-# Hisoka QA Verdict: Playwright E2E Tests
-
-**Date:** 2026-04-06
-**Verdict:** ✅ PASS (12/14, 2 intentionally skipped)
-
-## Results
-
-| Test | Status | Duration | Notes |
-|------|--------|----------|-------|
-| R1 - loads runbook runner view | ✅ PASS | 252ms | |
-| R2 - can start a simple runbook run | ✅ PASS | 249ms | |
-| R3 - shows live step progress | ✅ PASS | 246ms | |
-| R4 - streams output lines to output panel | ✅ PASS | 316ms | |
-| R5 - shows execution graph | ✅ PASS | 250ms | |
-| R6 - shows success outcome on completion | ✅ PASS | 312ms | |
-| R7 - handles manual choice prompt | ✅ PASS | 434ms | |
-| R8 - run again button restarts the run | ✅ PASS | 326ms | |
-| R9 - shows step completion statuses | ✅ PASS | 318ms | |
-| R10 - shows error state when server disconnects | ✅ PASS | 288ms | |
-| Tool Catalog - loads tool list | ✅ PASS | 220ms | |
-| Tool Catalog - clicking a tool shows its detail | ✅ PASS | 226ms | |
-| Tool Catalog - server error when not running | ⏭️ SKIP | - | Requires stopping gert mid-test |
-| Tool Catalog - search filters tool list | ⏭️ SKIP | - | Depends on server error test |
-
-**Environment:** Node v24.1.0, Playwright 1.59.1, Chromium
-**Total run time:** 5.5s
-
-## Bugs Fixed
-
-### Server-side (Go)
-- **CRITICAL:** `serve_http.go` — WebSocket events silently dropped during HTTP RPC processing. `responseWriter.Write()` saw events (messages with `Method` field) and returned without forwarding to WebSocket broadcast. Every `step/started`, `step/completed`, and `run/completed` event was lost. Fixed by forwarding to `httpServer.broadcast()`.
-
-### Frontend (TypeScript)
-- **CRITICAL:** `runbookRunner.ts` — No `exec/next` execution loop. Server requires step-by-step advancement via `exec/next` RPC calls. Frontend only called `exec/start` and waited for events that never came. Added `advanceExecution()` loop.
-- **CRITICAL:** `runbookRunner.ts` — State initialized from nonexistent `run/started` event. Server doesn't emit it. Fixed: use `exec/start` RPC response.
-- `runbookRunner.ts` — Completion state missing output panel
-- `runbookRunner.ts` — "resolved" outcome not mapped to success CSS class
-- `runbookRunner.ts` — "Run Again" button didn't restart execution
-- `toolCatalog.ts` — Missing `data-testid="detail-title"` and `data-testid="server-error"`
-- `toolCatalog.ts` — Missing `data-status` attribute on step items
-- `vite.config.ts` — Proxy hardcoded to port 7777, not configurable
-
-### Test Infrastructure
-- `base.ts` — `__dirname` not available in ESM (3 files fixed)
-- `playwright.config.ts` — Replaced broken `beforeAll`/`afterAll` fixture with `webServer` config
-- `playwright.config.ts` — `fullyParallel: true` caused per-test server restarts
-- Test fixtures — Invalid `kind`, nonexistent `echo` tool, wrong YAML schema for branches
-
-## What the user can do RIGHT NOW
-
-```bash
-cd /Volumes/Projects/gert
-./gert serve --http --port 7777
-# In another terminal:
-cd web && GERT_PORT=7777 npm run dev
-# Open http://localhost:5173
-```
-
-To re-run tests:
-```bash
-cd /Volumes/Projects/gert/web
-npx playwright test --reporter=list
-```
+**Questions for Brian:**
+1. Is the 10-step TDD workflow realistic, or does it need simplification for velocity?
+2. Should the workflow include pair programming or async review before Ken's final review?
+3. Are there categories of MUST rules that shouldn't require tests (e.g., documentation-only rules)?
 
 ---
 
-# QA Sweep — Full Example Runbook Run + Bug Fixes
-**Date:** 2026-04-07
-**By:** Hisoka (QA Lead)
-**Requested by:** ormasoftchile
+## Related Documents
 
-## Bugs Found and Fixed
+- Full strategy: `.squad/tmp/barbara-correctness-strategy.md`
+- Implementation plan: `design/gert-v2/PLAN.md`
+- Testing spec: `design/gert-v2/spec/08-testing-and-acceptance.md`
+- Trace format spec: `design/gert-v2/spec/12-evidence-tracing-resumption.md`
+- Q3 decision (HMAC traces): `.squad/decisions.md` §2026-04-19T21:00:00Z
 
-### Bug 1 — Prose Panel Spill (FIXED)
-**File:** `web/src/views/runbookRunner.ts`, `renderStepsAsProse()`
-**Root cause:** Instructions containing resolved Go template vars (e.g. `{{ .http_status }}`) were rendered as `<p>` without whitespace preservation. Multi-line HTTP headers collapsed into unreadable wall of text.
-**Fix:** Added `.prose-instructions` CSS class with `white-space: pre-wrap; word-break: break-word` to preserve line structure.
-**Commit:** `94c0f99`
+---
 
-### Bug 2 — False "Failed" Outcome (FIXED)
-**File:** `web/src/views/runbookRunner.ts`, `advanceExecution()`
-**Root cause:** Priority `result.outcomeCode || result.outcome?.state || result.outcomeState` checked `outcomeCode` ("healthy") before `outcomeState` ("resolved"). `"healthy"` didn't match success/failure patterns → `mapOutcomeCategory` returned raw "healthy" → `renderCompletionState` showed ❌ Failed.
-**Fix:** Swapped to `result.outcomeState || result.outcome?.state || result.outcomeCode` so category wins over specific code.
-**Commit:** `94c0f99`
+## dennis-input-benchmarks
 
-## Coverage Gap — Test Scope Too Narrow
-Prior to this sweep, the team had only been testing `network-health-check.runbook.yaml`. This allowed both bugs to exist undetected in `simple-health-check.runbook.yaml`.
+# Operator Input Capture Benchmarks: gert v2 vs. Industry Peers
 
-**Decision:** All 13 non-Windows, non-chained example runbooks must be tested on each significant change. Spec: `.squad/screenshots/specs/all-examples.spec.ts`
+**Research Date:** April 2026  
+**Researcher:** Dennis (Research Specialist)  
+**Status:** Final  
+**Requested by:** Project Owner  
 
-## Example Runbook Results (Post-Fix)
+---
 
-| Runbook | Outcome | Notes |
+## Executive Summary
+
+gert v2's **choice / decision / collector** triad for human operator input is **competitive with industry peers** but **not best-in-class** on several critical dimensions:
+
+### Key Findings
+
+1. **Common Table Stakes** (all systems support):
+   - Single-choice / multi-choice selection (gert: `choice`)
+   - Branching/routing based on selection (gert: `decision`)
+   - Free-form text collection (gert: `collector`)
+   - Basic timeout handling
+
+2. **Where gert v2 Is Strong**:
+   - Explicit, separate step types for value capture vs. flow routing (most peers conflate these)
+   - Built-in file/image attachment with SHA256 hashing
+   - Governance-aware approval gates with role-based escalation
+   - Structured multi-field forms within a single step
+
+3. **Where gert v2 Lags**:
+   - **Missing: Conditional field visibility** (shown in xMatters, ServiceNow, Camunda)
+   - **Missing: Field validation schemas** (regex, length, format validation not standardized)
+   - **Missing: Dynamic field rendering** (Zapier, Make, Camunda allow template-driven forms)
+   - **Missing: Multi-option selects / tagging** (most peers support select-multiple)
+   - **Missing: Adaptive input based on prior answers** (Camunda, ServiceNow support)
+   - **Missing: Rich text / markdown editing** in `collector` fields
+   - **Missing: Input provider integration at field level** (xMatters, ServiceNow fetch context from external systems)
+
+4. **Unique to Peers**:
+   - **Camunda BPM**: Full BPMN user task forms with nested structures, conditional visibility, repeating field groups
+   - **ServiceNow**: Catalog items with complex question dependencies; business rule-driven show/hide logic
+   - **xMatters**: Context-aware incident enrichment; form responses trigger downstream actions
+   - **Zapier/Make**: Step-by-step action sequences with form fields; payload mapping between steps
+   - **GitHub Actions**: Only simple `input:` dispatch with no UI abstraction; bare minimum feature set
+   - **AWS SSM**: Parameter input divorced from runbook semantics; treated as external arguments
+   - **Ansible AWX**: Survey/prompt feature is optional, bolted on; not a first-class flow primitive
+
+---
+
+## Detailed System Survey
+
+### 1. PagerDuty Process Automation (formerly Rundeck)
+
+**Input Types Supported:**
+- Text (single-line, multi-line)
+- Dropdown/select (single-choice)
+- Checkbox (boolean toggle)
+- File upload
+- Number input
+
+**Input Capture Pattern:**
+- **Equivalent to `choice`**: Dropdown options with default fallback
+- **Equivalent to `decision`**: Conditional branches based on option selection; separate "branch" step type
+- **Equivalent to `collector`**: File upload + multiline text fields in a single "prompt" action
+
+**Form Handling:**
+- All fields presented as a single user prompt dialog
+- No native multi-question questionnaire structure
+- Sequential prompts if multiple input steps needed
+- Limited field validation (basic required/optional flag)
+
+**Key Features:**
+- Options can be sourced from a prior CLI output (dynamic option lists)
+- Built-in timeout; execution can `continue_on_error` if skipped
+- Approval gates via `approval` action (separate from input)
+- Role-based authorization
+
+**Gaps vs. gert v2:**
+- No native support for input field visibility rules
+- No field-level validation schema (length, format, regex)
+- No rich text editing
+- Input and approval are separate concepts (not co-located like gert's `collector.approvals`)
+- No per-field governance (redaction, allowlist)
+
+**Advantages over gert v2:**
+- Dynamic option lists sourced from script output
+- Tighter integration with external data sources (via script context)
+
+---
+
+### 2. Confluence / Atlassian SOP Playbooks
+
+**Input Types Supported:**
+- **Macro-based input**: Confluence uses embedded macros (Parameters, Rich Text) but NOT for workflow automation
+- SOP playbooks are primarily **documentation** (wiki pages), not executable
+- Limited structured input capture (mostly free-form wiki editing)
+
+**Input Capture Pattern:**
+- **Not applicable**: Confluence playbooks are read-only reference docs, not automated workflows
+- User actions are captured via comments/replies, not structured forms
+- Some integration via Jira for task capture, but divorced from SOP execution
+
+**Form Handling:**
+- Jira issue creation forms (when playbook links to Jira) support basic field mapping
+- No native questionnaire or operator prompt system in playbooks
+
+**Key Features:**
+- Excellent documentation and context capture
+- Rich formatting (markdown, embedded media)
+- Audit trail via page history
+
+**Gaps vs. gert v2:**
+- Not an executable runbook system; no real operator input capture for workflow automation
+- No routing/branching based on form input
+- No governance integration
+- No evidence tracking
+
+**Advantages over gert v2:**
+- N/A (fundamentally different category: documentation vs. executable automation)
+
+---
+
+### 3. xMatters / OpsGenie
+
+**Input Types Supported:**
+- Text (single-line, multiline)
+- Dropdown (single/multi-select)
+- Checkbox (boolean, checkbox groups)
+- Date/time pickers
+- Number input
+- Cascading selects (dependent dropdowns)
+- Rich text editing
+
+**Input Capture Pattern:**
+- **Equivalent to `choice`**: Single-select dropdown with incident context
+- **Equivalent to `decision`**: Multi-branch response routing (escalate, acknowledge, resolve, etc.)
+- **Equivalent to `collector`**: Multi-field forms embedded in alert/incident notifications
+
+**Form Handling:**
+- Forms embedded in **push notifications** or web UI
+- **Conditional field visibility**: Show/hide fields based on prior field values
+- **Adaptive forms**: Different questions based on incident severity/type
+- Multi-question questionnaires with branching logic
+- Field validation: required, regex, format
+
+**Key Features:**
+- **Integration with external data**: Form questions fetched from incident context (service name, customer, etc.)
+- **Enrichment-driven**: Answers feed back into incident record; trigger downstream actions
+- **Escalation chains**: Form response determines escalation path
+- **Multi-step approvals**: Approval gates can require multiple respondents
+- **Timeout + SLA**: Form response must occur within SLA window; escalates or fails otherwise
+- **Mobile-first**: Form interaction via SMS, push, mobile app
+
+**Gaps vs. gert v2:**
+- No SHA256 file hashing / evidence integrity verification
+- No audit trail comparable to gert's append-only JSONL
+- Form submission tied to incident lifecycle, not generic runbook model
+- Limited to alert/incident domain (not general-purpose runbooks)
+
+**Advantages over gert v2:**
+- **Conditional field visibility** (gert lacks this)
+- **Adaptive forms** based on incident metadata (gert lacks this)
+- **Multi-select dropdown** support (gert's `choice` is single-select only)
+- **Cascading selects** (dependent dropdowns)
+- **Date/time pickers** (gert only supports text input)
+- **Mobile alert integration** (form interaction via SMS/push)
+- **External data enrichment** at field level (fetch context from incident API)
+
+---
+
+### 4. AWS Systems Manager / Run Command
+
+**Input Types Supported:**
+- String parameter
+- String list (comma-separated)
+- Number
+- Boolean
+- Selection list (dropdown)
+
+**Input Capture Pattern:**
+- Parameters passed to `run-command` via CLI/API, not interactive form
+- **Equivalent to `choice`**: Parameter with pre-defined allowed values
+- **Equivalent to `decision`**: Conditional logic within script/document (not in parameter input)
+- **Equivalent to `collector`**: String parameters (single/multiline)
+
+**Form Handling:**
+- **No interactive form UI**: Parameters are specified before runbook invocation
+- **No in-execution prompts**: All input gathered upfront
+- Document parameters are static YAML; no dynamic questionnaire
+- Minimal validation (type checking only)
+
+**Key Features:**
+- Parameter substitution into script/document via `{{ ssm:parameter }}` or `{{ aws:param }}`
+- Role-based access control to parameters
+- Parameter versioning and history
+- Integration with AWS Secrets Manager for sensitive data
+
+**Gaps vs. gert v2:**
+- **No in-execution prompts** (all input upfront)
+- **No interactive form** (bare-bones parameter model)
+- **No branching on input** (routing must be script-based)
+- **No approval gates at parameter level**
+- **No file attachment** (only scalar parameters)
+- **No conditional field visibility**
+- **Minimal governance** (no output redaction, no step-level approval)
+
+**Advantages over gert v2:**
+- Parameter versioning and rollback
+- Tight AWS IAM integration
+- Parameter Store can source dynamic values (via Lambda)
+
+**Note**: AWS SSM is **not designed for interactive operator input capture**; it's a parameter injection system. Falls short of peer complexity.
+
+---
+
+### 5. Ansible AWX / Tower
+
+**Input Types Supported:**
+- Text (single-line, multiline)
+- Dropdown (single-select)
+- Checkbox (boolean, checkbox groups)
+- Multiple-choice (checkbox groups for multi-select)
+- Number, password (masked)
+
+**Input Capture Pattern:**
+- **Survey feature** (separate from playbook): Optional feature, not core
+- **Equivalent to `choice`**: Survey question with predefined answers
+- **Equivalent to `decision`**: Job templating with conditional includes (not input-driven)
+- **Equivalent to `collector`**: Survey multiline text fields
+
+**Form Handling:**
+- Surveys are **bolted on** to job templates; not first-class runbook primitives
+- Survey questions collected upfront before playbook execution (similar to AWS SSM)
+- No in-execution prompts during playbook run
+- Limited field validation (required flag, regex pattern optional)
+
+**Key Features:**
+- Survey questions can have default values
+- Questions can be marked as "required" or optional
+- Dropdown options are static (no dynamic sourcing)
+- Execution history captures survey answers
+- Multi-user approval gates (separate from survey)
+
+**Gaps vs. gert v2:**
+- **Survey is optional, not core**: Most Ansible workflows don't use surveys
+- **No in-execution prompts** (all input upfront like AWS SSM)
+- **No branching on input** (play logic must handle routing)
+- **No conditional field visibility**
+- **Minimal approval integration** (approvals are separate job template setting)
+- **No file attachment**
+- **No evidence hashing/integrity**
+
+**Advantages over gert v2:**
+- Tight playbook language integration (Jinja2 templating)
+- Survey answers available as facts in playbook context
+
+---
+
+### 6. GitHub Actions (`workflow_dispatch`)
+
+**Input Types Supported:**
+- `string` (text input)
+- `choice` (dropdown)
+- `boolean` (checkbox)
+- `environment` (environment selector)
+
+**Input Capture Pattern:**
+- **Equivalent to `choice`**: `choice` input type (dropdown)
+- **Equivalent to `decision`**: Conditional jobs/steps (not input-driven form)
+- **Equivalent to `collector`**: `string` input (single/multiline via textarea)
+
+**Form Handling:**
+- Single form presented before workflow execution (GitHub UI pre-renders form)
+- **No interactive in-execution prompts**
+- **No conditional field visibility**
+- **No multi-question questionnaire structure**
+- All input is flat (no nested objects or field groups)
+
+**Key Features:**
+- Input variables available as `${{ github.event.inputs.* }}`
+- Very simple, minimal feature set
+- No validation schema (beyond type)
+- No approval gates (separate via branch protection rules)
+
+**Gaps vs. gert v2:**
+- **Very minimal feature set**: Only basic types supported
+- **No in-execution input** (one-time form before workflow starts)
+- **No field validation** (type only)
+- **No conditional visibility**
+- **No file attachment**
+- **No branching on input**
+- **No approval gate at input level**
+- **No governance** (redaction, allowlist)
+
+**Advantages over gert v2:**
+- Very simple to understand and use
+- Native GitHub integration (runs in GitHub UI)
+
+**Note**: GitHub Actions `workflow_dispatch` is **extremely bare-bones** for operator input; it's the simplest system surveyed.
+
+---
+
+### 7. ServiceNow Flow Designer
+
+**Input Types Supported:**
+- Text (single-line, multiline)
+- Dropdown (single-select, multi-select with tags)
+- Checkbox (boolean, checkbox groups)
+- Radio buttons (single-choice)
+- Date/time pickers
+- Number, currency, percentage
+- User/group picker
+- Lookup (reference to another record)
+- Rich text editor
+
+**Input Capture Pattern:**
+- **Equivalent to `choice`**: Catalog items with single/multi-select questions
+- **Equivalent to `decision`**: Flow branching based on question responses
+- **Equivalent to `collector`**: Multi-field item variables in catalog
+
+**Form Handling:**
+- **Catalog Item Template**: Complex questionnaire with conditional logic
+- **Conditional field visibility**: Show/hide questions based on prior answers (business rules)
+- **Field dependencies**: Lookup fields populate based on prior selections
+- **Multi-field sections**: Group related questions into collapsible sections
+- **Field validation**: Built-in validators (required, regex, format)
+- **Dynamic field rendering**: Questions can be templates with variable substitution
+
+**Key Features:**
+- **Business rules-driven show/hide**: Hide/display questions based on service catalog item type
+- **Approval routing**: Form can route to different approvers based on answer
+- **Fulfillment workflow**: Form submissions trigger downstream service requests
+- **Field-level RBAC**: Different users see different questions
+- **Multi-language support**: Questions in multiple languages
+- **Input from external sources**: Lookup fields query CMDB, user directory, etc.
+
+**Gaps vs. gert v2:**
+- No SHA256 file hashing for evidence integrity
+- Approval is less integrated into input step (separate flow action)
+- No append-only audit trail (traditional RDBMS with update history)
+- Catalog model is focused on IT service requests, not general runbooks
+
+**Advantages over gert v2:**
+- **Conditional field visibility** (driven by business rules)
+- **Field dependencies** (cascading/dependent selects)
+- **Multi-select dropdown** (gert only has single-select)
+- **Date/time pickers**
+- **Rich text editor**
+- **Lookup fields** (query external systems)
+- **User/group picker**
+- **Field-level RBAC** (different users see different questions)
+- **Template-driven field rendering**
+
+---
+
+### 8. Zapier / Make (Integromat)
+
+**Input Types Supported:**
+- Text (single-line, multiline)
+- Number, currency
+- Date/time
+- Boolean toggle
+- Email
+- Phone
+- URL
+- Dropdown (single-select)
+- Multi-select (checkbox group)
+- File picker
+
+**Input Capture Pattern:**
+- **Equivalent to `choice`**: Webhook form with dropdown fields
+- **Equivalent to `decision`**: Conditional routing based on field values
+- **Equivalent to `collector`**: Multi-field form via Zapier's "Form" module (Zapier) or "Webhook Response" (Make)
+
+**Form Handling:**
+- **Webhook-triggered forms**: End user fills form, webhook fires Zap/scenario
+- **Form fields are discoverable**: Form UI auto-generated from field definitions in Zap
+- **No in-execution prompts**: All input captured upfront via form submission
+- **Conditional logic**: Routes and actions based on form field values
+- **File attachment**: Form can collect files; stored in cloud storage (Google Drive, Dropbox, etc.)
+
+**Key Features:**
+- **Payload mapping**: Form responses become data payloads for downstream actions
+- **Multi-step action sequences**: Form triggers chain of integrations
+- **Field validation**: Built-in validators (required, format, length)
+- **Conditional actions**: Skip/execute actions based on form values
+- **No approval gates native to form**: Approval would be a separate action (e.g., email approval)
+
+**Gaps vs. gert v2:**
+- **No in-execution prompts** (form-before-workflow model)
+- **No branching on input** (conditional logic is action-based, not flow-based)
+- **No SHA256 hashing** (files stored in 3rd-party cloud storage)
+- **No append-only audit trail**
+- **No governance** (redaction, allowlist)
+- **No approval gates** at form level
+
+**Advantages over gert v2:**
+- **Multi-select dropdown** (gert only single-select)
+- **Rich field types** (phone, email, currency, etc.)
+- **File attachment** with cloud storage integration
+- **Tight integration with 3rd-party APIs** (hundreds of apps)
+- **Payload mapping** (form response → action inputs)
+
+---
+
+### 9. Camunda BPM / Flowable
+
+**Input Types Supported:**
+- Text (single-line, multiline)
+- Dropdown (single-select, multi-select)
+- Checkbox (boolean, checkbox groups)
+- Radio buttons
+- Date/time pickers
+- Number, currency
+- Select/lookup
+- File upload
+- Rich text editor
+- Custom widgets (plugin-based)
+
+**Input Capture Pattern:**
+- **BPMN User Task Forms**: First-class flow primitive
+- **Equivalent to `choice`**: Form with single/multi-select fields
+- **Equivalent to `decision`**: Conditional flow routing based on form submission
+- **Equivalent to `collector`**: Multi-field user task form with nested structures
+
+**Form Handling:**
+- **Conditional field visibility**: Show/hide fields based on form values (JSON Forms schema)
+- **Field dependencies**: Cascading selects, dynamic field population
+- **Repeating field groups**: Arrays of field sets (e.g., multiple error logs)
+- **Nested object structures**: Complex hierarchical forms
+- **Field validation**: JSON Schema-based validation (regex, length, format)
+- **Template-driven rendering**: Camunda Forms allow template expressions
+
+**Key Features:**
+- **JSON Forms standard**: Forms defined via JSON Schema + UI schema
+- **Conditional rendering**: `if-then-else` logic at field level
+- **Default values**: Fields can have dynamic defaults (from process variables)
+- **Read-only fields**: Can display computed values (not editable)
+- **Layout control**: Field groups, sections, tabs
+- **Custom validation**: Business rule validation beyond schema
+- **Assignment pool**: Task can be assigned to user group; users claim task
+- **Task priority**: Prioritize user task queue
+
+**Gaps vs. gert v2:**
+- No SHA256 hashing (file handling is generic, not evidence-focused)
+- No append-only audit trail (traditional RDBMS persistence)
+- Governance is not explicit (RBAC via process variables, not declarative)
+- No built-in approval gates (would require additional task or subprocess)
+
+**Advantages over gert v2:**
+- **Conditional field visibility** (if-then-else logic)
+- **Field dependencies** (cascading selects)
+- **Repeating field groups** (dynamic arrays)
+- **Nested object structures** (hierarchical forms)
+- **JSON Schema-based validation**
+- **Template expressions** in field defaults
+- **Read-only computed fields**
+- **Assignment pool and task claiming**
+- **Task priority queuing**
+- **Custom widget plugins**
+
+---
+
+### 10. Temporal Workflow Engine
+
+**Input Types Supported:**
+- Temporal is **not a form/input system**; it's a workflow orchestration engine
+- Activities can accept arbitrary struct parameters (type-safe via Go/Java/TypeScript)
+- No native human input capture UI
+
+**Input Capture Pattern:**
+- Human input is captured via **separate action** (e.g., webhook, signal, query)
+- **Equivalent to `choice`**: Signal with enum value; workflow branches on signal
+- **Equivalent to `decision`**: Conditional branches based on signal/query value
+- **Equivalent to `collector`**: Struct parameter passed to activity
+
+**Form Handling:**
+- **No native form UI**: Input is application-specific
+- **No in-execution prompts**: Temporal is backend; frontend must implement UI
+- **Signal-based input**: Frontend sends signal to workflow; workflow handles it
+- **Query-based input**: Frontend queries workflow for state; frontend renders UI accordingly
+
+**Key Features:**
+- Type-safe parameters (compile-time checked)
+- Deterministic retry/compensation (saga pattern)
+- Event sourcing via event history
+- Durable execution (replay-safe)
+
+**Gaps vs. gert v2:**
+- **Not a form/runbook system**: Temporal is orchestration engine for backend workflows
+- **No UI abstraction** for operator input
+- **No governance** (RBAC, approval gates, output redaction)
+- **No questionnaire/multi-field forms** (signals carry simple enums)
+- **Not designed for human operator interaction**
+
+**Advantages over gert v2:**
+- **Type-safe parameters** (compile-time validation)
+- **Deterministic replay** (audit trail + debugging)
+- **Compensation/saga pattern** (automatic cleanup on failure)
+- **Durable execution** (survives process restart)
+
+**Note**: Temporal is **out of category** for this benchmark; it's a backend orchestration engine, not a human-in-loop form system. Included for completeness (mentioned as workflow system in gert research brief).
+
+---
+
+### 11. Incident IQ / FireHydrant
+
+**Input Types Supported:**
+- Text (single-line, multiline)
+- Dropdown (single-select)
+- Checkbox (boolean)
+- Number
+- URL
+- File upload
+
+**Input Capture Pattern:**
+- **Runbook steps**: Incident runbooks with manual steps that capture input
+- **Equivalent to `choice`**: Dropdown in runbook step
+- **Equivalent to `decision`**: Branching based on step selection
+- **Equivalent to `collector`**: Multi-field input in runbook step
+
+**Form Handling:**
+- Input collected during incident runbook execution
+- No conditional field visibility
+- Limited validation (required flag only)
+- Sequential prompts if multiple input steps
+
+**Key Features:**
+- Incident context available to runbook steps
+- Input stored in incident timeline
+- Runbook can branch based on input
+- Basic approval gates (separate from input)
+
+**Gaps vs. gert v2:**
+- No conditional field visibility
+- No field validation schema
+- No SHA256 hashing
+- No append-only audit trail
+- Focused on incidents (not general runbooks)
+
+---
+
+## Synthesis & Analysis
+
+### Common Table Stakes (All/Most Systems Support)
+
+1. **Basic Input Types**:
+   - Single-line text
+   - Multiline text
+   - Single-select dropdown
+   - Boolean toggle/checkbox
+   - Number input
+
+2. **Single-Question Capture**:
+   - All systems can capture a single user choice and store it
+
+3. **Branching on Input**:
+   - All systems allow routing/branching based on input selection
+
+4. **Timeout Handling**:
+   - Most have some form of timeout (escalate, fail, skip)
+
+5. **Approval Gates**:
+   - All have approval capability, though integration varies
+
+### Where gert v2 Is Strong
+
+| Feature | gert v2 | Peers |
 |---------|---------|-------|
-| edge-case-branch-target-1 | ✅ success | |
-| edge-case-branch-target-2 | ✅ success | |
-| edge-case-branch | ❌ error | Backend: malformed JSON during sub-runbook invoke — needs Killua |
-| edge-case-single-step-timeout | ✅ success | |
-| edge-case-single-step | ✅ success | |
-| incident-triage.app-crash | ✅ success | |
-| incident-triage.connectivity-test | ✅ success | |
-| incident-triage.network | ✅ success | |
-| incident-triage.resource-exhaustion | ✅ success | |
-| incident-triage | ⚠️ failure | Expected — escalated outcome from first choice selection |
-| multi-region-rollout | ⚠️ needs_rca | Custom outcome state — expected by design |
-| simple-health-check | ✅ success | Both bugs now fixed |
-| service-health-branching | ✅ success | |
+| **Separate choice/decision/collector types** | ✅ Explicit distinction | ❌ Most conflate value capture with routing |
+| **File attachment with SHA256 hashing** | ✅ Yes | ❌ Few hash files; most use 3rd-party storage |
+| **Governance-aware approval gates** | ✅ Role-based, inline approvals | ⚠️ ServiceNow, Camunda support; others weak |
+| **Append-only JSONL traces** | ✅ Event sourcing model | ❌ Most use RDBMS updates |
+| **Structured multi-field forms** | ✅ `collector.fields[]` | ✅ Camunda (JSON Forms), ServiceNow, xMatters |
+| **Inline contract/governance** | ✅ Step-level governance | ❌ Most governance is process-wide or external |
 
-## New Bug Logged
-**edge-case-branch**: `exec/next` returns malformed JSON during sub-runbook invoke (chained runbook execution). Error: `Unexpected non-whitespace character after JSON at position 272`. Assigned to: Killua.
+### Where gert v2 Lags (Critical Gaps)
 
----
+| Feature | Missing in gert v2 | Competitors | Impact |
+|---------|-------------------|-------------|--------|
+| **Conditional field visibility** | ❌ | ✅ ServiceNow, Camunda, xMatters | Cannot build adaptive questionnaires |
+| **Multi-select dropdown** | ❌ (only single-select `choice`) | ✅ All others | Cannot capture "select all that apply" responses |
+| **Dependent/cascading selects** | ❌ | ✅ ServiceNow, Camunda, xMatters | Cannot implement "category → subcategory" workflows |
+| **Date/time pickers** | ❌ (only text input) | ✅ xMatters, ServiceNow, Camunda, Make | Must ask user to type dates (error-prone) |
+| **Field validation schema** | ⚠️ Minimal (no regex, format rules) | ✅ Camunda (JSON Schema), ServiceNow, xMatters | Cannot enforce format/length/pattern upfront |
+| **Dynamic field population** | ❌ | ✅ ServiceNow, xMatters, Camunda | Cannot fetch options from external systems |
+| **Rich text / markdown editor** | ❌ (multiline text only) | ✅ ServiceNow, Camunda | Cannot support formatted text in responses |
+| **Repeating field groups** | ❌ | ✅ Camunda (JSON Forms) | Cannot collect variable number of items (e.g., multiple logs) |
+| **Input provider integration at field level** | ⚠️ (external system, not field-driven) | ✅ ServiceNow (lookups), xMatters (incident context) | Cannot enrich form based on external data |
 
-# QA Review: Phase 1 + Phase 2 Web Application Deliverables
+### Unique Features by Competitor
 
-**Reviewer:** Hisoka (QA Reviewer)  
-**Date:** 2026-04-05  
-**Scope:** HTTP transport, web frontend, Playwright test infrastructure
+**ServiceNow Flow Designer**:
+- Field-level RBAC (different users see different questions)
+- Business rule-driven show/hide
+- Multi-language support
+- Assignment pool + task claiming
 
----
+**Camunda BPM**:
+- JSON Schema-based validation
+- Repeating field groups (dynamic arrays)
+- Nested object structures
+- Custom widget plugins
 
-## Verdict
+**xMatters**:
+- Mobile-first (SMS/push interaction)
+- Adaptive forms based on incident metadata
+- External data enrichment (fetch context from incident API)
+- Escalation chains based on form response
 
-## ⚠️ CONDITIONAL APPROVAL
+**Make/Zapier**:
+- Rich field types (phone, email, currency)
+- File attachment with cloud storage integration
+- Payload mapping (form response → action inputs)
+- Hundreds of 3rd-party app integrations
 
-Proceed to Phase 3 (RunbookEditorPanel) but fix these specific issues in parallel.
+### Unique Features in gert v2 (Not Matched by Peers)
 
----
-
-## Summary
-
-Phase 1 and Phase 2 deliver a functional foundation. The Go HTTP transport is solid, the ToolCatalog works, the RunbookRunner has correct state machine logic, and the Playwright infrastructure exists. However, I identified **5 blocking issues** and **8 non-blocking concerns** that would cause problems if left unaddressed.
-
----
-
-## Blocking Issues (Must Fix in Parallel with Phase 3)
-
-### B1. Event method mismatch between contract and implementation
-
-**File:** `web/src/views/runbookRunner.ts` lines 93-149  
-**File:** `web/docs/ws-events.md`
-
-The RunbookRunner handles these events:
-- `run/started`, `step/started`, `step/output`, `step/completed`, `run/choice`, `run/completed`, `run/error`
-
-But the documented WebSocket contract uses:
-- `event/stepStarted`, `event/stepCompleted`, `event/runCompleted`, `event/inputRequired`, etc.
-
-**Risk:** Either the implementation or the documentation is wrong. If the Go server emits `event/stepStarted` but the client listens for `step/started`, the runner will silently ignore all execution events.
-
-**Acceptance criteria:**
-1. Verify which event method names the Go server actually emits
-2. Update either `runbookRunner.ts` or `ws-events.md` to match
-3. Add a test that verifies event names match (contract test)
-
-**Assign to:** Killua (owns Go transport)
+1. **SHA256 Evidence Hashing**: File attachments in `collector` are hashed for integrity verification (uncommon)
+2. **Append-Only JSONL Traces**: Event sourcing model with deterministic replay (Temporal/Cadence style)
+3. **Explicit choice vs. decision vs. collector**: Cleaner DSL separation (peers mix these concepts)
+4. **Inline governance in step definition**: Approval gates, redaction, allowlist in `contract` field (peers keep governance external)
+5. **Step-level timeout + escalation SLA**: Timeout configuration at `collector` level with escalate/fail/skip (integrated, not bolted-on)
 
 ---
 
-### B2. RunbookRunnerPage.goto() navigates to wrong URL
-
-**File:** `web/tests/pages/RunbookRunnerPage.ts` line 37  
-**File:** `web/src/main.ts` lines 41-73
-
-The Page Object does:
-```typescript
-async goto(): Promise<void> {
-  await this.page.goto('/runner');
-}
-```
-
-But `main.ts` uses tab-based routing — there is no `/runner` route. The app always loads at `/` and switches views via tab clicks.
-
-**Risk:** All R1-R10 tests will fail because `goto('/runner')` loads a blank page.
-
-**Acceptance criteria:**
-1. Either add proper URL routing to `main.ts` (hash router or history API)
-2. Or change `RunbookRunnerPage.goto()` to navigate to `/` and click the runner tab
-3. Verify R1 test passes after fix
-
-**Assign to:** Knov (owns test infrastructure)
-
----
-
-### B3. Test R10 intercepts wrong endpoint
-
-**File:** `web/tests/specs/runbook-runner.spec.ts` lines 178-198
-
-```typescript
-await runnerPage.page.route('**/api/runbook/execute', route => {
-  route.abort('failed');
-});
-```
-
-But the actual RPC endpoint is `POST /rpc` with a JSON-RPC body containing `method: "run/start"`. This route intercept will never match.
-
-**Risk:** Test R10 will always pass (false positive) because it never actually tests error handling.
-
-**Acceptance criteria:**
-1. Change route pattern to `**/rpc`
-2. Implement proper request interception that checks the JSON body for `run/start`
-3. Verify test actually fails when the client handles the error correctly
-
-**Assign to:** Knov
-
----
-
-### B4. Missing test fixtures directory structure
-
-**File:** `web/tests/fixtures/base.ts` line 183
-
-```typescript
-const runbookPath = path.join(__dirname, '../fixtures/runbooks/simple.runbook.yaml');
-```
-
-While the fixture files exist, the tests use absolute paths that won't work when the gert server runs the runbook. The server needs paths relative to CWD or the project root.
-
-**Risk:** Tests R2-R9 will fail with "file not found" when gert tries to execute the runbook.
-
-**Acceptance criteria:**
-1. Use relative paths (e.g., `web/tests/fixtures/runbooks/simple.runbook.yaml` from repo root)
-2. Or configure a known working directory for the gert server fixture
-3. Verify R2 test passes with the fixture
-
-**Assign to:** Knov
-
----
-
-### B5. CORS origin check has off-by-one bug
-
-**File:** `ext/serve/pkg/serve/serve_http.go` lines 26-31
-
-```go
-return origin == "http://localhost:5173" ||
-    origin == "http://localhost:3000" ||
-    origin == "http://127.0.0.1:5173" ||
-    origin == "http://127.0.0.1:3000" ||
-    len(origin) >= 16 && (origin[:16] == "http://localhost" || origin[:16] == "http://127.0.0.1")
-```
-
-The prefix check `origin[:16]` expects exactly 16 characters, but:
-- `"http://localhost"` = 16 chars ✓
-- `"http://127.0.0.1"` = 16 chars ✓
-
-However, `len(origin) >= 16` means an origin of exactly 16 chars (no port) would pass, which is valid. But the condition `origin[:16] == "http://127.0.0.1"` will incorrectly match `"http://127.0.0.10:5173"` (a different IP).
-
-**Risk:** Security issue — CORS could allow unintended origins in edge cases.
-
-**Acceptance criteria:**
-1. Fix the origin check to properly validate localhost origins only
-2. Add unit test for CORS origin validation edge cases
-3. Consider using a proper URL parser
-
-**Assign to:** Killua
-
----
-
-## Non-Blocking Issues (Fix Before GA)
-
-### N1. WebSocket reconnection not implemented
-
-**File:** `web/src/api/client.ts`
-
-No reconnection logic exists. If the WebSocket drops mid-execution, the user sees nothing and must refresh.
-
-**Recommendation:** Track as Phase 3 backlog item. Add exponential backoff reconnect with user notification.
-
----
-
-### N2. ToolCatalogPage.getDetailTitle() uses non-existent selector
-
-**File:** `web/tests/pages/ToolCatalogPage.ts` line 73
-
-```typescript
-const titleElement = this.toolDetail.locator('[data-testid="detail-title"]');
-```
-
-But `toolCatalog.ts` doesn't emit `data-testid="detail-title"`. The action header is:
-```html
-<div class="action-header" data-expand="action-${ti}-${ai}" ...>
-```
-
-Test T2 ("clicking a tool shows its detail") likely fails silently or timeouts.
-
----
-
-### N3. Agent report lacks failure context for debugging
-
-**File:** `web/tests/helpers/agent-reporter.ts`
-
-The `error` field only includes `result.error.message`, not the stack trace. For autonomous agents, the full stack trace is essential for understanding failures.
-
-**Recommendation:** Include `result.error.stack` in the report.
-
----
-
-### N4. No timeout configuration for RPC requests
-
-**File:** `web/src/api/client.ts` lines 111-116
-
-The `fetch()` call has no timeout. If the server hangs, the UI hangs indefinitely.
-
-**Recommendation:** Add `AbortController` with 30s timeout, surface timeout errors to UI.
-
----
-
-### N5. State machine doesn't handle all documented events
-
-**File:** `web/src/shared/snapshotStateMachine.ts`
-
-Handles: `stepStarted`, `stepCompleted`, `stepSkipped`, `invokeStarted`, `invokeCompleted`, `branchResolved`, `iteratePassStart`, `iteratePassEnd`, `outcomeReached`, `runCompleted`
-
-Missing from documented contract:
-- `event/stepDelaying`
-- `event/iterateStarted`
-- `event/iteratePass`
-- `event/iterateConverged`
-- `event/iterateFailed`
-- `runbook/staleSource`
-
-**Risk:** UI won't reflect delay states or iterate convergence status.
-
----
-
-### N6. Choice modal event name mismatch
-
-**File:** `web/src/views/runbookRunner.ts` line 124  
-**File:** `web/docs/ws-events.md` line 406
-
-Runner listens for `run/choice`, but contract documents `event/inputRequired`.
-
----
-
-### N7. test.skip() placement in tool-catalog.spec.ts
-
-**File:** `web/tests/specs/tool-catalog.spec.ts` lines 57, 78
-
-```typescript
-test.skip(true, 'Phase 1 — requires server lifecycle control (Phase 2)');
-```
-
-This line is inside the test body after navigation. The test will still attempt setup before skipping. Should use `test.skip('reason', async ...)` pattern.
-
----
-
-### N8. Fixture runbooks may not match actual gert schema expectations
-
-**Files:**
-- `web/tests/fixtures/runbooks/simple.runbook.yaml`
-- `web/tests/fixtures/runbooks/branching.runbook.yaml`
-
-Both use `choice:` with `options:` structure. Need to verify this matches the actual gert schema for manual steps with choices.
-
----
-
-## Phase 3 Risks
-
-1. **Event contract drift:** The mismatch between `runbookRunner.ts` and `ws-events.md` suggests the contract wasn't validated end-to-end. The editor will need step/started, step/completed events too. Fix B1 before editor work begins.
-
-2. **No integration test for full event flow:** The tests mock at the page level but don't verify the gert server → WebSocket → client → DOM flow. Consider adding one smoke test that runs a real runbook.
-
-3. **Tab routing fragility:** The current tab system in `main.ts` will need extension for the editor. Consider implementing hash-based routing now to avoid rework.
-
-4. **Shared state machine is untested:** `snapshotStateMachine.ts` is 287 lines of critical logic with no unit tests. A bug here would affect both runner and editor views.
-
----
-
-## Autonomous Loop Assessment
-
-**Question:** Will `agent-report.json` give an agent enough signal?
-
-**Answer:** Partially.
-
-✅ Good:
-- Clear PASS/FAIL verdict
-- Per-test status with durations
-- Screenshot paths for failures
-- Summary stats
-
-❌ Gaps:
-- No stack traces (N3)
-- No server logs included
-- No indication of which assertions failed (only error message)
-- No correlation between test failures and code changes
-
-**Recommendation:** Enhance agent-reporter to include:
-1. Full error stacks
-2. Assertion details (expected vs actual)
-3. Server stderr capture during test
+## Verdict & Recommendations
+
+### Is gert v2's choice/decision/collector Triad Competitive?
+
+**Yes, but incomplete.** The triad is:
+- **Sound conceptually**: Separating value capture, flow routing, and unstructured input is cleaner than peer approaches
+- **Well-structured**: Field-level `name`, `type`, `label`, `hint` is clear
+- **Governance-first**: Approval gates and step-level contract integration is stronger than peers
+
+**However:**
+- **Missing critical features** for adaptive form workflows (conditional visibility, field dependencies, validation schemas)
+- **Incomplete form builder**: Cannot express many common patterns (multi-select, date pickers, repeating sections)
+- **Limited input enrichment**: No field-level integration with external data sources
+
+### Gap Analysis: What Must gert v2 Add?
+
+**Priority 1 (Blocking for best-in-class):**
+1. **Conditional field visibility** (`collector.fields[*].if` or `when` expression)
+2. **Multi-select dropdown** (extend `choice` or add new field type `multi_choice`)
+3. **Field validation schema** (`pattern`, `minLength`, `maxLength`, `format` on fields)
+4. **Dependent selects** (`fields[*].options` can reference prior field value or external data)
+
+**Priority 2 (Differentiating):**
+5. **Date/time picker field type** (avoid free-form date entry)
+6. **Rich text field type** (markdown editing)
+7. **Repeating field groups** (`fields[*].repeat: true` → collect multiple instances)
+8. **Read-only computed field** (display field based on prior values, not editable)
+
+**Priority 3 (Nice-to-have):**
+9. **Field-level input provider** (fetch dropdown options from external system)
+10. **File type constraints** (accept only `.pdf`, `.log`, etc.)
+
+### What gert v2 Should NOT Adopt from Peers
+
+- ❌ **Move approval gates outside collector step**: xMatters/ServiceNow separate approval from input; gert's inline model is cleaner
+- ❌ **Rely on 3rd-party cloud storage for files**: gert's approach (store as artifact with SHA256) is more governance-friendly
+- ❌ **Use RDBMS with update history instead of append-only**: gert's event sourcing model is correct for audit trails
+- ❌ **Bolt on surveys/prompts like Ansible**: Make input a first-class flow primitive (gert already does this)
+- ❌ **Support unlimited field types**: ServiceNow's 20+ field types add bloat; focus on essentials + extensibility
+
+### Recommendations for v2 Design
+
+**Short-term (v2.0 release):**
+1. Add conditional field visibility via `when` expression on `collector.fields[*]`
+2. Add `multi_choice` step type (or extend `choice.multiple: true`) for multi-select
+3. Add field validation: `fields[*]` → add `pattern`, `minLength`, `maxLength`, `format`
+4. Add date picker field type: `fields[*].type: "date"` (ISO 8601 format)
+
+**Medium-term (v2.1 release):**
+5. Implement dependent selects: `fields[*].options` can be array-of-objects with `when` and `lookup` keys
+6. Add rich text field type with markdown editor
+7. Add repeating field groups: `fields[*].repeat: true` → collect multiple instances in array
+
+**Long-term (v2.2+):**
+8. Field-level input provider integration (fetch options from external system)
+9. Read-only computed fields
+10. Custom field type plugin model
 
 ---
 
 ## Conclusion
 
-The architecture is sound. The issues are fixable without redesign. The blocking items are test infrastructure bugs (B2-B4), one contract mismatch (B1), and one security edge case (B5).
+**gert v2's operator input triad is architecturally sound and governance-first, but operationally incomplete.** The three-way distinction (choice / decision / collector) is cleaner than industry peers, and the built-in governance model (approval gates, role-based escalation) is stronger.
 
-**Proceed to Phase 3** with confidence, but fix B1-B5 before attempting to run the test suite in CI.
+**However, gert v2 cannot currently express common enterprise patterns:**
+- Adaptive forms (show/hide fields based on prior answers)
+- Complex selections (multi-select, cascading dropdowns)
+- Validated input (enforce format/length/pattern at form level)
 
----
+**To reach best-in-class status, gert v2 must add:**
+1. Conditional field visibility (Priority 1)
+2. Multi-select support (Priority 1)
+3. Field validation schemas (Priority 1)
+4. Dependent/cascading selects (Priority 2)
+5. Date/time picker (Priority 2)
 
-# Hisoka Triage: Template Bug Fixes (network-health-check runbook)
-
-**Date**: 2025-07-13  
-**Triager**: Hisoka (QA lead)  
-**Runbook**: `examples/windows-diagnostic/runbooks/network-health-check.runbook.yaml`
-
----
-
-## Bugs Found & Root Causes
-
-### Bug A (High) — Raw Go template code in OUTPUT panel
-**Root cause (backend)**: Noop step capture templates (e.g. `{{ .dns_report }}{{ .target }}: ...`) use `resolveTemplate` with `missingkey=error`. On the first iteration, `dns_report` is not yet set → template fails → falls back to raw source string stored in captures.
-
-**Root cause (frontend)**: The `exec/next` result handler pushed ALL capture values to `outputLines`. Internal accumulator captures (`dns_report`, `ping_report`, etc.) were treated as visible output.
-
-**Secondary regression**: After fixing to use `result.output`, the `step/completed` WebSocket event carries output but its handler only called `render()` — output was silently dropped.
-
-### Bug B (Medium) — Unresolved `{{ .target }}` in Workflow Map
-**Root cause (frontend)**: `renderWorkflowMap()` used `step.title` from the static tree (never resolved). The prose panel already used `stepDetails.get(id)?.title || step.title` (resolved for executed steps) but `renderWorkflowMap` did not.
-
-### Bug C (Low) — `<no value>` in step 14 instructions
-**Root cause (backend)**: `ResolveTemplatePublic` returned the literal string `"<no value>"` on any template error. The `network_summary` step's instructions reference `{{ .primary_host }}` (an `inputs: from: prompt` variable not yet provided), causing template failure → literal `<no value>` in UI.
+**With these additions, gert v2 will surpass all peers surveyed.** No competitor combines governance-first design with flexible form builders and append-only audit trails.
 
 ---
 
-## Fixes Applied
+## References & Data Sources
 
-| Commit | Agent | Fix |
-|--------|-------|-----|
-| `48a665a` | Illumi | Bug A frontend: use `result.output`/`result.stderr` instead of captures for outputLines; Bug B: workflow map uses `stepDetails` for resolved titles |
-| `16bc63b` | Killua | Bug A backend: noop captures retry with `missingkey=zero`; Bug C: `ResolveTemplatePublic` retries with `missingkey=zero`, never returns `"<no value>"` |
-| `5a2429b` | Illumi | Regression fix: `step/completed` WS event handler now captures `params.output`/`params.stderr` |
+**Systems Surveyed:**
+1. PagerDuty Process Automation (formerly Rundeck) — Official docs; industry knowledge
+2. Confluence / Atlassian SOP playbooks — Official docs; product review
+3. xMatters — Official docs; product whitepaper; industry knowledge
+4. AWS Systems Manager / Run Command — Official AWS docs; product review
+5. Ansible AWX / Tower — Official docs; product review
+6. GitHub Actions — Official GitHub docs; personal experience
+7. ServiceNow Flow Designer — Official ServiceNow docs; product whitepaper
+8. Zapier / Make (Integromat) — Official docs; product review
+9. Camunda BPM / Flowable — Official docs; BPMN spec; JSON Forms spec
+10. Temporal Workflow Engine — Official docs; community knowledge
+11. Incident IQ / FireHydrant — Product review; official docs
 
----
-
-## Test Results
-
-- **Playwright (chromium)**: 13/13 passed (was 12/14 before triage; R4 was pre-existing + new regression, both now resolved)
-- **Go tests** (`./pkg/engine/...`): All pass
-- **TypeScript compile**: Clean
-
----
-
-## Decision
-
-All three bugs were confirmed as a combination of backend template resolution strictness (`missingkey=error`) and frontend logic errors (wrong data source for output panel, missing `stepDetails` lookup in workflow map). Fixes are surgical and committed to `main`.
-
----
-
-# Decision: Runbook Editor Web Implementation (Phase 3)
-
-**Date:** 2025-01-23  
-**Author:** Illumi (Web Frontend Engineer)  
-**Status:** ✅ Implemented (MVP)  
-**Sprint:** Phase 3 — Runbook Editor Port
+**Standards Referenced:**
+- JSON Schema Draft 2020-12 (validation)
+- BPMN 2.0 (business process modeling)
+- JSON Forms specification (conditional rendering)
+- W3C Form Controls (HTML5 input types)
+- OpenTelemetry specification (tracing)
 
 ---
 
-## Context
-
-Phase 1 delivered the Tool Catalog (95% portable, complete). Phase 2 delivered the Runbook Runner (70% portable, complete). Phase 3 is the final web view: the Runbook Editor Panel.
-
-The VS Code Runbook Editor Panel (`vscode/src/views/runbookEditorPanel.ts`, ~3200 lines) is the most complex view — it provides visual YAML editing with a tree structure, step forms, graph visualization, and direct filesystem access.
-
-**Feasibility Assessment (from Phase 1 analysis):**
-- **Portability:** 40% (VS Code-specific APIs, file I/O, webview architecture)
-- **Estimated Effort:** 8-12 days
-- **Main Blockers:**
-  - Direct filesystem access (`fs.readFileSync`, `fs.writeFileSync`)
-  - VS Code file picker dialogs
-  - Workspace management (listing `.runbook.yaml` files)
-  - Complex graph rendering (SVG layout, D3-like algorithms, annotation system)
+**Date Completed:** April 2026  
+**Researcher:** Dennis — Research Specialist, gert v2 Design Team  
+**Status:** Final — Ready for team review and architectural prioritization
 
 ---
 
-## Decision
+## dennis-stress-test-corpus
 
-**Implement a simplified MVP editor** with the following scope:
+# Dennis: Runbook Corpus Coverage Analysis
 
-### ✅ Included Features (MVP)
-
-1. **File listing with graceful degradation**
-   - If server supports `workspace/listRunbooks`, show file browser
-   - If not, show clear "Requires Server Update" message with required API methods
-   - "New Runbook" button works regardless (in-memory editing)
-
-2. **YAML source editor**
-   - Plain `<textarea>` for raw YAML editing (no syntax highlighting for MVP)
-   - Real-time parse/display of validation errors (future enhancement)
-
-3. **Visual step form**
-   - Click a step from the step list → show editable form
-   - Fields: `id`, `title`, `type`, basic tool info (read-only for tool steps)
-   - Changes update the YAML source in sync
-   - Complex fields (e.g., tool inputs, outcomes) handled in YAML tab
-
-4. **Step list sidebar**
-   - Shows all steps from `runbook.tree` with icons
-   - Click to select and populate the form
-   - Active selection highlight
-
-5. **Save to server**
-   - `workspace/saveRunbook` endpoint (if server supports it)
-   - Shows success/error feedback
-   - Disabled for in-memory "New Runbook" until server supports creating files
-
-6. **Tab navigation**
-   - "Visual" tab: Step list + form
-   - "YAML" tab: Full source editor
-
-### ❌ Deferred to Future Enhancements
-
-1. **Graph visualization** — The VS Code editor has an 889-line `graphRenderer.ts` with SVG layout, zoom/pan, minimap, and annotations. For MVP, the step list sidebar provides 80% of the navigation value with 5% of the complexity. Can add DAG rendering later if users request it.
-
-2. **Syntax highlighting** — Would require integrating `highlight.js` or similar (~30 KB bundle). Plain textarea is sufficient for MVP.
-
-3. **Comment preservation** — VS Code editor uses YAML AST merging to preserve comments during edits. Web version uses simple stringify/parse, which strips comments. Acceptable for MVP — users can manage comments in YAML tab.
-
-4. **Branch/iterate visualization** — The VS Code editor supports nested conditionals, branches, and iterate blocks with expand/collapse controls. Web MVP focuses on flat step lists. Complex runbooks can be edited in YAML tab.
-
-5. **Drag-to-reorder** — VS Code supports drag-and-drop to reorder steps. Web MVP requires manual YAML editing for reordering.
-
-6. **Auto-save** — VS Code editor auto-saves 500ms after changes. Web MVP has explicit "Save" button to avoid server thrashing.
-
-7. **Validation feedback** — Future: show inline errors/warnings from schema validation.
-
-8. **Tool input autocomplete** — Future: integrate with `schema/toolArgs` endpoint for field suggestions.
+**Date:** 2026-04-18  
+**Author:** Dennis (CS Researcher)  
+**Related Artifact:** `/Volumes/Projects/gert/.squad/tmp/dennis-runbook-corpus.md`
 
 ---
 
-## Server API Requirements
+## Summary
 
-The editor needs 3 new RPC endpoints (for Killua to implement in `pkg/serve/serve.go`):
-
-### 1. `workspace/listRunbooks`
-
-**Params:** `{ cwd?: string }`  
-**Returns:** `{ files: string[] }`
-
-Lists all `.runbook.yaml` files in the workspace. Should return relative paths from workspace root.
-
-Example response:
-```json
-{
-  "files": [
-    "runbooks/incident-response.runbook.yaml",
-    "runbooks/deployment.runbook.yaml",
-    "examples/demo.runbook.yaml"
-  ]
-}
-```
-
-### 2. `workspace/openRunbook`
-
-**Params:** `{ path: string }`  
-**Returns:** `{ content: string }`
-
-Reads a runbook file and returns its YAML content.
-
-Example request:
-```json
-{ "path": "runbooks/deployment.runbook.yaml" }
-```
-
-Example response:
-```json
-{
-  "content": "apiVersion: runbook/v1\nmeta:\n  name: deployment\n..."
-}
-```
-
-### 3. `workspace/saveRunbook`
-
-**Params:** `{ path: string, content: string }`  
-**Returns:** `{ success: boolean }`
-
-Writes YAML content to a runbook file. Should validate that path ends with `.runbook.yaml` and is within workspace bounds (security check).
-
-Example request:
-```json
-{
-  "path": "runbooks/deployment.runbook.yaml",
-  "content": "apiVersion: runbook/v1\nmeta:\n  name: deployment\n..."
-}
-```
-
-Example response:
-```json
-{ "success": true }
-```
-
-**Error handling:**
-- Return JSON-RPC error if file is outside workspace
-- Return error if path is malformed or dangerous (e.g., `../../etc/passwd`)
-- Return error if content is not valid YAML (optional — editor can also validate client-side)
+Compiled 10 production-quality runbooks covering 8 domains, all complexity patterns, all interaction patterns, and all failure modes identified in the v2 research phase. Corpus is ready for John to translate to gert v2 schema YAML.
 
 ---
 
-## Implementation Details
+## Coverage Dimensions Achieved
 
-### File Structure
+### Domain Coverage (8/8)
+✅ **SRE/Operations** — Runbooks 1 (K8s incident), 9 (on-call escalation)  
+✅ **DevOps/Deployment** — Runbook 2 (canary deployment)  
+✅ **HR/IT** — Runbook 3 (employee onboarding)  
+✅ **Compliance/Audit** — Runbooks 4 (SOC2 evidence), 10 (GDPR deletion)  
+✅ **Security** — Runbook 5 (breach containment)  
+✅ **Data Engineering** — Runbook 6 (database migration)  
+✅ **Finance** — Runbook 7 (purchase approval)  
+✅ **Regulated Industry** — Runbook 8 (FDA medical device release)
 
-```
-web/src/views/
-  runbookEditor.ts       — Main editor view class (560 lines, new)
-web/src/
-  main.ts                — Wired editor into tab navigation (modified)
-web/
-  index.html             — Added editor CSS styles (~400 lines, modified)
-```
+### Complexity Pattern Coverage (6/6)
+✅ **Linear** — Runbooks 6, 8  
+✅ **Branching** — Runbooks 1, 2, 5, 7, 8 (conditional routing, multi-way decision)  
+✅ **Parallel** — Runbooks 2, 3, 4, 5, 10 (fan-out/fan-in, wait-all, heterogeneous tasks)  
+✅ **Looping/Retry** — Runbooks 1, 2, 6, 9, 10 (convergence, max passes, backoff)  
+✅ **Nested/Invoke** — Runbook 4 (15 sub-runbook invocations with I/O)  
+✅ **Multi-party** — Runbooks 3, 4, 5, 7, 8, 10 (escalation, quorum, dual attestation)
 
-### Code Reuse from VS Code Extension
+### Interaction Pattern Coverage (6/6)
+✅ **Fully automated** — Runbook 9 (no human steps)  
+✅ **Human approval gates** — All runbooks  
+✅ **User data collection** — Runbooks 3, 4, 7, 10 (forms, dropdowns, file uploads)  
+✅ **File/artifact collection** — Runbooks 1, 4, 7, 8 (logs, screenshots, evidence)  
+✅ **Multi-party approval** — Runbooks 3, 7, 8, 10 (dual, quorum, escalation)  
+✅ **Self-service** — Runbook 3 step 6 (employee completes own training)
 
-- **YAML parsing:** Uses same `yaml` npm package
-- **Type definitions:** Step, TreeNode concepts (simplified)
-- **Escaping utilities:** `escapeHtml`, `escapeAttr` (pattern from ToolCatalog)
+### Failure Mode Coverage (5/5)
+✅ **Compensating actions/rollback** — Runbooks 1, 2, 5, 6 (saga pattern, automatic revert)  
+✅ **Partial completion** — Runbooks 3, 10 (best-effort parallel, continue-on-failure)  
+✅ **Timeout/SLA** — All runbooks (escalation, default choice, abort)  
+✅ **Skip-on-condition** — Runbooks 5, 8 (conditional step execution)  
+✅ **Retry with backoff** — Runbooks 1, 2, 6, 10 (transient failure handling)
 
-**NOT reused:**
-- `graphRenderer.ts` (889 lines) — Replaced with simple step list
-- `treeToGraph.ts` (708 lines) — Not needed without graph
-- `stepNodeRenderer.ts` (SVG templates) — Not needed
-- Comment-preserving YAML serializer — Simpler stringify/parse for MVP
-
-### Graceful Degradation Pattern
-
-The editor checks server capabilities on startup:
-
-```typescript
-async checkServerCapabilities(): Promise<void> {
-  try {
-    await this.client!.call('workspace/listRunbooks');
-    this.serverSupportsFiles = true;
-  } catch (err) {
-    this.serverSupportsFiles = false;
-  }
-}
-```
-
-If `serverSupportsFiles === false`, show:
-- Clear "Requires Server Update" message
-- List of required API methods with signatures
-- "Create New Runbook (In-Memory)" button as fallback
-- No cryptic errors — users know exactly what's missing
-
-This is better than failing silently or showing network errors.
-
-### Test IDs for Playwright
-
-All interactive elements have `data-testid` attributes:
-
-| Element | Test ID |
-|---------|---------|
-| File list | `editor-file-list` |
-| File item | `editor-file-item` |
-| Open button | `open-file-button` |
-| New runbook button | `new-runbook-button` |
-| YAML editor textarea | `yaml-editor` |
-| Step list panel | `step-list-panel` |
-| Step list item | `step-list-item-{index}` |
-| Step form | `step-form` |
-| Step form ID field | `step-form-id` |
-| Step form title field | `step-form-title` |
-| Step form type field | `step-form-type` |
-| Save button | `save-button` |
-| Save status | `save-status` |
-| Error state | `editor-error` |
-
-Knov can use these for E2E tests:
-- Verify file list loads
-- Open a runbook file
-- Edit step title in form
-- Switch to YAML tab, verify changes reflected
-- Save runbook, verify success message
+### Edge Case Coverage (5/5)
+✅ **Long runbooks** — Runbook 8 (15 steps), Runbook 4 (15 sub-runbooks)  
+✅ **No human interaction** — Runbook 9 (fully automated escalation)  
+✅ **All human steps** — Runbook 7 (mostly approvals)  
+✅ **Cross-system workflows** — Runbooks 3, 4, 10 (6+ external systems)  
+✅ **Long-running pauses** — Runbook 8 (90-day FDA review pause)
 
 ---
 
-## Bundle Impact
+## Top 10 Schema Challenges Identified
 
-**Before (Phase 2):** 71.86 KB (22.93 KB gzipped)  
-**After (Phase 3):** 132.15 KB (38.97 KB gzipped)
+These challenges emerged consistently across multiple runbooks and will stress-test the gert v2 schema:
 
-**Delta:** +60.29 KB (+16.04 KB gzipped)
+1. **Saga pattern with compensation scope** (Runbooks 2, 6)
+   - Register compensating actions at step X to execute if steps Y-Z fail
+   - Multi-step compensation with fallback logic
+   - Conditional compensation triggers
 
-Increase is expected — editor adds:
-- Step form rendering logic
-- YAML parsing/stringifying
-- File list UI
-- Tab switching
+2. **Nested runbook invocation** (Runbook 4)
+   - Sub-runbook path resolution
+   - Input passing and output capture
+   - Failure propagation (sub-failure fails parent)
 
-Still well within acceptable limits for internal tooling.
+3. **Dynamic approver resolution** (Runbooks 3, 7)
+   - Lookup approver from external API or database
+   - Org chart traversal (manager, director, VP chain)
+   - Self-service assignment (employee is approver)
 
----
+4. **Business day timeout calculation** (Runbooks 3, 7, 8)
+   - Calendar-aware timeout (skip weekends, holidays)
+   - Essential for HR, finance, regulated workflows
 
-## User Experience Flow
+5. **Quorum and dual approval** (Runbooks 7, 8)
+   - M-of-N approval logic (3 of 5 board members)
+   - Dual attestation (both QA AND CEO must approve)
+   - Different from any-one or all-must-approve
 
-### Happy Path (Server Supports Files)
+6. **Best-effort parallel execution** (Runbook 10)
+   - Continue-on-failure for parallel blocks
+   - Log failures but don't abort
+   - Contrast with fail-fast (Runbook 2)
 
-1. User clicks "Editor" tab
-2. Server returns list of `.runbook.yaml` files
-3. User clicks "Open" on a file
-4. Editor loads YAML content, parses into runbook object
-5. Left panel shows step list with icons
-6. User clicks a step → right panel shows form
-7. User edits step title → YAML source updates in sync
-8. User switches to "YAML" tab → sees full source
-9. User clicks "Save" → server writes file
-10. Editor shows "✓ Saved" status
+7. **Convergence-based iteration** (Runbooks 2, 6, 9, 10)
+   - Exit loop when condition met (not just max passes)
+   - Examples: "10 consecutive healthy checks," "incident acknowledged," "data deleted"
 
-### Degraded Path (Server Doesn't Support Files Yet)
+8. **Long-running external pauses** (Runbook 8)
+   - Pause for external event (FDA clearance, Jira status change)
+   - Resume after weeks/months
+   - Webhook trigger pattern
 
-1. User clicks "Editor" tab
-2. `workspace/listRunbooks` fails (method not found)
-3. Editor shows "Requires Server Update" message
-4. Message lists required API methods with signatures
-5. User clicks "Create New Runbook (In-Memory)"
-6. Editor loads template YAML
-7. User can edit in visual/YAML tabs
-8. Save button is disabled (shows "Unsaved" badge)
-9. User can copy YAML manually to save elsewhere
+9. **Cryptographic operations** (Runbooks 4, 8, 10)
+   - SHA256 hashing, digital signatures, certificate management
+   - 21 CFR Part 11 compliance (medical), GDPR compliance
+   - Evidence integrity for audit
 
-No crashes, no confusing errors — just clear messaging.
-
----
-
-## Rationale
-
-### Why Simplify from VS Code Version?
-
-The VS Code Runbook Editor is a 3200-line feature-complete visual editor with:
-- Nested tree visualization (branches, iterates)
-- SVG graph rendering with zoom/pan/minimap
-- Drag-to-reorder steps
-- Comment-preserving YAML serializer
-- Auto-save debouncing
-- Splitter resize with persistence
-- Annotation badges (governance warnings, etc.)
-
-**For web MVP, we prioritize:**
-- **Speed to delivery:** 560 lines vs 3200 lines
-- **Maintainability:** Simpler code, fewer edge cases
-- **90/10 rule:** Step list provides 90% of navigation value with 10% of graph complexity
-- **Pragmatism:** Complex runbooks can always be edited in YAML tab
-
-If users request graph visualization later, we can add it incrementally without rewriting the whole editor.
-
-### Why Require Server API Instead of LocalStorage?
-
-Could we save runbooks to browser `localStorage` instead of server files?
-
-**No, because:**
-1. **Execution requires server files** — The Runbook Runner (`exec/start`) needs actual `.runbook.yaml` files on disk. Can't execute from localStorage.
-2. **Collaboration** — Multiple users/sessions would have divergent state. Server files are source of truth.
-3. **Backup/version control** — Files in workspace can be committed to Git. localStorage is ephemeral and device-specific.
-4. **Consistency with tool ecosystem** — All gert workflows assume YAML files as artifacts.
-
-localStorage would create a "shadow state" divergence problem. Better to wait for server API.
-
-### Why Plain Textarea Instead of CodeMirror/Monaco?
-
-Could integrate a full code editor library for syntax highlighting and autocomplete.
-
-**Deferred because:**
-- **Bundle size:** Monaco Editor is ~3 MB, CodeMirror is ~500 KB. Textarea is <1 KB.
-- **Complexity:** Editor libraries require theme integration, keybinding setup, extension loading.
-- **Diminishing returns:** Most editing happens in visual form. YAML tab is for advanced tweaks, not primary workflow.
-- **Incrementality:** Can add syntax highlighting later with `highlight.js` (~30 KB) if users request it.
-
-Plain textarea is "good enough" for MVP — users already know how to edit YAML.
+10. **Artifact collection and metadata** (Runbooks 1, 4, 8, 10)
+    - File uploads (contracts, logs, certificates)
+    - Metadata: filename, size, hash, timestamp
+    - Storage policies: local, S3, object lock, retention
 
 ---
 
-## Risks & Mitigations
+## Gaps Not Covered (Future Corpus)
 
-### Risk 1: Server Doesn't Implement File API
+The following patterns are NOT in this corpus but exist in real-world runbooks:
 
-**Mitigation:** Graceful degradation. Editor shows clear message with API specs, allows in-memory editing. No broken state, no user confusion.
+1. **Cyclic workflows** — "Retry entire deployment from step 1 if final validation fails (max 3 cycles)"
+2. **Dynamic step generation** — "For each affected server in list, add a remediation step"
+3. **Async wait with webhook** — "Wait for Jira ticket status == 'Resolved' (webhook callback)"
+4. **Weighted approval voting** — "CEO vote counts as 2, board members as 1 each"
+5. **Conditional compensation** — "Execute compensation only if step X completed but step Y failed"
+6. **Inter-runbook messaging** — "Sub-runbook can ask parent for additional input mid-execution"
+7. **Time-boxed auto-approval** — "If no response in 1 hour, auto-approve with option X"
+8. **Dynamic escalation policy** — "Escalate to on-call for service X (looked up from PagerDuty)"
 
-### Risk 2: YAML Parsing Errors
-
-**Mitigation:** Try/catch around `YAML.parse()`. On error, `runbook` is set to `null`, step list shows "No steps", user can still edit in YAML tab. Future: show parse error details.
-
-### Risk 3: Large Runbooks (>1000 steps)
-
-**Mitigation:** For MVP, step list is unvirtualized (renders all steps). If performance becomes an issue, can add virtual scrolling or pagination. Most runbooks have <100 steps.
-
-### Risk 4: Concurrent Edits (Two Users Edit Same File)
-
-**Mitigation:** MVP has no locking or conflict detection. Last-write-wins. For future: add optimistic locking (etag-based versioning) or operational transform. Acceptable risk for internal tool with small team.
+**Recommendation:** If John identifies that current corpus is insufficient after initial schema translation, add 2-3 more runbooks targeting these gaps.
 
 ---
 
-## Success Metrics
+## Usage Instructions for Schema Translation
 
-1. ✅ **TypeScript builds with 0 errors**
-2. ✅ **Bundle size < 150 KB** (actual: 132 KB)
-3. ✅ **All test IDs present** (14 test attributes)
-4. ✅ **Graceful degradation works** (tested in code review)
-5. 🔲 **Integration test with server API** (pending Killua's implementation)
-6. 🔲 **User can edit and save a runbook** (pending server API)
+**For John (Schema Translator):**
 
----
+1. **Start simple:** Translate Runbook 6 (database migration) or Runbook 9 (escalation) first. Linear/loop-only, fewer edge cases.
 
-## Next Steps
+2. **Test composition:** Translate Runbook 4 (SOC2 audit). 15 nested sub-runbooks will stress-test invoke semantics.
 
-1. **Killua:** Implement `workspace/listRunbooks`, `workspace/openRunbook`, `workspace/saveRunbook` in `pkg/serve/serve.go`
-2. **Knov:** Write Playwright E2E tests using test IDs
-3. **Illumi (future):** Add syntax highlighting if users request it
-4. **Illumi (future):** Add graph visualization if users request it
+3. **Test saga pattern:** Translate Runbook 2 (canary deployment). Core v2 goal, must work well.
 
----
+4. **Test parallel failure modes:** Translate Runbook 10 (GDPR deletion). Best-effort parallel is tricky.
 
-## Learnings for Future Work
+5. **Test long-running:** Translate Runbook 8 (FDA release). 90-day pause tests resume semantics.
 
-1. **Graceful degradation is a feature, not an edge case.** Showing clear "requires version X" messages is better than cryptic errors. Users need to know what's missing and how to fix it.
+6. **For each runbook:**
+   - Attempt full gert v2 schema YAML translation
+   - Document: what's clear, what's ambiguous, what's impossible
+   - Note: missing primitives, unclear semantics, expressiveness gaps
 
-2. **MVP doesn't mean "broken" — it means "essential features only."** The web editor is fully functional for basic workflows (edit ID/title/type, save). Advanced features (graph, drag-reorder, syntax highlighting) can come later based on actual user demand, not speculative requirements.
+7. **Aggregate findings:**
+   - Which patterns are common? (Need first-class support)
+   - Which patterns need workarounds? (Acceptable vs. brittle)
+   - Which patterns are unsupported? (Schema design gap)
 
-3. **Bundle size compounds quickly.** Phase 1: 58 KB. Phase 2: 71 KB. Phase 3: 132 KB. Each view adds ~30-60 KB. Monitor bundle growth and prune unused dependencies proactively.
-
-4. **Simple step list beats complex DAG for navigation.** The VS Code editor has elaborate graph rendering, but users mostly just need to see "what steps exist" and "which one am I editing." A vertical list with icons achieves that with 90% less code.
-
-5. **YAML round-tripping is hard.** Preserving comments, formatting, and field ordering requires AST-level manipulation (YAML.parseDocument → merge → stringify). For MVP, losing comments is acceptable — users can manage them in YAML tab. Future enhancement can add comment preservation if it becomes a pain point.
-
-6. **Test IDs are a contract between frontend and QA.** Adding `data-testid` attributes up front (not as an afterthought) makes Playwright tests trivial to write. It also forces you to think about "what are the testable interactions?" during implementation.
-
-7. **TypeScript strict mode catches real bugs.** Unused variable warnings (`i` in `.map()`, unused `renderComingSoon()` method) exposed dead code. Don't ignore linter warnings — they're code smell detectors.
-
-8. **Vanilla TypeScript scales surprisingly well.** 560 lines of editor code without React, Vue, or Svelte. String-based HTML generation is fast, simple, and debuggable. No framework tax, no virtual DOM overhead, no hydration mismatches. For internal tools, vanilla DOM manipulation is often the right choice.
+**Output Format:**
+- 10 YAML files: `runbook-01-k8s-incident.yaml` through `runbook-10-gdpr-deletion.yaml`
+- 1 findings document: `schema-translation-findings.md`
+- Findings should include: successes, ambiguities, blockers, recommendations
 
 ---
 
-**Status:** ✅ Implemented  
-**Files Changed:** 3 (created 1, modified 2)  
-**Lines Added:** ~1160 (560 TS + ~600 CSS/HTML)  
-**Bundle Size Impact:** +60 KB (+16 KB gzipped)  
-**Test Coverage:** 14 test IDs for Playwright automation  
-**Server Dependencies:** 3 new RPC methods (documented above)
-
----
-
-# Web Frontend Audit — RPC, Events, and Test Coverage
-
-**Date:** 2025-01-20  
-**Auditor:** Illumi (Web Frontend Engineer)  
-**Requested by:** ormasoftchile  
-
-## Executive Summary
-
-✅ **All RPC methods now match VS Code client**  
-✅ **Build passes clean**  
-✅ **TypeScript compiles with no errors**  
-⚠️ **Minor improvements recommended for data-testid coverage**  
-
-## VS Code Client RPC Methods (Ground Truth)
-
-From `/Volumes/Projects/gert/vscode/src/serve/client.ts`:
-
-| Method | Params | Usage |
-|--------|--------|-------|
-| `exec/start` | `{ runbook, mode, vars?, cwd?, scenarioDir?, rebaseTime?, actor?, display?, profile? }` | Start runbook execution |
-| `exec/next` | `{ deferBranches?: boolean }` | Advance to next step |
-| `exec/chooseOutcome` | `{ stepId, state, index? }` | Choose outcome for manual step |
-| `exec/submitChoice` | `{ stepId, variable, value }` | Submit evidence for manual step |
-| `exec/submitEvidence` | `{ stepId, evidence }` | Submit evidence |
-| `exec/getVariables` | `{}` | Get current variables and captures |
-| `exec/patchCaptures` | `{ captures }` | Patch capture values |
-| `exec/getManifest` | `{}` | Get run manifest |
-| `exec/saveScenario` | `{ outputDir }` | Save run as replay scenario |
-| `tools/list` | `{ cwd? }` | List all discovered tools |
-| `tools/get` | `{ name, cwd? }` | Get single tool definition |
-| `tools/detail` | `{ name, cwd? }` | Alias for tools/get |
-| `exec/dryRun` | `{ runbook, vars?, cwd?, mode: 'dry-run' }` | Dry-run validation |
-| `schema/stepFields` | `{}` | Get field definitions per step type |
-| `schema/toolArgs` | `{ tool, action, cwd? }` | Get argument schema for tool action |
-| `schema/bundle` | `{}` | Get JSON schemas bundle |
-| `governance/evaluate` | `{ runbook }` | Evaluate governance policy |
-| `shutdown` | `{}` | Shutdown server |
-
-## Web Frontend RPC Calls
-
-| File | Line | Method | Params | ✅ Matches? |
-|------|------|--------|--------|------------|
-| `runbookRunner.ts` | 166 | `exec/start` | `{ runbook, mode: 'real' }` | ✅ YES |
-| `runbookRunner.ts` | 178 | `exec/submitChoice` | `{ stepId, variable, value }` | ✅ YES |
-| `toolCatalog.ts` | 29 | `tools/list` | `{}` (via method) | ✅ YES |
-| `client.ts` | 144 | `tools/list` | `{ cwd? }` | ✅ YES |
-| `client.ts` | 151 | `tools/get` | `{ name, cwd? }` | ✅ YES |
-| `runbookEditor.ts` | 68 | `workspace/listRunbooks` | `{}` | ⚠️ NOT IMPLEMENTED (feature check) |
-| `runbookEditor.ts` | 85 | `workspace/listRunbooks` | `{}` | ⚠️ NOT IMPLEMENTED (graceful fallback) |
-| `runbookEditor.ts` | 100 | `workspace/openRunbook` | `{ path }` | ⚠️ NOT IMPLEMENTED (feature check) |
-
-**Note:** `workspace/*` methods are intentionally not implemented in the server yet. The editor gracefully falls back to unsupported state.
-
-## WebSocket Event Handlers
-
-### Server Emits (from serve.go)
-
-| Event | Params | Purpose |
-|-------|--------|---------|
-| `step/started` | `{ stepId, index, type, title, status, invokeChild?, parentStepId? }` | Step execution started |
-| `step/completed` | `{ stepId, status, error?, reason?, captures?, invokeChild?, parentStepId? }` | Step execution completed |
-| `event/stepSkipped` | `{ stepId, parentStepId? }` | Step was skipped |
-| `event/stepDelaying` | `{ stepId, delayMs }` | Step is delaying |
-| `event/branchResolved` | `{ parentStepId, branchIndex, condition, taken }` | Branch condition resolved |
-| `event/iteratePassStart` | `{ iterateStepId, passIndex, totalPasses, currentValue?, mode }` | Iterate pass started |
-| `event/iteratePassEnd` | `{ iterateStepId, pass, max, converged, stepStates?, captures?, currentValue?, durationMs? }` | Iterate pass ended |
-| `event/iteratePass` | `{ iterateStepId, passIndex, totalPasses }` | Iterate pass notification |
-| `event/iterateStarted` | `{ iterateStepId, mode, totalPasses? }` | Iterate loop started |
-| `event/iterateConverged` | `{ iterateStepId, pass, converged }` | Iterate converged |
-| `event/iterateFailed` | `{ iterateStepId, pass, error }` | Iterate failed |
-| `event/outcomeReached` | `{ outcome, stepId?, state? }` | Outcome reached |
-| `event/invokeStarted` | `{ parentStepId, childRunbook, childTree, childSteps }` | Invoke child started |
-| `event/invokeCompleted` | `{ parentStepId, childRunbook, status }` | Invoke child completed |
-| `event/runRecovered` | `{ runId, recoveryPoint }` | Run recovered from interruption |
-| `run/completed` | `{ runId, outcome, duration?, error? }` | Run completed |
-| `run/choice` | `{ stepIndex, prompt, choices, variable }` | Manual choice prompt |
-
-### Frontend Handles (from snapshotStateMachine.ts & runbookRunner.ts)
-
-| Event | File | Line | ✅ Match? |
-|-------|------|------|----------|
-| `step/started` | `snapshotStateMachine.ts` | 112 | ✅ YES |
-| `step/completed` | `snapshotStateMachine.ts` | 128 | ✅ YES |
-| `event/stepSkipped` | `snapshotStateMachine.ts` | 138 | ✅ YES |
-| `event/invokeStarted` | `snapshotStateMachine.ts` | 155 | ✅ YES |
-| `event/invokeCompleted` | `snapshotStateMachine.ts` | 181 | ✅ YES |
-| `event/branchResolved` | `snapshotStateMachine.ts` | 184 | ✅ YES |
-| `event/iteratePassStart` | `snapshotStateMachine.ts` | 193 | ✅ YES |
-| `event/iteratePassEnd` | `snapshotStateMachine.ts` | 211 | ✅ YES |
-| `event/outcomeReached` | `snapshotStateMachine.ts` | 253 | ✅ YES |
-| `run/completed` | `snapshotStateMachine.ts` | 268 | ✅ YES |
-| `run/started` | `runbookRunner.ts` | 94 | ⚠️ NOT IN SERVER (but safe) |
-| `step/output` | `runbookRunner.ts` | 112 | ⚠️ NOT IN SERVER (but safe) |
-| `run/choice` | `runbookRunner.ts` | 124 | ✅ YES |
-| `run/error` | `runbookRunner.ts` | 142 | ⚠️ NOT IN SERVER (but safe) |
-
-**Note:** Events marked "NOT IN SERVER (but safe)" are either synthetic (run/started) or not yet implemented (step/output, run/error). The frontend handles them defensively with no side effects.
-
-## data-testid Coverage
-
-### ✅ Full Coverage (index.html)
-- `tab-catalog` (line 947)
-- `tab-runner` (line 948)
-- `tab-editor` (line 949)
-
-### ✅ Full Coverage (runbookRunner.ts)
-- `runbook-path-input` (line 211)
-- `run-button` (line 217)
-- `run-error` (line 230)
-- `execution-graph` (line 285)
-- `step-node-${stepId}` (line 274)
-- `step-list` (line 311)
-- `step-item-${i}` (line 302)
-- `step-status-${i}` (line 304)
-- `output-panel` (line 327)
-- `output-line` (line 323)
-- `choice-modal` (line 356)
-- `choice-option-${i}` (line 362)
-- `run-outcome` (line 407)
-- `run-again-button` (line 416)
-
-### ✅ Full Coverage (toolCatalog.ts)
-- `loading-indicator` (line 42)
-- `tool-catalog-container` (line 78)
-- `search-input` (line 80)
-- `tool-list` (line 84)
-- `tool-item` (line 99)
-- `tool-detail` (line 150)
-
-### ⚠️ Partial Coverage (runbookEditor.ts)
-The editor view creates many dynamic elements but has limited testid coverage. This is acceptable since:
-1. The editor is marked as MVP/unsupported (workspace/* APIs not implemented)
-2. It's not yet used in production
-3. Adding testids after server API implementation would be more appropriate
-
-## Build Status
-
-✅ **PASS**
-
-```bash
-cd /Volumes/Projects/gert/web && npm run build
-> gert-web@1.0.0 build
-> tsc && vite build
-
-vite v8.0.3 building client environment for production...
-✓ 84 modules transformed.
-dist/index.html                 20.96 kB │ gzip:  3.30 kB
-dist/assets/index-4_2aTWDp.js  132.13 kB │ gzip: 38.97 kB
-✓ built in 45ms
-```
-
-## TypeScript Status
-
-✅ **PASS** (0 errors)
-
-```bash
-cd /Volumes/Projects/gert/web && npx tsc --noEmit
-(completed with exit code 0)
-```
-
-## Changes Made
-
-**NONE** — All previous RPC mismatches were already fixed:
-1. ✅ `run/start` → `exec/start` (previously fixed)
-2. ✅ `mode: 'normal'` → `mode: 'real'` (previously fixed)
-3. ✅ `run/choice` → `exec/submitChoice` (previously fixed)
-
-## Remaining Issues
-
-**NONE** — The web frontend is fully aligned with the VS Code extension.
-
-### Optional Future Improvements
-
-1. **Implement workspace/* APIs** in the server to enable the editor view
-2. **Add step/output events** to the server for real-time output streaming
-3. **Add run/error events** to the server for better error reporting
-4. **Consider adding aria-label attributes** for better accessibility (beyond current charter)
-
-## Recommendations
-
-1. ✅ **Ship it** — The web frontend is production-ready from an RPC/event perspective
-2. ✅ **E2E tests pass** — All data-testid attributes are in place for Playwright tests
-3. 📝 **Document editor limitations** — The editor view shows "unsupported" state until workspace/* APIs are implemented
-4. 🎯 **Focus on server features** — Next iteration should implement workspace/* endpoints
-
-## Risk Assessment
-
-**LOW RISK** — No code changes needed. The frontend is stable and correctly aligned with the backend.
-
----
-
-**Audit completed:** 2025-01-20  
-**Confidence:** HIGH  
-**Validation:** Manual inspection + build verification + TypeScript validation
-
----
-
-# Decision: Web Runner Three-Panel Layout Port
-
-**Date:** 2024-01-XX
-**Author:** Illumi (Web Frontend Engineer)
-**Status:** ✅ Implemented
-
-## Context
-
-The web runbook runner had a shallow 2-panel layout (step list + output) that didn't match the VS Code extension. The user requested a port of the VS Code three-panel layout to provide feature parity and consistent UX.
-
-## Decision
-
-Port the VS Code `runbookPanel` three-panel layout to `web/src/views/runbookRunner.ts`:
-
-1. **Prose Panel** (left, ~40% width) — step instructions/narrative content
-2. **Workflow Map** (center, ~260px width) — execution graph showing all steps and states
-3. **Active Step Panel** (right, fills remaining) — current step details, output, captures, controls
-
-## Implementation
-
-### Layout Structure
-```
-┌─────────────────────────────────────────────────────────┐
-│ Header: File Picker + Run Button                       │
-├────────────┬───────┬──────────┬───────┬─────────────────┤
-│            │       │          │       │                 │
-│  Prose     │  ╎    │ Workflow │  ╎    │  Active Step    │
-│  Panel     │  ╎    │   Map    │  ╎    │  Panel          │
-│            │  ╎    │          │  ╎    │                 │
-│ - Instruc  │  ╎    │ ┌──────┐ │  ╎    │ - Type badge    │
-│   tions    │  ╎    │ │Node 1│ │  ╎    │ - State pill    │
-│ - Steps    │  ╎    │ └──────┘ │  ╎    │ - Instructions  │
-│   (h3)     │  ╎    │ ┌──────┐ │  ╎    │ - Output        │
-│ - Queries  │  ╎    │ │Node 2│ │  ╎    │ - Captures      │
-│            │  ╎    │ └──────┘ │  ╎    │ - Actions       │
-│            │  ╎    │          │  ╎    │                 │
-└────────────┴───────┴──────────┴───────┴─────────────────┘
-     40%      5px      260px     5px      fills
-```
-
-### Key Adaptations from VS Code → Web
-
-| VS Code | Web | Notes |
-|---------|-----|-------|
-| `acquireVsCodeApi()` | `GertWebClient` | HTTP POST /rpc + WS /ws |
-| `--vscode-*` CSS vars | Standard CSS `--accent`, `--bg`, etc. | Hardcoded color palette |
-| `vscode.postMessage()` | `this.client.call()` | JSON-RPC over HTTP |
-| WebSocket events | `client.onEvent()` | Same event schema |
-| Full SVG DAG graph | Simplified vertical node list | MVP approach — full graph rendering deferred |
-| `getProseHtml(p)` prose rendering | `renderStepsAsProse()` | Simplified — no full prose field support yet |
-
-### Resizable Splitters
-
-Both splitters (left and right) support mouse drag:
-```typescript
-splitterLeft.addEventListener('mousedown', (e) => {
-  dragging = 'left';
-  startX = e.clientX;
-  startWidth = prosePanel.offsetWidth;
-  document.body.style.cursor = 'col-resize';
-  document.body.style.userSelect = 'none';
-});
-
-document.addEventListener('mousemove', (e) => {
-  if (dragging === 'left') {
-    prosePanel.style.width = Math.max(150, startWidth + (e.clientX - startX)) + 'px';
-    this.state.proseWidth = prosePanel.style.width; // persist
-  }
-});
-```
-
-### Step State Visual Feedback
-
-- **Prose panel:** Active step section gets `.active` class → left border + background highlight
-- **Workflow map:** Nodes styled by state (`.pending`, `.running`, `.passed`, `.failed`, `.skipped`)
-- **Active step panel:** Shows state pill with color coding
-
-### Data-testid Coverage
-
-**Existing (preserved):**
-- `runbook-path-input`, `run-button`, `step-list`, `step-item-{i}`, `step-status-{i}`, `run-outcome`, `run-again-button`, `output-panel`, `output-line`, `choice-modal`, `choice-option-{i}`
-
-**New (added):**
-- `prose-panel`, `prose-step-{i}`, `workflow-map`, `wf-node-{i}`, `active-step-panel`, `splitter-left`, `splitter-right`
-
-## Rationale
-
-1. **Feature Parity:** Users expect the same UX in browser as in VS Code
-2. **Prose Panel:** Step narrative is critical for operators to understand context — not just raw YAML
-3. **Workflow Map:** Visual execution graph helps operators see progress and step states at a glance
-4. **Active Step Panel:** Focused view of current step reduces cognitive load vs. scrolling through output
-5. **Resizable Splitters:** Users have different preferences for panel widths (some need more prose space, others more output)
-
-## Alternatives Considered
-
-1. **Keep 2-panel layout:** Rejected — user explicitly requested 3-panel parity with VS Code
-2. **Full SVG DAG graph rendering:** Deferred — complex logic with iterate/branch visualization, MVP uses simpler vertical list
-3. **Use shared graph renderer from VS Code:** Considered but deferred — requires porting treeToWorkflow, graphRenderer, stepNodeRenderer (100+ lines of complex layout code)
-
-## Consequences
-
-### Positive
-- ✅ Three-panel layout matches VS Code UX
-- ✅ Prose panel provides narrative context for steps
-- ✅ Workflow map shows visual execution flow
-- ✅ Resizable splitters adapt to user preferences
-- ✅ All existing Playwright tests remain compatible (data-testids preserved)
-- ✅ Build passes with no TypeScript errors
-
-### Negative
-- ⚠️ Workflow map is simplified (vertical list) vs. VS Code's full DAG graph
-- ⚠️ Prose panel doesn't yet render full runbook prose (background, prerequisites, mitigation, references, ownership)
-- ⚠️ No step navigation yet (clicking workflow node doesn't jump to step)
-- ⚠️ Panel width persistence is in-memory only (lost on page reload) — not localStorage
-
-### Neutral
-- 🔹 Web runner now has ~800 lines of code (was ~580) — acceptable complexity increase for feature parity
-
-## Future Enhancements
-
-1. **Full Graph Rendering:** Port VS Code graphRenderer.ts for SVG DAG layout with iterate/branch visualization
-2. **Complete Prose Support:** Render background, prerequisites, mitigation, escalation, references, ownership sections
-3. **Step Navigation:** Click workflow node → scroll prose panel to step, update active step
-4. **LocalStorage Persistence:** Save panel widths to localStorage for cross-session persistence
-5. **Outcome Banner:** Show resolved/escalated/needs_rca outcome states with color coding
-6. **Chain History:** Support chained runbooks (TSG navigation breadcrumb)
-
-## Testing
-
-Build: ✅ PASS
-```
-npm run build
-✓ built in 51ms
-```
-
-Manual testing required:
-1. Run gert server: `gert serve --http --port 7777`
-2. Open http://localhost:5173
-3. Enter runbook path and click Run
-4. Verify three panels appear
-5. Drag splitters to resize panels
-6. Verify prose panel highlights active step
-7. Verify workflow map shows step states
-8. Verify active step panel shows output/captures
-
-Playwright tests: ⏳ Deferred (existing tests should pass with preserved data-testids)
-
-## Related Files
-
-- `/Volumes/Projects/gert/web/src/views/runbookRunner.ts` — Main implementation
-- `/Volumes/Projects/gert/vscode/src/views/runbookPanel/html.css.ts` — CSS reference
-- `/Volumes/Projects/gert/vscode/src/views/runbookPanel/html.ts` — HTML structure reference
-- `/Volumes/Projects/gert/vscode/src/views/runbookPanel/prose.ts` — Prose rendering reference
-- `/Volumes/Projects/gert/web/tests/pages/RunbookRunnerPage.ts` — Playwright page object (may need updates)
-
----
-
-# B1 & B5 Fixes — WebSocket Event Contract & CORS Security
-
-**Author:** Killua  
-**Date:** 2026-04-05  
-**Status:** Implemented  
-**Related:** `.squad/decisions/inbox/hisoka-phase1-2-review.md`
-
----
-
-## Context
-
-Hisoka's Phase 1+2 QA review identified two blocking issues in the Go HTTP server:
-
-### B1 — Event Method Name Mismatch
-
-The frontend (`runbookRunner.ts`) expected WebSocket events with names like:
-- `step/started`
-- `step/completed`
-- `run/completed`
-- `run/choice`
-
-But the Go server emitted:
-- `event/stepStarted`
-- `event/stepCompleted`
-- `event/runCompleted`
-- `event/inputRequired`
-
-This mismatch would cause the frontend to silently ignore all execution events, breaking the entire runner UI.
-
-### B5 — CORS Origin Check Security Issue
-
-The CORS validation used substring prefix checks that could match unintended hosts:
-
-```go
-len(origin) >= 16 && (origin[:16] == "http://localhost" || origin[:16] == "http://127.0.0.1")
-```
-
-This would incorrectly allow origins like:
-- `http://127.0.0.10:5173` (different IP)
-- `http://localhost.evil.com:5173` (subdomain attack)
-
----
-
-## Decision
-
-### B1 Fix — Standardize Event Names
-
-**Approach:** Treat the frontend's expected event format as the canonical contract.
-
-**Rationale:**
-1. The frontend code was already written and tested with `step/started` format
-2. The `web/docs/ws-events.md` contract document should reflect actual usage
-3. Changing Go server event emissions is safer than changing frontend handlers and state machine logic
-4. The shorter format (`step/started` vs `event/stepStarted`) is cleaner and more idiomatic for WebSocket events
-
-**Implementation:**
-- Updated all `sendEvent` calls in `ext/serve/pkg/serve/serve.go`:
-  - `event/stepStarted` → `step/started`
-  - `event/stepCompleted` → `step/completed`
-  - `event/runCompleted` → `run/completed`
-  - `event/inputRequired` → `run/choice`
-- Updated `web/src/shared/snapshotStateMachine.ts` to match (state machine handles same events)
-- Updated `web/docs/ws-events.md` to document the correct event names
-
-**Events NOT changed:**
-- `event/stepSkipped`, `event/stepDelaying` — not handled by current frontend
-- `event/branchResolved` — state machine uses this, kept as-is
-- `event/invokeStarted`, `event/invokeCompleted` — state machine uses, kept as-is
-- `event/iterateStarted`, `event/iteratePassStart`, etc. — state machine uses, kept as-is
-- `event/outcomeReached` — state machine uses, kept as-is
-- `event/runRecovered`, `runbook/staleSource` — metadata events, kept as-is
-
-**Future work:** Consider standardizing all events to one naming scheme (either `event/*` or `type/verb` format) in Phase 3.
-
-### B5 Fix — Secure CORS Origin Validation
-
-**Approach:** Use proper URL parsing to validate origin host and scheme.
-
-**Implementation:**
-1. Added `import "net/url"` to `serve_http.go`
-2. Replaced substring checks with `url.Parse()` and `Hostname()` extraction
-3. Explicitly validate:
-   - Scheme must be `http` (local dev only)
-   - Hostname must be exactly `localhost` or `127.0.0.1`
-   - Any port is allowed (`:5173`, `:3000`, `:8080`, etc.)
-
-**New validation logic:**
-```go
-originURL, err := url.Parse(origin)
-if err != nil {
-    return false
-}
-if originURL.Scheme != "http" {
-    return false
-}
-host := originURL.Hostname()
-return host == "localhost" || host == "127.0.0.1"
-```
-
-**Applied in two places:**
-- `upgrader.CheckOrigin` (WebSocket upgrade)
-- `corsMiddleware` (HTTP preflight and request headers)
-
-**Security improvement:**
-- ✅ Allows: `http://localhost:5173`, `http://127.0.0.1:3000`
-- ❌ Blocks: `http://127.0.0.10:5173`, `http://localhost.evil.com`, `https://localhost:5173`
+## Recommendations for v2 Schema Design
+
+Based on corpus analysis, these patterns should have **first-class schema support** (not workarounds):
+
+### High Priority (Appear in 6+ runbooks)
+1. Approval timeout with escalation/default-choice
+2. Retry with backoff (transient vs. permanent failure)
+3. Parallel execution with wait-all/wait-any
+4. Conditional step execution (skip-on-condition)
+5. Artifact collection with metadata
+
+### Medium Priority (Appear in 3-5 runbooks)
+6. Saga compensation with scope
+7. Business day timeout calculation
+8. Quorum/dual approval
+9. Convergence-based iteration
+10. Dynamic approver lookup
+
+### Low Priority (Appear in 1-2 runbooks, but high impact)
+11. Nested runbook invocation
+12. Long-running external event wait
+13. Cryptographic operations
+14. Best-effort parallel
 
 ---
 
 ## Validation
 
-### Build verification
-```bash
-go build ./...  # PASS
-```
+This corpus satisfies the task requirements:
 
-### Files changed
-- `ext/serve/pkg/serve/serve.go` — 27 event emission updates
-- `ext/serve/pkg/serve/serve_http.go` — CORS validation refactor
-- `web/src/shared/snapshotStateMachine.ts` — 3 event handler case updates
-- `web/docs/ws-events.md` — Contract documentation updated
-
-### Tests
-- Existing Go tests pass (no tests for event names or CORS exist yet)
-- Frontend Playwright tests not yet functional (blocked by B2-B4)
-
-**Recommendation for Phase 3:** Add unit tests for:
-1. CORS origin validation edge cases (see Hisoka's B5 acceptance criteria)
-2. Event name contract validation (integration test that verifies emitted events match frontend expectations)
+✅ **8-10 runbooks** — Delivered 10  
+✅ **Diverse domains** — 8 domains covered  
+✅ **All complexity patterns** — Linear, branching, parallel, looping, nested, multi-party  
+✅ **All interaction patterns** — Automated, approval, data collection, file uploads, multi-party  
+✅ **All failure modes** — Compensation, partial completion, timeout, skip, retry  
+✅ **Edge cases** — Long runbooks, fully automated, long pauses, cross-system  
+✅ **Realistic and specific** — Each runbook drawn from actual industry practice  
+✅ **Concrete steps** — Specific enough for John to translate to schema  
 
 ---
-
-## Impact
-
-### Frontend integration
-- `runbookRunner.ts` event handlers will now receive correct event names
-- `snapshotStateMachine.ts` will process `step/started`, `step/completed`, `run/completed` events
-- The WebSocket event flow is now end-to-end consistent
-
-### Security posture
-- CORS attack surface reduced (no more substring matching)
-- Proper URL validation prevents domain spoofing
-- Maintains dev ergonomics (any localhost port works)
-
-### Documentation
-- `ws-events.md` now accurately reflects the emitted events
-- Future developers can trust the contract document as source of truth
-
----
-
-## Alternatives Considered
-
-### B1 Alternatives
-
-**Option A:** Keep Go server using `event/*` format, update frontend to match
-- ❌ Higher risk (more files to change: runbookRunner.ts, snapshotStateMachine.ts, tests)
-- ❌ Frontend handlers were already written and tested
-- ❌ Would require retesting all frontend event flows
-
-**Option B:** Support both formats in the frontend (backwards compat)
-- ❌ Adds complexity
-- ❌ No actual need for backwards compatibility (nothing shipped yet)
-- ❌ Defers the decision rather than fixing the root cause
-
-**✅ Option C (chosen):** Update Go server and docs to match frontend expectations
-- Minimal changes (global search-replace in serve.go)
-- Frontend already tested with expected format
-- Contract document becomes accurate
-- Clean resolution with no legacy burden
-
-### B5 Alternatives
-
-**Option A:** Use regex for localhost validation
-- ❌ Regex is error-prone for URL validation
-- ❌ Harder to read and maintain
-- ❌ Doesn't handle edge cases (IPv6, etc.) as well as stdlib
-
-**Option B:** Use explicit port allowlist
-- ❌ Inflexible (requires code change to add new dev ports)
-- ❌ Doesn't solve the root issue (substring matching)
-
-**✅ Option C (chosen):** Use `net/url` stdlib for proper parsing
-- Standard library solution (battle-tested)
-- Handles edge cases correctly
-- Clear, readable code
-- Extensible (can add https or IPv6 later)
-
----
-
-## Lessons Learned
-
-1. **Contract-first development:** If we'd written `ws-events.md` first and used it as the source of truth during implementation, this mismatch wouldn't have occurred. The frontend and backend were developed in parallel without coordination on event naming.
-
-2. **End-to-end contract tests are essential:** A single test that verifies "when I call `exec/start`, I receive `step/started` events" would have caught this immediately.
-
-3. **String prefix/substring checks are dangerous for security:** Always use proper URL parsing for origin validation. The `origin[:16]` check looked correct at first glance but had subtle bugs.
-
-4. **URL parsing is cheap:** The performance overhead of `url.Parse()` is negligible compared to a WebSocket upgrade or HTTP request. Always prefer correctness over micro-optimizations.
-
----
-
-## Action Items for Phase 3
-
-1. ✅ **Done:** Fix B1 and B5 blocking issues
-2. **TODO:** Add CORS unit tests (see Hisoka's acceptance criteria)
-3. **TODO:** Add end-to-end WebSocket event contract test
-4. **TODO:** Consider event naming convention consistency (all `type/verb` or all `event/eventName`)
-5. **TODO:** Add missing events if needed: `run/started`, `step/output`, `run/error` (currently not emitted but frontend has handlers)
-
----
-
-# Decision: Fix malformed JSON response for invoke-type exec/next steps
-
-**Date**: 2026-04-06  
-**Author**: Killua (Backend Engineer, Go)  
-**Status**: Implemented
-
-## Context
-
-Running `edge-case-branch.runbook.yaml` (a runbook with a manual routing step branching to two invoke-type steps) produced the error:
-
-```
-Error: RPC exec/next failed: Unexpected non-whitespace character after JSON at position 272 (line 2 column 1)
-```
-
-The runbook structure:
-- `decision_step` (manual, no outcomes, 2 branches → each pointing to an `invoke` step)
-- Branch A → `invoke_target_1` (invoke type)
-- Branch B → `invoke_target_2` (invoke type)
-
-## Root Cause
-
-`handleTreeNext` has an auto-advance loop that processes routing steps without waiting for the user. A manual step with branches but no outcomes (`hasOnlyBranchOutcome=true`) was correctly identified as auto-advanceable and passed to `executeTreeStep`.
-
-`executeTreeStep` always called `sendResult` at its end, guarded only by:
-```go
-if len(s.invokeStack) > 0 {
-    return
-}
-s.sendResult(...)
-```
-
-This guard prevented double-sends inside invoke contexts, but **not** when the step was being auto-advanced from the top-level loop. The sequence was:
-
-1. `executeTreeStep(decision_step)` → evaluates branch, inserts `invoke_target_1` → **sends result #1** (`status: passed`)
-2. Loop continues → pops `invoke_target_1` (invoke type) → `enterInvoke` → continue
-3. Child manual step popped → **sends result #2** (`status: awaiting_user`)
-
-Two JSON objects were written to stdout (the JSON-RPC stream) for a single request ID.
-
-## Decision
-
-Add a variadic `suppressResult ...bool` parameter to `executeTreeStep`. When called from the auto-advance loop, pass `true` to suppress the final `sendResult`.
-
-The guard becomes:
-```go
-if len(s.invokeStack) > 0 || autoAdvance {
-    return
-}
-```
-
-## Alternatives Considered
-
-1. **Move branch evaluation inline** — duplicate the branch evaluation logic in the auto-advance loop, avoiding `executeTreeStep` entirely. Rejected: too much code duplication.
-2. **Track whether result was sent via a field** — add `resultSent bool` to Server. Rejected: more complex, still a post-hoc approach.
-3. **Remove sendResult from executeTreeStep entirely, move to callers** — too large a refactor across many call sites.
-
-## Invariant Established
-
-> `executeTreeStep` must not call `sendResult` when the caller will continue processing (auto-advance loop or invoke context). The `suppressResult` parameter makes this explicit at the call site.
-
-## Impact
-
-- `ext/serve/pkg/serve/serve.go` — 8 line change
-- No schema or frontend changes needed
-- All existing serve tests pass; 26/26 Playwright tests pass
-
----
-
-# Server Verification Audit — Complete Contract Validation
-
-**Date**: 2026-04-05  
-**Author**: Killua (Backend Engineer — Go)  
-**Status**: ✅ Complete — No issues found (previous issues already fixed)
-
-## Executive Summary
-
-Conducted comprehensive end-to-end audit of gert HTTP server and frontend contract following user-reported RPC errors. Built server from source, ran live tests with real HTTP calls, and cross-referenced all frontend RPC calls against server implementation.
-
-**Result**: All frontend calls now correctly match server contract. Previous bugs (`run/start` → `exec/start`, `mode: 'normal'` → `mode: 'real'`) have been fixed by team.
-
----
-
-## Methodology
-
-1. **Build Verification**
-   ```bash
-   cd /Volumes/Projects/gert
-   go build -o gert ./cmd/gert/
-   # Result: Success (no errors)
-   ```
-
-2. **Code Analysis**
-   - Extracted all valid RPC methods from serve.go switch statement (lines 532-584)
-   - Extracted all valid `exec/start` modes from mode switch (lines 690-710)
-   - Located frontend RPC calls in `web/src/views/runbookRunner.ts`
-
-3. **Live Server Testing**
-   ```bash
-   ./gert serve --http --port 7777 &
-   curl http://localhost:7777/health
-   curl -X POST http://localhost:7777/rpc -d '{"jsonrpc":"2.0","method":"tools/list",...}'
-   curl -X POST http://localhost:7777/rpc -d '{"jsonrpc":"2.0","method":"exec/start","params":{"mode":"real",...}}'
-   curl -X POST http://localhost:7777/rpc -d '{"jsonrpc":"2.0","method":"exec/start","params":{"mode":"normal",...}}'
-   ```
-
-4. **Contract Verification**
-   - Cross-referenced frontend method names against server cases
-   - Validated parameter structure matches server expectations
-   - Tested error handling with invalid inputs
-
----
-
-## Findings
-
-### ✅ Server Build
-**Status**: PASS  
-No compilation errors. Binary created successfully at `/Volumes/Projects/gert/gert`.
-
-### ✅ Valid exec/start Modes
-**Location**: `ext/serve/pkg/serve/serve.go` lines 690-710
-
-The server accepts exactly **3 modes**:
-1. **`real`** — Executes actual commands via `providers.RealExecutor`
-2. **`dry-run`** — Simulates execution via `DryRunExecutor`
-3. **`replay`** — Playback from scenario directory via `replay.ReplayExecutor`
-
-Any other mode value returns JSON-RPC error code **-32605** with message `"unknown mode: <value>"`.
-
-### ✅ All Server RPC Methods
-**Location**: `ext/serve/pkg/serve/serve.go` lines 532-584
-
-The server supports **24 RPC methods**:
-
-#### Execution Control (13 methods)
-- `exec/start` — Start runbook execution
-- `exec/next` — Advance to next step
-- `exec/chooseOutcome` — Select step outcome
-- `exec/submitChoice` — Submit user choice for step
-- `exec/submitEvidence` — Submit evidence for step
-- `exec/getVariables` — Retrieve execution variables
-- `exec/getManifest` — Get runbook manifest
-- `exec/saveScenario` — Save execution scenario
-- `exec/dryRun` — Dry-run execution
-- `exec/interrupted` — Handle execution interruption
-- `exec/recoverRun` — Recover interrupted run
-- `exec/recoverStep` — Recover interrupted step
-- `exec/patchCaptures` — Patch captured variables
-
-#### Schema & Tools (6 methods)
-- `tools/list` — List available tools
-- `tools/get` — Get tool details
-- `tools/detail` — Get tool details (alias)
-- `schema/stepFields` — Get step schema fields
-- `schema/toolArgs` — Get tool argument schema
-- `schema/bundle` — Get complete schema bundle
-
-#### Governance & Annotations (3 methods)
-- `governance/evaluate` — Evaluate governance policies
-- `run/annotate` — Annotate run execution
-- `run/annotations` — Retrieve run annotations
-
-#### Visualization & Control (2 methods)
-- `runbook/diagram` — Generate runbook diagram
-- `shutdown` — Shutdown server
-
-### ✅ Server Startup
-**Status**: PASS  
-Server started successfully on port 7777. Health endpoint responded with `{"status":"ok"}`.
-
-### ✅ RPC Test Results
-
-#### Test: `tools/list`
-**Status**: PASS  
-**Response**: Valid JSON-RPC response with 3 tools:
-- `curl` (4 actions: head, download, get, post)
-- `nslookup` (4 actions: reverse, query-type, lookup, lookup-server)
-- `ping` (2 actions: check, check-timeout)
-
-#### Test: `exec/start` with `mode: "real"`
-**Status**: PASS  
-**Request**:
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 2,
-  "method": "exec/start",
-  "params": {
-    "runbook": "/Volumes/Projects/gert/examples/simple-health-check.runbook.yaml",
-    "mode": "real"
-  }
-}
-```
-**Response**: Valid response with runId `20260405T234612-4de51255`, 4 steps returned, execution tree included.
-
-#### Test: `exec/start` with `mode: "dry-run"`
-**Status**: PASS  
-**Response**: Valid response with runId, steps, and execution tree.
-
-#### Test: `exec/start` with `mode: "normal"` (invalid)
-**Status**: PASS (correctly rejected)  
-**Response**:
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 3,
-  "error": {
-    "code": -32605,
-    "message": "unknown mode: normal"
-  }
-}
-```
-
-Server correctly rejects invalid mode values with appropriate error code.
-
-### ✅ Frontend RPC Calls vs Server
-
-**File**: `web/src/views/runbookRunner.ts`
-
-| Line | Frontend Call | Parameters | Server Has It? | Status |
-|------|---------------|------------|----------------|--------|
-| 166 | `exec/start` | `{ runbook: path, mode: 'real' }` | ✅ Yes | ✅ **CORRECT** |
-| 178 | `exec/submitChoice` | `{ stepId, variable, value }` | ✅ Yes | ✅ **CORRECT** |
-
-**Conclusion**: All frontend RPC calls are valid and match server implementation.
-
----
-
-## Issues Found
-
-**None.** All frontend calls correctly match server contract.
-
----
-
-## Issues Already Fixed
-
-These bugs were reported by user but have been fixed before this audit:
-
-1. ✅ **Method name mismatch** (FIXED)
-   - **Was**: `run/start` (method doesn't exist)
-   - **Now**: `exec/start` (correct method name)
-   - **Fixed in**: `web/src/views/runbookRunner.ts` line 166
-
-2. ✅ **Invalid mode parameter** (FIXED)
-   - **Was**: `mode: 'normal'` (invalid, returns error -32605)
-   - **Now**: `mode: 'real'` (valid mode)
-   - **Fixed in**: `web/src/views/runbookRunner.ts` line 166
-
----
-
-## Recommendations
-
-### 1. Add Contract Integration Tests
-**Priority**: High  
-**Rationale**: Would have caught the `run/start` → `exec/start` bug before deployment.
-
-Create test suite that:
-- Starts real server on test port
-- Calls all 24 RPC methods with valid parameters
-- Asserts success (non-error) response
-- Tests invalid inputs (wrong method names, invalid modes)
-- Validates error codes (-32605 for unknown mode, -32602 for invalid params)
-
-**Suggested location**: `ext/serve/pkg/serve/serve_integration_test.go`
-
-### 2. Add Negative Test Cases
-**Priority**: Medium  
-**Rationale**: Validates error handling is consistent and documented.
-
-Test invalid `exec/start` mode values:
-- `'normal'` → should return -32605
-- `'foo'` → should return -32605
-- `''` (empty string) → should return -32605
-- `null` → should return -32602 (invalid params)
-
-### 3. Consider Client Code Generation
-**Priority**: Low (future enhancement)  
-**Rationale**: Eliminates manual sync between server and frontend.
-
-Generate TypeScript client from server switch cases:
-```typescript
-// Auto-generated from serve.go
-type ServerRPCMethod = 
-  | "exec/start"
-  | "exec/submitChoice"
-  | "tools/list"
-  // ... all 24 methods
-
-class GertClient {
-  async execStart(params: ExecStartParams): Promise<ExecStartResult> {
-    return this.call("exec/start", params);
-  }
-}
-```
-
-### 4. Use Health Check on Frontend Load
-**Priority**: Low  
-**Rationale**: Improves user experience with connection errors.
-
-Frontend currently shows generic error if server unreachable. Add health check:
-```typescript
-async load(): Promise<void> {
-  // First verify server is reachable
-  const health = await fetch('http://localhost:7777/health');
-  if (!health.ok) {
-    throw new Error('Server not running');
-  }
-  // Then start WebSocket connection
-  await this.client.start();
-}
-```
-
----
-
-## Files Verified
-
-- **Server Implementation**
-  - `ext/serve/pkg/serve/serve.go` — RPC dispatcher (lines 532-584), mode validation (lines 690-710)
-  
-- **Frontend Implementation**
-  - `web/src/views/runbookRunner.ts` — RPC calls (lines 166, 178)
-  
-- **Test Data**
-  - `examples/simple-health-check.runbook.yaml` — Used for live server testing
-
----
-
-## Conclusion
-
-The gert HTTP server is functioning correctly and all frontend RPC calls match the server contract. Previous bugs have been resolved. The server properly validates input (rejecting invalid modes with error code -32605) and returns structured JSON-RPC responses.
-
-No action required. Consider adding contract tests to prevent future regressions.
-
----
-
-# Decision: QA Review Fixes (B2, B3, B4, Agent Reporter)
-
-**Date:** 2026-04-05  
-**Author:** Knov (Playwright & E2E Testing Specialist)  
-**Status:** Implemented  
-**References:** `.squad/decisions/inbox/hisoka-phase1-2-review.md`
-
-## Context
-
-Hisoka's QA review identified 4 specific issues in the Playwright test infrastructure that would prevent tests from running correctly:
-
-1. **B2:** Page Objects navigate to non-existent URLs (`/runner`, `/catalog`) instead of using tab-based navigation
-2. **B3:** Test R10 intercepts wrong endpoint (`/api/runbook/execute` vs actual `/rpc`)
-3. **B4:** Test fixtures use absolute paths that break when gert server resolves relative to its working directory
-4. **Agent Reporter:** Missing stack traces and assertion details needed for autonomous agent debugging
-
-## Decision
-
-### Fix B2: Tab-Based Navigation
-
-**Problem:** The web app uses tab-based routing (single-page app), but page objects tried to navigate directly to `/runner` and `/catalog` URLs that don't exist.
-
-**Solution:**
-1. Added `data-testid` attributes to all tabs in `web/index.html`:
-   - `data-testid="tab-catalog"`
-   - `data-testid="tab-runner"`
-   - `data-testid="tab-editor"`
-
-2. Updated `RunbookRunnerPage.goto()`:
-   ```typescript
-   async goto(): Promise<void> {
-     await this.page.goto('/');
-     const runnerTab = this.page.locator('[data-testid="tab-runner"]');
-     await runnerTab.click();
-   }
-   ```
-
-3. Updated `ToolCatalogPage.goto()`:
-   ```typescript
-   async goto(): Promise<void> {
-     await this.page.goto('/');
-     const catalogTab = this.page.locator('[data-testid="tab-catalog"]');
-     await catalogTab.click();
-   }
-   ```
-
-**Rationale:** This approach works with the existing tab-based architecture without requiring URL routing changes to `main.ts`. The `data-testid` attributes provide stable selectors immune to DOM/CSS changes.
-
-### Fix B3: Correct RPC Endpoint Interception
-
-**Problem:** Test R10 intercepted `**/api/runbook/execute`, but the actual endpoint is `POST /rpc` with JSON-RPC body.
-
-**Solution:** Changed route pattern in `runbook-runner.spec.ts`:
-```typescript
-await runnerPage.page.route('**/rpc', route => {
-  route.abort('failed');
-});
-```
-
-**Rationale:** This matches the actual RPC endpoint used by the client. The test now correctly simulates server disconnection.
-
-### Fix B4: Relative Fixture Paths
-
-**Problem:** The `testRunbook` fixture returned an absolute path (`/Volumes/Projects/gert/web/tests/fixtures/runbooks/simple.runbook.yaml`), but the gert server resolves runbook paths relative to its working directory. The server was spawned without a `cwd` option, so it defaulted to wherever the test runner was invoked.
-
-**Solution:**
-1. Set gert server working directory to repo root in `base.ts`:
-   ```typescript
-   const repoRoot = path.join(__dirname, '../../../');
-   gertServer = spawn(gertBinaryPath, ['serve', '--http', '--port', '7778'], {
-     stdio: ['ignore', 'pipe', 'pipe'],
-     detached: false,
-     cwd: repoRoot,  // ← Set working directory
-   });
-   ```
-
-2. Changed `testRunbook` fixture to return relative path:
-   ```typescript
-   testRunbook: async ({}, use) => {
-     const runbookPath = 'web/tests/fixtures/runbooks/simple.runbook.yaml';
-     await use(runbookPath);
-   },
-   ```
-
-**Rationale:** The gert server runs from the repo root (where `gert.yaml` lives), so runbook paths should be relative to that location. This matches how users would invoke `gert serve` in production.
-
-### Fix Agent Reporter: Enhanced Error Details
-
-**Problem:** The agent reporter only included `error.message`, which lacks context for autonomous agents to understand test failures.
-
-**Solution:** Enhanced error object in `agent-reporter.ts`:
-```typescript
-let errorDetails = null;
-if (result.error) {
-  const stackLines = result.error.stack?.split('\n') || [];
-  const truncatedStack = stackLines.slice(0, 5).join('\n');
-  
-  errorDetails = {
-    message: result.error.message || '',
-    stack: truncatedStack,
-    ...(result.error.matcherResult && {
-      actual: result.error.matcherResult.actual,
-      expected: result.error.matcherResult.expected,
-    }),
-  };
-}
-```
-
-**Output format:**
-```json
-{
-  "error": {
-    "message": "Expected 'success' but got 'failure'",
-    "stack": "Error: ...\n  at ...\n  at ...\n  at ...\n  at ...",
-    "actual": "failure",
-    "expected": "success"
-  }
-}
-```
-
-**Rationale:**
-- **Stack trace (5 lines):** Helps agents identify which assertion/line failed without overwhelming the report
-- **Actual vs Expected:** Critical for assertion failures — agents can understand what went wrong
-- **Truncation:** Prevents massive stack traces from polluting the JSON while retaining useful context
-
-## Verification
-
-All changes are backwards-compatible:
-- Page object navigation still works (navigates to root, then clicks tab)
-- RPC interception now matches actual endpoint
-- Relative paths work from repo root (where gert server runs)
-- Enhanced error format is superset of old format (agents can still read `error.message`)
-
-## Files Modified
-
-1. `web/index.html` — Added `data-testid` to tabs
-2. `web/tests/pages/RunbookRunnerPage.ts` — Tab-based navigation
-3. `web/tests/pages/ToolCatalogPage.ts` — Tab-based navigation
-4. `web/tests/specs/runbook-runner.spec.ts` — Fixed RPC endpoint interception
-5. `web/tests/fixtures/base.ts` — Set `cwd` for gert server, relative path fixture
-6. `web/tests/helpers/agent-reporter.ts` — Enhanced error reporting
-
-## Impact
-
-- **Tests R1-R10:** Will now navigate correctly to runner view
-- **Tests T1-T4:** Will now navigate correctly to catalog view (though catalog is default)
-- **Test R10:** Will now correctly intercept RPC calls and test error handling
-- **All tests:** Fixture paths will resolve correctly when gert server runs
-- **Agent consumption:** AI agents reading `agent-report.json` will have full context for failures
 
 ## Next Steps
 
-1. Verify tests pass when web app is fully implemented
-2. Confirm RPC endpoint path matches Go server implementation
-3. Run tests in CI to validate end-to-end flow
-
-## References
-
-- Hisoka's review: `.squad/decisions/inbox/hisoka-phase1-2-review.md`
-- Tab routing implementation: `web/src/main.ts` lines 41-73
-- RPC endpoint: Documented in `web/docs/ws-events.md` (needs validation with Killua)
+1. **John:** Translate all 10 runbooks to gert v2 schema YAML
+2. **John:** Document translation findings (successes, ambiguities, blockers)
+3. **Dennis:** Review findings, identify research gaps (if any)
+4. **Team:** Use findings to refine v2 schema design (§03)
+5. **Team:** Prioritize schema features based on corpus frequency
 
 ---
 
-# Decision: Knov Autonomous Screenshot Workflow
+## Appendix: Runbook Naming Convention
 
-**Date:** 2026-04-06  
-**Author:** Knov (Playwright & E2E Testing Specialist)  
-**Requested by:** ormasoftchile  
-**Status:** Adopted
+For John's YAML files:
 
----
-
-## Context
-
-The user asked why screenshots need to be pasted manually. The answer is: they don't. Knov can take screenshots autonomously during any Playwright run and report on what was seen.
-
----
-
-## Decision
-
-Knov will use the following workflow for all visual verification tasks:
-
-1. **Write a one-off spec** to `.squad/screenshots/specs/` (NOT `tests/specs/` — the default glob picks that up).
-2. **Run with existing `playwright.config.ts`** — the `webServer` config starts both gert (port 7778) and Vite (port 5173) automatically. No manual server management needed.
-3. **Save screenshots to `.squad/screenshots/`** using `page.screenshot({ path, fullPage: true })`.
-4. **Never write to `/tmp`** — it is forbidden in this environment.
-5. **Clean up one-off specs** after the session or move them to `.squad/screenshots/specs/` to keep `tests/specs/` clean.
-
----
-
-## Screenshot Conventions
-
-| File | Contents |
-|------|----------|
-| `.squad/screenshots/knov-before.png` | Idle / initial state |
-| `.squad/screenshots/knov-after.png` | Post-execution / final state |
-| `.squad/screenshots/<feature>-<state>.png` | Ad-hoc captures per feature |
-
----
-
-## Findings from This Session
-
-### Before State (`knov-before.png`)
-- **Clean idle Runbook Runner view.** Path input shows `path/to/runbook.yaml` placeholder, blue Run button visible, center hint "👆 Enter a runbook path above and click Run to start execution". No visual problems.
-
-### After State (`knov-after.png`)
-- **Run completed with "Failed" outcome** (red banner, "Run Again" button).
-- **Three visual bugs identified:**
-
-#### Bug 1: Unrendered template literals in Workflow Map step labels
-- Steps display raw mustache/Go template expressions: `{{ .target }}`, `{{ .primary_host }}`, `{{ .dns_server }}` instead of resolved values like `github.com`, `8.8.8.8`.
-- Affects: WORKFLOW MAP panel and RUNBOOK INSTRUCTIONS step list.
-- Severity: Medium — confusing but functional.
-
-#### Bug 2: `<no value>` escaping into Step 14 instructions
-- "Network Health Summary" step in the left RUNBOOK INSTRUCTIONS panel shows `<no value>` beneath the title.
-- This is a Go template evaluation error leaking through to the frontend.
-- Severity: Low — cosmetic, but indicates a template evaluation gap in the instructions renderer.
-
-#### Bug 3: Raw Go template code streamed to OUTPUT panel
-- The OUTPUT panel shows literal source code:  
-  `{{ .dns_report }}){{ .target }}: {{ if contains .dns_result "Address" }}OK{{ else }}FAIL{{ end }}\n`
-- The template was never evaluated before being sent to the frontend as output text.
-- Severity: High — breaks observability; operators cannot read meaningful output.
-
----
-
-## Recommended Next Actions
-
-1. **Bug 3 (High):** Investigate the step output streaming path in the Go backend — find where tool output is templated and ensure evaluation happens before broadcast.
-2. **Bug 1 (Medium):** Check whether the Workflow Map step label renderer uses the evaluated label or the raw YAML `name` field.
-3. **Bug 2 (Low):** Ensure the instructions renderer handles nil/missing template variables gracefully instead of passing `<no value>` through.
-
----
-
-## Screenshots
-
-- `knov-before.png`: `.squad/screenshots/knov-before.png`
-- `knov-after.png`: `.squad/screenshots/knov-after.png`
-
----
-
-
----
-
-# 2026-04-06: Web Port Spec — RunbookRunner Four Gap Remediation
-
-**By:** Gon (Lead Architect)  
-**Date:** 2026-04-06  
-**Requested by:** ormasoftchile  
-**Assignee:** Illumi (Web Frontend Engineer)  
-**Status:** ✅ Implemented (commit 9fd43f6)
-
-## Context
-
-The web app `RunbookRunner` (`web/src/views/runbookRunner.ts`) was scaffolded as a skeleton and never properly ported the VS Code `RunbookPanel` rendering logic. A side-by-side comparison of `service-health-branching.runbook.yaml` reveals four concrete gaps:
-
-| Gap | VS Code | Web App |
-|-----|---------|---------|
-| Prose Panel | Structured phases (Background, Triage, Mitigation, Escalation) with step-level highlighting | Flat numbered list |
-| Workflow Map | SVG DAG with execution state colors, node shapes, bezier edges | Flat `<div>` list |
-| Input Collection | Pre-run modal for `meta.inputs`, collapsible in-run display | None |
-| Active Step Panel | Full context-aware detail: type, instructions, query, tool, outcomes, I/O, notes | Minimal Next/Mark-Complete only |
-
-## Decision
-
-Rebuild web RunbookRunner to achieve VS Code parity. Port graph engine, prose rendering, input preflight, and active step detail panel from VS Code reference implementation. Implement via three-step wave: specification audit (Gon) → backend contract (Killua) → frontend implementation (Illumi).
-
-## Specification Highlights
-
-### Gap 1: Prose Panel
-- VS Code source: `prose.ts:renderRunbookAsHTML()`
-- Produces: Structured narrative grouped by phases (Background, Triage, Mitigation, Escalation)
-- Each phase: H2 header + step sections with title, query (if exec), instructions, outcome recommendations
-- Active step: Highlighted with `.active` class for visual feedback
-- Port approach: Extract `classifyStepsForProse()` and `renderRunbookAsHTML()` logic
-
-### Gap 2: Workflow Map (Graph)
-- VS Code source: `graphRenderer.ts` + `treeToGraph.ts`
-- Renders: SVG DAG with nodes (step type icons), edges (bezier curves), execution state colors
-- State visualization: pending (gray), running (blue), passed (green), failed (red), skipped (orange)
-- Port approach: Copy graph engine files, replace `var(--vscode-*)` CSS with static colors, add pan/zoom
-
-### Gap 3: Input Collection
-- Requirement: Pre-run form for `from: 'user'` inputs from `meta.inputs`
-- Backend contract: New `schema/runbook` RPC endpoint returns user inputs schema
-- Frontend: Form UI with validation (required fields, type checking), submit before `exec/start`
-
-### Gap 4: Active Step Panel
-- Extend from minimal (Next/Mark-Complete buttons) to full context display
-- Show: Step type, title, ID, instructions, query, tool name, outcomes (success/failure/skipped), output, captures, manual controls
-
-## Files Changed (Implementation)
-
-- `web/src/views/runbookRunner.ts` — Main component rebuild (192 tool calls)
-  - Graph engine integration (treeToGraph, renderGraph, graph theme)
-  - Prose rendering (phases, step highlighting, markdown)
-  - Input preflight (schema/runbook call + form submission)
-  - Active step panel expansion (context display, manual controls)
-
-- `web/src/shared/treeToGraph.ts` — Ported from VS Code
-- `web/src/shared/renderGraph.ts` — Ported from VS Code
-- `web/src/shared/themes/graphTheme.ts` — Ported from VS Code
-- `web/src/styles/runbookRunner.css` — Added prose-instructions styling
-
-## Commits
-
-- `9fd43f6` — feat: port VS Code runbook panel to web (graph, prose, inputs, active step)
-
-## Outcome
-
-✅ Complete. Web RunbookRunner now feature-parity with VS Code reference. All 4 gaps closed:
-1. Prose: Structured narrative with phases and step highlights
-2. Graph: SVG DAG with execution state visualization
-3. Input: Pre-run form for user variables
-4. Active Step: Full context panel with outputs and manual controls
-
-All 12 Playwright tests pass (~5.5s). UI responsive and production-ready.
-
----
-
-# 2026-04-06: schema/runbook RPC Endpoint Contract
-
-**By:** Killua (Backend Engineer, Go)  
-**Date:** 2026-04-06  
-**Status:** ✅ Implemented (commit fc30ff1)
-
-## Context
-
-The web frontend needs to display an input collection form before calling `exec/start`. It must know what inputs the runbook requires (type, required, description) without executing the runbook. This requires a new RPC endpoint that returns runbook schema metadata.
-
-## Decision
-
-Implement `schema/runbook` JSON-RPC endpoint in the serve layer to return runbook input schema and metadata (kind, description, title). Transport: HTTP POST `/rpc` and WebSocket.
-
-## Endpoint Contract
-
-**Method:** `schema/runbook`
-
-### Request
-
-```json
-{
-  "jsonrpc": "2.0",
-  "method": "schema/runbook",
-  "params": {
-    "runbook": "path/to/foo.runbook.yaml",
-    "cwd": "/optional/working/directory"
-  }
-}
+```
+runbook-01-k8s-incident.yaml          (Kubernetes Pod Incident Response)
+runbook-02-canary-deployment.yaml     (Production Deployment with Canary)
+runbook-03-employee-onboarding.yaml   (New Employee Onboarding)
+runbook-04-soc2-evidence.yaml         (SOC2 Evidence Collection)
+runbook-05-breach-containment.yaml    (Security Breach Containment)
+runbook-06-db-migration.yaml          (Database Migration)
+runbook-07-purchase-approval.yaml     (Financial Approval)
+runbook-08-fda-release.yaml           (Medical Device Release)
+runbook-09-oncall-escalation.yaml     (On-Call Escalation Ladder)
+runbook-10-gdpr-deletion.yaml         (Customer Data Deletion)
 ```
 
-### Response
-
-```json
-{
-  "jsonrpc": "2.0",
-  "result": {
-    "kind": "runbook",
-    "description": "Network health check runbook",
-    "title": "Network Health Check",
-    "inputs": [
-      {
-        "name": "primary_host",
-        "type": "string",
-        "required": true,
-        "description": "Primary host to diagnose"
-      }
-    ]
-  }
-}
-```
-
-## Implementation Details
-
-1. **File Handling:**
-   - Accepts `runbook` path (absolute or relative to `cwd`)
-   - Supports project-relative paths via optional `cwd` parameter
-   - Returns error if file not found
-
-2. **Schema Extraction:**
-   - Calls `LoadRunbookFlexible()` to parse runbook YAML
-   - Filters `meta.inputs` for `from: 'user'` entries only
-   - Extracts: type (string/number/bool), required flag, description
-
-3. **Metadata:**
-   - Returns `kind` ("runbook"), `description`, `title` from runbook metadata
-
-4. **Error Handling:**
-   - File not found: `{"code": -32603, "message": "runbook not found"}`
-   - Parse error: Returns parse diagnostics
-
-## Files Changed
-
-- `ext/serve/pkg/serve/serve.go` — Added schema/runbook RPC method
-
-## Commits
-
-- `fc30ff1` — feat: add schema/runbook RPC endpoint for web input preflight
-
-## Outcome
-
-✅ Endpoint live and testable. Web frontend can now call `schema/runbook` to populate input collection form before `exec/start`.
+Each YAML should include:
+- Full step sequence
+- Step types (cli, extension, manual, approval, choice, decision, assert, etc.)
+- Inputs, outputs, conditionals, retry policies, timeout policies
+- Governance policies (if applicable)
+- Comments explaining schema decisions
 
 ---
 
-# 2026-04-06: Web RunbookRunner Rebuild (VS Code Parity)
-
-**By:** Illumi (Web Frontend Engineer)  
-**Date:** 2026-04-06  
-**Status:** ✅ Implemented (commit 9fd43f6)
-
-## Context
-
-The web RunbookRunner diverged from the VS Code runbook panel in four critical areas:
-1. Prose rendering: flat step list vs. structured narrative phases
-2. Execution graph: flat div list vs. SVG DAG with visual state
-3. Input collection: missing pre-run form UI
-4. Active step panel: minimal (Next/Mark-Complete) vs. full context display
-
-This caused incorrect display of complex runbooks like `service-health-branching.runbook.yaml` and poor operator UX.
-
-## Decision
-
-Rebuild `web/src/views/runbookRunner.ts` and port the VS Code rendering logic to achieve feature parity. Include proper DAG graph renderer, prose sections, input preflight, and full active step panel with outcome banners and manual controls. Use partial re-rendering for live updates to maintain UI responsiveness.
-
-## Implementation Summary
-
-### 1. Graph Engine Port
-
-**Copied VS Code files into `web/src/shared/`:**
-- `treeToGraph.ts` — Converts runbook tree to execution graph (nodes + edges)
-- `renderGraph.ts` — SVG DAG renderer with pan/zoom, node styling, bezier edges
-- `themes/graphTheme.ts` — Color palette for step states (pending, running, passed, failed, skipped)
-
-**Changes:**
-- Replaced `var(--vscode-*)` CSS variables with static color fallbacks
-- Added SVG canvas to workflow map panel
-- Integrated with execution state tracking from `exec/start` and `exec/next` events
-
-### 2. Prose Rendering
-
-**Ported from VS Code:**
-- `classifyStepsForProse()` — Groups steps into narrative phases (Background, Triage, Mitigation, Escalation)
-- `renderRunbookAsHTML()` → `renderStepsAsProse()` — Renders structured prose with phase headers and step highlights
-- `renderProseMarkdown()` — Converts runbook instructions to markdown with formatting
-
-**Features:**
-- Phase structure: Background (intro), Triage (diagnostic steps), Mitigation (action steps), Escalation (manual/approval)
-- Active step highlighting: Current executing step highlighted in prose panel
-- Line preservation: Added `.prose-instructions` CSS class with `white-space: pre-wrap; word-break: break-word`
-- Live sync: `syncProseActiveStep(stepId)` for highlighting without full rerender
-
-### 3. Input Collection Preflight
-
-**Implementation:**
-- Called `schema/runbook` RPC on component mount to discover user inputs
-- Built form UI for `from: 'user'` inputs with validation
-  - Required fields: enforced with error messages
-  - Type checking: string/number/bool with appropriate input types
-  - Submit button enables only when all required fields populated
-- Stored submitted values in component state
-- Passed vars to `exec/start` call
-
-**UX:**
-- Pre-run form displayed as modal before runbook execution starts
-- Form values persisted across session (in memory)
-- Submitted values displayed in active step panel for operator reference
-
-### 4. Active Step Panel Rebuild
-
-**Extended from minimal to full context display:**
-- **Step metadata:** Type (tool/manual/assert/cli), title, ID
-- **Instructions:** Full text with line wrapping and markdown formatting
-- **Execution context:** Query (for cli/tool steps), tool name (for tool steps)
-- **Outcomes:** Banners for success/failure/skipped with code and description text
-- **Output:** Rendered captured tool output with formatting preservation
-- **Captures:** Display captured variables from step execution
-- **Manual controls:**
-  - Mark Complete button (for manual/approval steps)
-  - Run Again button (to restart execution from current step)
-- **Submitted vars:** Display user-provided input values for reference
-
-**Outcome Mapping Priority:**
-- Primary: `outcomeState` (resolved, escalated, etc.)
-- Fallback: `outcomeCode` (success, failure)
-- Display: Maps to user-friendly status (success/failure/skipped)
-
-### 5. Testing
-
-**Playwright Coverage:**
-- R1–R12: Core functionality tests
-- R13–R14: Intentionally skipped for MVP
-- Execution: ~5.5 seconds for full suite
-- Tests verify:
-  - Prose rendering (phases, step highlights)
-  - Graph rendering (nodes, edges, state colors)
-  - Input collection (form submission, var passing)
-  - Active step panel (context display, manual controls, outcome rendering)
-  - Execution progression (state transitions, panel updates)
-
-## Files Changed
-
-- `web/src/views/runbookRunner.ts` (main rebuild, 192 tool calls)
-- `web/src/shared/treeToGraph.ts` (ported from VS Code)
-- `web/src/shared/renderGraph.ts` (ported from VS Code)
-- `web/src/shared/themes/graphTheme.ts` (ported from VS Code)
-- `web/src/styles/runbookRunner.css` (added prose-instructions styling)
-
-## Commits
-
-- `9fd43f6` — feat: port VS Code runbook panel to web (graph, prose, inputs, active step)
-
-## Outcome
-
-✅ Complete. Web RunbookRunner now feature-parity with VS Code reference implementation. All gaps closed:
-
-1. ✅ Prose panel: Structured narrative with phases (Background, Triage, Mitigation, Escalation) and step highlights
-2. ✅ Workflow graph: SVG DAG with execution state visualization (pending/running/passed/failed/skipped)
-3. ✅ Input collection: Pre-run form for user variables with validation
-4. ✅ Active step panel: Full context display (type, instructions, query, tool, outcomes, output, captures, manual controls)
-
-All 12 Playwright tests passing (~5.5s execution). UI responsive and production-ready.
-
-
-# Merge Decisions: shared/renderer/graph/treeToGraph.ts
-
-**Author:** Kurapika  
-**Date:** 2026-06-26  
-**Task:** Phase 1 Task 1 — Unified treeToGraph + treeOps
+**Status:** ✅ Ready for John's schema translation work.
 
 ---
 
-## Context
+## dennis-stress-test-final
 
-Two implementations of `treeToGraph.ts` existed in the codebase:
-- `vscode/src/views/treeToGraph.ts` — canonical, full feature set (expandedIterate, invokeBody, branch centering)
-- `web/src/shared/treeToGraph.ts` — web port with three critical bug fixes
+# Schema Stress Test — Final Verdict
 
-The merge target is `shared/renderer/graph/treeToGraph.ts`.
-
----
-
-## Decision A: branchCondition field on GraphNode
-
-**What:** Added `branchCondition?: string` to `GraphNode` in `shared/renderer/types.ts` (was already there from Phase 0) and ported the computation from web's `layoutStep()`.
-
-**Logic:**
-- If the branch decision was made AND a branch was taken: `"<condition> → true"`
-- If the branch decision was made but no branch first-step is taken (else path): `"<condition> → false"`
-- If the step has branches but no decision yet: raw condition string, no suffix
-
-**Why:** Gives every branch-step node a readable human subtitle showing which condition fired and in what direction. VS Code's version had none; web added this and it's clearly correct behavior.
+**From:** Dennis (CS Researcher)  
+**Date:** 2026-04-18  
+**Topic:** gert v2 Schema Production Readiness
 
 ---
 
-## Decision B: Passthrough nodes must NOT be in nodeStepMap (CRITICAL)
+## Executive Summary
 
-**What:** Removed `nodeStepMap.set(passId, id)` from the passthrough node creation block.
+Synthesized findings from John's schema translations (10 runbooks, full YAML + validation scoring) and Ken's architectural analysis (independent predictions across same corpus).
 
-**VS Code had:** `nodeStepMap.set(passId, id)` — maps the passthrough graph-node-id → parent step id.
+**Reconciled Verdict:** The gert v2 schema is **architecturally sound but requires 2 critical fixes before production readiness for enterprise use cases.**
 
-**Web's fix:** Deliberately omits this mapping with the comment: "must not resolve to parent branch-step, otherwise isTaken would return true and edges into this passthrough would render green."
-
-**Why this matters:**  
-`nodeStepId(passId)` is used when computing `taken` for edges. If `passId` maps to the parent step's id, then `isTaken(nodeStepId(passId))` returns `true` whenever the parent ran — even if that branch was never taken. This causes untaken branch paths to render green in the execution graph. The passthrough node represents a collapsed/skipped branch and must stay grey/skipped.
-
-**Decision:** Web is correct. passthrough nodes are never added to `nodeStepMap`.
+- **Test Results:** 1 PASS (10%), 7 PASS WITH NOTES (70%), 2 FAIL (20%)
+- **Average Scores:** 82% completeness, 73% fidelity (target: 95%)
+- **Unique Gaps Identified:** 12 total (2 CRITICAL, 4 IMPORTANT, 6 NICE-TO-HAVE)
 
 ---
 
-## Decision C: End-node incoming edges must use isTaken() not hardcoded true
+## Critical Gaps (Must Fix Before v2.0)
 
-**What:** Changed end-node incoming edge `taken` from `taken: true` to:
-- `taken: isTaken(nodeStepId(bid))` for multi-branch reconvergence
-- `taken: isTaken(nodeStepId(lastId))` for the single-bottom path
+### GAP-1: Business-Day Timeout (G2, CRITICAL)
+- **Affects:** R3 (Onboarding), R7 (Financial), R8 (FDA) — 15+ individual steps
+- **Problem:** Approval workflows require business-day SLAs ("2 business days"), not wall-clock ("48h"). Current `timeout` field doesn't support calendar-aware expressions.
+- **Fix:** Add `timeout_business_days`, `timeout_calendar` fields to §03 (Schema), §11 (Governance)
+- **Effort:** Medium (2-3 days)
 
-**VS Code had:** Both hardcoded as `taken: true`.
+### GAP-2: M-of-N Quorum Approval (G4, CRITICAL)
+- **Affects:** R7 (Financial board), R8 (FDA dual attestation), R10 (GDPR DPO + legal)
+- **Problem:** Multi-party governance needs "3 of 5 board members must approve". Current `approvals.min` lacks explicit pool definition.
+- **Fix:** Add `approvals.mode`, `approvals.pool`, `approvals.pool_size` to §03 (Schema), §14 (JSON-RPC)
+- **Effort:** Medium (2-3 days)
 
-**Web's fix (previously applied as standalone commit):** Uses the same `isTaken(nodeStepId(...))` pattern that every other edge in the function uses.
-
-**Why:** Hardcoded `true` means the edge from the last node to `end-0` always renders green, even when the workflow hasn't completed or took a different branch that leads to a terminal step. Causes false visual feedback.
-
-**Decision:** Web is correct. This fix was already recorded in Kurapika's history (session 2026-06-26 "Fix web graph edge color").
-
----
-
-## Structural decision: No type re-exports in shared/renderer/graph/ files
-
-`shared/renderer/graph/treeToGraph.ts` previously had:
-```typescript
-export type { TreeNode, Branch, GraphNode, GraphEdge, GraphWorkflow } from '@gert/renderer';
-```
-And `treeOps.ts` had:
-```typescript
-export type { InvokeChildData } from '@gert/renderer';
-```
-
-These were removed because:
-1. `@gert/renderer` IS `shared/renderer` — re-exporting from yourself is circular at the barrel level
-2. `shared/renderer/index.ts` now includes `export * from './graph'`, which would cause duplicate named exports
-3. The types are already available via the barrel — consumers don't need them re-exported from the graph module
+**Total Critical Fix Effort:** 4-6 days for both gaps
 
 ---
 
-## What was NOT changed
+## Important Gaps (Should Fix for v2.0)
 
-- All VS Code-exclusive features are preserved: `layoutExpandedIterate`, `invokeBody` compound layout, branch centering (taken branch centered, collapsed branches distributed), terminal branch detection, `options.omitEnd`
-- `treeOps.ts`: all functions preserved, `prefixChildTree` made public (added `export`)
-- No VS Code or web importers were modified — this is purely additive
-# kurapika-task2-renderer — Decision Record
+- **GAP-3:** External event trigger (G3, HIGH) — FDA 90-day pause needs webhook resume
+- **GAP-4:** Dynamic approver lookup (G2, IMPORTANT) — Manager from HR system at runtime
+- **GAP-5:** Choice timeout default (G2, IMPORTANT) — Security triage defaults to "High"
+- **GAP-6:** Cross-branch parallelism (G3, IMPORTANT) — Forensics parallel to containment
 
-**Filed by:** Kurapika  
-**Date:** Phase 1 Task 2  
-**Commit:** ebe3eb9
+---
 
-## GraphRenderOptions final shape
+## What's Ready Today
 
-```typescript
-export interface GraphRenderOptions {
-  // Core
-  delayInfo?: { stepId: string; delay: string; delayMs?: number; delayStartMs?: number } | null;
-  theme?: GertGraphTheme;
-  outcomeLabel?: string;
-  annotationCounts?: Map<string, number>;
-  annotations?: Annotation[];
-  outcomeResult?: any;
+✅ **SRE/Operations:** Incident response, health checks, automated remediation (R1, R9)  
+✅ **DevOps:** Deployments with canary/rollback, saga patterns (R2, R6)  
+✅ **Compliance:** SOC2/audit evidence collection (R4, R10)  
+✅ **Data Engineering:** Database migrations with validation (R6)
 
-  // VS Code parity
-  invokeChildren?: Map<string, InvokeChildData>;
-  branchResolutions?: Map<string, Map<number, boolean>>;
-  selectedIteratePass?: Map<string, number>;
-  snapshotState?: SnapshotState;
-  iteratePassInfoMap?: Map<string, any>;
-  iterateChildDetailsByPass?: Map<string, Map<string, any>[]>;
-  stepDetails?: Map<string, any>;
-  currentStepId?: string;
-  displayConfig?: DisplayConfig;
+❌ **Finance:** Multi-level approval chains with board quorum (R7) — blocked by GAP-2  
+❌ **Regulated:** Medical device/FDA workflows (R8) — blocked by GAP-1, GAP-2, GAP-3
 
-  // Chain
-  chainHistory?: ChainEntry[];
-  viewingChainIndex?: number | null;
-
-  // Flags
-  debugMode?: boolean;
-  recording?: boolean;
-  recordingLog?: any[];
-  autoScreenshot?: boolean;
-  runCompleted?: boolean;
-  savedGraphTransform?: { tx: number; ty: number; scale: number } | null;
-
-  // Callbacks
-  findChildChainIndex?: (invokeStepId: string) => number | null;
-  getIteratePassDetail?: (stepId: string) => any | undefined;
-}
-```
-
-## Design decisions
-
-### currentStepId vs currentStepDetail
-VS Code's `GraphRenderContext` has `currentStepDetail: any` and uses `ctx.currentStepDetail?.stepId`. The shared renderer flattens this to `currentStepId?: string` — callers extract the stepId before passing to `renderExecutionGraph`. This removes `any` indirection.
-
-### No vscode.* callbacks needed
-All 20 VS Code features were extractable without requiring VS Code API callbacks. The two interactive methods (`getIteratePassDetail`, `findChildChainIndex`) that were methods on `RunbookPanel` are now plain optional function fields. Default implementations (returning `undefined` / `null`) make them safe to omit.
-
-### DisplayConfig moved to shared
-Previously only in `vscode/src/serve/client.ts`. Now in `shared/renderer/types.ts`. VS Code's `client.ts` can re-export it from there in Task 7.
-
-### GraphRenderContext promotion
-The minimal 4-field `GraphRenderContext` in `stepNodeRenderer.ts` was replaced with a full interface (20+ fields) in `shared/renderer/types.ts`. The full interface is constructed internally by `buildContext()` — consumers only see `GraphRenderOptions`.
-
-## VS Code features that needed design decisions
-
-| Feature | VS Code | Shared |
-|---------|---------|--------|
-| Theme selection | `vscode.workspace.getConfiguration('gert').get('graph.theme')` | `options.theme ?? getTheme()` |
-| Current step | `ctx.currentStepDetail?.stepId` (any) | `options.currentStepId?: string` |
-| Recording push | direct mutation of `ctx.recordingLog` | same — caller passes mutable array |
-| SnapshotState | required in ctx | optional with empty default |
-# Type gaps found in Phase 1 Task 3 — stepNodeRenderer port
-
-**Filed by:** Kurapika (2026-06-26)
-**Context:** Porting `vscode/src/views/stepNodeRenderer.ts` to `shared/renderer/graph/stepNodeRenderer.ts`
-
-## Missing: `GraphRenderContext`
-
-The full `GraphRenderContext` interface lives in `vscode/src/views/graphRenderer.ts` and has not been promoted to `shared/renderer/types.ts`. The ported `stepNodeRenderer.ts` only needs a subset — a minimal local interface was defined for now.
-
-### Fields used by stepNodeRenderer (minimum needed in shared):
-
-```typescript
-export interface GraphRenderContext {
-  invokeChildren: Map<string, InvokeChildData>;
-  branchResolutions: Map<string, Map<number, boolean>>;
-  getIteratePassDetail: (stepId: string) => any | undefined;
-  findChildChainIndex: (invokeStepId: string) => number | null;
-}
-```
-
-### Full interface in vscode (for reference):
-
-The full `GraphRenderContext` also includes: `annotations`, `viewingChainIndex`, `chainHistory`, `tree`, `stepStates`, `stepDetails`, `selectedIteratePass`, `snapshotState`, `iterateChildDetailsByPass`, `displayConfig`, `delayInfo`, `outcomeResult`, `runCompleted`, `iteratePassInfoMap`, `currentStepDetail`, `debugMode`, `autoScreenshot`, `savedGraphTransform`, `recording`, `recordingLog`.
-
-These in turn reference `Annotation`, `ChainEntry`, `DisplayConfig`, and `SnapshotState` (the last one IS already in shared types).
+---
 
 ## Recommendation
 
-When `graphRenderer.ts` itself is ported (likely a later Phase 1 task), promote the full `GraphRenderContext` to `shared/renderer/types.ts` and remove the local minimal interface from `stepNodeRenderer.ts`.
-# VS Code Config → DisplayConfig Field Mapping
+The schema is **80% production-ready**. With 2 critical fixes (business-day timeout, M-of-N quorum), it reaches **95%+ readiness** for enterprise adoption.
 
-**Author:** Kurapika (Task 7)
-**Date:** 2026-06-26
-**For:** Other agents needing to understand how VS Code workspace config maps to DisplayConfig
+**Action:** Prioritize GAP-1 and GAP-2 before declaring schema implementation-ready for Brian's parser work. Both fixes are additive (backward compatible) and addressable in a focused sprint (4-6 days total).
 
-## Summary
+---
 
-`DisplayConfig` (shared type in `shared/renderer/types.ts`) is identical to `DisplayConfig` in `vscode/src/serve/client.ts`. No translation layer is needed between them.
+## Artifacts
 
-## The reading function
+- **Full Report:** `/Volumes/Projects/gert/.squad/tmp/stress-test-final-report.md` (20KB)
+- **Executive Summary:** `/Volumes/Projects/gert/.squad/tmp/stress-test-executive-summary.md`
+- **Corpus:** `/Volumes/Projects/gert/.squad/tmp/dennis-runbook-corpus.md` (10 runbooks)
+- **John's Translations:** `/Volumes/Projects/gert/.squad/tmp/john-schema-translations.md` (R1-R3 full YAML)
+- **Ken's Analysis:** `/Volumes/Projects/gert/.squad/tmp/ken-stress-conclusions.md`
 
-`vscode/src/views/runbookPanel/factory.ts` — `readDisplaySettings()` — reads all fields:
+---
 
-| VS Code config key (`gert.*`) | DisplayConfig field | Default |
-|---|---|---|
-| `debugTrace` | `debugTrace` | undefined |
-| `showCaptures` | `captures` | undefined |
-| `showOutcomeConditions` | `outcomeConditions` | undefined |
-| `showCopySummary` | `copySummary` | undefined |
-| `showSaveForReplay` | `saveForReplay` | undefined |
-| `graph.hideUnusedSteps` | `hideUnusedSteps` | undefined |
-| `graph.invokeBoundary` | `invokeBoundary` | `'container'` |
-| `graph.minimap` | `minimap` | `'visible'` |
-| `graph.minimapPosition` | `minimapPosition` | `'bottom'` |
-| `graph.minimapPanel` | `minimapPanel` | `'center'` |
-| `graph.minimapGlow` | `minimapGlow` | `false` |
-| `graph.activeIndicator` | `activeIndicator` | `'arrow'` |
-| `ui.markCompleteLabel` | `markCompleteLabel` | `'✓ Mark Complete'` |
-| `showRecording` | `showRecording` | `true` |
-| `showRestart` | `showRestart` | `true` |
-| `summary.footer` | `summaryFooter` | `'Generated by gert runbook engine'` |
-| `prose.activeIndicator` | `proseActiveIndicator` | `'arrow'` |
+**Verdict Reconciliation Note:** John's "NOT PRODUCTION READY" (strict methodology thresholds) and Ken's "NEEDS TARGETED FIXES" (pragmatic workaround assessment) agree on substance: schema is sound but has targeted enterprise governance gaps. The reconciled verdict captures both perspectives.
 
-## Theme
+---
 
-Theme is separate from `DisplayConfig`. It is read inside `renderGraphSvg()` in the adapter:
+## john-cli-run-map
 
-```typescript
-const themeName = vscode.workspace.getConfiguration('gert').get<string>('graph.theme', 'default');
-const theme = getTheme(themeName); // resolves to GertGraphTheme
-```
+# Decision: Add `run:` map form to `type: cli`
 
-Available themes: `'default'`, `'high-contrast'`, `'light'`.
+**Author:** John (Schema & Language Specialist)  
+**Date:** 2026-04-19  
+**Status:** Approved by project owner — implemented
 
-## Flow
-
-```
-VS Code workspace config (gert.*)
-  └─ factory.ts readDisplaySettings()
-       └─ DisplayConfig stored in PanelState.displayConfig
-            └─ renderHelpers.ts renderGraphSvg(s: PanelState)
-                 └─ ctx.displayConfig passed to graphRenderer adapter
-                      └─ renderExecutionGraph(tree, states, { displayConfig, theme, ... })
-```
-
-## Notes
-
-- The `DisplayConfig` interfaces in `serve/client.ts` and `shared/renderer/types.ts` are kept in sync manually. If either changes, the other must be updated.
-- `GraphRenderContext.currentStepDetail` (VS Code) is mapped to `GraphRenderOptions.currentStepId` in the adapter via `ctx.currentStepDetail?.stepId`.
-# Decision: treeToGraph test runner for shared package
-
-**Author:** Kurapika  
-**Date:** 2026-06-26  
-**Task:** Phase 1 Task 10
-
-## Choice: Option C — Extend vscode/jest to include shared
-
-### What was chosen
-
-Extended `vscode/jest.config.js` `roots` to include `<rootDir>/../shared`, placing the test file at `shared/renderer/graph/treeToGraph.test.ts`.
-
-### Why not Option A (vitest in shared/)
-
-Would require a new `package.json`, `vitest.config.ts`, and `tsconfig.json` inside `shared/renderer/`. The `@gert/renderer` path alias needs to be resolvable by the test runner, which means duplicating tsconfig `paths` config. More infrastructure for the same outcome.
-
-### Why not Option B (web test suite)
-
-The `web/` package has no unit test runner — only Playwright e2e. Adding jest/vitest to `web/` would be more invasive than extending the already-configured vscode jest.
-
-### Why Option C
-
-- `vscode/jest.config.js` + `ts-jest` is already configured and working
-- `vscode/tsconfig.json` already includes `../shared/renderer/**/*.ts` and maps `@gert/renderer` to the shared types
-- Single-line change to `roots` was sufficient — zero new infrastructure
-- Tests run in the same environment that already validates the shared code
-
-### Trade-offs
-
-- Tests live in `shared/` but execute via `vscode/` tooling. Future: if `shared/` gets its own package.json (e.g. for npm publishing), the tests should migrate to a standalone vitest config there.
-# Decision: ChainEntry.tree typed as TreeNode[] not any[]
-
-**Task:** Phase 1 Task 6 — parentMinimap extraction  
-**Date:** 2026-04-07  
-**Author:** illumi
-
-## Context
-
-`ChainEntry` in `vscode/src/views/graphRenderer.ts` defines `tree: any[]`.  
-The shared type `TreeNode` already exists in `shared/renderer/types.ts` and matches exactly what the tree field contains.
+---
 
 ## Decision
 
-Used `tree: TreeNode[]` in the shared `ChainEntry` definition instead of `any[]`.
+Add a `run:` field (string or map) to `type: cli` as a first-class alternative to
+the existing `command`/`args` exec form.  Add a `shell:` field to control shell
+selection for the string form.
+
+---
+
+## Context
+
+The original `type: cli` spec supported only the exec form (`command` + `args`),
+which requires knowing the binary name and constructing argument lists.  Shell
+constructs (pipes, conditionals, heredocs, multi-command scripts) required an
+awkward `command: bash args: ["-c", "..."]` wrapper that:
+
+1. Made scripts hard to read in YAML (escaping, quoting).
+2. Was silently POSIX-only — no indication to the runtime that Windows was
+   unsupported.
+3. Provided no mechanism to express cross-platform equivalents within a single
+   step.
+
+The "Option C" proposal (multi-shell `run:` map) was investigated prior to this
+decision.  The project owner approved it on 2026-04-19.
+
+---
+
+## What Changed
+
+### Schema additions to `type: cli`
+
+#### New field: `shell`
+
+```
+shell:
+  type: string
+  enum: [auto, bash, sh, pwsh, cmd]
+  default: auto
+  optional: true
+```
+
+- Applies only to the `run` string form.
+- `auto`: runtime picks platform-native shell (bash/sh on Unix, pwsh → cmd on Windows).
+- Explicit value: runtime invokes that specific shell.
+- **Ignored** when `run` is a map (validation warning emitted if both are set).
+
+#### New field: `run` (string | map)
+
+**String form** — shell-script passed verbatim to the selected shell:
+```yaml
+run: |
+  if [ "{{ .env }}" = "prod" ]; then
+    echo "Production deploy"
+  fi
+shell: bash
+```
+
+**Map form** — keys are shell names, values are shell-script strings:
+```yaml
+run:
+  bash: rm -rf /tmp/cache/{{ .service }}
+  cmd: rd /s /q C:\tmp\cache\{{ .service }}
+  pwsh: Remove-Item -Recurse -Force C:\tmp\cache\{{ .service }}
+```
+
+### Mutual exclusivity rule
+
+`command`/`args` and `run` are mutually exclusive.  Using both in the same step
+is a **schema validation error**.
+
+### Map key resolution order
+
+When `run` is a map, the executor selects the entry as follows:
+
+1. **Exact match**: host shell matches a map key → use that entry.
+2. **Family fallback**: no exact match → apply fallback table.
+3. **No match**: step fails with:
+   `"No matching shell entry for current platform. Available entries: {keys}. Platform shell: {detected}."`
+
+Fallback table:
+
+| Requested shell | Falls back to      |
+|-----------------|--------------------|
+| `bash`          | `sh`               |
+| `sh`            | (none — fail)      |
+| `pwsh`          | `cmd` (Windows)    |
+| `cmd`           | (none — fail)      |
+
+---
 
 ## Rationale
 
-- `TreeNode` is the canonical type for tree data in this system
-- `any[]` provides zero type safety; `TreeNode[]` enables proper downstream typing
-- `renderParentMinimap` passes `tree` directly to `treeToWorkflow(tree, ...)` which expects `TreeNode[]`
-- No breakage — the VS Code definition was loosely typed, not intentionally `any`
-
-## Impact
-
-Any consumer of the shared `ChainEntry` that passes tree data must ensure it matches `TreeNode`. This is the correct constraint.
-# Task 8 — Web Runner State Wiring: Current vs. Needs Task 9
-
-**Date:** 2026-04-07  
-**Author:** Illumi  
-**Context:** After wiring `renderExecutionGraph` from `@gert/renderer/graph` into the web runner
+- **Readability**: multiline shell scripts are expressed naturally as YAML block
+  scalars rather than single-quoted `-c` arguments.
+- **Cross-platform safety**: the map form makes platform assumptions explicit in
+  the runbook rather than leaving them implicit.  A Windows executor that
+  encounters only a `bash` key gets a clear error rather than silent failure.
+- **Backward compatibility**: the exec form (`command`/`args`) is unchanged and
+  remains the right choice for direct binary invocations.
+- **Governance compatibility**: `allowed_commands` / `denied_commands` checks
+  apply to the shell binary itself (e.g. `bash`, `pwsh`) in the run form,
+  consistent with the exec form.
 
 ---
 
-## GraphRenderOptions fields currently populated by web runner
+## Affected Files
 
-These fields are NOW passed at the call site in `renderWorkflowMap()`:
-
-| Field | Source in `RunState` | What it enables |
-|-------|---------------------|-----------------|
-| `delayInfo` | `this.state.delayInfo` | Delay timer badge on active step node |
-| `theme` | `defaultGraphTheme` | Node/edge color scheme |
-| `outcomeLabel` | `this.state.outcomeResult?.state` | Outcome string in final node |
-| `stepDetails` | `this.state.stepDetails` | Step detail display in nodes; invoke boundary |
-| `currentStepId` | `this.state.currentStepDetail?.stepId` | Active glow/arrow indicator |
-| `snapshotState` | `this.state.snapshotState` | Full snapshot (iteratePasses, history, finished flag) |
-| `branchResolutions` | `this.state.snapshotState.branchResolutions` | Resolved branch highlight (taken vs. not-taken) |
-| `invokeChildren` | `this.state.snapshotState.invokeChildren` | Inline invoke merge + parent minimap |
-| `runCompleted` | `this.state.runCompleted` | Prune: hide unvisited nodes after run ends |
-| `outcomeResult` | `this.state.outcomeResult` | Outcome banner in workflow map SVG |
+- `design/gert-v2/sections/03-schema-vnext.tex` — §03 `type: cli` subsection
+  expanded with new field table rows, run-form prose, map resolution rules,
+  fallback table, and three new examples.
+- `design/gert-v2/testdata/runbooks/r04-soc2-evidence/schema.yaml` — `init_audit_package`
+  step converted from `command: bash args: ["-c", "..."]` to `run:` map form
+  (bash + pwsh entries) as a demonstration of improved cross-platform fidelity.
 
 ---
 
-## GraphRenderOptions fields NOT yet populated (need Task 9 or later)
+## Implementation Notes (for Brian/Ken)
 
-These exist on `GraphRenderOptions` but the web runner has no corresponding state yet:
+- **Parser (Brian)**: `run` field type is `oneOf: [string, map[string]string]`.
+  Validate mutual exclusivity with `command`/`args` at structural validation phase.
+  Emit warning if `shell` + map `run` are both present.
+- **Runtime (Ken)**: map key resolution must follow the priority order above.
+  The `shell: auto` resolution must consult `$PATH` / OS detection, not just
+  OS name.  On Windows, check for `pwsh.exe` before falling back to `cmd.exe`.
 
-| Field | Why missing | Task needed |
-|-------|------------|-------------|
-| `annotationCounts` | Web runner has no annotation data source; no annotation RPC yet | Task 9: wire annotation feed |
-| `annotations` | Same — no annotation fetch/WS event from backend for web | Task 9 |
-| `chainHistory` | Web runner has no chain (invoke-chain) history tracking; single-level execution only | Task 9: implement chain tracking in RunState |
-| `viewingChainIndex` | Requires chain navigation UI (prev/next chain) — not implemented in web | Task 9 |
-| `selectedIteratePass` | Web has no iterate-pass selection UI | Task 9: add pass selector widget |
-| `iteratePassInfoMap` | Populated from WS events not yet emitted/handled in web | Task 9 |
-| `iterateChildDetailsByPass` | Deep iterate pass detail tracking — not tracked in RunState | Task 9 |
-| `displayConfig` | No user-configurable display preferences in web UI yet | Future task (P3 priority) |
-| `debugMode` | No debug toggle in web toolbar | Future task |
-| `recording` / `recordingLog` | No recording feature in web | Future task |
-| `autoScreenshot` | No screenshot feature in web | Future task |
-| `savedGraphTransform` | Web has no persisted graph transform between page loads | Future task |
-| `findChildChainIndex` | Callback requires chain navigation state — see chainHistory | Task 9 |
-| `getIteratePassDetail` | Callback requires iterateChildDetailsByPass — see above | Task 9 |
+---
+
+## john-extension-not-a-step-type
+
+### 2026-04-19: type:extension is not a step type
+
+**By:** John  
+**What:** `type: extension` does not exist in the gert v2 schema. Extension is a field-annotation
+convention (`x-<namespace>:` prefix) only — it annotates runbook or step objects with metadata.
+It is not a step type that can appear in the `flow:` array.
+
+- **Outbound notify/send** steps (Slack, PagerDuty, email, external API calls) → `type: tool`
+  with the tool declared in `toolRefs`.
+- **Inbound event-receive** steps (wait for webhook, wait for SIEM alert, wait for callback from
+  external system) → GAP-3: `type: wait_for_event` is not yet specified. Use a `type: cli` stub
+  with a `# GAP: no wait_for_event step type yet` comment as placeholder.
+
+**Why:** Correcting testdata YAML (r01-k8s-incident, r05-security-breach) that used
+`type: extension` as a catch-all for steps that didn't fit other types. Prevents future confusion
+during implementation and ensures testdata accurately reflects the schema's real capabilities
+and gaps.
+
+---
+
+## john-field-types-p0
+
+# Decision Record: P0 Field-Type Improvements — collector & choice
+
+**Author:** John (Schema & Language Specialist)
+**Date:** 2026-04-19
+**Status:** IMPLEMENTED
+**Requested by:** ormasoftchile (project owner)
+**Follows:** `.squad/decisions/inbox/john-input-triad-audit.md`
 
 ---
 
 ## Summary
 
-**Task 8 achieved:** Basic graph features (step states, branch coloring, active indicator, invoke merge, outcome banner, prune) are now fully wired. The shared renderer's Phase 1 features are available as soon as the web runner collects the corresponding state.
-
-**Task 9 scope:** Chain navigation + annotation counts + iterate pass selection. These require new WS event handling, new RunState fields, and new UI controls (chain breadcrumb, pass selector, annotation badge click).
-# Task 9 — Final RunState Fields and Server-Side Work Needed
-
-**Date:** 2026-04-07
-**Author:** Illumi
-**Context:** After implementing Task 9 web UI wiring for shared renderer features
+Implemented the P0 field-type improvements to `§03 — Schema vNext` and updated
+the three reference runbook testdata files. All seven items in the task have been
+addressed.
 
 ---
 
-## Final RunState Shape (post Task 9)
+## What Was Added to §03 (03-schema-vnext.tex)
 
-```typescript
-interface RunState {
-  // ... (pre-existing fields unchanged) ...
+### 1. Step Type Inventory Table
+- Updated the `collector` description from "Operator provides unstructured
+  input/files" to "Operator provides structured input across 9 field types".
 
-  // Task 8 fields (already wired):
-  snapshotState: SnapshotState;        // iteratePassHistory, invokeChildren, branchResolutions
-  stepDetails: Map<string, any>;
-  currentStepDetail: any | null;
-  branchResolutions via snapshotState
-  invokeChildren via snapshotState
-  runCompleted: boolean;
-  pruneActive: boolean;
+### 2. `type: choice` — `multiple` flag
+Added three new fields to the `choice` step field table:
+- `multiple: bool` (default: false) — when true, operator can select more than one option
+- `min_selections: integer` (optional) — minimum number of selections when `multiple: true`
+- `max_selections: integer` (optional) — maximum number of selections when `multiple: true`
 
-  // Task 9 NEW fields:
-  selectedIteratePass: Map<string, number>;  // stepId → passIndex
-  chainHistory: ChainEntry[];                // one entry per event/invokeStarted
-  viewingChainIndex: number | null;          // null = current execution view
-  annotationCounts: Map<string, number>;     // empty; TODO awaiting server events
-}
+New constraints:
+- When `multiple: true`, stored variable becomes an array of selected values.
+- `min_selections` must be ≥ 1; `max_selections` must be ≤ total options and ≥ `min_selections`.
+
+### 3. `type: collector` — complete rewrite of field section
+
+**Field structure table** expanded with new columns:
+- `default` — pre-filled default value
+- `validation` — type-specific validation constraints object
+- `options` / `options_from` — for `select` type
+- `multiple` — for `select` type (multi-select)
+- `multiline` — for `text` type (textarea)
+
+**New field type inventory table** (9 types, was 5):
+
+| Type | Notes |
+|------|-------|
+| `text` | Single-line or multi-line (set `multiline: true` for textarea) |
+| `number` | Integer or float; validation: `min`, `max`, `step` |
+| `integer` | Shorthand for `number` with `step: 1` |
+| `date` | ISO 8601 YYYY-MM-DD; UI: date picker; validation: `min`, `max` as ISO date strings |
+| `datetime` | RFC 3339 with timezone; UI: datetime picker; validation: `min`, `max` |
+| `boolean` | True/false checkbox; stored as boolean (not string) |
+| `select` | Dropdown; `options` (static) or `options_from` (dynamic provider); `multiple: true` for multi-select |
+| `file` | File attachment; stored as artifact with SHA256 hash |
+| `image` | Image/screenshot; stored as artifact |
+
+**Removed as a distinct type:** `multiline` and `url` from prior enumeration.
+`multiline` is now a flag on `text`; `url` is subsumed by `text` with appropriate
+hint (retained for backward compatibility via `gert migrate`).
+
+**New subsubsections** added for each of the 6 new types:
+- `\subsubsection{Field type: text}` — with `multiline` flag
+- `\subsubsection{Field type: number}` — with validation table and 3 examples
+- `\subsubsection{Field type: integer}` — shorthand docs
+- `\subsubsection{Field type: date}` — with validation table
+- `\subsubsection{Field type: datetime}` — with validation table
+- `\subsubsection{Field type: boolean}` — template usage note
+- `\subsubsection{Field type: select}` — static + dynamic provider options, multi-select
+
+### 4. Questionnaire Pattern (new `\paragraph`)
+Added `\paragraph{Questionnaire Pattern}` in the collector section documenting:
+- A `collector` step with multiple fields IS the canonical questionnaire
+- Atomic submission semantics
+- Benefits over sequential single-field steps
+- Complete 4-field triage form example using `integer`, `select`, `text`,
+  and `text` with `multiline: true`
+
+### 5. Validation rules for `collector` (new `\paragraph`)
+Added `\paragraph{Validation rules for collector}` specifying:
+- `fields` MUST have at least one entry (structural: `minItems: 1`)
+- Field `name` uniqueness within a step
+- `select` fields: exactly one of `options` / `options_from` required
+- `number` fields: `min ≤ max` when both present
+- `date`/`datetime` fields: `min ≤ max` (chronologically) when both present
+
+### 6. Collector example updated
+The "Incident evidence collection" example updated to use `type: text` with
+`multiline: true` instead of the deprecated `type: multiline`.
+
+---
+
+## File Metrics
+
+| File | Lines before | Lines after | Delta |
+|------|-------------|-------------|-------|
+| `sections/03-schema-vnext.tex` | 1,988 | 2,325 | +337 |
+| `testdata/r03-employee-onboarding/schema.yaml` | ~450 | 457 | +7 |
+| `testdata/r07-financial-approval/schema.yaml` | ~350 | 355 | +5 |
+| `testdata/r04-soc2-evidence/schema.yaml` | ~290 | 293 | +3 |
+
+---
+
+## Testdata Updates
+
+### r03-employee-onboarding/schema.yaml
+Gaps closed from G2-002 (`# GAP: no dropdown/autocomplete field type`):
+- `department`: `type: text` + hint → `type: select` with 4 static options
+- `office_location`: `type: text` + hint → `type: select` with 4 static options
+- `start_date`: `type: text` + "(YYYY-MM-DD)" hint → `type: date`
+- `estimated_delivery` (laptop order): `type: text` → `type: date`
+- `manager_approved`: `type: text` "Type 'yes'" → `type: boolean`
+- `background_check_completed`, `no_disqualifying_issues`, `report_uploaded`: → `type: boolean`
+- `calendar_invite_sent`, `zoom_link_included`: → `type: boolean`
+- `security_training_completed`, `phishing_simulation_completed`, `aup_signed`: → `type: boolean`
+- `access_confirmed`: → `type: boolean`
+
+Assessment updated: Completeness 8→9, Fidelity 7→9. G2-002 marked FIXED.
+
+### r07-financial-approval/schema.yaml
+Gaps closed from G2-004 (`# GAP: no dropdown`) and numeric/date workarounds:
+- `amount`: `type: text` + "(USD, e.g. 75000)" hint → `type: number` with `validation.min: 50000`
+- `budget_line_item`: `type: text` + hint → `type: select` with `options_from: finance-system`
+- `requested_delivery_date`: `type: text` + "(YYYY-MM-DD)" → `type: date`
+- `department`: `type: text` + hint → `type: select` with 5 static options
+- `business_justification`: `type: multiline` → `type: text` with `multiline: true`
+- All approval yes/no fields (6 steps): `type: text` "Type 'yes'" → `type: boolean`
+- `manager_comments`: `type: multiline` → `type: text` with `multiline: true`
+
+Side effect: `.amount` is now a proper number — Go template `gt`/`lt` comparisons
+in the branch conditions (step 4) are now semantically correct numeric comparisons.
+
+Assessment updated: Completeness 8→9, Fidelity 8→9. G2-002 and G2-004 marked FIXED.
+
+### r04-soc2-evidence/schema.yaml
+Gaps closed from G2-002 (`# GAP: no dropdown field type`):
+- `risk_assessment_date`: `type: text` + "(YYYY-MM-DD)" hint → `type: date`
+- `mitigation_status`: `type: text` + hint → `type: select` with 3 static options
+- `all_controls_evidenced`, `no_missing_files`, `date_ranges_covered`: → `type: boolean`
+
+Assessment updated: Fidelity 8→9. G2-002 marked FIXED.
+
+---
+
+## Design Decisions Made
+
+1. **`integer` as distinct type, not `number` + `step: 1`**: Both coexist.
+   `integer` is a convenience alias that signals intent clearly in the schema
+   and produces a stored value guaranteed to be an integer. The runtime
+   normalizes `integer` to `number + step: 1` during parsing.
+
+2. **`multiline` removed as a top-level type**: Made a flag on `text`
+   (`multiline: true`). Cleaner: one text type with a rendering hint.
+   `gert migrate` rewrites `type: multiline` → `type: text` + `multiline: true`.
+
+3. **`url` not removed**: `url` is retained as a valid type for backward
+   compatibility. It is no longer listed in the primary inventory table but
+   remains accepted by the parser (emits a deprecation warning suggesting
+   `type: text` with a `hint`).
+
+4. **`options_from` for dynamic select**: Introduced `options_from.provider`
+   (string) + `options_from.field` (optional string) as the provider integration
+   point for runtime option population. This closes the `budget_line_item` gap
+   in r07 without requiring a new step type.
+
+5. **`multiple` on both `choice` and `select`**: Consistent flag name across
+   both step-level selection (`choice.multiple`) and field-level selection
+   (`collector.fields[*].multiple`). Stored as array of values in both cases.
+
+---
+
+## Gaps Still Open (not in scope for P0)
+
+- Business-day timeout support (`timeout_business_days` for `collector.approvals`)
+- Self-service task pattern (`type: task`, no approval semantics)
+- `on_timeout: auto_approve` option
+- Autocomplete field type for directory lookups
+- Dynamic approver resolution (`roles_from:` with provider query)
+- `invoke_many:` / `iterate.over: imports.*` for bulk sub-runbook invocation
+
+---
+
+## john-field-types-p1
+
+# Decision: Collector Field Types — P1 Improvements
+
+**By:** John (Schema & Language Specialist)  
+**Date:** 2026-04-18  
+**Status:** Accepted  
+**Relates to:** `design/gert-v2/sections/03-schema-vnext.tex`, §03 Schema vNext
+
+---
+
+## Context
+
+The P0 pass (field-types-p0) added nine field types to `collector` steps. A follow-up
+input-triad audit identified two P1 gaps that were left unaddressed:
+
+- **P1-A:** No mechanism to conditionally show/hide individual fields within a collector
+  based on previously-entered values.
+- **P1-B:** No validation constraints for the `text` field type beyond `required` and
+  `hint`.
+
+---
+
+## Decision: P1-A — Conditional Field Visibility via `when`
+
+### What
+
+Add an optional `when` field to every `collector.fields[*]` object. The value is a Go
+template expression (the same engine used for step-level `when:` guards and all other
+gert template expressions).
+
+### Schema addition
+
+```yaml
+fields:
+  - name: severity
+    type: select
+    ...
+  - name: escalation_reason
+    type: text
+    required: true
+    when: "{{ eq .severity 'critical' }}"   # only shown when severity = critical
 ```
 
-## Features: Live vs. Waiting for Server
+### Semantics
 
-### ✅ LIVE (wired end-to-end)
+1. **Falsy → absent.** When `when` evaluates to falsy the field is hidden in the UI,
+   not prompted in a TUI, and its variable binding is **skipped** (the variable is not
+   set; it does not appear as `null` or empty in the variable space).
 
-| Feature | Status | How |
-|---------|--------|-----|
-| Prune toggle | **Live** | `pruneActive` → `displayConfig.hideUnusedSteps`; CSS class + renderer both wired |
-| Iterate pass pills (render) | **Live** | `snapshotState.iteratePassHistory` populated from `event/iteratePassStart/End` via snapshotStateMachine |
-| Iterate pass selection (click) | **Live** | Click handler on `.iterate-pass-pill` → `selectedIteratePass` → re-render |
-| Chain navigation UI (click) | **Live** | `chainNav(idx)` → `viewingChainIndex` → `renderExecutionGraph` chain view |
-| Chain breadcrumb minimap | **Live** | `chainHistory` passed to renderer; `renderParentMinimap` renders when populated |
-| `displayConfig.hideUnusedSteps` | **Live** | Passed from `pruneActive` |
-| `annotationCounts` | **Wired (empty)** | Passed to renderer; no server events yet |
-| Zoom controls (shared toolbar) | **Live** | SVG toolbar rendered by shared renderer; web runner zoom overrides via pan/zoom handlers |
+2. **Dynamic re-evaluation.** In interactive UIs, if an earlier field value changes,
+   downstream `when` expressions are re-evaluated and dependent fields are shown/hidden
+   accordingly.
 
-### ⏳ WAITING FOR SERVER-SIDE WORK
+3. **required + when.** A `required: true` field with a `when` expression is only
+   required when its `when` condition is truthy. When the condition is falsy, `required`
+   does not apply.
 
-| Feature | What's Needed | Priority |
-|---------|--------------|----------|
-| Annotation counts on nodes | Server must emit `event/annotationCreated` or similar WS event with `{ stepId, count }` | P2 |
-| Chain entry step states | `event/invokeCompleted` should include `childStepStates: Map<string,string>` so `ChainEntry.stepStates` can be populated | P2 |
-| Iterate child details per-pass | Server would need to send per-step detail keyed by pass index (for `iterateChildDetailsByPass`) | P3 |
-| `iteratePassHistory.currentValue` | Already sent in `event/iteratePassStart` for list-mode; verified working | ✅ |
+4. **Ordering constraint.** A field's `when` expression MUST NOT reference a field
+   declared later in the same `fields` array (no forward references). This is a
+   schema validation error detected at parse time. Expressions may freely reference:
+   (a) fields declared earlier in the same `fields` array, and (b) the global runbook
+   variable space (prior step outputs, runbook inputs, `gert.*` built-ins).
 
-## Callbacks Not Yet Wired
+### Validation rules added
 
-| Callback | Status | Notes |
-|----------|--------|-------|
-| `findChildChainIndex` | Not wired | Requires chain navigation; basic chainNav is wired but this callback path is not |
-| `getIteratePassDetail` | Not wired | Requires `iterateChildDetailsByPass` which needs server data |
+- A field `when` expression MUST NOT reference a field declared later in the same
+  `fields` array (no forward references).
+- A `required: true` field with a `when` expression is only required when the `when`
+  condition is truthy.
 
-## What Server Needs to Add for Full Activation
+### Why
 
-1. **Annotation events** — new WS event type: `event/annotationCreated` / `event/annotationUpdated` with `{ stepId, count }` or full annotation body
-2. **Chain step states in invokeCompleted** — add `childStepStates: map[string]string` to the `event/invokeCompleted` payload in `serve.go` (line ~2667)
-3. **Per-pass step details** — lower priority; would require server to capture `event/stepDetail` per-pass during iterate execution and group them
-
-## Notes
-
-- `snapshotState.iteratePassHistory` is already fully populated from existing `event/iteratePassStart` and `event/iteratePassEnd` events — no server changes needed for pass pill rendering
-- `event/invokeStarted` and `event/invokeCompleted` already exist in serve.go and carry enough data to build `ChainEntry` objects; only `childStepStates` is missing
-
+Runbook forms are inherently conditional: escalation details are only relevant for
+critical incidents; customer impact is irrelevant for low-severity alerts; shipping
+address is irrelevant for in-office employees. Without field-level `when:`, authors
+are forced to split one logical form into multiple sequential steps, losing atomicity
+and increasing approval-gate complexity. The `when` field closes this gap with minimal
+schema surface area by reusing the existing Go template engine.
 
 ---
 
-# Wave 2 Design Decisions Merger (2026-04-18)
+## Decision: P1-B — Text Field Validation Constraints
 
-This section merges decisions from Ken (§06, §10), Barbara (§07, §13), and Dennis (§15).
+### What
 
-## §06 Runtime Events — Key Decisions
+Add an optional `validation` object to `type: text` fields with four sub-fields:
 
-### Event Role: Fan-Out Notifications, Not Command/Control
-Events are one-way notifications from Runtime Core; they don't trigger state transitions. Keeps adapters passive.
+| Field | Type | Description |
+|-------|------|-------------|
+| `pattern` | string | ECMA 262 regex; field value must match |
+| `pattern_hint` | string | Human-readable error shown when pattern validation fails |
+| `min_length` | integer ≥ 0 | Minimum character count |
+| `max_length` | integer > 0 | Maximum character count |
 
-### Event Delivery Semantics
-- JSONL trace: at-least-once (synchronous)
-- In-process subscribers: best-effort (bounded channel, discard-on-full)
+### Schema addition
 
-### Event Envelope: 7 Mandatory Fields
-`event_id`, `run_id`, `runbook_id`, `timestamp` (RFC3339 UTC), `kind`, `sequence` (int64), `payload`
+```yaml
+- name: target_ip
+  type: text
+  label: Target IP address
+  required: true
+  validation:
+    pattern: "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+    pattern_hint: "Must be a valid IPv4 address (e.g. 192.168.1.1)"
+```
 
-### Event Catalog: 22 Event Kinds
-6 categories: Run lifecycle (3), Step lifecycle (6), Governance (4), Extension/tool (4), Human-in-loop (2), Saga/compensation (2)
+### Validation rules added
 
-### Required vs Optional Events
-11 REQUIRED (lifecycle + governance), 11 OPTIONAL (observability)
+- `validation.max_length` MUST be strictly greater than `validation.min_length` when
+  both are present.
+- `validation.pattern` MUST be a valid ECMA 262 regex, validated at schema load time
+  (structural validation error if invalid).
+- `validation.pattern_hint` is silently ignored when `validation.pattern` is absent
+  (warning, not error).
 
-### Event Channels: Three Delivery Paths
-1. In-process event bus (bounded Go channel)
-2. WebSocket broadcast (`/events` endpoint)
-3. JSONL trace file (authoritative log)
+### Why
 
-### Replay Determinism
-Historical traces re-emitted with same sequence/timestamp/kind/payload; new event_id assigned; no step execution.
+Free-form `type: text` fields are the most common source of operator data entry
+errors (wrong date format, wrong IP format, over-length inputs causing downstream
+tool failures). Validation constraints surface errors at form submission time rather
+than at tool execution time, improving the operator experience and reducing invalid
+evidence in the audit trail.
 
----
-
-## §10 Migration and Compatibility — Key Decisions
-
-### v1 Compatibility Shim: 6-Month Grace Period
-v2 parser accepts v1 runbooks, silently normalizes. Shim removed in v2.1.
-
-### CLI and JSON-RPC Backward Compatibility
-All CLI commands and JSON-RPC methods preserved; no breaking changes to public interfaces.
-
-### Runbook Schema Breaking Changes: 3 Categories
-1. Field promotions (meta.* → top-level)
-2. Step type renames (collector → manual, router → end)
-3. New required fields ($schema, id)
-
-### Automated Migration Tool: 10-Step Algorithm
-Deterministic, idempotent, fail-safe rollback on validation error.
-
-### Tool and Provider Migration: Manual Review Required
-Tool capabilities and provider field namespacing require manual review.
-
-### Extension Handshake: v2 Protocol with v1 Compatibility
-v2 requires protocol_version: "2.0", capabilities: [...]. v1 shim grants all capabilities.
-
-### Trace Format Migration: v2 Replay Compatibility Mode
-v2 gert replay reads v1 traces; synthesizes missing fields. Removed in v2.1.
-
-### Rollout Strategy: 4-Phase Adoption Over 8 Weeks
-Phase 1: validation, Phase 2: schema migration, Phase 3: extension/tool migration, Phase 4: integration migration.
+ECMA 262 regex was chosen over Go regex because:
+- It is the JSON Schema Draft 2020-12 `pattern` format, keeping the gert schema
+  self-consistent with the JSON Schema layer.
+- VS Code and browser-based UIs implement ECMA 262 regex natively for live validation.
+- ECMA 262 is a strict subset of most patterns that operators would write in practice.
 
 ---
 
-## §07 Security & Trust — Key Decisions
+## Testdata Impact
 
-### Extension Trust Levels
-Three levels: Local trusted (no sig), Project-scoped (optional sig), Remote/signed (mandatory Ed25519)
-
-### Signature Format and Verification
-Ed25519 over canonical JSON. Signature block includes algorithm, publicKeyFingerprint, signatureData, signedFields, trust_chain.
-
-### Process Isolation Mechanisms
-Out-of-process isolation: unveil (OpenBSD), seccomp-bpf (Linux), host-side validation.
-
-### Credential and Secret Handling
-Secrets NEVER in traces. Providers/tools mark outputs as sensitive. Host redacts before trace write.
-
-### RBAC Model for gert serve
-Three roles: Viewer (read-only), Operator (execute), Admin (manage governance).
-
-### Approval Token Signing and Replay Protection
-Ed25519 signatures over canonical JSON; timestamp within 5-min window; single-use approvalId.
-
-### HMAC Trace Chaining for Integrity
-Optional HMAC-SHA256 chain over JSONL events for tamper-proof audit logs.
-
-### Supply Chain Security: Tool Checksums
-Tool definitions declare SHA256 checksum. Host verifies before invocation.
+| Runbook | Change | Field(s) |
+|---------|--------|----------|
+| r03-employee-onboarding | P1-B: `validation.pattern` | `email` → `@company.com` domain |
+| r03-employee-onboarding | P1-A: `when` | `shipping_address` → only shown when `office_location = Remote` |
+| r05-security-breach | P1-A: `when` | `legal_notes` → only shown when `notification_required = yes` |
+| r05-security-breach | P1-B: `validation.pattern` | `responsible_team` → restricted to valid team names |
+| r05-security-breach | P1-B: `validation.pattern` | `target_completion_date` → enforces YYYY-MM-DD |
+| r06-db-migration | P1-B: `validation.pattern` | `maintenance_start` → enforces RFC 3339 datetime |
+| r07-financial-approval | P1-B: `validation.max_length` | `item_description` → enforces 500-char prose limit |
 
 ---
 
-## §13 Adapter Contracts — Key Decisions
+## Assessment Score Changes
 
-### Contract Version Format
-`{surface}/{major}` format (e.g., exec/v2). No minor version; breaking change bumps major.
-
-### Error Code Registry
-5 categories: 1xxx (execution), 2xxx (governance), 3xxx (schema), 4xxx (integration), 5xxx (server)
-
-### Contract Deprecation Policy
-Previous version supported 12 months after GA. Simultaneous support during transition.
-
-### Forward and Backward Compatibility
-Clients ignore unknown fields. Servers accept requests omitting optional fields (with defaults).
-
-### Contract Test Suite
-YAML test cases in `testdata/contracts/{name}/`. `gert contract test` validates. CI gate.
-
-### JSON-RPC Execution Contract Methods
-6 methods: exec/start, exec/next, exec/cancel, exec/status, run/list, run/get
-
-### WebSocket Event Stream Protocol
-Connect to /ws, subscribe (runId, sinceSequence). Server streams JSON events. Reconnect with sinceSequence to resume.
-
-### Tool Invocation Contract (tool/v2)
-stdio JSON-RPC: invoke (params: action, inputs, context), cancel (params: invocationId, reason)
-
-### MCP Tool Adapter
-MCP servers wrapped to satisfy tool/v2. Adapter translates invoke → tools/call, forwards context as _gert_context.
-
-### OpenAPI and JSON Schema Specifications
-All contracts documented as OpenAPI 3.1, schemas as JSON Schema Draft 2020-12. Source of truth for specs.
+| Runbook | Metric | Before | After |
+|---------|--------|--------|-------|
+| r03-employee-onboarding | Fidelity | 9/10 | 10/10 |
+| r05-security-breach | Fidelity | 7/10 | 8/10 |
+| r06-db-migration | Fidelity | 7/10 | 8/10 |
+| r07-financial-approval | Fidelity | 9/10 | 10/10 |
 
 ---
 
-## §15 Observability & Diagnostics — Key Decisions
+## Alternatives Considered
 
-### OpenTelemetry as the Distributed Tracing Standard
-OTel for vendor neutrality, industry adoption, W3C Trace Context support, metrics/logs convergence.
+### P1-A: Use separate steps instead of field-level `when`
 
-### Prometheus OpenMetrics Format for Metrics
-Prometheus pull model via `/metrics` endpoint; OTLP push as alternative via OTEL_METRICS_EXPORTER.
+The existing workaround is to split a conditional field into its own `collector` step
+with a step-level `when:` guard. This works but fragments the logical form: the
+operator fills in partial forms sequentially, and each step requires its own
+submission confirmation. Multi-field forms with several conditional fields become
+awkward chains of single-field steps. Rejected in favour of field-level `when`.
 
-### Three-Level Span Hierarchy
-Root (gert.run) → Child (gert.step) → Grandchild (gert.tool.invoke, gert.governance.check, gert.input.resolve)
+### P1-B: Re-use JSON Schema `pattern` format (URI annotation)
 
-### W3C Trace Context for Cross-System Correlation
-traceparent and tracestate HTTP headers propagate trace context across system boundaries.
-
-### Health Endpoint Paths Follow Kubernetes Conventions
-/health (liveness), /ready (readiness), /metrics (Prometheus)
-
-### gert diagnose Command for Pre-Flight Checks
-Validates runbook schema, tool availability, provider connectivity, extension loading, governance policies.
-
-### Sensitive Data Redaction in Logs and Traces
-Inputs referred by name only; no values in logs/traces. Same redaction rules as §12 Evidence Tracing.
-
-### Metrics Cardinality Management via Label Dimensions
-Low-cardinality labels: outcome, runbook_id, step_type, tool_name, step_id (approvals only). High-cardinality data in traces/logs.
-
-### Histogram Bucket Tuning by Operation Type
-Tool (sub-sec to 30s), Step (100ms to 5min), Run (500ms to 1hr), Approval (10s to 24hr)
-
-### Parent-Based Sampling Strategy
-Inherit parent's sampling decision if trace exists; sample at configurable rate for standalone runs (default 100 0ev, 1-10
+Considered linking `validation.pattern` to the JSON Schema `format: "regex"` concept.
+Decided against it: the gert spec is already explicit about ECMA 262 and runtime
+implementors benefit from the clear callout rather than an implicit JSON Schema
+reference.
 
 ---
 
-## §03 & §14 — Step Type Refactor: Replace manual with choice/decision/collector (John, Barbara, Ken)
+## Implementation Notes for Brian (Parser) and Ken (Runtime)
 
-**Date:** 2026-04-18  
-**Authors:** John (Schema Specialist), Barbara (Integrations Specialist), Ken (Runtime Architect)  
-**Status:** Implemented  
-**Affects:** §03 Schema vNext, §14 Input Provider Framework
+- `when` expressions on fields use the same `text/template` evaluation path as
+  step-level `when:`. No new expression engine is needed.
+- Forward-reference detection requires a single pass over the `fields` array during
+  semantic validation (Phase 2). Collect field names in declaration order; for each
+  `when` expression, parse template AST and check `.FieldName` references against
+  the already-seen set.
+- `validation.pattern` should be compiled at schema load time (not at form render
+  time). Use `regexp.MustCompile` equivalent wrapped in a structured validation error
+  if the regex is invalid. Use the ECMA 262 regex dialect where the runtime supports
+  it (e.g. in the browser extension); fall back to RE2 in Go, noting that RE2 rejects
+  some ECMA 262 constructs (lookahead, backreferences). A compatibility warning should
+  be emitted if the pattern uses ECMA-262-only features.
 
-### John's Decision: Step Type Refactor
+---
 
-**Decision:** Replace the overly-generic `manual` step type with three semantically precise step types:
+## john-field-types-p2
 
-1. **`choice`** — User selects from predefined options; result stored in variable
-2. **`decision`** — User picks execution path; routes flow to selected runbook or step
-3. **`collector`** — User provides unstructured input (text, files, images, forms)
+# Decision: Collector Field Types — P2 Improvements
 
-**Rationale:** The `manual` step type conflated three distinct responsibilities violating single-responsibility principle:
-- Value capture (storing user selections)
-- Control flow (routing execution)
-- Data collection (gathering evidence/attachments)
+**Author:** John (Schema & Language Specialist)  
+**Date:** 2026-04-19  
+**Status:** Proposed  
+**Requested by:** Project owner  
+**References:** `john-field-types-p0.md`, `john-field-types-p1.md`
 
-This created implementation ambiguity for parsers, runtimes, and authors.
+---
 
-**New Step Type Inventory (12 total):**
-1. `cli` — Execute shell command
-2. `choice` — **NEW** — User selects; stores result
-3. `decision` — **NEW** — User picks path; routes execution
-4. `collector` — **REDEFINED** — Unstructured user input/files
-5. `tool` — Invoke named tool action
-6. `invoke` — Call another runbook
-7. `branch` — Conditional execution (if/else)
-8. `iterate` — Loop over collection
-9. `parallel` — Fan-out/fan-in with join semantics
-10. `assert` — Runtime assertion with predicates
-11. `compensate` — Saga pattern rollback registration
-12. `end` — Terminal outcome
+## Context
 
-### choice Step Type Specification
+P0 added core field types (text/number/integer/date/datetime/boolean/select/file/image) and basic
+validation. P1 added pattern validation, `when:` conditional fields, and field-level validation
+constraints (min/max, min_length/max_length, pattern). P2 addresses three remaining gaps
+identified during testdata stress-testing and schema review:
 
-**Fields:**
-- `prompt` (string, required) — Question displayed to user
-- `options` (array, required) — List of `{label, value, hint}` objects
-- `variable` (string, required) — Variable name to store selected value
-- `default` (string, optional) — Default option value
+1. Secrets in audit trails — credential fields (tokens, passwords, API keys) must not appear in
+   JSONL audit logs or evidence stores.
+2. Live search for large datasets — static option lists are unworkable when the candidate set is
+   an entire employee directory, service registry, or ticket database.
+3. Structural validation for multiline text — authors frequently collect YAML or JSON snippets
+   via collector steps with no way to validate parse correctness before the value flows
+   downstream.
 
-**Constraints:** Minimum 2 options; unique values; default must match option value if provided
+---
 
-**Example:**
+## Decisions
+
+### P2-A: `ephemeral: true` field attribute
+
+**Decision:** Add `ephemeral` boolean attribute (default `false`) to all collector field types.
+
+**Semantics:**
+- Value IS bound to the variable space and usable in downstream template expressions within the
+  same run.
+- Value is NEVER written to the JSONL audit log; the audit record shows `"[REDACTED]"` instead.
+- Value is NEVER persisted to any store (trace, artifact store, variable snapshot).
+- If the run is suspended (e.g., after `wait_for_event`) and resumed, ephemeral values are
+  gone; the collector step must be re-executed.
+
+**Validation rules:**
+- Valid on all field types; semantically meaningful on `text`, `select`, `boolean`.
+- Setting `ephemeral: true` on `type: file` or `type: image` is a **warning** (not error):
+  file payloads will not be stored, but a `[REDACTED]` placeholder in the audit trail is still
+  useful for evidence lineage.
+
+**Security note:** Ephemeral fields reduce audit footprint for secrets. They do NOT prevent the
+value from being transmitted to tool steps or sub-processes. Authors are responsible for
+ensuring ephemeral values flow only to secure execution contexts.
+
+---
+
+### P2-B: `type: autocomplete` field type
+
+**Decision:** Add `autocomplete` as a tenth collector field type.
+
+**Semantics:**
+- Functions like `select` in storage and validation (stored value is a string; `multiple: true`
+  stores an array).
+- Options are fetched dynamically from an input provider as the operator types (search-as-you-type).
+- `options_from` is required (same object as `select`), extended with:
+  - `provider` (required): input provider ID
+  - `field` (required): provider input field that receives the search query string
+  - `min_chars` (optional, default 2): minimum characters before search fires
+  - `debounce_ms` (optional, default 300): debounce delay in milliseconds
+- `options` (static list) is NOT valid on `autocomplete`; structural validation error if present.
+- **CLI / non-interactive fallback:** The provider MUST be called once with an empty query to
+  fetch all options; the result is rendered as a standard `select`.
+
+**Rationale:** Large datasets (employee directories, service registries, ticket systems) are
+impossible to enumerate as static option lists. Autocomplete is the idiomatic UI pattern and
+is already anticipated by the `options_from` provider mechanism in `select`.
+
+---
+
+### P2-C: `validation.format` for multiline text fields
+
+**Decision:** Add `format` sub-field to the `validation` object of `type: text` fields. Only
+meaningful when `multiline: true`.
+
+**Supported values:**
+- `format: yaml` — value must parse as valid YAML
+- `format: json` — value must parse as valid JSON
+- `format: toml` — deferred to a future release; declaring it is a warning in v2.0
+
+**Validation behavior:**
+- Parse attempt is made after submission.
+- On parse failure: re-prompt with message `"Value must be valid {FORMAT}. Please correct and resubmit."`
+- On success: value is stored as a raw string (the original text), NOT as a parsed object.
+  Parsing is validation-only.
+
+**Constraints:**
+- `validation.format` on a non-multiline field is a validation **warning**; constraint ignored at runtime.
+- `validation.format: toml` is a validation **warning** in v2.0; not enforced at runtime.
+
+**Note:** The stored value is always a string. Downstream template expressions that need to
+traverse the structure must use gert's `fromYAML`/`fromJSON` template functions.
+
+---
+
+## Testdata impact
+
+| Runbook | Change | P2 feature |
+|---------|--------|------------|
+| r03-employee-onboarding | `manager` field: `type: text` → `type: autocomplete` with `options_from.provider: hr-directory` | P2-B |
+| r03-employee-onboarding | Score: 9/10 → 10/10; verdict: PASS WITH NOTES → PASS | P2-B |
+
+**P2-A:** No existing collector fields in the 10 testdata runbooks carry names containing
+"token", "password", "key", "secret", or "credential". No changes required for P2-A.
+
+**P2-C:** No existing multiline fields in the testdata are clearly YAML or JSON payloads (all
+are prose text). No changes required for P2-C.
+
+---
+
+## Spec changes
+
+- `§03 §\ref{subsec:step-collector}` — field structure table: added `ephemeral` row
+- `§03 §\ref{par:ephemeral-fields}` — new paragraph: ephemeral semantics, security note, example
+- `§03 §\ref{par:collector-field-types}` — type inventory: `nine` → `ten`; added `autocomplete` row
+- `§03 §\ref{subsubsec:field-text}` — validation table: `format` sub-field (five validation fields)
+- `§03 §\ref{par:text-format}` — new paragraph: format validation semantics and examples
+- `§03 §\ref{subsubsec:field-autocomplete}` — new subsection: autocomplete type, `options_from`
+  extension table, CLI fallback note, examples
+- `§03 §\ref{par:collector-validation}` — validation rules: added P2-A, P2-B, P2-C rules
+
+---
+
+## john-gap1-gap2-approve
+
+### 2026-04-19: GAP-1 + GAP-2 resolved in approve step
+**By:** John
+**What:** approve step now supports: (1) timeout_business_days + timezone + business_calendar for business-day timeouts (mutually exclusive with timeout); (2) approvals.mode (all/any/quorum) + approvals.pool + approvals.required for M-of-N quorum. Validation rules documented. R7 and R8 testdata updated.
+**Why:** Critical gaps from stress test. R7 Financial and R8 FDA runbooks were FAIL due to these missing fields.
+
+---
+
+## john-input-triad-audit
+
+# Input-Capturing Triad Audit — choice, decision, collector
+
+**Author:** John (Schema & Language Specialist)  
+**Date:** 2026-04-19  
+**Requested by:** ormasoftchile  
+**Status:** RECOMMENDATION — awaiting owner decision  
+
+---
+
+## Executive Summary
+
+The input-capturing triad (`choice`, `decision`, `collector`) covers **80% of real-world input needs** but has **7 critical gaps** that force workarounds in production runbooks. Most gaps can be resolved by **extending existing step types** — no new step type required.
+
+**Top 3 gaps by impact:**
+1. **No dropdown/select field type** — forces `type: text` with hint comments (blocks validation)
+2. **No numeric field type** — forces string comparison for amounts, no range validation
+3. **No date/datetime field type** — forces `type: text` with YYYY-MM-DD format in hint
+
+**Questionnaire pattern:** Fully supported via `collector` with multi-field `fields` array — no schema change needed.
+
+**Internal consistency:** Types are well-separated, but `collector` has approval-gate semantics overlap with `approve` step (acceptable; documented below).
+
+---
+
+## 1. Full Input Taxonomy
+
+Comprehensive list of input types required by production runbooks:
+
+| Input Type | Example Use Case | Priority |
+|------------|------------------|----------|
+| **Single-select from options** | Environment (staging/prod/canary) | P0 |
+| **Multi-select from options** | Checkbox list (affected systems) | P1 |
+| **Free text (short)** | Name, email, ticket ID | P0 |
+| **Free text (long)** | Incident summary, justification | P0 |
+| **Numeric (integer)** | Number of approvers, timeout days | P1 |
+| **Numeric (float)** | Dollar amount, percentage | P1 |
+| **Numeric with units** | Timeout (5m / 2h / 3d), storage (50GB) | P2 |
+| **Date** | Start date, delivery date | P1 |
+| **Time** | Cut-over window start time | P2 |
+| **Datetime** | Scheduled maintenance window | P2 |
+| **Boolean / acknowledgment** | "I have verified X" checkbox | P1 |
+| **File upload** | Error log, signed contract PDF | P0 |
+| **Image / screenshot** | Dashboard screenshot, photo | P0 |
+| **URL** | Related ticket, documentation link | P0 |
+| **Credentials (ephemeral)** | API token, password (never persisted) | P2 |
+| **Dropdown (dynamic source)** | Budget line items from finance system | P1 |
+| **Autocomplete (search)** | Employee name from directory | P2 |
+| **Ranked ordering** | Priority order of mitigation steps | P3 |
+| **Questionnaire (multi-question form)** | 5-question security checklist | P1 |
+| **Table / matrix input** | Access control matrix (user × role) | P3 |
+| **Signature / attestation** | Legal signature (image or typed name) | P2 |
+| **JSON / YAML snippet** | Structured configuration block | P2 |
+| **Key-value pairs** | Tag list, metadata | P2 |
+
+---
+
+## 2. Coverage Mapping
+
+### type: choice
+**Purpose:** User selects one value from a fixed set of options; value is stored in a variable.
+
+| Input Type | Coverage | Notes |
+|------------|----------|-------|
+| Single-select from options | ✅ Full | `options` with `label`, `value`, `hint` |
+| Multi-select from options | ❌ None | **GAP-1**: No `multiple: true` flag |
+| Boolean / acknowledgment | ⚠️ Workaround | Can model as 2-option choice (yes/no) but semantic mismatch |
+| Dropdown (static) | ✅ Full | Same as single-select |
+| Dropdown (dynamic source) | ❌ None | **GAP-2**: No `options_from: provider` or `options_from: tool` |
+
+**Recommendation:**
+- Add `multiple: true` (optional, default: false) to enable multi-select (GAP-1)
+- Add `options_from: { provider: string, field: string }` for dynamic options (GAP-2)
+
+---
+
+### type: decision
+**Purpose:** User selects an execution path; flow branches to selected runbook or step.
+
+| Input Type | Coverage | Notes |
+|------------|----------|-------|
+| Single-select from paths | ✅ Full | `routes` with `label`, `runbook`, `goto`, `hint` |
+
+**No gaps.** Decision is a pure control-flow primitive; it stores the selected route label for audit but does not collect data.
+
+**Internal consistency note:** Decision overlaps slightly with `type: branch` (condition-based routing). Distinction is clear: `decision` = user-driven routing, `branch` = condition-driven routing. However, runbook authors unfamiliar with the schema might reach for `decision` when they should use `branch` with a prior `choice` step.
+
+**Recommendation:** Add clarifying prose to spec:
+> "Use `decision` when the user chooses the execution path interactively. Use `branch` (with condition) when the path is determined programmatically from existing variables. If you need the user to select a value AND route based on that value, use a `choice` step followed by a `branch` step."
+
+---
+
+### type: collector
+**Purpose:** Collects unstructured or multi-field input from the user; stores values as variables or artifacts.
+
+| Input Type | Coverage | Notes |
+|------------|----------|-------|
+| Free text (short) | ✅ Full | `field.type: text` |
+| Free text (long) | ✅ Full | `field.type: multiline` |
+| File upload | ✅ Full | `field.type: file` (stored as artifact with SHA256) |
+| Image / screenshot | ✅ Full | `field.type: image` (stored as artifact) |
+| URL | ✅ Full | `field.type: url` (basic validation) |
+| Numeric (integer) | ❌ None | **GAP-3**: No `field.type: number` or `field.type: integer` |
+| Numeric (float) | ❌ None | **GAP-3**: No `field.type: number` |
+| Numeric with units | ❌ None | **GAP-3**: No `field.type: duration` or `field.type: quantity` |
+| Date | ❌ None | **GAP-4**: No `field.type: date` |
+| Time | ❌ None | **GAP-4**: No `field.type: time` |
+| Datetime | ❌ None | **GAP-4**: No `field.type: datetime` |
+| Boolean / acknowledgment | ❌ None | **GAP-5**: No `field.type: boolean` or `field.type: checkbox` |
+| Dropdown (static) | ❌ None | **GAP-6**: No `field.type: select` with `options` array |
+| Dropdown (dynamic) | ❌ None | **GAP-6 + GAP-2**: No select + no dynamic options |
+| Autocomplete (search) | ❌ None | **GAP-7**: No `field.type: autocomplete` with provider binding |
+| Multi-select (checkboxes) | ❌ None | **GAP-1 + GAP-6**: No multi-select + no select type |
+| Credentials (ephemeral) | ⚠️ Partial | Can use `type: text` but no `ephemeral: true` flag (credential appears in audit trace) |
+| Ranked ordering | ❌ None | Out of scope (P3, use case too rare) |
+| Table / matrix | ❌ None | Out of scope (P3, can be modeled as JSON/YAML snippet) |
+| Signature / attestation | ⚠️ Workaround | Can use `type: image` (upload signature image) or `type: text` (type name) |
+| JSON / YAML snippet | ⚠️ Workaround | Can use `type: multiline` but no syntax validation |
+| Key-value pairs | ⚠️ Workaround | Can use `type: multiline` (format: `key=value` per line) but no validation |
+| Questionnaire (multi-question) | ✅ Full | Use `fields` array with multiple field objects |
+
+**Recommendations:**
+
+**GAP-3: Add numeric field types**
+```yaml
+fields:
+  - name: amount
+    type: number  # NEW: accepts integer or float
+    label: Amount (USD)
+    required: true
+    validation:  # NEW: optional validation block
+      min: 50000
+      max: 10000000
+      
+  - name: timeout_minutes
+    type: integer  # NEW: integer-only variant
+    label: Timeout (minutes)
+    required: true
+    validation:
+      min: 1
+      max: 1440
+```
+
+**GAP-4: Add date/time field types**
+```yaml
+fields:
+  - name: start_date
+    type: date  # NEW: YYYY-MM-DD format, date picker in UI
+    label: Start date
+    required: true
+    validation:  # NEW: optional validation
+      min: "2026-01-01"  # earliest allowed date
+      
+  - name: maintenance_window
+    type: datetime  # NEW: ISO 8601 format
+    label: Maintenance window start
+    required: true
+```
+
+**GAP-5: Add boolean/checkbox field type**
+```yaml
+fields:
+  - name: security_training_completed
+    type: boolean  # NEW: checkbox in UI, boolean value in variables
+    label: Security training completed?
+    required: true
+    default: false
+```
+
+**GAP-6: Add select field type (dropdown)**
+```yaml
+fields:
+  - name: department
+    type: select  # NEW: dropdown in UI
+    label: Department
+    required: true
+    options:  # NEW: options array (same schema as choice.options)
+      - label: Engineering
+        value: engineering
+      - label: Sales
+        value: sales
+      - label: Marketing
+        value: marketing
+    multiple: false  # NEW: default false; set true for multi-select
+```
+
+**GAP-7: Add dynamic options binding**
+```yaml
+fields:
+  - name: manager
+    type: select
+    label: Manager
+    required: true
+    options_from:  # NEW: fetch options from provider
+      provider: employee-directory
+      field: managers
+      # Provider must implement options protocol: return {label, value}[] 
+```
+
+**Ephemeral credentials (minor enhancement):**
+```yaml
+fields:
+  - name: api_token
+    type: text
+    label: API token
+    required: true
+    ephemeral: true  # NEW: value is not persisted in audit trace; redacted as [REDACTED]
+```
+
+**JSON/YAML snippet validation (optional enhancement):**
+```yaml
+fields:
+  - name: config_block
+    type: multiline
+    label: Configuration (YAML)
+    required: true
+    format: yaml  # NEW: optional; validates syntax (yaml | json)
+```
+
+---
+
+### type: approve
+**Purpose:** Standalone approval gate; suspends execution until authorized roles approve.
+
+| Input Type | Coverage | Notes |
+|------------|----------|-------|
+| Approval / sign-off | ✅ Full | Dedicated step type; no data collection |
+| Attestation with identity | ✅ Full | Captures approver identity in audit trail |
+
+**No gaps.** `approve` is a specialized approval gate that does not collect data. It has full support for quorum (`mode: quorum`), business-day timeout (`timeout_business_days`), and escalation (`escalate_to`).
+
+**Overlap with collector:** The `collector` step type can embed an `approvals` block, which creates an approval gate + data collection in a single step. This is intentional: sometimes approval and data collection are coupled (e.g., "upload signed contract and have procurement approve"). The distinction is clear:
+- Use `approve` when you need a pure go/no-go gate with no data collection.
+- Use `collector` with `approvals` when data collection and approval are coupled.
+
+---
+
+### type: wait_for_event
+**Purpose:** Pauses execution until an inbound event arrives (webhook, message queue, signal).
+
+| Input Type | Coverage | Notes |
+|------------|----------|-------|
+| Inbound webhook payload | ✅ Full | `event.source: webhook` with `capture` block |
+| External system callback | ✅ Full | `event.source: channel` with event ID |
+
+**No gaps.** This is a specialized input type for asynchronous event-driven flows, not interactive user input. Included here for completeness.
+
+---
+
+## 3. Questionnaire Analysis
+
+**Question:** Can the current triad support questionnaires (multiple questions presented as a single form)?
+
+**Answer:** Yes, fully supported by `type: collector` with the `fields` array.
+
+### Example: Security Checklist (5 questions)
+
 ```yaml
 - step:
-    id: select_environment
+    id: security_checklist
+    type: collector
+    title: Pre-deployment security checklist
+    prompt: |
+      Complete the security checklist before deployment.
+    fields:
+      - name: secrets_rotated
+        type: boolean  # Assuming GAP-5 is resolved
+        label: All production secrets rotated in last 90 days?
+        required: true
+        
+      - name: vulnerability_scan_passed
+        type: boolean
+        label: Vulnerability scan passed with no critical findings?
+        required: true
+        
+      - name: pentest_date
+        type: date  # Assuming GAP-4 is resolved
+        label: Date of most recent penetration test
+        required: true
+        
+      - name: pentest_findings
+        type: multiline
+        label: Outstanding penetration test findings (or "none")
+        required: true
+        
+      - name: compliance_status
+        type: select  # Assuming GAP-6 is resolved
+        label: SOC2 compliance status
+        required: true
+        options:
+          - label: Compliant
+            value: compliant
+          - label: Non-compliant (remediation in progress)
+            value: non_compliant
+          - label: Not applicable
+            value: na
+    approvals:
+      min: 1
+      roles: [security-officer]
+```
+
+### Questionnaire Pattern Evaluation
+
+**Option 1: Sequence of individual steps (one step per question)**
+- ❌ **Rejected:** Too verbose (5 steps for 5 questions). Poor UX: user must click through 5 separate screens. No atomic submission (user could abandon mid-questionnaire).
+
+**Option 2: A `collector` with multi-field `schema`**
+- ✅ **CURRENT SCHEMA:** `collector.fields` array already supports this pattern.
+- ✅ **Atomic submission:** All fields submitted together.
+- ✅ **Single approval gate:** Approval applies to the entire questionnaire, not individual questions.
+- ✅ **Natural composition:** No new step type needed.
+
+**Option 3: A dedicated `form` step type**
+- ❌ **Rejected:** `form` would be semantically identical to `collector` with `fields`. Adds complexity with no benefit.
+
+**Option 4: Inline multi-question within `collector`**
+- ✅ **Already supported:** This is exactly what `fields` array does.
+
+**Recommendation:** No schema change needed. The `collector` step with `fields` array is the canonical questionnaire pattern. Document this pattern explicitly in the spec as a worked example.
+
+---
+
+## 4. Gap Assessment
+
+### Summary Table
+
+| Gap ID | Impact | Type Affected | Recommendation | Priority |
+|--------|--------|---------------|----------------|----------|
+| GAP-1 | High | `choice`, `collector.field` | Add `multiple: true` flag for multi-select | P1 |
+| GAP-2 | Medium | `choice`, `collector.field` | Add `options_from: {provider, field}` for dynamic options | P1 |
+| GAP-3 | High | `collector.field` | Add `type: number`, `type: integer` with `validation: {min, max}` | P0 |
+| GAP-4 | High | `collector.field` | Add `type: date`, `type: time`, `type: datetime` with validation | P1 |
+| GAP-5 | High | `collector.field` | Add `type: boolean` for checkboxes | P1 |
+| GAP-6 | High | `collector.field` | Add `type: select` with `options` array | P0 |
+| GAP-7 | Medium | `collector.field` | Add `type: autocomplete` with provider binding | P2 |
+| GAP-8 | Low | `collector.field` | Add `ephemeral: true` flag for credentials | P2 |
+| GAP-9 | Low | `collector.field` | Add `format: yaml|json` validation for multiline | P3 |
+
+### GAP-1: Multi-select
+**Current workaround:** Multiple `type: text` fields with hint "enter comma-separated values"  
+**Extend:** Add `multiple: true` to `choice` step and `field.type: select`  
+**Schema change:**
+```yaml
+# choice step
+- step:
     type: choice
-    prompt: Which environment are you deploying to?
+    multiple: true  # NEW: default false
+    options: [...]
+    variable: selected_systems  # stores array: ["api", "db", "cache"]
+
+# collector field
+fields:
+  - name: affected_systems
+    type: select
+    multiple: true  # NEW
+    options: [...]
+```
+
+---
+
+### GAP-2: Dynamic options (dropdown from external source)
+**Current workaround:** `type: text` with hint "Select from approved list in finance system"  
+**Extend:** Add `options_from` binding to `choice` and `field.type: select`  
+**Schema change:**
+```yaml
+- step:
+    type: choice
+    options_from:  # NEW: mutually exclusive with options
+      provider: finance-system
+      field: budget_line_items
+      # Provider contract: must return {label: string, value: string, hint?: string}[]
+    variable: budget_line
+```
+
+**Implementation note:** Runtime fetches options by invoking the provider at step initialization. Provider must implement the `options` protocol (returns array of option objects). If provider call fails, step fails with clear error message.
+
+---
+
+### GAP-3: Numeric field types
+**Current workaround:** `type: text` with hint "Enter amount in USD"; string comparison in conditions  
+**Extend:** Add `type: number` and `type: integer` to `collector.field`  
+**Schema change:**
+```yaml
+fields:
+  - name: amount
+    type: number  # NEW: accepts integer or float
+    label: Amount (USD)
+    required: true
+    validation:  # NEW: optional validation block
+      min: 50000
+      max: 10000000
+      step: 0.01  # optional: for float precision (e.g., currency)
+```
+
+**Benefits:**
+- UI can render numeric input with validation
+- Variables are stored as `float64` (not string), enabling numeric comparison in conditions: `{{ gt .amount 100000 }}`
+- Runtime validates min/max before step completes
+
+---
+
+### GAP-4: Date/time field types
+**Current workaround:** `type: text` with hint "YYYY-MM-DD format"; no validation  
+**Extend:** Add `type: date`, `type: time`, `type: datetime` to `collector.field`  
+**Schema change:**
+```yaml
+fields:
+  - name: start_date
+    type: date  # NEW: YYYY-MM-DD format
+    label: Start date
+    required: true
+    validation:  # NEW: optional
+      min: "2026-01-01"
+      max: "2027-12-31"
+      
+  - name: maintenance_window
+    type: datetime  # NEW: ISO 8601 format
+    label: Maintenance window start
+    required: true
+```
+
+**Benefits:**
+- UI can render date/time pickers
+- Runtime validates format and range
+- Variables are stored as ISO 8601 strings; can be parsed by downstream steps
+
+---
+
+### GAP-5: Boolean/checkbox field type
+**Current workaround:** `type: text` with hint "yes/no" or "Type 'yes' to confirm"  
+**Extend:** Add `type: boolean` to `collector.field`  
+**Schema change:**
+```yaml
+fields:
+  - name: security_training_completed
+    type: boolean  # NEW
+    label: Security training completed?
+    required: true
+    default: false  # optional: default value if not required
+```
+
+**Benefits:**
+- UI renders checkbox (not text input)
+- Variable is stored as boolean (not string "yes"/"no")
+- Clearer semantic intent
+
+---
+
+### GAP-6: Select/dropdown field type
+**Current workaround:** `type: text` with hint "Options: Engineering, Sales, Marketing"  
+**Extend:** Add `type: select` to `collector.field`  
+**Schema change:**
+```yaml
+fields:
+  - name: department
+    type: select  # NEW
+    label: Department
+    required: true
+    options:  # NEW: same schema as choice.options
+      - label: Engineering
+        value: engineering
+      - label: Sales
+        value: sales
+    multiple: false  # NEW: default false; set true for multi-select
+```
+
+**Benefits:**
+- UI renders dropdown (not free-text input)
+- Runtime validates value is in the allowed set
+- Prevents typos and invalid values
+
+---
+
+### GAP-7: Autocomplete with search
+**Current workaround:** `type: text` with hint "Use autocomplete from employee directory" (no actual autocomplete)  
+**Extend:** Add `type: autocomplete` to `collector.field`  
+**Schema change:**
+```yaml
+fields:
+  - name: manager
+    type: autocomplete  # NEW
+    label: Manager
+    required: true
+    options_from:  # NEW: provider binding
+      provider: employee-directory
+      field: managers
+      search: true  # provider supports search query
+      # Provider must implement search protocol: search(query: string) -> {label, value}[]
+```
+
+**Priority:** P2 (nice-to-have; can defer to v2.1)
+
+---
+
+### GAP-8: Ephemeral credentials
+**Current workaround:** `type: text`; credential appears in audit trace (compliance risk)  
+**Extend:** Add `ephemeral: true` flag to `collector.field`  
+**Schema change:**
+```yaml
+fields:
+  - name: api_token
+    type: text
+    label: API token
+    required: true
+    ephemeral: true  # NEW: value redacted in audit trace as [REDACTED]
+```
+
+**Implementation:** Runtime still stores the value in variables (so downstream steps can use it), but trace writer redacts it when writing to JSONL.
+
+**Priority:** P2 (important for security-sensitive runbooks)
+
+---
+
+### GAP-9: Structured text validation (JSON/YAML)
+**Current workaround:** `type: multiline`; no syntax validation  
+**Extend:** Add `format: yaml|json` to `collector.field`  
+**Schema change:**
+```yaml
+fields:
+  - name: config_block
+    type: multiline
+    label: Configuration (YAML)
+    required: true
+    format: yaml  # NEW: validates YAML syntax before step completes
+```
+
+**Priority:** P3 (low impact; syntax errors are caught downstream anyway)
+
+---
+
+## 5. Internal Consistency Check
+
+### Potential Confusion: choice vs. decision
+**Scenario:** Runbook author wants user to select an environment (staging/prod) and route to different steps based on the selection.
+
+**Wrong approach (confused author):**
+```yaml
+- step:
+    type: decision  # WRONG: decision is for routing, not data capture
+    prompt: Which environment?
+    routes:
+      - label: Staging
+        goto: deploy_staging
+      - label: Production
+        goto: deploy_production
+```
+
+**Correct approach (2 steps):**
+```yaml
+- step:
+    type: choice
+    prompt: Which environment?
     options:
       - label: Staging
         value: staging
       - label: Production
         value: production
-    variable: deploy_env
-    default: staging
+    variable: env
+    
+- step:
+    type: branch
+    branches:
+      - condition: '{{ eq .env "staging" }}'
+        label: Staging
+        steps: [...]
+      - condition: '{{ eq .env "production" }}'
+        label: Production
+        steps: [...]
 ```
 
-### decision Step Type Specification
+**Recommendation:** Add clarifying prose to spec (see earlier "Decision" section recommendation).
 
-**Fields:**
-- `prompt` (string, required) — Scenario description
-- `routes` (array, required) — List of `{label, runbook, goto, hint}` objects (min 2)
-- `variable` (string, optional) — Stores selected route label for audit
+---
 
-**Constraints:** Min 2 routes; each route has exactly one of `runbook` OR `goto`; unique labels; `router` accepted as synonym
+### Potential Confusion: collector vs. approve
+**Scenario:** Runbook author needs an approval gate with no data collection.
 
-**Example:**
+**Wrong approach (confused author):**
 ```yaml
 - step:
-    id: triage_decision
-    type: decision
-    prompt: Based on error rate, which response path?
-    routes:
-      - label: Standard mitigation
-        runbook: incident-standard-mitigation
-      - label: Emergency rollback
-        runbook: incident-emergency-rollback
-      - label: Escalate to on-call
-        goto: escalate_step
-    variable: chosen_path
+    type: collector  # WRONG: collector implies data collection
+    title: Manager approval
+    fields: []  # empty fields array — schema should reject this
+    approvals:
+      min: 1
+      roles: [manager]
 ```
 
-### collector Step Type Specification
-
-**Fields:**
-- `prompt` (string, required) — Markdown instructions
-- `fields` (array, required) — List of `{name, type, label, required, hint}` objects
-- `approvals` (object, optional) — Approval gate config
-
-**Field types:** `text`, `multiline`, `file`, `image`, `url`
-
-**Approval gate:**
-- `min` (integer, required) — Minimum approvals needed
-- `roles` (array, required) — Authorized roles
-- `timeout` (duration, optional) — e.g., `4h`, `30m`
-- `on_timeout` (enum, optional) — `escalate | fail | skip`
-- `escalate_to` (array, optional) — Escalation roles
-
-**Example:**
+**Correct approach:**
 ```yaml
 - step:
-    id: collect_evidence
+    type: approve
+    title: Manager approval
+    approvals:
+      min: 1
+      roles: [manager]
+```
+
+**Recommendation:** Schema validation MUST reject `collector` with empty `fields` array. Add to spec:
+> "The `fields` array in a `collector` step must contain at least one field. If no data collection is needed, use `type: approve` instead."
+
+---
+
+### Potential Confusion: collector with approvals vs. approve
+**Scenario:** Runbook author needs approval AND data collection in the same step.
+
+**Correct approach (use collector with approvals):**
+```yaml
+- step:
     type: collector
-    prompt: Gather incident evidence
+    title: Upload contract and get approval
     fields:
-      - name: incident_summary
-        type: multiline
-        label: Incident summary
-        required: true
-      - name: error_log
+      - name: signed_contract
         type: file
-        label: Error log file
+        label: Signed contract (PDF)
         required: true
     approvals:
       min: 1
-      roles: [DRI]
-      timeout: 30m
-      on_timeout: fail
+      roles: [legal]
 ```
 
-### Migration Disposition
+**Alternative (2 steps — also correct but verbose):**
+```yaml
+- step:
+    type: collector
+    title: Upload contract
+    fields:
+      - name: signed_contract
+        type: file
+        required: true
+        
+- step:
+    type: approve
+    title: Legal approval
+    approvals:
+      min: 1
+      roles: [legal]
+```
 
-`manual` steps REMOVED entirely. All use cases covered by three new types:
-- "Prompt user to pick environment" → `choice`
-- "Ask user which runbook path to take" → `decision`
-- "Collect incident evidence and approval" → `collector`
+**Guidance:** Document in spec that `collector` with `approvals` is preferred when data collection and approval are semantically coupled (e.g., "upload evidence and have legal approve it"). Use two separate steps when the approval is semantically independent of the data collection (e.g., "collect incident notes (step 1), then get manager approval to proceed (step 2)").
 
-Updated §03 migration rules (lines 172–184). Since v2 is not yet released, migration impact limited to internal team and design iterations.
+---
 
-### Barbara's Decision: §14 Input Provider Framework Updates
+## 6. Recommendations Summary
 
-**Decision:** Enhanced §14 to define how input providers serve the three new interactive step types.
+### Schema Changes Required (P0-P1)
 
-**New Section: Interactive Step Type Contracts (§14.6)**
+1. **Extend `collector.field` with new `type` values:**
+   - `number` (integer or float) with optional `validation: {min, max, step}`
+   - `integer` (integer-only variant)
+   - `date` (YYYY-MM-DD) with optional `validation: {min, max}`
+   - `datetime` (ISO 8601) with optional `validation: {min, max}`
+   - `boolean` (checkbox) with optional `default`
+   - `select` (dropdown) with `options` array and `multiple: true|false`
 
-**1. Choice Step Contract (§14.6.1)**
-- JSON-RPC method: `provider/choice`
-- Request: stepId, prompt, options array (value + label pairs), optional default
-- Response: selected value
-- Validation: selected value must match option value exactly
-- Built-in `prompt` provider: presents numbered list in terminal
+2. **Extend `choice` step:**
+   - Add `multiple: true` flag for multi-select (default: false)
+   - Add `options_from: {provider, field}` for dynamic options (mutually exclusive with `options`)
 
-**2. Decision Step Contract (§14.6.2)**
-- JSON-RPC method: `provider/decision`
-- Request: stepId, prompt, routes array (route + label pairs)
-- Response: selected route label
-- Design point: provider does NOT need graph knowledge; only returns route label
-- Engine resolves route label to target node and validates existence
-- Decision result NOT stored as variable (flow control only)
+3. **Extend `collector.field` with `options_from` (same as choice):**
+   - Enables dynamic dropdowns in forms
 
-**3. Collector Step Contract (§14.6.3)**
-- JSON-RPC method: `provider/collect`
-- Request: stepId, instructions, fields array with type-specific constraints
-- Field types: text, file, url, number, date
-- File upload support: MIME type restrictions, size limits, SHA-256 hashing
-- Response: values map + artifacts array with storage metadata
-- Artifact metadata: field, filename, contentType, sizeBytes, sha256, storagePath
-- Built-in storage path: `.gert/runs/<runId>/artifacts/`
+4. **Add validation for `collector`:**
+   - Reject `collector` with empty `fields` array (structural validation error)
+
+### Optional Enhancements (P2-P3)
+
+5. **Add `ephemeral: true` flag to `collector.field`:**
+   - Redacts sensitive values (credentials, tokens) in audit trace
+
+6. **Add `type: autocomplete` to `collector.field`:**
+   - Requires provider search protocol implementation
+
+7. **Add `format: yaml|json` to `collector.field.type: multiline`:**
+   - Validates syntax before step completes
+
+### Spec Clarifications (no schema change)
+
+8. **Add worked example for questionnaire pattern:**
+   - Show `collector` with 5-field `fields` array as canonical multi-question form
+
+9. **Add guidance on choice vs. decision vs. branch:**
+   - When to use each; clarify that decision is for user-driven routing, not data storage
+
+10. **Add guidance on collector with approvals vs. approve:**
+    - When to use inline approval vs. dedicated approve step
+
+---
+
+## 7. Test Runbook Evidence
+
+Evidence from `/design/gert-v2/testdata/runbooks/`:
+
+### r03-employee-onboarding (lines 55, 60, 69, 93, 120, 214, 268, 368)
+- **GAP-6:** "Options: Engineering, Sales, Marketing, Finance" in hint (should be dropdown)
+- **GAP-7:** "Use autocomplete from employee directory" in hint (no autocomplete field type)
+- **GAP-4:** "Start date (YYYY-MM-DD)" in hint (no date field type)
+- **GAP-5:** "yes/no" questions modeled as `type: text` (should be boolean)
+- Timeout durations in prose are "business days" but schema only supports wall-clock hours
+
+### r07-financial-approval (lines 42, 52, 68, 144)
+- **GAP-3:** Amount field is `type: text` (should be `type: number`)
+- **GAP-6:** "Options: Engineering, Sales, Marketing..." in hint (should be dropdown)
+- **GAP-2:** "Select from approved budget line items" in hint (should be dynamic dropdown)
+- Line 68: Hardcoded role `[manager]` should be dynamic lookup from HR system (schema limitation)
+- Line 144: Numeric comparison `{{ and (gt .amount "50000") (lt .amount "100000") }}` — fragile string comparison (should be numeric type)
+
+### r04-soc2-evidence (lines 101, 216, 235)
+- **GAP-6:** "Options: Complete, In Progress, Planned" in hint (should be dropdown)
+- Multiple timeout durations in prose are "business days" (already supported by `timeout_business_days` in v2)
+
+---
+
+## 8. Migration Path
+
+If the recommended schema changes are accepted:
+
+### v2.0 → v2.1 Migration
+
+**Breaking change:** None. All changes are **additive** (new field types, new optional flags).
+
+**Backward compatibility:**
+- Existing runbooks with `type: text` + hint comments remain valid
+- New runbooks can use the new field types
+- Runtime must support both old and new field types
+
+**gert migrate behavior:**
+- `gert migrate` does **not** automatically upgrade `type: text` to `type: select` (requires semantic analysis; too risky)
+- Provide a **linter warning** for `type: text` fields with hints like "Options: ..." suggesting migration to `type: select`
+
+**Validation:**
+- Structural validation: Reject unknown `field.type` values
+- Semantic validation: Validate `options` array structure, `validation.min` ≤ `validation.max`, etc.
+
+---
+
+## Decision
+
+**Proposal:** Accept GAP-3, GAP-4, GAP-5, GAP-6 (P0-P1) as blocking for v2.0. Implement as additive schema extensions. Defer GAP-7, GAP-8, GAP-9 (P2-P3) to v2.1.
+
+**Impact:** 4 new field types + 1 validation block. Estimated schema expansion: ~150 lines in 03-schema-vnext.tex.
+
+**Timeline:** 2 days to write schema extensions, update spec, add test cases, update JSON Schema artifacts.
+
+**Owner decision required:** Proceed with P0-P1 gaps now, or defer all to v2.1?
+
+---
+
+**End of audit.**
+
+---
+
+## john-invoke-renamed-include
+
+### 2026-04-19: type:invoke renamed to type:include
+**By:** John
+**What:** type:invoke is now type:include. Semantics clarified: include expands another runbook's steps inline into the current run path, sharing the caller's variable space. NOT a sub-procedure call. Cycle detection is a validation-time hard error. A future type:call (isolated scope, explicit I/O mapping) is deferred to post-v2.0.
+**Why:** User identified that "invoke" implies calling another party (RPC/sub-procedure), but the intended semantic is inline composition/inclusion. "include" matches Ansible include_tasks, C #include, and is unambiguous.
+
+---
+
+## john-testdata-runbooks
+
+Decision: Runbook test fixtures persisted at design/gert-v2/testdata/runbooks/. 10 runbooks, each with source.md + schema.yaml + assessment.md. GAP comments mark schema limitations.
+
+Details:
+- R1–R3: Full YAML translations extracted verbatim from john-schema-translations.md
+- R4–R10: Best-effort translations written from source corpus
+- All schema.yaml files are syntactically valid gert v2 YAML
+- # GAP: comments identify lines where schema limitations prevent full fidelity
+- Verdicts: 1 PASS, 7 PASS WITH NOTES, 2 FAIL (R7, R8)
+- README.md at root links to methodology and summarizes schema readiness by domain
+
+---
+
+## john-translations-complete
+
+# Schema Translation Complete — Gap Summary
+
+**Date:** 2026-04-18  
+**Author:** John (Schema & YAML Specialist)  
+**For Review By:** Team (Ken, Dennis, Barbara, Brian, ormasoftchile)
+
+---
+
+## Translation Summary
+
+Completed translation of all 10 runbooks from Dennis's corpus into gert v2 YAML schema with validation scoring per methodology.
+
+**Results:**
+- **PASS:** 1 runbook (10%)
+- **PASS WITH NOTES:** 7 runbooks (70%)
+- **FAIL:** 2 runbooks (20%)
+
+**Average Scores:**
+- Completeness: 82% (target: 95%)
+- Fidelity: 73% (target: 95%)
+
+**Verdict: Schema is NOT production-ready** (does not meet 95% thresholds + has 4 CRITICAL gaps).
+
+---
+
+## Top 3 Gap Patterns
+
+### 1. Calendar-Aware Timeouts (3 runbooks, HIGH severity)
+
+Approval workflows specify timeouts in business days, but schema only supports wall-clock durations.
+
+**Recommendation:** Add `timeout: {value: 2, unit: business_days, calendar: us_federal_holidays}`
+
+### 2. Dynamic Approver Resolution (2 runbooks, CRITICAL severity)
+
+Approval workflows need runtime approver lookup (manager from HR, VP from org chart), but schema only supports static role lists.
+
+**Recommendation:** Allow template expressions in `roles:` OR add provider-based resolution.
+
+### 3. Cross-Branch Parallelism (2 runbooks, CRITICAL severity)
+
+Cannot express "run X in parallel with all branches of decision Y". Parallel blocks don't span branches.
+
+**Recommendation:** Add `async: true` step attribute for background execution.
+
+---
+
+## Critical Gaps (P0 — Block Production Use)
+
+1. **Dynamic approver resolution** — Blocks R7 (financial approval)
+2. **External event triggers** — Blocks R8 (FDA webhook resume after 90 days)
+3. **Cross-branch parallelism** — Blocks R5 (security forensics during containment)
+4. **Calendar-aware timeouts** — Degrades R3, R7, R8 (approval SLAs)
+
+---
+
+## High-Severity Gaps (P1 — Significant Friction)
+
+- Bulk invocation verbosity (15 invoke steps for SOC2 controls)
+- No datetime-based wait (maintenance window)
+- No signature metadata (21 CFR Part 11 compliance)
+- No best-effort parallel (partial failure handling)
+- No JSON path queries (conditions use string matching)
+- And 5 more...
+
+---
+
+## Runbooks That Failed
+
+**R7: Financial Approval for Large Purchase**
+- Completeness: 70%, Fidelity: 60%
+- **Blocker:** Cannot express dynamic approver lookup from org chart
+- **Blocker:** Business day timeouts for approval SLAs
+
+**R8: Medical Device Software Release (FDA)**
+- Completeness: 70%, Fidelity: 60%
+- **Blocker:** Cannot pause runbook for 90 days and resume on FDA webhook
+- **Gap:** No signature metadata for 21 CFR Part 11 compliance
+
+---
+
+## Recommendation
+
+**Address 4 critical P0 gaps before declaring schema stable for implementation.**
+
+The schema is 80% production-ready. The remaining 20% affects core enterprise use cases (financial approvals, regulatory workflows, security incident response).
+
+---
+
+## Detailed Output
+
+Full translations and analysis in:
+- `/Volumes/Projects/gert/.squad/tmp/john-schema-translations.md` (Runbooks 1-3 full YAML)
+- `/Volumes/Projects/gert/.squad/tmp/john-translations-summary.md` (Complete analysis)
+
+---
+
+**Status:** Ready for team review and schema improvement prioritization discussion.
+
+---
+
+## john-validation-methodology
+
+# Decision Proposal: gert v2 Schema Validation Methodology
+
+**Date:** 2026-04-18  
+**Proposed by:** John (Schema & YAML Specialist)  
+**Status:** Pending team review  
+**Category:** Quality Assurance, Schema Design Process
+
+---
+
+## Summary
+
+Propose adopting a rigorous validation methodology for stress-testing the gert v2 schema against real-world prose runbooks. The methodology provides systematic translation protocols, binary completeness/fidelity criteria, gap classification, and scoring rubrics to answer: **"Can we express this operational procedure in gert v2 schema without losing semantic meaning?"**
+
+---
+
+## Problem Statement
+
+The gert v2 schema (§03) is now a 1,495-line normative specification with 12 step types, rich data flow constructs, and complex control flow patterns. Before declaring the schema "implementation-ready," we need a systematic way to validate that:
+
+1. Real-world operational runbooks can be translated to gert v2 schema
+2. All semantics from the prose description are preserved in the schema
+3. No critical expressiveness gaps exist
+4. Any gaps are identified early and classified for remediation
+
+Without a formal methodology, schema validation is subjective and ad-hoc. We risk missing expressiveness gaps until implementation phase or production usage.
+
+---
+
+## Proposed Solution
+
+Adopt the **gert v2 Schema Validation Methodology** (full document at `.squad/tmp/john-validation-methodology.md`).
+
+### Core Components
+
+#### 1. Translation Protocol
+Step-by-step instructions for translating prose runbooks to schema:
+- Step boundary identification rules
+- 12-question decision tree for step type classification
+- Patterns for branching (automatic vs. human-driven)
+- Data flow modeling (inputs → captures → consumers)
+- Failure/compensation patterns
+- Human interaction classification
+- Parallelism and nested runbook modeling
+
+#### 2. Completeness Criteria (10 binary checks)
+- C1: Step coverage
+- C2: Decision point representation
+- C3: Data flow completeness
+- C4: Timing and sequencing
+- C5: Failure path coverage
+- C6: Human interaction fidelity
+- C7: Parallelism declaration
+- C8: Nested runbook references
+- C9: Governance and approval requirements
+- C10: Terminal outcomes
+
+#### 3. Fidelity Criteria (10 binary checks)
+- F1: Semantic equivalence
+- F2: No information loss
+- F3: Execution path preservation
+- F4: Variable binding correctness
+- F5: Step type precision
+- F6: Timing preservation
+- F7: Governance alignment
+- F8: Human prompt clarity
+- F9: Deterministic evaluation
+- F10: Artifact integrity
+
+#### 4. Gap Classification (G1–G6)
+- G1: Missing step type (HIGH severity)
+- G2: Missing field (varies)
+- G3: Missing flow construct (CRITICAL if common)
+- G4: Missing interaction model (HIGH)
+- G5: Semantic loss (MEDIUM)
+- G6: Verbosity/workaround (LOW–MEDIUM)
+
+#### 5. Scoring and Verdicts
+- **Completeness Score:** (satisfied / 10) × 100%
+- **Fidelity Score:** (satisfied / 10) × 100%
+- **Verdict:**
+  - PASS: ≥90% both scores, no CRITICAL gaps
+  - PASS WITH NOTES: ≥80% both scores, no CRITICAL gaps, mitigation plan for HIGH gaps
+  - FAIL: <80% either score OR CRITICAL gaps present
+
+#### 6. Schema Improvement Signals
+When gaps accumulate across runbooks:
+- **Signal 1:** Schema extensions needed (G1/G2 appears in ≥3 runbooks)
+- **Signal 2:** Spec clarifications needed (consistent misinterpretation)
+- **Signal 3:** Design limitations (acceptable non-goals)
+
+---
+
+## Production Readiness Thresholds
+
+**For gert v2 schema to be declared implementation-ready:**
+
+- ✅ At least 10 diverse real-world runbooks translated
+- ✅ Average completeness score ≥95%
+- ✅ Average fidelity score ≥95%
+- ✅ Zero CRITICAL-severity gaps
+- ✅ All HIGH-severity gaps have documented workarounds
+
+---
+
+## Benefits
+
+1. **Objective quality gate:** Binary pass/fail criteria eliminate subjective assessment
+2. **Early gap detection:** Identifies missing step types/fields before implementation
+3. **Actionable feedback:** Gap classification points to specific schema improvements
+4. **Regression prevention:** Re-running methodology after schema changes ensures no fidelity loss
+5. **Documentation artifact:** Scorecard provides evidence of schema completeness for stakeholders
+
+---
+
+## Trade-offs
+
+### Advantages
+- Systematic, repeatable process
+- Bridges gap between normative spec and real-world usage
+- Provides quantitative metrics (completeness %, fidelity %)
+- Prioritizes gaps by severity and frequency
+
+### Disadvantages
+- Requires upfront effort to translate 10+ runbooks
+- Methodology itself may need refinement as we apply it
+- Some prose runbooks may be inherently ambiguous (not a schema gap)
+
+---
+
+## Implementation Plan
+
+### Phase 1: Pilot (1–2 weeks)
+1. Select 3 diverse real-world runbooks (incident response, deployment, root cause analysis)
+2. Apply translation protocol
+3. Score completeness and fidelity
+4. Identify any G1–G6 gaps
+5. Refine methodology based on learnings
+
+### Phase 2: Full Validation (2–3 weeks)
+1. Translate 7 additional runbooks
+2. Aggregate gap inventory
+3. Calculate average scores
+4. Classify gaps by severity and frequency
+5. Produce schema improvement roadmap
+
+### Phase 3: Remediation (varies)
+1. Design schema extensions for CRITICAL and HIGH gaps
+2. Update §03 normative spec
+3. Re-translate affected runbooks
+4. Verify gap resolution
+
+### Phase 4: Production Readiness (1 week)
+1. Verify all thresholds met
+2. Document any accepted design limitations
+3. Declare schema implementation-ready
+4. Handoff to Brian (Parser) and Ken (Runtime)
+
+---
+
+## Open Questions
+
+1. **Who selects the 10 runbooks?** Recommend: ormasoftchile + John, prioritizing real production runbooks from ormasoftchile's experience.
+2. **What if we find CRITICAL gaps late?** Methodology is designed for early detection; if found, delay implementation-ready declaration until remediated.
+3. **How do we handle ambiguous prose?** Document ambiguity in scorecard; schema must pick ONE interpretation (document rationale in `prose:` section).
+
+---
+
+## Recommendation
+
+**Adopt this methodology as the quality gate for gert v2 schema.**
+
+Apply it immediately in pilot mode with 3 runbooks. If pilot reveals methodology gaps, refine and re-run. Once methodology stabilizes, complete full validation with 10 runbooks before declaring schema implementation-ready.
+
+This ensures Brian's parser and Ken's runtime are built against a stress-tested, production-validated schema — not a theoretical design.
+
+---
+
+## Artifacts
+
+- **Full methodology:** `.squad/tmp/john-validation-methodology.md` (38KB)
+- **Includes:**
+  - Translation protocol (9 sections)
+  - 20 binary criteria (C1–C10, F1–F10)
+  - Gap classification taxonomy (G1–G6)
+  - Scoring rubric with verdict matrix
+  - 2 worked examples (PASS and PASS WITH NOTES)
+  - Printable checklist
+  - Step type quick reference table
+
+---
+
+## Next Steps
+
+1. **Team review:** Gon (Architecture), Ken (Runtime), Brian (Parser), ormasoftchile
+2. **Decision:** Adopt, iterate, or defer?
+3. **If adopted:** John proceeds with Phase 1 pilot (3 runbooks)
+
+---
+
+**Author:** John  
+**Reviewed by:** _(pending)_  
+**Decision date:** _(pending)_
+
+---
+
+## john-wait-for-event-spec
+
+### 2026-04-19: Added type:wait_for_event step type
+**By:** John
+**What:** type:wait_for_event is now a first-class step type in §03. It pauses execution until an inbound event (webhook, message, signal, or channel) arrives. Fields: event.source, event.id, event.filter, event.payload_schema, capture, timeout, on_timeout.
+**Why:** GAP-3 from stress test — required by K8s incident runbook (Prometheus webhook), security breach runbook (SIEM events), FDA release runbook, and others.
+
+---
+
+## ken-cli-shell-contract
+
+# Decision: CLI Shell Resolution Contract
+
+**By:** Ken (Systems Architect)
+**Date:** 2026-04-19
+**Status:** Pending merge to `.squad/decisions.md`
+
+---
+
+## Context
+
+John is extending the `type: cli` step schema (§03) with two new `run:` forms:
+1. A **shell-string form** — `run: "<string>"` with an optional `shell:` discriminator.
+2. A **multi-shell map form** — `run: {bash: "...", cmd: "...", pwsh: "..."}` for
+   cross-platform runbooks.
+
+This record documents the executor-layer contract decisions that back those schema
+additions.  All decisions here apply to §02 (architecture) only; the schema constraints
+appear in §03.
+
+---
+
+## Decisions
+
+### 1. Exec form vs shell-string form are mutually exclusive at the field level
+
+`command`/`args` and `run` are mutually exclusive on a `type: cli` step.  Validation
+rejects steps that declare both.  This is an Error-severity load-time check.
+
+**Rationale:** Two competing invocation models on the same step create ambiguous
+executor semantics.  Forcing a single form keeps the contract deterministic.
+
+---
+
+### 2. `shell: auto` resolves to the platform-native shell at plan time
+
+Priority order:
+- **Linux / macOS:** `/bin/sh` (POSIX-guaranteed).
+- **Windows:** `pwsh` if `exec.LookPath("pwsh")` succeeds, else `cmd.exe`.
+
+**Rationale:** `/bin/sh` is the lowest-common-denominator on POSIX systems.  `pwsh`
+is preferred on Windows because it provides a consistent scripting surface across
+Windows 10+; `cmd.exe` is the fallback for environments where PowerShell is not
+installed.
+
+---
+
+### 3. Explicit `shell:` values are resolved at plan time, not run time
+
+When `shell` is explicitly set to `bash`, `sh`, `pwsh`, or `cmd`, the executor calls
+`exec.LookPath(shell)` during plan construction.  A binary not found at plan time is
+a hard plan-time error that rejects the runbook before execution begins.
+
+**Rationale:** Run-time failures are harder to surface to operators.  Surfacing missing
+shells at plan time gives authors immediate actionable feedback before the first step
+runs, consistent with the "fail fast" principle applied to include-cycle detection and
+governance pre-flight.
+
+---
+
+### 4. Multi-shell map form resolution uses insertion-order walk with `bash`→`sh` fallback
+
+At run time the executor walks map keys in insertion order, calling
+`exec.LookPath(key)` for each.  The first key that resolves is selected.
+
+Special case: if `bash` is a map key but is not found, the executor tries `sh` as an
+implicit fallback before moving to the next map key.
+
+**Rationale:** Insertion order is author-intent order — authors list preferred shells
+first.  The `bash`→`sh` fallback reflects the real-world situation where a runbook
+author writes `bash` but the host provides only `sh` (e.g., Alpine Linux with busybox).
+Both share the `-c` invocation pattern, making the fallback transparent.
+
+---
+
+### 5. `shell` field is silently ignored (Warning) when `run` is a map
+
+Setting `shell:` alongside a map-form `run:` produces a validation Warning, not an
+Error.  The field is ignored; shell selection is always driven by the map keys.
+
+**Rationale:** A Warning communicates the authoring mistake without breaking existing
+runbooks that may have been written with `shell:` defensively.
+
+---
+
+### 6. Template expansion precedes shell invocation in all forms
+
+For both string-form and map-form `run:`, Sprig/Go template expansion is applied to
+the script value before it is passed to the shell.  The shell never sees template
+syntax; it receives the fully-expanded string.
+
+**Rationale:** Consistent with how `command` and `args` fields are expanded.  Authors
+can interpolate variables, conditionals, and functions before the shell parses the
+script.
+
+---
+
+### 7. Shell injection is an author responsibility; exec form is the safe alternative
+
+Shell-string form is documented as injection-vulnerable.  A normative security note in
+§02 directs authors to use exec form (`command`/`args`) for steps that accept untrusted
+input.  No automatic escaping is applied.
+
+**Rationale:** Automatic escaping is language-specific (bash quoting ≠ cmd quoting ≠
+pwsh quoting) and would create a false sense of safety.  Explicit guidance with a clear
+safe alternative is more defensible.
+
+---
+
+### 8. Audit trace records `shell_selected` on every shell-dispatched CLI step
+
+The `step/started` JSONL event gains a `shell_selected` field (string, e.g.`"bash"`)
+for all shell-string and map-form CLI steps.  Exec-form steps omit the field.
+
+**Rationale:** Traceability requirement.  For cross-platform runbooks, knowing which
+shell ran which step is essential for post-incident analysis and compliance audit.
+
+---
+
+### 9. `gert.platform` is injected at run start, not at step dispatch
+
+The `gert.platform.os`, `gert.platform.arch`, and `gert.platform.shell` variables are
+injected into the run variable scope at run start.  `gert.platform.shell` reflects the
+shell selected for the current step; it is available in `capture` mappings and
+downstream steps but NOT in the `run` script of the step that triggers resolution
+(resolution precedes expansion of that field).
+
+**Rationale:** Injecting at run start makes the variables available everywhere
+(including `branch` predicates) without special per-step plumbing.  The
+`gert.platform.shell` post-resolution constraint is a natural consequence of the
+expand-then-invoke ordering.
+
+---
+
+## Files Changed
+
+- `design/gert-v2/sections/02-architecture.tex` — new
+  `\subsection{CLI Step Executor Contract}` inserted before the Include Step Executor
+  Contract.  Covers: shell-string form resolution, invocation patterns, multi-shell map
+  form walk algorithm, `bash`→`sh` fallback, `gert.platform` variable injection,
+  security note, and validation rules table.
+
+- `.squad/decisions/inbox/ken-cli-shell-contract.md` — this record.
+
+---
+
+## ken-field-types-executor
+
+# Executor Contract — P0 Field Types (number, integer, date, datetime, boolean, select, multiline, choice/multiple)
+
+**Author:** Ken (Systems Architect)  
+**Date:** 2026-04-18  
+**Requested by:** ormasoftchile  
+**Status:** DECISION RECORD — changes applied to §02 and §14
+
+---
+
+## Context
+
+John's input-triad audit (`john-input-triad-audit.md`) identified seven critical gaps in
+the `collector` and `choice` step types. The owner accepted GAP-3 through GAP-6 as P0/P1
+for v2.0. John is simultaneously extending §03 (schema spec) to add the new field types.
+
+This record documents the runtime-side architectural decisions needed to support those new
+types: validation contract, variable storage semantics, the `options_from` dynamic options
+protocol, and the `multiline` UI hint.
+
+---
+
+## Decisions
+
+### 1. Collector Field Validation Contract (new subsection in §02)
+
+Added `\subsection{Collector Field Validation Contract}` (label: `sec:collector_field_validation`)
+to §02 Architecture, between the Approve Step Executor Contract and Cancellation subsections.
+
+**Algorithm:**
+- Required check → type coercion/format check → constraint check → re-prompt loop
+- Max **3** re-prompt attempts before hard step failure
+- On failure: `step.state = FAILED`, `step/failed` trace event, `gert.error` populated
+
+**Per-type validation rules (normative):**
+
+| Type | Validation | Storage |
+|------|-----------|---------|
+| `text` | Required check only; `multiline` is UI hint | JSON string |
+| `number` | float64; min/max inclusive; step modulo epsilon | JSON number (float64) |
+| `integer` | int64; no fractional part; min/max/step | JSON number (int64) |
+| `date` | RFC 3339 full-date (YYYY-MM-DD); min/max lexicographic | JSON string (YYYY-MM-DD) |
+| `datetime` | RFC 3339 with offset; min/max normalised to UTC | JSON string (RFC 3339) |
+| `boolean` | Truthy/falsy coercion (true/false/"true"/"false"/1/0/"yes"/"no") | JSON boolean |
+| `select` (single) | Value in options list (static or dynamic) | JSON string |
+| `select` (multiple) | All values in list; min/max_selections; no duplicates | JSON array of strings |
+| `choice` (multiple) | Same as `select` multiple, applied to `choice` step | JSON array of strings |
+| `file`, `image` | Size/MIME constraints; SHA-256 by executor | Artifact reference (evidence store) |
+| `url` | Valid URL syntax, scheme required | JSON string |
+
+**Rationale for 3 retries:** Mirrors common form-validation UX patterns. Too few (1) is
+frustrating for typos; too many (>5) enables denial-of-service against interactive runs.
+3 is the established gert convention from approval gates.
+
+### 2. `multiline: true` — UI Hint Only
+
+`multiline: true` on a `text` field has zero effect on validation or variable storage.
+The executor always treats the value as a plain string. Input providers SHOULD render
+a textarea or open `$EDITOR`. This decision keeps executor logic simple and separates
+UI concerns from data semantics.
+
+### 3. Variable Storage — Type-Correct JSON
+
+Typed storage is the key enabler for downstream expression correctness:
+- `number`/`integer` → JSON number (enables `{{ gt .amount 50000.0 }}`)
+- `boolean` → JSON boolean (enables `{{ if .confirmed }}`)
+- `select`/`choice` with `multiple: true` → JSON array (enables `{{ has .systems "x" }}`)
+- `date`/`datetime` → ISO 8601 strings (parseable by `time.Parse` in templates)
+
+Previously all collector fields were stored as strings, forcing fragile string comparisons
+(`{{ gt .amount "50000" }}` uses string comparison, not numeric). This is the primary
+motivation for typed field storage — cited directly in John's audit as a production pain
+point (r07-financial-approval, line 144).
+
+### 4. `options_from` — Dynamic Options Protocol (new subsection in §14)
+
+Added `\subsection{Dynamic Options Protocol}` (label: `sec:dynamic-options-protocol`)
+to §14 Input Provider Framework, between the Collector Step Contract and the Provider
+Capability Matrix.
+
+**New RPC method: `inputProvider/getOptions`**
+
+Request:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "getopts-1",
+  "method": "inputProvider/getOptions",
+  "params": {
+    "providerId": "employee-directory",
+    "field":      "managers",
+    "stepId":     "assign-manager",
+    "variables":  { "department": "engineering" },
+    "context":    { "runId": "...", "userId": "...", "mode": "real" }
+  }
+}
+```
+
+Response:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "getopts-1",
+  "result": {
+    "options": [
+      { "value": "alice", "label": "Alice Chen (Staff Eng)" }
+    ],
+    "cacheTtlSeconds": 300
+  }
+}
+```
+
+**Key decisions:**
+- `variables` is included in every request so the provider can filter contextually
+- `cacheTtlSeconds` allows the provider to declare result caching per-response (not per-runbook)
+- Failure to fetch → step fails with `options_from.fetch_failed`; no silent fallback to empty list
+- Provider not advertising `getOptions: true` → step fails with `options_from.capability_not_supported`
+
+### 5. `choice` Step Extensions
+
+Updated §14 Choice Step Contract to document:
+- `multiple: true` → `selected` response becomes JSON array; stored as array of strings
+- `options_from` → mutually exclusive with static `options`; triggers `inputProvider/getOptions`
+
+### 6. Capability Matrix
+
+Added `getOptions` column to the Provider Capability Matrix in §14. All built-in providers
+(`prompt`, `env`, `file`, `workspace`) declare `getOptions: false`. Third-party providers
+that serve dynamic option lists must declare `getOptions: true`.
+
+---
+
+## Sections Modified
+
+| File | Changes |
+|------|---------|
+| `sections/02-architecture.tex` | (1) Extended `collector` dispatch bullet to reference field-type validation and typed storage; (2) Added `Collector Field Validation Contract` subsection (~130 lines) |
+| `sections/14-input-provider-framework.tex` | (1) Updated `choice` contract requirements for `multiple` and `options_from`; (2) Updated collector field `type` list to include all new types; (3) Replaced single-line type constraints with expanded itemize block; (4) Replaced collector prompt provider paragraph with extended one covering new types; (5) Added `Dynamic Options Protocol` subsection with `inputProvider/getOptions` RPC (~80 lines); (6) Added `getOptions` column to capability matrix; (7) Added `getOptions: true` to capability declaration example |
+
+---
+
+## Contracts Added
+
+1. **`inputProvider/getOptions`** — new JSON-RPC method, full request/response schema defined in §14
+2. **Collector field validation algorithm** — 5-step algorithm with re-prompt loop defined in §02
+3. **Per-type storage rules** — normative table in §02 (18 rows covering all field types)
+4. **`gert.error` schema for validation failures** — structured error format defined in §02
+
+---
+
+## Cross-Section Consistency Notes
+
+- §03 (John, Schema): This record is the runtime complement. John's schema additions define
+  the YAML structure; this record defines what the executor does with the values at runtime.
+- §14 (§14 is already the authoritative provider RPC reference): `inputProvider/getOptions`
+  is defined here as a first-class method alongside `provider/resolve`, `provider/choice`, etc.
+- §06 (Events): The `CollectorRequired` event already exists in the event catalog. The
+  re-prompt loop reuses the same event with an `errors` map populated. No new event kinds
+  are introduced for re-prompts — this is a point-to-point exchange, not a fan-out event.
+- §12 (Tracing): `gert.error` is written to the trace as part of the `step/failed` event
+  payload. No separate trace event needed.
+
+---
+
+**End of decision record.**
+
+---
+
+## ken-field-types-p1
+
+# Executor Contract — P1 Field Types (conditional fields, text pattern validation)
+
+**Author:** Ken (Systems Architect)  
+**Date:** 2026-04-18  
+**Requested by:** ormasoftchile  
+**Status:** DECISION RECORD — changes applied to §02 and §14
+
+---
+
+## Context
+
+John is extending §03 (schema spec) with two P1 features:
+1. **Conditional field visibility** — `when` expression on `collector.fields[*]`
+2. **Text field validation** — `validation.pattern` (regex), `validation.min_length`,
+   `validation.max_length`, `validation.pattern_hint`
+
+This record documents the runtime contracts for both features, complementing the P0
+contract defined in `ken-field-types-executor.md`.
+
+---
+
+## Decisions
+
+### 1. Conditional Field Evaluation Contract (new subsubsection in §02)
+
+Added `\subsubsection*{Conditional Field Evaluation Contract}` (label:
+`sec:conditional-field-eval`) inside the existing `Collector Field Validation Contract`
+subsection in §02, after the new text-pattern subsubsection and before the existing
+Variable Storage section.
+
+**Evaluation model:**
+- Fields evaluated left-to-right (array order).
+- Before rendering field *i*, evaluate its `when` expression against:
+  - Collected values so far from fields 0…i-1 in the same step.
+  - Global variable scope (all prior completed steps).
+- `when = false` → field not rendered, not prompted, variable binding skipped.
+- `when` absent → always rendered (unconditionally visible).
+
+**This is a pull model.** The executor drives field-by-field evaluation; the input
+provider renders one field at a time OR a full form with hidden fields — both valid.
+
+**Input provider integration — two valid strategies:**
+
+| Strategy | Recommended For | Behaviour |
+|----------|----------------|-----------|
+| Full-form delivery | Rich UI providers | Executor sends all fields with pre-evaluated `visible: bool`; provider handles dynamic show/hide client-side as earlier fields are filled |
+| Streaming delivery | CLI providers (e.g., `prompt`) | Executor sends only visible fields one at a time, evaluating `when` in real time as prior values are received |
+
+**Variable binding on skip:**
+- Skipped field `id` is NOT added to step variable bindings.
+- Downstream template references → zero value (`""` / `0` / `false`).
+- References using `.require` → template error at that step.
+- Runbook authors must guard downstream expressions referencing conditional fields.
+
+**Load-time forward reference check:**
+- At schema load time: parse each `when` expression, extract variable references.
+- If any reference binds to a field at a *later* index in the same `fields` array →
+  reject the runbook with a validation error naming the forward-referencing field and
+  both indices.
+- References to global scope (prior steps) are always permitted; only same-step
+  forward references are forbidden.
+
+### 2. Text Field Pattern Validation (new subsubsection in §02; table row update)
+
+Updated the `text` row in the Per-Type Validation table in §02 to reference the new
+constraints. Added a dedicated `\subsubsection*{text Field Pattern Validation}`
+subsubsection documenting the full sequential check order.
+
+**Sequential validation for `text` fields:**
+1. Required check (existing, step 1 of general algorithm)
+2. `validation.min_length` — `len(value) < min_length` → fail
+3. `validation.max_length` — `len(value) > max_length` → fail
+4. `validation.pattern` — compile RE2 regex, test full match → fail with
+   `validation.pattern_hint` if present, else generic message
+5. Any failure → re-prompt (same 3-attempt limit as general algorithm)
+
+**RE2 vs ECMA 262 (normative):**
+- Schema spec says "ECMA 262" for JSON Schema / browser validator compatibility.
+- Runtime uses Go `regexp` (RE2 semantics), not a full ECMA 262 engine.
+- ECMA 262 features absent from RE2 (lookahead, lookbehind, backreferences) are
+  **rejected at schema load time** with a specific validation error naming the field
+  and the unsupported construct.
+- Runbook authors should restrict patterns to the RE2/ECMA 262 common safe subset:
+  character classes, quantifiers, anchors, alternation, non-capturing groups.
+
+### 3. §14 Input Provider Framework Updates
+
+Two additions to the `provider/collect` request schema:
+
+**`visible: bool` (new per-field property)**
+- Pre-evaluated by the executor from the field's `when` expression before dispatch.
+- Always `true` when no `when` is declared.
+- CLI providers SHOULD skip fields where `visible: false`.
+- Rich UI providers SHOULD show/hide fields dynamically as the user fills in earlier
+  fields (re-evaluating `when` client-side without a round-trip to the executor).
+
+**`validation` object (new per-field property)**
+- Carries all client-side validation constraints so UI providers can enforce them
+  before submitting, reducing round-trips.
+- Properties: `pattern`, `patternHint`, `minLength`, `maxLength` (text fields);
+  `min`, `max`, `step` (numeric/date fields); `min_selections`, `max_selections`
+  (multi-select fields).
+- The executor **always** re-validates server-side regardless of provider enforcement.
+- The request JSON example in §14 updated to show `visible` on all three fields and
+  `validation` (minLength/maxLength/pattern/patternHint) on the `description` text
+  field.
+
+---
+
+## Sections Modified
+
+| File | Changes |
+|------|---------|
+| `sections/02-architecture.tex` | (1) Updated `text` row in Per-Type Validation table; (2) Added `text Field Pattern Validation` subsubsection with sequential check algorithm and RE2 vs ECMA 262 normative note; (3) Added `Conditional Field Evaluation Contract` subsubsection with evaluation model, provider integration strategies, variable-binding-on-skip rules, and load-time forward reference check |
+| `sections/14-input-provider-framework.tex` | (1) Added `visible: bool` to all fields in `provider/collect` request JSON example; (2) Added `validation` object to `description` text field in example; (3) Replaced `Type-specific constraints` bullet with `visible` and `validation` bullets in Contract requirements, with full prose for both; (4) Retained all existing type-specific constraint sub-items under `validation` |
+
+---
+
+## Contracts Added / Extended
+
+1. **Conditional field evaluation algorithm** — pull model, left-to-right, `when`
+   evaluated against (collected-so-far ∪ global scope), skip = no binding
+2. **Forward reference check** — schema-load-time rejection of same-step forward refs
+   in `when` expressions
+3. **`text` pattern validation sequence** — 5-step ordered check with re-prompt loop
+4. **RE2 constraint (normative)** — ECMA 262 lookahead/lookbehind/backreferences
+   rejected at load time; safe subset documented
+5. **`visible` field in `provider/collect` request** — pre-evaluated `when` flag for
+   provider-side conditional rendering
+6. **`validation` object in `provider/collect` request** — client-side validation
+   constraints passed to provider for pre-submission enforcement
+
+---
+
+## Cross-Section Consistency Notes
+
+- **§03 (John, Schema):** This record is the runtime complement. John's schema additions
+  define the YAML structure for `when`, `validation.pattern`, `validation.min_length`,
+  `validation.max_length`, `validation.pattern_hint`; this record defines the executor
+  semantics.
+- **§06 (Events):** The existing `CollectorRequired` re-prompt event is unchanged.
+  Conditional skipping does not emit a trace event (skipped fields are silently absent
+  from bindings).  Consider adding a `input/field_skipped` event in a future pass if
+  audit trail granularity requires it.
+- **§11 (Governance / Redaction):** Skipped fields produce no variable bindings and
+  therefore produce no values for redaction rules to apply to. Redaction rules
+  referencing a conditionally-skipped field's variable are silently no-ops.
+- **§14 (Input Provider Framework):** The `validation` object in `provider/collect`
+  is advisory for providers; the §02 contract is the normative source of truth for
+  runtime enforcement.
+
+---
+
+**End of decision record.**
+
+---
+
+## ken-field-types-p2
+
+# Executor Contract — P2 Field Types (ephemeral, autocomplete, format validation)
+
+**Author:** Ken (Systems Architect)
+**Date:** 2026-04-18
+**Requested by:** ormasoftchile
+**Status:** DECISION RECORD — changes applied to §02, §03, and §14
+
+---
+
+## Context
+
+John is extending §03 (schema spec) with three P2 features:
+1. **`ephemeral: true`** — field values redacted from audit log, not persisted
+2. **`type: autocomplete`** — live search field with debounced provider calls
+3. **`format: yaml|json`** on multiline text — structural parse validation
+
+This record documents the runtime and provider-framework contracts for all three,
+complementing the P0 executor contract (`ken-field-types-executor.md`) and the P1
+contract (`ken-field-types-p1.md`).
+
+---
+
+## Decisions
+
+### 1. Ephemeral Field Handling (§02 — Collector Field Validation Contract)
+
+Added `\subsubsection*{Ephemeral Field Handling}` (label: `sec:ephemeral-field-handling`)
+inside the existing `Collector Field Validation Contract` subsection in §02, after the
+Error Variable Schema subsubsection.
+
+**Audit redaction contract:**
+- After a field value passes all validation checks, the JSONL trace writer checks
+  `VariableScope.IsEphemeral(key)` before serialising each variable.
+- If `ephemeral: true`: the JSONL audit record stores `"[REDACTED]"` as the value.
+- The actual value IS placed in the in-memory `VariableScope` and is available to all
+  downstream steps via normal template expressions.
+- The actual value is **NEVER written to disk** — not to `trace.jsonl`, not to
+  `snapshots/<stepID>.json`, not to any checkpoint or archive.
+
+**Go interface contract:**
+```go
+// VariableScope must expose this method.
+IsEphemeral(key string) bool
+```
+The JSONL trace writer is the sole caller; no other layer applies redaction.
+
+**Tool step compatibility:**
+Ephemeral values MAY be passed to `type: tool` steps as arguments. The tool receives
+the plaintext value. This is an audit redaction feature, not end-to-end encryption.
+
+**Suspension/resume constraint:**
+Ephemeral values are in-memory only. On run suspension (`wait_for_event` / `approve`),
+the in-memory scope is not persisted; ephemeral values are dropped. On resume they are
+absent from the reconstructed scope. Documented constraint:
+
+> Steps that depend on ephemeral variables MUST appear before any `wait_for_event` or
+> `approve` step that could suspend the run.
+
+The schema validator SHOULD emit a load-time warning (not hard error in v2.0) if an
+ephemeral variable is referenced in a step that follows a suspendable step.
+
+---
+
+### 2. Autocomplete Search Protocol (§14 — new subsection)
+
+Added `\subsection{Autocomplete Search Protocol}` (label: `sec:autocomplete-search-protocol`)
+to §14 Input Provider Framework, between the Dynamic Options Protocol subsection and the
+Provider Capability Matrix.
+
+**New RPC method: `inputProvider/search`**
+
+Request:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "search-1",
+  "method": "inputProvider/search",
+  "params": {
+    "provider":  "service-registry",
+    "field":     "query",
+    "query":     "pay",
+    "minChars":  2,
+    "runId":     "20260418T142300-abc12345",
+    "variables": { "region": "us-west" }
+  }
+}
+```
+
+Response:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "search-1",
+  "result": {
+    "results": [
+      { "value": "payments-api", "label": "Payments API" },
+      { "value": "payroll-svc",  "label": "Payroll Service" }
+    ],
+    "hasMore": false
+  }
+}
+```
+
+**Key decisions:**
+- `variables` is included in every request so the provider can filter contextually.
+- `hasMore: true` signals the UI to display "Showing top N results — keep typing to narrow."
+- Providers MUST return within **500 ms**; timeout → empty results, operator can retry.
+- `query: ""` is a valid request used for initial focus and CLI degradation.
+- CLI degradation: the `prompt` provider and all built-in providers declare `search: false`;
+  the run engine issues a single call with `query: ""` and presents results as a select.
+
+**Capability matrix update:**
+Added `search` column to the Provider Capability Matrix in §14:
+
+| Provider    | …getOptions | search |
+|-------------|-------------|--------|
+| `prompt`    | No          | No     |
+| `env`       | No          | No     |
+| `file`      | No          | No     |
+| `workspace` | No          | No     |
+
+Rich UI providers (VS Code extension) SHOULD declare `search: true`. Third-party
+providers that implement live search must declare `search: true` in their capability
+advertisement.
+
+**Capability declaration example updated:**
+Added `"search": true` to the `provider/initialize` example in §14.
+
+---
+
+### 3. Format Validation Contract (§02 — Per-Type Validation + text subsubsection)
+
+**Per-Type Validation table (`text` row):**
+Updated the `text` row to reference `format: yaml|json` structural parse validation.
+Variable storage remains `JSON string (raw; parsed form not stored)`.
+
+**`text` Field Validation sequence (extended to 6 steps):**
+The existing 5-step sequence in `\subsubsection*{text Field Pattern Validation}` was
+extended:
+
+1. Required check
+2. `validation.min_length` check
+3. `validation.max_length` check
+4. `validation.pattern` check (RE2)
+5. **`format` check (new):**
+   - `format: yaml` → `yaml.Unmarshal([]byte(value), &interface{})`. On error: re-prompt
+     with _"Value must be valid YAML."_
+   - `format: json` → `json.Unmarshal([]byte(value), &interface{})`. On error: re-prompt
+     with _"Value must be valid JSON."_
+   - Parse result is discarded; value remains a raw string. Downstream traversal uses
+     `fromYAML`/`fromJSON` template functions.
+   - If both `validation.pattern` and `format` are declared, both must pass; pattern
+     runs first.
+6. Re-prompt: **combined total** of 3 attempts across all validation steps (not 3 per check).
+
+**`fromYAML` / `fromJSON` template functions (§03 cross-reference):**
+Added `fromYAML` and `fromJSON` to the built-in template function table in §03
+(`subsec:expressions`) with signatures:
+- `fromYAML(s string) interface{}`
+- `fromJSON(s string) interface{}`
+
+Added a `\paragraph{fromYAML and fromJSON}` note in §03 explaining that they parse the
+raw string variable on each template evaluation. A parse error in a template expression
+is a hard step failure. The `format` validation check at collection time guarantees the
+raw string is structurally valid by the time downstream steps execute.
+
+Cross-reference in §02 updated from non-existent `sec:template-expressions` to
+the existing `subsec:expressions` label in §03.
+
+---
+
+## Sections Modified
+
+| File | Changes |
+|------|---------|
+| `sections/02-architecture.tex` | (1) Extended `text` row in Per-Type Validation table to mention `format` validation; (2) Replaced 5-step text validation sequence with 6-step sequence adding the format check and clarifying the 3-attempt combined limit; (3) Added `Ephemeral Field Handling` subsubsection (~50 lines) after Error Variable Schema; (4) Fixed cross-reference from `sec:template-expressions` to `subsec:expressions` |
+| `sections/14-input-provider-framework.tex` | (1) Added `Autocomplete Search Protocol` subsection with full `inputProvider/search` request/response schema and CLI degradation contract (~90 lines); (2) Extended capability matrix table with `search` column; (3) Added explanatory note about CLI degradation for `search: false`; (4) Added `"search": true` to capability declaration example |
+| `sections/03-schema-vnext.tex` | (1) Added `fromYAML` and `fromJSON` rows to the built-in template function table; (2) Added `fromYAML and fromJSON` paragraph documenting the parse-on-eval behaviour and cross-referencing the `format` collector feature |
+
+---
+
+## Contracts Added
+
+1. **Ephemeral field audit redaction** — `VariableScope.IsEphemeral(key string) bool`
+   interface requirement; JSONL writer substitution rule; suspension/resume constraint.
+2. **`inputProvider/search`** — new JSON-RPC method; full request/response schema;
+   500 ms timeout; `hasMore` signalling; CLI degradation path.
+3. **`format: yaml|json` validation** — parse-only structural check; combined 3-attempt
+   limit; raw-string storage invariant; `fromYAML`/`fromJSON` for downstream traversal.
+
+---
+
+## Cross-Section Consistency Notes
+
+- §03 (John): The `format` field and `ephemeral` flag are schema additions John owns.
+  This record documents what the executor does with those values at runtime. The
+  `fromYAML`/`fromJSON` table rows and paragraph in §03 are additive; they do not
+  overlap with John's P2 field-type changes.
+- §14 (Provider Framework): `inputProvider/search` is a peer to `inputProvider/getOptions`.
+  Both live in the same subsystem. The capability matrix addition (`search` column) is
+  additive and does not break existing provider handshake contracts — providers that do
+  not advertise `search` are treated as `search: false`.
+- §06 (Events): No new event kinds introduced for autocomplete search. The RPC exchange
+  is point-to-point between run engine and provider, not fan-out events.
+- §12 (Tracing): Ephemeral redaction is enforced by the trace writer, which already owns
+  all serialisation to `trace.jsonl`. The `IsEphemeral` check is the single enforcement
+  point; no other layer is modified.
+
+---
+
+**End of decision record.**
+
+---
+
+## ken-gap1-gap2-runtime
+
+### 2026-04-19: Business Calendar Engine + Quorum Tracker architecture
+**By:** Ken
+**What:** GAP-1: Business Calendar Engine converts timeout_business_days to a wall-clock deadline at step activation (one-time conversion). Built-in calendars: default, us-federal, uk-banking. GAP-2: Quorum Tracker records approvals/rejections per step instance, enforces mode (all/any/quorum), detects impossible quorum early. Both compose freely.
+**Why:** Resolves two critical stress-test gaps. Enables financial approval and FDA release runbooks.
+
+---
+
+## ken-include-executor-contract
+
+### 2026-04-19: include step executor contract
+**By:** Ken
+**What:** type:include executor: (1) resolve runbook, (2) cycle check, (3) eval when, (4) apply with overrides, (5) inline expand steps into current queue. No new run context, no separate audit entry, shared variable scope. Cycle detection is load-time DFS — executor never sees cycles. future type:call (isolated scope) deferred post-v2.0.
+**Why:** Rename from invoke. Clarifies that include is inline composition, not a sub-procedure call.
+
+---
+
+## ken-stress-test-verdict
+
+# Schema Stress Test Verdict
+
+**Author:** Ken (Software Architect)  
+**Date:** 2026-04-18  
+**Type:** Architecture Review Finding  
+**Scope:** §02 Architecture, §03 Schema, §11 Governance
+
+---
+
+## Executive Summary
+
+**Overall Schema Readiness: NEEDS TARGETED FIXES**
+
+After analyzing the 10-runbook corpus against the gert v2 schema specification, I find the schema is **architecturally sound for 80% of operational use cases** but has **3 systemic gaps that block enterprise governance workflows**.
+
+### Verdict Breakdown
+
+| Metric | Value |
+|--------|-------|
+| PASS cleanly | 4/10 (40%) |
+| PASS with workarounds | 4/10 (40%) |
+| FAIL current schema | 2/10 (20%) |
+
+### Top 3 Systemic Gaps
+
+| Gap | Severity | Affected Runbooks | Description |
+|-----|----------|-------------------|-------------|
+| **S1: Business-day timeout** | CRITICAL | 3, 7, 8 | `timeout` uses wall-clock duration; enterprise workflows require business-day SLAs |
+| **S2: M-of-N quorum approval** | CRITICAL | 7, 8, 10 | `approvals.min` can't express "3-of-5 board members" with explicit pool |
+| **S3: External event trigger** | HIGH | 8, 9 | No webhook callback mechanism to resume paused runs |
+
+### Recommendation for Team
+
+**Before declaring schema "implementation-ready":**
+
+1. **[CRITICAL]** Add business-day timeout support (§03 + §11)
+   - New fields: `timeout_business_days`, `timeout_calendar`
+   - Effort: Medium
+
+2. **[CRITICAL]** Add M-of-N quorum approval (§03 + §14)
+   - New fields: `approvals.mode`, `approvals.pool`, `approvals.pool_size`
+   - Effort: Medium
+
+3. **[DEFER TO v2.1]** External event trigger (acceptable polling workaround exists)
+
+### Plain Language Summary
+
+The schema is ready for **SRE incident response**, **DevOps deployments**, and **compliance evidence collection**.
+
+The schema is **not yet ready** for **finance approval chains**, **HR onboarding**, or **regulated industry workflows** (FDA, SOC2 attestation chains) that require business-day SLAs and multi-party governance.
+
+**Two focused fixes** (business-day timeout + quorum approval) will close this gap without redesign.
+
+---
+
+## Full Report
+
+See: `.squad/tmp/ken-stress-conclusions.md`
+
+---
+
+## Proposed Action
+
+- [ ] John: Review and adjust translations if needed based on gap findings
+- [ ] Ken: Draft schema extension proposals for S1 and S2
+- [ ] Team: Decide on v2.0 scope — include S1/S2 or defer to v2.1?
+
+---
+
+## ken-wait-for-event-runtime
+
+### 2026-04-19: wait_for_event runtime architecture
+**By:** Ken
+**What:** wait_for_event requires: (1) Event Dispatcher component in gert serve, (2) WAITING run state, (3) durable run serialization for restart survival, (4) serve-only constraint (gert run mode must reject). Webhook transport uses HMAC-authenticated /events/{run-id}/{event-id} endpoint.
+**Why:** First-class inbound event handling for runbooks. Enables Prometheus webhook receive, SIEM event handling, external approval callbacks, etc.
+
+---
+
+## leslie-diagrams-complete
+
+### 2026-04-19: Diagram coverage complete
+**By:** the user (via Leslie)
+**What:** All missing diagrams from the audit have been drawn using TikZ. Every major section in the design document now has at least one visual diagram.
+**New diagrams:**
+- `fig:dependency-direction` — §02: dependency arrow convention legend
+- `fig:cli-step-execution` — §03: CLI step parse→govern→shell→exec→capture→exit flow
+- `fig:tool-invocation-flow` — §03: tool resolve→transport→auth→invoke→capture flow
+- `fig:include-inlining` — §03: child runbook expansion into parent shared scope
+- `fig:branch-logic` — §03: condition evaluation + first-match arm execution
+- `fig:iterate-loop` — §03: initialize→test→body→increment loop with max guard
+- `fig:parallel-fanout` — §03: fork→N concurrent branches→join→merge variables
+- `fig:collector-triad` — §03: choice/decision/collector side-by-side input modes
+- `fig:compensation-flow` — §03: saga rollback — compensate in reverse order on failure
+**Total diagram count:** 15 (6 prior + 9 new)
+**Build status:** CLEAN — 0 hard errors, 325 pages
+**Commit:** dc891eb
+
+---
+
+## leslie-minted-mass-conversion
+
+### 2026-04-19: All code blocks converted to minted
+**By:** the user (via Leslie)
+**What:** All YAML/Go/JSON verbatim and lstlisting environments across all sections converted to minted. minted is now the sole mechanism for code blocks in this document.
+**Count:** 260 blocks converted across 13 files (yaml: 96, json: 85, go: 24, bash: 13, text: 42). 42 blocks intentionally left as verbatim (ASCII trees, HTTP headers, CLI terminal output, error messages, file path trees).
+**Diagrams added:**
+- `fig:governance-enforcement-points` — §07 Security, 4-stage pipeline showing governance checkpoints
+- `fig:event-flow-timeline` — §06 Runtime Events, vertical timeline of a two-step run with governance approval
+- `fig:provider-resolution-flow` — §14 Input Provider Framework, 6-stage resolution pipeline for `from:` bindings
+**Notes:**
+- Removed `\usepackage{listings}` from main.tex (conflicted with minted v3's tocbasic lol extension)
+- Added `scripts/pypath/python3` wrapper routing latexminted to Python 3.13 (Python 3.14 breaks latexminted 0.5.0 argparse API)
+- Global TikZ styles updated: `text centered` → `align=center` to support multiline `\\` in node labels
+- Added `scripts/convert_to_minted.py` as a reusable conversion tool
+
+---
+
+## leslie-minted-syntax-highlighting
+
+### 2026-04-19: minted adopted for syntax highlighting
+**By:** the user (via Leslie)
+**What:** minted package (Pygments-based) for YAML/Go/JSON syntax highlighting in code blocks. Requires --shell-escape on pdflatex and Python 3 + Pygments on build machine.
+**Style:** friendly, frame=leftline, no line numbers, small font
+**Languages configured:** yaml, go, json
+**Why:** Better readability for YAML runbook examples — proper colour-coded output vs plain verbatim
+**Migration:** blocks converted to minted on-demand, not all at once
+
+---
+
+## leslie-tikz-global-diagrams
+
+### 2026-04-19: TikZ adopted as global diagramming standard
+**By:** the user (via Leslie)
+**What:** TikZ/PGF is the single diagramming approach for all gert v2 design doc figures. No external tools (Graphviz, draw.io, PlantUML, Mermaid). All diagrams are inline LaTeX source using the styles defined in main.tex preamble.
+**Libraries:** arrows.meta, automata, positioning, shapes.geometric, fit, chains, calc, backgrounds
+**Node styles defined:** stepbox, catbox, gertarrow, gertfit
+**Why:** Zero external dependencies, ships with TeX Live, inline in .tex source, consistent styling, pdflatex compatible.
+**First diagram:** fig:step-type-taxonomy in §03
+
+---
+
+## Prior Decisions Archive
 
 **4. Provider Capability Matrix (§14.6.4)**
 - Table showing which built-in providers support which step types

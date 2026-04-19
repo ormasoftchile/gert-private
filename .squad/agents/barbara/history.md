@@ -34,6 +34,37 @@ This is a LaTeX document using the MastersThesis class. Sections are in `design/
 
 ## Learnings
 
+### 2026-04-19 — Correctness Strategy Authored
+
+**What was done:**
+Created comprehensive correctness strategy document at `.squad/tmp/barbara-correctness-strategy.md` in response to Cristian's question: "how do you plan to make sure the development is correct?"
+
+**Strategy covers:**
+1. **Spec as law:** Every MUST/MUST NOT/SHALL rule in spec files maps to tagged test (`// spec: {file} §{section}`). Spec coverage tool (Phase 0 deliverable) enforces ≥95% coverage by Phase 13.
+2. **Test types by phase:** Defined test mix for all 14 phases (Unit → Contract → Integration → Golden trace → Acceptance corpus).
+3. **Spec compliance tests:** Tagging pattern creates traceable link from spec rule → test → implementation. Coverage tool cross-references and reports gaps.
+4. **Golden traces:** Deterministic JSONL trace comparison with normalized timestamps/IDs. HMAC verification tests for Phase 11+. Updated via `go test -update`.
+5. **Phase gates:** 6-part exit criteria (deliverables, spec checklist, test coverage ≥80%, Ken's review, integration tests, no regressions).
+6. **Brian's TDD workflow:** 10-step loop: read spec → extract MUST rules → write failing tests with tags → implement → pass → refactor → verify coverage → submit to Ken.
+7. **Ken as spec reviewer:** Reviews each phase for spec alignment, interface correctness, dependency rules, test coverage, error handling, completeness. Approval gates next phase.
+
+**Key design decisions:**
+- Spec coverage tool is a Phase 0 deliverable (`gert dev spec-coverage` command)
+- Golden traces used starting Phase 3 (Runtime Core) for deterministic trace regression
+- HMAC chain verification tests added in Phase 11 (Evidence & Replay)
+- Ken's approval required before any phase can proceed to next
+- Test tag format: `// spec: {file} §{section} — {RULE_TEXT}`
+- Phase gate includes phase-specific spec compliance checklist derived from PLAN.md spec references
+
+**Decision points:**
+- Spec compliance is measurable and enforced (not aspirational)
+- TDD is mandatory workflow for Brian, not optional
+- Ken is the spec authority; ambiguities go to Ken, not guessed by implementer
+- Golden trace normalization handles non-deterministic fields (timestamps, UUIDs, durations)
+- Spec drift is caught in review, not in production
+
+**Output:** `.squad/tmp/barbara-correctness-strategy.md` (16.8 KB, 7 sections, code examples throughout)
+
 ### 2026-04-18 — Implementation plan authored (PLAN.md)
 
 **What was done:**

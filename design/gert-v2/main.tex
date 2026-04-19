@@ -59,7 +59,8 @@
   baselinestretch=1.1,
   breaklines=true,
   breakanywhere=false,
-  autogobble=true
+  autogobble=true,
+  ignorelexererrors=true   % suppress red error-token boxes (<string>, <int>, etc.)
 }
 \setminted[yaml]{
   style=friendly,       % clean, readable colour scheme
@@ -82,12 +83,6 @@
   framesep=6pt,
   rulecolor=\color{black!25}
 }
-% Suppress Pygments error-token red boxes (e.g. <string>, <int> template tokens in JSON/YAML/Go)
-% friendly.style.minted defines PYG@tok@err → sets PYG@bc to fcolorbox (red border).
-% Redefine PYG@tok@err as no-op AFTER the style file loads (AtBeginDocument runs after minted's hooks).
-\makeatletter
-\AtBeginDocument{\@namedef{PYG@tok@err}{}}
-\makeatother
 % Convenience command for inline code
 \newcommand{\yinline}[1]{\mintinline{yaml}{#1}}
 

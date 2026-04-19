@@ -101,6 +101,50 @@
 **What:** Phase 2 will extend the form editor to support branches and iterate nesting (tree-based editing). New TreeNode structure for internal representation.
 **Why:** Phase 1 was flat/linear only. Phase 2 adds full tree editing capability, preserving branch/conditional data.
 
+---
+
+## 2026-04-19T22:34:59Z: Phase 1 Parser Implementation Approved
+
+**By:** Ken (Software Architect)  
+**Status:** APPROVED  
+**Priority:** CRITICAL (unblocks Phase 2)
+
+**Decision:** Phase 1 parser implementation (`v2/internal/parser/`) is production-ready and approved to proceed to Phase 2.
+
+**Review Summary:**
+- All 10 evaluation criteria passed (two-phase validation, nested parallel, signal allow-list, path normalization, error types, step dispatch, ParsedRunbook completeness, test quality, package boundaries, vet clean)
+- 14/14 tests passing
+- `go vet ./...` clean (no warnings)
+- All 10 runbook fixtures (r01–r10) parse successfully
+
+**Evidence:**
+- Read 6 parser files: `parser.go`, `unmarshal.go`, `validate_structural.go`, `validate_semantic.go`, `errors.go`, `parser_test.go`
+- Ran `go test ./internal/parser/... -v -count=1` → **14/14 PASS**
+- Ran `go vet ./...` → **clean**
+
+**Non-Blocking Suggestions for Phase 2:**
+
+| # | Location | Suggestion |
+|---|----------|------------|
+| S1 | `pkg/parser/parser.go:33` | Update interface comment: semantic validation now lives in parser |
+| S2 | `validate_semantic.go:walkFlowNodes` | Detect nested flow-level `ParallelNode` |
+| S3 | `unmarshal.go` switch | Add comment for `StepTypeExtension` pass-through |
+| S4 | `validate_semantic.go:collectStepIDs` | Add `IterateNode.ID` and `ParallelNode.ID` to uniqueness check |
+| S5 | `parser_test.go` structural tests | Assert specific error codes (not just `err != nil`) |
+| S6 | `ParsedRunbook.Warnings` | Populate deprecated-field warnings in Phase 2+ |
+
+**Rationale:**
+- Two-phase ordering is unambiguous: structural errors short-circuit before semantic validation
+- Locked decisions (nested parallel forbidden, signal allow-list, path normalization) correctly implemented
+- Error types are structured (ValidationError with code, field, message) and caller-friendly
+- Tests are spec-linked via testutil.Tag; 14/14 passing
+- Package boundaries clean; internal/parser unexported, only Parser/ParsedRunbook/ParseWarning exported
+
+**Impact:**
+- Parser ready for integration into serve APIs (backend for CLI and editor)
+- Unblocks Phase 2: Planner architecture design, engine integration, serve endpoint for validation diagnostics
+- Unblocks Phase 2 parallel work: Brian (S2/S4/S5 fixes), Barbara (testutil schema types)
+
 ### 2026-04-15: No cross-repo dependencies in design/gert-v2
 **By:** Gon (Lead Architect)
 **What:** `/design/gert-v2` repo will NOT depend on `/gert/v2` or other cross-repo paths during build. All references are doc-only.

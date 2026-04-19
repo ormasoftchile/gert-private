@@ -808,3 +808,42 @@ Barbara addressed all 7 defects from the initial Phase 0 rejection. Verified eac
 **Decision recorded:** `.squad/decisions/inbox/ken-stepspec-interface.md`
 
 **Impact:** Type-safe step dispatch in engine; compiler now ensures all step types implement `StepSpec`.
+
+---
+
+## 2026-04-19: Phase 1 Architectural Review
+
+**Task:** Review Brian's parser implementation (`v2/internal/parser/`).
+
+**Files reviewed:**
+- `internal/parser/parser.go`, `unmarshal.go`, `validate_structural.go`, `validate_semantic.go`, `errors.go`, `parser_test.go`
+- `pkg/parser/parser.go` (interface)
+- `pkg/engine/stepspec.go` (StepSpec interface, Ken's own addition)
+- `pkg/schema/step.go`, `pkg/schema/steps.go`
+
+**Commands run:**
+- `go test ./internal/parser/... -v -count=1` — 14/14 PASS
+- `go vet ./...` — clean
+
+**Verdict: APPROVED**
+
+**What is good:**
+- Two-phase validation: structural short-circuits correctly before semantic
+- Nested parallel detection covers step-type parallel via `inParallel` flag
+- Signal allow-list uses injectable `platform.AllowedSignals()` (FakePlatform-testable)
+- Path normalization covers CLI.Workdir and IncludeSpec.Include.Runbook recursively
+- `ValidationError` carries Code + Field + Message — structured for callers
+- JSON Schema catches unknown step types structurally
+- All tests use `testutil.Tag` for spec traceability
+- Package boundary clean: `internal/parser` correctly not exported
+- `go vet` clean
+
+**Non-blocking suggestions logged:**
+1. `pkg/parser/parser.go:33` — interface comment says semantic is Planner's job (now inaccurate)
+2. Flow-level nested `ParallelNode` not detected (only step-type parallel is checked)
+3. `StepTypeExtension` silent pass-through needs explanatory comment
+4. `IterateNode.ID` / `ParallelNode.ID` not in uniqueness check
+5. Structural-error tests should assert error codes, not just `err != nil`
+6. `ParsedRunbook.Warnings` never populated
+
+**Decision file:** `.squad/decisions/inbox/ken-phase1-review.md`

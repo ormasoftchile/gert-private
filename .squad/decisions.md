@@ -1789,7 +1789,7 @@ Integrating now ensures:
 
 ---
 
-## 2026-04-19T21:32:56Z: Event Sequencing for Parallel Blocks
+## ✅ LOCKED: Event Sequencing for Parallel Blocks
 
 **By:** Ken (Software Architect)  
 **Status:** PROPOSED  
@@ -1811,9 +1811,11 @@ Integrating now ensures:
 
 **Impact:** Phase 3 (per-branch buffer), Phase 5 (join flushes in order), Phase 11 (replay), spec update to §06
 
+**Locked by:** Cristian — 2026-04-19
+
 ---
 
-## 2026-04-19T21:32:56Z: Nested Parallel Blocks
+## ✅ LOCKED: Nested Parallel Blocks
 
 **By:** Ken (Software Architect)  
 **Status:** PROPOSED  
@@ -1830,9 +1832,11 @@ Integrating now ensures:
 
 **Impact:** Phase 1 (semantic validation), spec update to §03
 
+**Locked by:** Cristian — 2026-04-19
+
 ---
 
-## 2026-04-19T21:32:56Z: Event Consumption Semantics for wait_for_event
+## ✅ LOCKED: Event Consumption Semantics for wait_for_event
 
 **By:** Ken (Software Architect)  
 **Status:** PROPOSED  
@@ -1849,9 +1853,11 @@ Integrating now ensures:
 
 **Impact:** Phase 9 (EventDispatcher consume semantics), spec update to §03
 
+**Locked by:** Cristian — 2026-04-19
+
 ---
 
-## 2026-04-19T21:32:56Z: Trace Event for Event Arrival
+## ✅ LOCKED: Trace Event for Event Arrival
 
 **By:** Ken (Software Architect)  
 **Status:** PROPOSED  
@@ -1863,9 +1869,11 @@ Integrating now ensures:
 
 **Impact:** Phase 3 (event catalog), Phase 9 (emit when event matches), spec update to §06
 
+**Locked by:** Cristian — 2026-04-19
+
 ---
 
-## 2026-04-19T21:32:56Z: Windows Support Tier
+## ✅ LOCKED: Windows Support Tier
 
 **By:** Ken (Software Architect)  
 **Status:** PROPOSED  
@@ -1882,9 +1890,11 @@ Integrating now ensures:
 
 **Impact:** Phase 13 (CI matrix with `continue-on-error: true` on Windows), documentation
 
+**Locked by:** Cristian — 2026-04-19
+
 ---
 
-## 2026-04-19T21:32:56Z: Signal Source Support
+## ✅ LOCKED: Signal Source Support
 
 **By:** Ken (Software Architect)  
 **Status:** PROPOSED  
@@ -1902,6 +1912,8 @@ Integrating now ensures:
 **Rationale:** Balances portability (SIGINT works everywhere) with power-user needs (SIGUSR1 for custom workflows on Linux)
 
 **Impact:** Phase 1 (platform-aware signal validation), Phase 5 (signal registration), spec update to §03
+
+**Locked by:** Cristian — 2026-04-19
 
 ---
 

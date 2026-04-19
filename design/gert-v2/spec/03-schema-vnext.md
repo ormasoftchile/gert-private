@@ -828,6 +828,14 @@ Event source semantics:
 - `webhook` — runtime opens HTTP POST listener; sender POSTs a JSON body.
 - `message` — runtime subscribes to a message-queue topic or queue name given by `event.id`.
 - `signal` — runtime registers a named OS or process signal handler.
+
+  **Allowed signals by platform:**
+  - Linux: `SIGINT`, `SIGTERM`, `SIGUSR1`, `SIGUSR2`, `SIGHUP`
+  - macOS: `SIGINT`, `SIGTERM`, `SIGUSR1`, `SIGUSR2`, `SIGHUP`
+  - Windows: `SIGINT` only (CTRL_C_EVENT)
+
+  Semantic validation MUST reject unsupported signals for the host OS at parse time.
+
 - `channel` — runtime uses a gert-internal named channel.
 
 Runtime endpoint available as `{{ .gert.event.<id>.endpoint }}`. Webhook token available as `{{ .gert.event.<id>.token }}` (single-use, expires on resume or timeout).
@@ -974,6 +982,8 @@ Executes a set of independent step groups concurrently, then joins. New in v2.
 | `branches` | array | Yes | Each branch is an independent group |
 | `join.wait_for` | enum | No | `all \| any \| majority` (default: `all`) |
 | `join.on_failure` | enum | No | `fail \| continue` (default: `fail`) |
+
+**Constraint:** Nested `parallel` steps are forbidden in v2.0. A `parallel` step MUST NOT appear as a step inside a parallel branch. Semantic validation MUST reject this with error `parallel/nested-forbidden`.
 
 Parallel branches are isolated from each other's variable writes during execution. After join, all `capture` values from all branches are merged into the caller's variable map. Write conflicts (two branches writing the same variable) → last-writer-wins, warning emitted.
 

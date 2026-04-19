@@ -203,6 +203,49 @@ Every event carries a mandatory envelope. Consumers MUST tolerate unknown fields
 
 **Required:** YES if retry is attempted. Optional in v2.0 (retry not yet implemented).
 
+#### `step/resumed`
+
+**Emitted:** When a step transitions from WAITING state back to RUNNING state (e.g., after a `wait_for_event` receives its event).
+
+```json
+{
+  "step_id":      "<string>",
+  "resume_reason": "<string>"
+}
+```
+
+- `resume_reason`: `"event_received"` | `"timeout_expired"` | `"cancelled"`
+
+**Required:** YES, for every step that transitions from WAITING to RUNNING.
+
+---
+
+### External Event Events
+
+#### `event/received`
+
+Emitted when an external event arrives and matches a waiting `wait_for_event` step.
+
+```json
+{
+  "event_id":      "<string>",
+  "source":        "<string>",
+  "channel":       "<string>",
+  "payload":       "<object>",
+  "filter_matched": "<string>"
+}
+```
+
+- `event_id` — the step ID of the waiting `wait_for_event` step
+- `source` — event source kind: `webhook` | `message` | `signal` | `channel`
+- `channel` — the channel name (for `source: channel`)
+- `payload` — the event payload (captured verbatim for audit)
+- `filter_matched` — the filter expression that matched (if any)
+
+**Ordering:** Emitted BEFORE the `step/resumed` event (which transitions the step from WAITING → RUNNING).
+
+**Required:** YES, for every external event that matches a waiting step.
+
 ---
 
 ### Governance Events

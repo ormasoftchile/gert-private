@@ -139,3 +139,28 @@ Implemented the full Phase 1 parser for gert v2 runbooks. All 26 tests pass; all
 ### Cross-Agent Notes
 - For Barbara/Ken: schema.Step needs a JoinSpec field for parallel steps — current design loses join: data
 - For John: ToolInvocation.args relaxed to map[string]any — spec update needed
+## Learnings - Phase 1 Correctness Fixes (2026-04-19)
+
+Fixed 5 parser correctness gaps (S1-S5) flagged by Ken Phase 1 review.
+
+S1: Updated stale comment in v2/pkg/parser/parser.go (semantic validation now in parser, not Planner).
+S2: walkFlowNodes now emits parallel/nested-forbidden for flow-level ParallelNode when inParallel==true. New test: TestParser_NestedParallelNodeForbidden.
+S3: Added explicit StepTypeExtension case with comment in unmarshal.go.
+S4: collectStepIDs now counts fn.Iterate.ID and fn.Parallel.ID. New tests: TestParser_IterateNodeDuplicateID, TestParser_ParallelNodeDuplicateID.
+S5: Added assertErrorCode helper; 9 tests now assert specific error codes.
+Build: go build ./... go vet ./... go test ./internal/parser/... -> 23 PASS.
+
+---
+
+## 2026-04-19: Phase 2 Kickoff
+
+**Status:** Approved and orchestrated
+
+Parser Phase 1 fixes complete. Ready for Phase 2 planning logic.
+
+**Deliverables:**
+- validate_semantic.go, unmarshal.go, parser_test.go, pkg/parser/parser.go modified
+- 23 tests pass (+3 new)
+- All 5 correctness gaps (S1–S5) resolved
+
+**Next:** Implement concrete Planner logic using Ken's interface design. Barbara ready with testutil real types. Build clean, ready for integration.

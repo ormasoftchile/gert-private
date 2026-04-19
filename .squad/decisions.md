@@ -244,3 +244,333 @@
 **Impact:**
 - Engine can now use StepSpec for type-safe dispatch logic
 - Unblocks Phase 2 (ResolvedStep serialization and executor implementation)
+
+---
+
+## 2026-04-19: Parser Phase 1 Correctness Fixes (S1-S5)
+
+**By:** Brian (Go Programmer)
+**Status:** IMPLEMENTED — pending Ken review
+**Scope:** `v2/internal/parser/`, `v2/pkg/parser/parser.go`
+
+---
+
+### S1 — Stale comment (cosmetic)
+
+`v2/pkg/parser/parser.go` interface comment no longer claims semantic validation is "the Planner's job". The parser performs both structural (JSON Schema) and semantic validation.
+
+---
+
+### S2 — Flow-level ParallelNode nested in parallel branch
+
+**Problem:** `walkFlowNodes` only checked `inParallel` for `schema.Step{Type:"parallel"}`. A flow-level `ParallelNode` (`fn.Parallel != nil`) inside a parallel branch was not caught.
+
+**Fix:** Added `inParallel` guard in `walkFlowNodes` before delegating to `validateParallelNode`. Emits `parallel/nested-forbidden` for the outer ParallelNode when `inParallel == true`.
+
+**New test:** `TestParser_NestedParallelNodeForbidden`
+
+---
+
+### S3 — StepTypeExtension silent pass-through (cosmetic)
+
+Added explicit `case schema.StepTypeExtension:` with comment: "Extension steps are validated structurally only; their body is opaque to the parser." No behavior change.
+
+---
+
+### S4 — IterateNode.ID and ParallelNode.ID missing from uniqueness check
+
+**Problem:** `collectStepIDs` recursed into `fn.Iterate.Steps` and `fn.Parallel.Branches` but never incremented `ids[fn.Iterate.ID]` or `ids[fn.Parallel.ID]`. `stepIDExists` already handled these IDs correctly — this was a gap only in the uniqueness collector.
+
+**Fix:** Added `ids[fn.Iterate.ID]++` and `ids[fn.Parallel.ID]++` before recursing into children.
+
+**New tests:** `TestParser_IterateNodeDuplicateID`, `TestParser_ParallelNodeDuplicateID`
+
+---
+
+### S5 — Structural error tests now assert specific codes
+
+**Problem:** 8 structural tests checked only `err != nil`. `TestParser_BranchRequiresAtLeastOneArm` also lacked a code assertion.
+
+**Fix:** Added `assertErrorCode(t, err, code)` helper that uses `errors.As` to unwrap `parser.ValidationErrors` and checks for a specific code. Applied to all 9 tests:
+- 8 structural tests check for `schema/structural`
+- `TestParser_BranchRequiresAtLeastOneArm` checks for `branch/no-arms`
+
+---
+
+### Build result
+
+```
+go build ./...   PASS
+go vet ./...     PASS
+go test ./internal/parser/... -v -count=1   23 tests PASS (was 20 before new tests)
+```
+
+**Impact:** Parser correctness improved. All specified gaps (S1–S5) resolved. New tests validate fixes. Ready for integration with Phase 2 Planner.
+
+---
+
+## 2026-04-19: testutil Real Types
+
+**By:** Barbara (Integrations Specialist)  
+**Date:** 2026-04-20  
+**Status:** APPROVED (implemented, build clean)
+
+## Context
+
+Phase 0 created `v2/pkg/testutil/` with placeholder stubs because Brian's schema/engine types did not yet exist. Phase 1 delivered `pkg/engine`, `pkg/eventbus`, and `pkg/trace`. This decision records how the testutil package was updated to match the real interfaces.
+
+## Decisions
+
+### 1. FakeStepExecutor implements engine.StepExecutor
+
+`engine.StepExecutor.Execute` takes `engine.ResolvedStep` (value, not pointer) and returns `*engine.StepResult`. The fake matches this exactly. Stub `Step` and `StepResult` types were removed.
+
+A compile-time guard was added:
+```go
+var _ engine.StepExecutor = (*FakeStepExecutor)(nil)
+```
+
+### 2. FakeEventDispatcher implements eventbus.EventDispatcher
+
+The real `eventbus.EventDispatcher` interface requires:
+- `Dispatch(ev InboundEvent) error`
+- `Wait(ctx, stepID, EventFilter, timeout) (*InboundEvent, error)`
+- `Cancel(stepID, reason string)`
+
+The stub `Event` and `EventFilter func(Event) bool` types were removed. All three methods now use real types. `Cancel` was added as a new method (was missing from Phase 0).
+
+**Filter semantics:** `eventbus.EventFilter` is a struct (Source, ID, Payload map), not a predicate function. A `matchesFilter(ev, f)` helper was added that checks each non-empty field against the event.
+
+**Cancellation signal:** `DrainAll` and `Cancel` send a nil `*eventbus.InboundEvent` on the delivery channel. Waiters check `ev == nil` to distinguish cancellation from a real event.
+
+**Extra methods retained:** `WaitOnChannel`, `WaitersCount`, `DrainAll` are testutil-specific helpers not in the interface. They were kept and updated to use real types.
+
+### 3. ConcurrentEventCollector collects trace.TraceEvent
+
+The stub `CollectedEvent` struct was removed. The collector now stores `[]trace.TraceEvent` directly. `EventsForStep` extracts `step_id` from the `json.RawMessage` payload using a small unmarshal helper (`stepIDFromPayload`).
+
+### 4. golden.go uses trace.TraceEvent
+
+The stub `TraceEvent` type was replaced with `trace.TraceEvent`. Normalization field names updated: `.At` → `.Timestamp`, `.Seq` → `.Sequence`. The hand-rolled JSONL reader was replaced with `bytes.NewReader`.
+
+## Impact
+
+- Any test code referencing `testutil.Event`, `testutil.EventFilter` (func), `testutil.Step`, `testutil.StepResult`, `testutil.TraceEvent`, or `testutil.CollectedEvent` must be updated to use the real package types.
+- No existing tests outside `pkg/testutil` were found to depend on these stub types.
+- `go build ./...` and `go vet ./...` pass clean.
+
+---
+
+## 2026-04-19: Phase 2 Planner Design
+
+**Date:** 2026-04-20
+**Author:** Ken (Software Architect)
+**Status:** APPROVED
+**Priority:** CRITICAL (blocking Phase 2)
+
+## Decision Summary
+
+Phase 2 Planner architecture establishes interfaces for transforming `*parser.ParsedRunbook` into `*engine.ExecutionPlan`. The design introduces three key interfaces and a concrete stub implementation.
+
+---
+
+## Interface Design Decisions
+
+### 1. Planner Interface Location
+
+**Decision:** Keep `Planner` interface in `pkg/engine/planner.go`; place supporting interfaces (`RunbookLoader`, `ToolRegistry`, `Config`) in `pkg/planner/planner.go`.
+
+**Rationale:**
+- `engine.ExecutionPlan` is already in `pkg/engine/run.go`
+- Avoids import cycles: planner depends on engine (for ExecutionPlan), not vice versa
+- `engine.Planner` is the API the engine consumes; `planner.Config` is how you build one
+- Implementation lives in `internal/planner/` — clean separation of interface from impl
+
+### 2. Planner Interface Signature
+
+**Before (old signature in engine/planner.go):**
+```go
+Plan(ctx context.Context, rb *parser.ParsedRunbook, opts PlanOptions) (*ExecutionPlan, error)
+```
+
+**After (simplified signature):**
+```go
+Plan(ctx context.Context, rb *parser.ParsedRunbook) (*ExecutionPlan, error)
+```
+
+**Rationale:**
+- Configuration moved to `planner.Config` struct at construction time
+- Planner is constructed once with Loader, Tools, BaseDir, MaxIncludeDepth
+- Simplifies the call site — runtime just calls `p.Plan(ctx, rb)`
+- Options that vary per-call (e.g., vars) can be added later without interface change
+
+### 3. RunbookLoader Interface
+
+```go
+type RunbookLoader interface {
+    Load(ctx context.Context, path string) (*parser.ParsedRunbook, error)
+}
+```
+
+**Design decisions:**
+- Returns `*parser.ParsedRunbook`, not raw bytes — loader wraps parser internally
+- Path resolution is relative to loader's configured base directory
+- Test doubles can return in-memory runbooks without filesystem
+- Error types: `ErrRunbookNotFound` for missing files
+
+### 4. ToolRegistry Interface
+
+```go
+type ToolRegistry interface {
+    Lookup(ctx context.Context, name string, action string) (*schema.ToolDef, error)
+}
+```
+
+**Design decisions:**
+- Two-key lookup (name + action) rather than single composite key
+- Returns full `*schema.ToolDef` so planner can validate args
+- Error types: `ErrToolNotFound`, `ErrActionNotFound` (separate cases)
+- Registry is pre-populated (scanned at construction, not lazy)
+
+### 5. Config Struct
+
+```go
+type Config struct {
+    Loader          RunbookLoader  // required
+    Tools           ToolRegistry   // required
+    BaseDir         string         // optional, defaults to runbook directory
+    MaxIncludeDepth int            // optional, defaults to 10
+}
+```
+
+**Rationale:**
+- Required fields panic if nil — fail fast, don't return cryptic errors later
+- Optional fields have sensible defaults
+- No ProviderDir — provider resolution is tool-runtime concern, not planner concern
+
+---
+
+## ExecutionPlan Structure
+
+The existing `engine.ExecutionPlan` structure is sufficient for Phase 2:
+
+```go
+type ExecutionPlan struct {
+    RunID       string
+    RunbookPath string
+    Steps       []ResolvedStep
+    Tools       map[string]*schema.ToolDef
+    Providers   map[string]*schema.ProviderDef
+    Governance  governance.GovernancePolicy
+    Metadata    PlanMetadata
+}
+```
+
+**Notes:**
+- `Steps` is a flat ordered list (per §02 decision: ExecutionPlan is flat, not DAG)
+- `Tools` map keyed by tool name — planner populates this during tool discovery
+- `Providers` left empty for Phase 2 — provider resolution deferred to runtime
+- `Governance` populated from runbook's governance config during planning
+
+### ResolvedStep Structure
+
+```go
+type ResolvedStep struct {
+    ID     string
+    Kind   string
+    Spec   StepSpec   // typed: *CLISpec, *ToolCallSpec, *IncludeSpec, etc.
+    Depth  int        // nesting depth (0 = root runbook)
+    Origin string     // source runbook path
+}
+```
+
+**No changes needed** — the existing structure supports:
+- Typed specs via StepSpec interface (Phase 1 deliverable)
+- Include tracking via Depth and Origin fields
+- Tool resolution via Spec (ToolCallSpec carries invocation details)
+
+---
+
+## Error Model
+
+Structured errors with codes for programmatic handling:
+
+```go
+var (
+    ErrNotImplemented   = errors.New("planner: not implemented")
+    ErrToolNotFound     = errors.New("planner: tool not found")
+    ErrActionNotFound   = errors.New("planner: action not found")
+    ErrRunbookNotFound  = errors.New("planner: runbook not found")
+    ErrImportCycle      = errors.New("planner: import cycle detected")
+    ErrMaxDepthExceeded = errors.New("planner: max include depth exceeded")
+)
+
+type PlanError struct {
+    Code   error   // one of the Err* sentinels
+    StepID string  // optional: step that caused the error
+    Path   string  // optional: runbook path involved
+    Detail string  // human-readable context
+}
+```
+
+**Rationale:**
+- Sentinel errors enable `errors.Is(err, planner.ErrToolNotFound)`
+- Wrapped errors preserve context chain
+- StepID enables pointing users to the exact step that failed
+
+---
+
+## Deliverables
+
+| File | Description |
+|------|-------------|
+| `v2/pkg/planner/doc.go` | Package documentation |
+| `v2/pkg/planner/planner.go` | Planner, RunbookLoader, ToolRegistry interfaces; Config; error types |
+| `v2/pkg/engine/planner.go` | Updated Planner interface (simplified signature) |
+| `v2/internal/planner/planner.go` | Concrete stub implementation returning ErrNotImplemented |
+| `v2/internal/planner/planner_test.go` | 6 skeleton test cases (all t.Skip) |
+
+---
+
+## Test Coverage (Skeleton)
+
+| Test | Description |
+|------|-------------|
+| `TestPlan_BasicRunbook` | Single CLI step → single ResolvedStep |
+| `TestPlan_IncludeResolution` | Parent includes child → child steps inlined |
+| `TestPlan_ToolResolution` | Tool call → tool registered in plan.Tools |
+| `TestPlan_ImportCycleDetection` | A includes B includes A → ErrImportCycle |
+| `TestPlan_ToolNotFound` | Unknown tool → ErrToolNotFound |
+| `TestPlan_MaxDepthExceeded` | 12-deep include chain → ErrMaxDepthExceeded |
+
+---
+
+## Build Verification
+
+```
+$ cd /Volumes/Projects/gert/v2 && go build ./...
+# (clean exit)
+
+$ go vet ./...
+# (clean exit)
+
+$ go test ./internal/planner/... -v
+# 6 tests SKIP (Phase 2: not yet implemented)
+```
+
+---
+
+## Impact
+
+- Unblocks Phase 2 implementation (Brian can write concrete planner logic)
+- Unblocks tool loading infrastructure (needs ToolRegistry implementation)
+- Unblocks include resolution logic
+- Runtime can now depend on engine.Planner interface
+
+---
+
+## Open Questions (deferred)
+
+1. **Provider resolution** — deferred to runtime, not planner
+2. **Governance policy merging** — how to merge parent + child runbook policies (deferred)
+3. **Parallel planning** — should nested includes be resolved concurrently? (deferred to v2.1)

@@ -385,3 +385,71 @@ Builtin Tool Stubs (Phase 6 deliverables):
 - `AllowList`, `DenyList`, `RedactionPattern` — supporting types
 
 **Decision inbox written:** `.squad/decisions/inbox/barbara-phase0-revision.md`
+
+---
+
+## 2026-04-20: Updated pkg/testutil stubs to real schema/engine types
+
+**Requested by:** Cristian  
+**Status:** COMPLETE
+
+### What changed
+
+Updated all four stub-heavy files in `v2/pkg/testutil/` to use real types from Phase 1 packages. `spec_tag.go` and `time_controller.go` had no type dependencies and required no changes.
+
+**fake_step_executor.go**
+- Removed stub `Step` and `StepResult` types
+- Imported `pkg/engine`
+- `StepHandler` now `func(ctx, engine.ResolvedStep, map[string]any) (*engine.StepResult, error)`
+- `ExecuteCall.Step` is now `engine.ResolvedStep`
+- `Execute` method matches `engine.StepExecutor` interface exactly
+- Added compile-time interface guard: `var _ engine.StepExecutor = (*FakeStepExecutor)(nil)`
+- `RegisterSuccess` maps output to `engine.StepResult.Vars`; status to `engine.StepOutcomeSuccess`
+- `RegisterFailure` uses `engine.StepOutcomeFailed`
+
+**fake_event_dispatcher.go**
+- Removed stub `Event` and `EventFilter func(Event) bool` types
+- Imported `pkg/eventbus`
+- `FakeEventDispatcher` now implements `eventbus.EventDispatcher` (compile-time guard added)
+- `waiterEntry` updated: `filter eventbus.EventFilter`, `ch chan *eventbus.InboundEvent`, added `stepID string` for `Cancel` targeting
+- `Dispatch(ev eventbus.InboundEvent) error` — returns error, uses real type
+- `Wait(ctx, stepID, eventbus.EventFilter, timeout) (*eventbus.InboundEvent, error)` — struct-based filter, pointer return
+- `WaitOnChannel` updated to same types (remains testutil extra)
+- Added `Cancel(stepID, reason string)` to satisfy interface
+- `DrainAll` sends nil pointer to signal cancellation (waiters check ev == nil)
+- Added `matchesFilter(ev, f)` helper for struct-field matching
+
+**concurrent_event_collector.go**
+- Removed stub `CollectedEvent` type
+- Imported `pkg/trace`
+- Collector now stores `[]trace.TraceEvent`
+- `Collect(trace.TraceEvent)`, `Events() []trace.TraceEvent`, `EventsForStep() []trace.TraceEvent`
+- `EventsForStep` extracts step_id from json.RawMessage payload via `stepIDFromPayload` helper
+
+**golden.go**
+- Removed stub `TraceEvent` type and hand-rolled `jsonlReaderT`
+- Imported `pkg/trace` and `bytes`
+- `AssertGoldenTrace` and `NormalizeTrace` use `trace.TraceEvent`
+- Normalization: `.At` renamed to `.Timestamp`, `.Seq` renamed to `.Sequence`
+- JSONL reader simplified to `bytes.NewReader`
+
+### Build result
+`go build ./...` clean  
+`go vet ./...` clean
+
+**Decision inbox written:** `.squad/decisions/inbox/barbara-testutil-real-types.md`
+
+---
+
+## 2026-04-19: Phase 2 Kickoff
+
+**Status:** Approved and orchestrated
+
+testutil integration complete. Test infrastructure now uses real engine/eventbus/trace types.
+
+**Deliverables:**
+- fake_step_executor.go, fake_event_dispatcher.go, concurrent_event_collector.go, golden.go modified
+- Build clean
+- No existing tests outside pkg/testutil depend on stub types
+
+**Next:** Phase 2 integration tests using real types. Brian planner logic ready to test. Ken's Planner design ready for executor implementation.

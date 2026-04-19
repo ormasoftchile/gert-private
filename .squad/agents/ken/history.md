@@ -847,3 +847,68 @@ Barbara addressed all 7 defects from the initial Phase 0 rejection. Verified eac
 6. `ParsedRunbook.Warnings` never populated
 
 **Decision file:** `.squad/decisions/inbox/ken-phase1-review.md`
+
+---
+
+## 2026-04-20: Phase 2 Planner Design
+
+**Task:** Design the Planner architecture for Phase 2 (ParsedRunbook to ExecutionPlan).
+
+**Deliverables:**
+
+1. **`v2/pkg/planner/doc.go`** — Package documentation explaining the three planner jobs
+2. **`v2/pkg/planner/planner.go`** — Interfaces:
+   - `Planner` (main interface, also in pkg/engine)
+   - `RunbookLoader` — abstraction for loading runbooks by path
+   - `ToolRegistry` — abstraction for looking up tool definitions
+   - `Config` — planner configuration (Loader, Tools, BaseDir, MaxIncludeDepth)
+   - Error types: ErrNotImplemented, ErrToolNotFound, ErrActionNotFound, ErrRunbookNotFound, ErrImportCycle, ErrMaxDepthExceeded
+   - `PlanError` — structured error with Code, StepID, Path, Detail
+3. **`v2/pkg/engine/planner.go`** — Simplified signature (removed PlanOptions, config at construction)
+4. **`v2/internal/planner/planner.go`** — Stub implementation returning ErrNotImplemented
+5. **`v2/internal/planner/planner_test.go`** — 6 skeleton test cases (all t.Skip):
+   - TestPlan_BasicRunbook
+   - TestPlan_IncludeResolution
+   - TestPlan_ToolResolution
+   - TestPlan_ImportCycleDetection
+   - TestPlan_ToolNotFound
+   - TestPlan_MaxDepthExceeded
+
+**Build Status:**
+- `go build ./...` clean
+- `go vet ./...` clean
+- `go test ./internal/planner/... -v` — 6 tests SKIP (Phase 2 stub)
+
+**Key Design Decisions:**
+
+1. **Interface location:** Planner in `pkg/engine/`, supporting interfaces in `pkg/planner/`
+2. **Simplified signature:** `Plan(ctx, rb)` — config at construction, not per-call
+3. **RunbookLoader:** Returns `*parser.ParsedRunbook`, wraps parser internally
+4. **ToolRegistry:** Two-key lookup (name + action), returns `*schema.ToolDef`
+5. **Error model:** Sentinel errors + PlanError wrapper for errors.Is matching
+6. **MaxIncludeDepth:** Defaults to 10, guards against unbounded recursion
+
+**Decision recorded:** `.squad/decisions/inbox/ken-phase2-planner-design.md`
+
+**Impact:**
+- Unblocks Phase 2 implementation (Brian can write planner logic)
+- Unblocks ToolRegistry and RunbookLoader implementations
+- Runtime can depend on `engine.Planner` interface
+
+---
+
+## 2026-04-19: Phase 2 Kickoff
+
+**Status:** Approved and orchestrated
+
+All three Phase 1 agents completed their deliverables:
+
+1. **Brian** — Parser correctness gaps (S1–S5) fixed, 3 new tests, 23 total tests pass
+2. **Barbara** — testutil now uses real engine/eventbus/trace types, clean build
+3. **Ken** — Phase 2 Planner architecture designed and implemented
+
+**Orchestration logs created:** 3 files in `.squad/orchestration-log/`  
+**Session log created:** `.squad/log/2026-04-19T22:39:51Z-phase2-kickoff.md`  
+**Decisions merged:** All 3 inbox decisions consolidated into `.squad/decisions.md`
+
+**Phase 2 ready to proceed.** Brian will implement concrete planner logic; Barbara will add integration tests; Ken will review and iterate on architecture.

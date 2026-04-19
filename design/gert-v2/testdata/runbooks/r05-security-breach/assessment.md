@@ -1,8 +1,16 @@
 # Assessment: Security Breach Containment and Forensics
 
 **Completeness:** 8/10 (80%)  
-**Fidelity:** 7/10 (70%)  
+**Fidelity:** 8/10 (80%)  
 **Verdict:** PASS WITH NOTES
+
+## Gaps Closed (field-types-p1)
+
+| Gap ID | Class | Severity | Resolution |
+|--------|-------|----------|------------|
+| G2-002 | G2 | ~~MEDIUM~~ | **PARTIALLY FIXED** — `responsible_team` field in `remediation_planning` now carries `validation.pattern` restricting input to `security\|infrastructure\|engineering\|compliance`, plus `pattern_hint` for operator guidance. Full fix (dropdown) still requires `type: select`; pattern validation is a P1 interim. |
+| G2-003 | G2 | ~~LOW~~ | **FIXED** — `legal_notes` field in `legal_assessment` step now carries `when: '{{ eq .notification_required "yes" }}'`. The field is hidden and its variable skipped when notification is not required, which matches the actual business logic. |
+| G2-004 | G2 | ~~LOW~~ | **FIXED** — `target_completion_date` field in `remediation_planning` now carries `validation.pattern` enforcing `YYYY-MM-DD` format, with `pattern_hint` shown on validation failure. |
 
 ## Corrections Applied (2026-04-19)
 
@@ -64,7 +72,7 @@ The `toolRefs` section was expanded to include all tools referenced by corrected
 | G3-001 | G3 | CRITICAL | Cross-branch parallelism not expressible — forensics (step 8) should run concurrently with containment branches (4, 5, 6); schema's `type: parallel` cannot span branch arms |
 | G3-002 | G3 | HIGH | Mid-runbook cross-branch goto not supported — step 6b (Medium Containment) needs to jump to "High Containment" branch; workaround inlines duplicate steps |
 | G2-001 | G2 | HIGH | `choice` step default on timeout — prose specifies "default to High on 10-min timeout"; workaround uses `on_timeout: skip` which proceeds with pre-set default variable |
-| G2-002 | G2 | MEDIUM | No dropdown field type — remediation planning responsible_team field reduced to text + hint |
+| G2-002 | G2 | LOW | Responsible team still `type: text` — pattern validation added (P1-B) constrains valid values but a `type: select` dropdown would be more ergonomic; full fix deferred |
 
 ## Translation Notes
 

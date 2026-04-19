@@ -44,6 +44,9 @@ flow:
           label: Email address
           required: true
           hint: Must be @company.com
+          validation:
+            pattern: "^[a-zA-Z0-9._%+\\-]+@company\\.com$"
+            pattern_hint: "Must be a valid @company.com email address"
         - name: start_date
           type: date
           label: Start date
@@ -221,6 +224,7 @@ flow:
                     multiline: true
                     label: Shipping address
                     required: true
+                    when: '{{ eq .office_location "Remote" }}'
                   - name: estimated_delivery
                     type: date
                     label: Estimated delivery date

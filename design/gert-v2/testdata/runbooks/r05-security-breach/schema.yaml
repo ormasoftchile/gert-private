@@ -602,6 +602,7 @@ flow:
           type: multiline
           label: Legal notes and jurisdictions affected
           required: false
+          when: '{{ eq .notification_required "yes" }}'
       approvals:
         min: 1
         roles: [legal-counsel]
@@ -652,10 +653,16 @@ flow:
           label: Responsible team
           required: true
           hint: "Options: security, infrastructure, engineering, compliance" # GAP: no dropdown
+          validation:
+            pattern: "^(security|infrastructure|engineering|compliance)$"
+            pattern_hint: "Must be one of: security, infrastructure, engineering, compliance"
         - name: target_completion_date
           type: text
           label: Target completion date (YYYY-MM-DD)
           required: true
+          validation:
+            pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            pattern_hint: "Must be in YYYY-MM-DD format (e.g. 2026-04-30)"
       approvals:
         min: 1
         roles: [security-oncall]

@@ -1,8 +1,15 @@
 # Assessment: New Employee Onboarding
 
 **Completeness:** 9/10 (90%)  
-**Fidelity:** 9/10 (90%)  
+**Fidelity:** 10/10 (100%)  
 **Verdict:** PASS WITH NOTES
+
+## Gaps Closed (field-types-p1)
+
+| Gap ID | Class | Severity | Resolution |
+|--------|-------|----------|------------|
+| G2-003 | G2 | ~~LOW~~ | **FIXED** — `email` field in `collect_employee_info` now carries `validation.pattern` enforcing `@company.com` domain. `pattern_hint` gives the operator a clear error message. |
+| G2-004 | G2 | ~~LOW~~ | **FIXED** — `shipping_address` field in `order_laptop` step now carries `when: '{{ eq .office_location "Remote" }}'`. Remote employees see and must fill the field; in-office employees see neither the field nor the prompt. |
 
 ## Gaps Closed (field-types-p0)
 

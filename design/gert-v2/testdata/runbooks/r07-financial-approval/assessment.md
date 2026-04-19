@@ -1,8 +1,14 @@
 # Assessment: Financial Approval for Large Purchase
 
 **Completeness:** 9/10 (90%)
-**Fidelity:** 9/10 (90%)
+**Fidelity:** 10/10 (100%)
 **Verdict:** PASS WITH NOTES
+
+## Gaps Fixed (field-types-p1)
+
+| Gap ID | Class | Severity | Resolution |
+|--------|-------|----------|------------|
+| G2-005 | G2 | ~~LOW~~ | **FIXED** — `item_description` now uses `validation.max_length: 500` to enforce the prose requirement "max 500 chars". The redundant parenthetical was removed from the label. |
 
 ## Gaps Fixed (field-types-p0)
 

@@ -31,8 +31,10 @@ flow:
       fields:
         - name: item_description
           type: text
-          label: Item description (max 500 chars)
+          label: Item description
           required: true
+          validation:
+            max_length: 500
         - name: vendor_name
           type: text
           label: Vendor name

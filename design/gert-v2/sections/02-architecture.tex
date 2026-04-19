@@ -1045,7 +1045,10 @@ For each field in submission order:
 \textbf{Type} & \textbf{Validation} & \textbf{Variable Storage} \\
 \hline
 \texttt{text}
-  & No constraint beyond the required check.
+  & Required check; then optional length and pattern constraints:
+    \texttt{validation.min\_length}, \texttt{validation.max\_length} (character
+    count); \texttt{validation.pattern} (RE2 regex — see below);
+    \texttt{validation.pattern\_hint} (shown on pattern failure).
     \texttt{multiline: true} is a UI hint only; no effect on validation or storage.
   & JSON string \\
 \hline
@@ -1122,6 +1125,144 @@ The \texttt{multiline: true} flag on a \texttt{text} field is a \textbf{UI hint 
 The executor treats the submitted value as a plain string regardless of this flag.
 Input providers SHOULD render a multi-line textarea (or open \texttt{\$EDITOR}) rather
 than a single-line input box when \texttt{multiline: true} is set.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsubsection*{\texttt{text} Field Pattern Validation}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\texttt{text} fields support optional length and pattern constraints applied
+\emph{after} the required check.  The full sequence for a \texttt{text} field is:
+
+\begin{enumerate}
+  \item \textbf{Required check} — same as all field types (step 1 of the general
+        algorithm above).
+  \item \textbf{Min-length check} — if \texttt{validation.min\_length} is declared,
+        fail if \texttt{len(value) < min\_length} (character count, not bytes).
+  \item \textbf{Max-length check} — if \texttt{validation.max\_length} is declared,
+        fail if \texttt{len(value) > max\_length}.
+  \item \textbf{Pattern check} — if \texttt{validation.pattern} is declared, compile
+        and test the full value against the RE2 regex.  On failure, the re-prompt
+        error message is \texttt{validation.pattern\_hint} if present; otherwise the
+        generic message \emph{``Value does not match required format''} is used.
+  \item \textbf{Re-prompt} — any failure at steps 2--4 triggers a re-prompt (same
+        3-attempt limit as the general algorithm).
+\end{enumerate}
+
+\paragraph{RE2 vs ECMA~262.}
+The gert schema specification uses the term \emph{ECMA~262 regex} for compatibility
+with JSON Schema tooling and browser-based UI validators.  At runtime, gert uses Go's
+\texttt{regexp} package, which implements RE2 semantics — not a full ECMA~262 engine.
+
+Patterns \textbf{must} be valid RE2 expressions.  ECMA~262 features absent from RE2
+(lookahead, lookbehind, backreferences) are \textbf{rejected at schema load time} with
+a validation error naming the offending field:
+
+\begin{verbatim}
+error: step "gather-details", field "ticket_ref":
+  validation.pattern uses lookahead (?=...) which is not supported in RE2;
+  replace with an anchored RE2 equivalent
+\end{verbatim}
+
+Runbook authors targeting both the VS~Code extension (which uses a JavaScript regex
+engine) and the gert runtime (RE2) should restrict patterns to the safe common subset:
+character classes, quantifiers, anchors, alternation, and non-capturing groups.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsubsection*{Conditional Field Evaluation Contract}
+\label{sec:conditional-field-eval}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\texttt{collector} fields MAY declare a \texttt{when} expression.  The executor
+evaluates \texttt{when} before rendering each field, determining whether the field
+is shown, prompted, and bound to a variable.
+
+\paragraph{Evaluation model.}
+Fields are evaluated left-to-right in array order:
+
+\begin{enumerate}
+  \item Before rendering field $i$, the executor evaluates its \texttt{when}
+        expression against:
+        \begin{itemize}
+          \item \textbf{Collected values so far} — the values returned by the input
+                provider for fields $0 \ldots i-1$ in the current step (those fields
+                whose \texttt{when} evaluated to \texttt{true} and were rendered).
+          \item \textbf{Global variable scope} — the run's accumulated variable
+                bindings from all previously completed steps.
+        \end{itemize}
+  \item If \texttt{when} evaluates to \textbf{false}: the field is \textbf{not
+        rendered, not prompted, and its variable binding is skipped entirely}.  The
+        field's \texttt{id} is NOT added to the step's variable scope for this run.
+  \item If \texttt{when} evaluates to \textbf{true}, or if \texttt{when} is absent
+        (unconditionally visible), the field is rendered and validated normally.
+\end{enumerate}
+
+\noindent
+This is a \textbf{pull model}: the executor drives field-by-field evaluation in order;
+the input provider renders one field at a time, or a full form with some fields
+conditionally hidden — both are valid provider strategies.
+
+\paragraph{Input provider integration.}
+Two delivery strategies are both valid; providers declare their preference via
+capability flags (see §\ref{subsec:collector-contract}):
+
+\begin{itemize}
+  \item \textbf{Full-form delivery} (recommended for rich UI providers): the executor
+        sends the complete \texttt{fields} array in a single \texttt{provider/collect}
+        request.  Each field carries a pre-evaluated \texttt{visible: bool} flag
+        reflecting the current \texttt{when} result at dispatch time.  Rich UI
+        providers SHOULD implement dynamic client-side show/hide as the user fills in
+        earlier fields, re-evaluating \texttt{when} locally against live form state so
+        the form responds without a round-trip to the executor.
+  \item \textbf{Streaming delivery} (recommended for CLI providers): the executor
+        sends only the currently-visible fields, evaluating each \texttt{when}
+        expression in real time as previous field values are received.  This is the
+        natural mode for the built-in \texttt{prompt} provider, which renders fields
+        sequentially at the terminal.  Fields where \texttt{visible: false} are
+        simply never sent.
+\end{itemize}
+
+\paragraph{Variable binding on skip.}
+When a field is skipped (\texttt{when} = \texttt{false}):
+
+\begin{itemize}
+  \item Its \texttt{id} is NOT added to the step's variable bindings.
+  \item Template expressions in subsequent steps that reference the skipped field's
+        variable resolve to the \emph{zero value}: \texttt{""} for string,
+        \texttt{0} for number, \texttt{false} for boolean.
+  \item If the skipped variable is referenced with \texttt{.require} in a downstream
+        template expression, the executor produces a template error at that step.
+  \item Runbook authors should guard downstream template expressions that may depend
+        on conditionally-bound fields:
+\end{itemize}
+
+\begin{verbatim}
+{{/* Safe: test for empty before using a conditionally-bound variable */}}
+{{ if .ticket_ref }}JIRA: {{ .ticket_ref }}{{ else }}(no ticket){{ end }}
+\end{verbatim}
+
+\paragraph{Load-time validation — forward reference check.}
+At schema load time, the parser performs a forward-reference check for every field
+that declares \texttt{when}:
+
+\begin{enumerate}
+  \item Parse the \texttt{when} expression and extract all variable references.
+  \item For each referenced variable, determine whether it is bound by a field
+        declared \emph{earlier} in the same \texttt{fields} array (by array index).
+  \item If any referenced variable is bound by a field declared \emph{later} in the
+        same \texttt{fields} array, \textbf{reject the runbook at load time} with a
+        validation error:
+\end{enumerate}
+
+\begin{verbatim}
+error: step "gather-details", field "region" (index 2):
+  when expression references "country" which is bound by field at index 4;
+  forward references in when expressions are not allowed
+\end{verbatim}
+
+\noindent
+Variables from the global scope (prior steps) and the run context are always valid
+references in \texttt{when} expressions; only same-step forward references are
+rejected.
 
 \subsubsection*{Variable Storage — Downstream Expression Semantics}
 

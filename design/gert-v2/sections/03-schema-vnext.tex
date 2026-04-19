@@ -864,6 +864,7 @@ Each field is an object with:
 \texttt{type}       & enum    & Yes & Field type — see field type inventory below \\
 \texttt{label}      & string  & Yes & Prompt or label text shown to user \\
 \texttt{required}   & bool    & No  & If true, user must provide a value (default: false) \\
+\texttt{when}       & template & No  & Go template — field shown and prompted only when truthy; variable binding skipped when falsy \\
 \texttt{hint}       & string  & No  & Additional context or validation help \\
 \texttt{default}    & any     & No  & Pre-filled default value (must match field type) \\
 \texttt{validation} & object  & No  & Type-specific validation constraints \\
@@ -874,6 +875,37 @@ Each field is an object with:
 \hline
 \end{tabular}
 \end{center}
+
+\paragraph{Dynamic Forms}
+\label{par:dynamic-forms}
+
+When one or more fields carry a \texttt{when} expression, the \texttt{collector}
+step renders as a \emph{dynamic form}: fields are shown, hidden, and re-evaluated
+as the operator fills in earlier fields.  gert enforces the following evaluation
+order guarantees:
+
+\begin{enumerate}
+  \item Fields are evaluated in the order they appear in the \texttt{fields}
+        array.
+  \item A field's \texttt{when} expression may reference only variables that
+        are declared \emph{earlier} in the same \texttt{fields} array, or
+        variables already present in the global runbook variable space
+        (variables set by prior steps, runbook inputs, or \texttt{gert.*}
+        built-ins).  A forward reference — referencing a field declared
+        \emph{later} in the same \texttt{fields} array — is a schema
+        validation error detected at parse time.
+  \item When a field's \texttt{when} expression evaluates to falsy: the field
+        is hidden in the UI, not prompted in a TUI, and its variable binding is
+        \emph{skipped}.  The variable does not appear in the runbook variable
+        space; it is not set to \texttt{null} or empty string.
+  \item In interactive UIs (VS~Code, browser), if an earlier field value
+        changes after later fields have been filled, all downstream
+        \texttt{when} expressions are re-evaluated and dependent fields are
+        shown or hidden accordingly.
+  \item A \texttt{required: true} field with a \texttt{when} expression is
+        required only when its \texttt{when} condition is truthy.  When the
+        condition is falsy, the \texttt{required} constraint does not apply.
+\end{enumerate}
 
 \paragraph{Field type inventory}
 \label{par:collector-field-types}
@@ -905,13 +937,50 @@ Single-line text input by default.  Set \texttt{multiline: true} to render a
 multi-line textarea — appropriate for descriptions, reproduction steps, or
 any field where newlines are meaningful.
 
+\paragraph{Text field validation constraints}
+
+The optional \texttt{validation} object on a \texttt{text} field supports four
+sub-fields:
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Validation field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{pattern}       & string  & No & ECMA~262 regular expression; field value must match \\
+\texttt{pattern\_hint} & string  & No & Human-readable error shown when pattern validation fails \\
+\texttt{min\_length}   & integer & No & Minimum character count ($\geq 0$) \\
+\texttt{max\_length}   & integer & No & Maximum character count ($> 0$; must exceed \texttt{min\_length} when both are present) \\
+\hline
+\end{tabular}
+\end{center}
+
 \begin{verbatim}
+# Basic multiline with hint
 - name: description
   type: text
   label: Incident description
   multiline: true
   required: true
   hint: Describe what happened, when, and which services were affected
+
+# Pattern validation — IPv4 address
+- name: target_ip
+  type: text
+  label: Target IP address
+  required: true
+  validation:
+    pattern: "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+    pattern_hint: "Must be a valid IPv4 address (e.g. 192.168.1.1)"
+
+# Length constraints
+- name: summary
+  type: text
+  label: Executive summary
+  required: true
+  validation:
+    min_length: 20
+    max_length: 500
 \end{verbatim}
 
 \subsubsection{Field type: \texttt{number}}
@@ -1207,44 +1276,43 @@ Benefits of the questionnaire pattern:
   \item Better UX: operator sees the full context before filling in any field.
 \end{itemize}
 
-\textbf{Example: Incident triage form} (4-field questionnaire using the new field types)
+\textbf{Example: Incident triage form} (4-field form with conditional logic using \texttt{when})
 
 \begin{verbatim}
 - step:
-    id: triage_form
+    id: collect_incident_details
     type: collector
-    title: Incident triage
+    title: Incident Triage
     prompt: |
-      Complete the incident triage form. All fields are required.
+      Complete the incident triage form.
     fields:
       - name: severity
-        type: integer
-        label: Severity score (1 = low, 5 = critical)
-        required: true
-        validation:
-          min: 1
-          max: 5
-      - name: environment
         type: select
-        label: Affected environment
+        label: Severity
         required: true
         options:
-          - value: production
-            label: Production
-          - value: staging
-            label: Staging
-          - value: development
-            label: Development
-      - name: affected_service
+          - value: low
+            label: Low
+          - value: medium
+            label: Medium
+          - value: critical
+            label: Critical
+      # Shown only when severity = critical (forward-reference guard)
+      - name: escalation_reason
         type: text
-        label: Affected service name
-        required: true
-      - name: reproduction_steps
-        type: text
-        label: Reproduction steps
+        label: Escalation reason
         multiline: true
-        required: false
-        hint: Step-by-step instructions to reproduce the issue
+        required: true
+        when: "{{ eq .severity 'critical' }}"
+      - name: affected_systems
+        type: text
+        label: Affected systems
+        required: true
+      # Shown for medium and critical; hidden for low
+      - name: customer_impact
+        type: boolean
+        label: Customer-facing impact?
+        when: "{{ or (eq .severity 'medium') (eq .severity 'critical') }}"
 \end{verbatim}
 
 \paragraph{Validation rules for \texttt{collector}}
@@ -1265,6 +1333,23 @@ Benefits of the questionnaire pattern:
   \item For \texttt{date} and \texttt{datetime} fields, if both
         \texttt{validation.min} and \texttt{validation.max} are present,
         \texttt{min} must be chronologically $\leq$ \texttt{max}.
+  \item A field \texttt{when} expression \textbf{MUST NOT} reference a field
+        declared later in the same \texttt{fields} array (no forward references).
+        Forward references are detected at parse time and are a schema
+        validation error.
+  \item A \texttt{required: true} field with a \texttt{when} expression is
+        only required when the \texttt{when} condition is truthy.  When
+        \texttt{when} evaluates to falsy, \texttt{required} does not apply and
+        the variable binding is skipped entirely.
+  \item For \texttt{text} fields, if both \texttt{validation.min\_length} and
+        \texttt{validation.max\_length} are present, \texttt{max\_length}
+        \textbf{MUST} be strictly greater than \texttt{min\_length}.
+  \item For \texttt{text} fields, \texttt{validation.pattern} \textbf{MUST}
+        be a valid ECMA~262 regular expression; it is validated at schema
+        load time and will cause a structural validation error if invalid.
+  \item For \texttt{text} fields, \texttt{validation.pattern\_hint} is
+        silently ignored when \texttt{validation.pattern} is absent
+        (warning, not error).
 \end{itemize}
 
 \subsection{Step Type: approve}

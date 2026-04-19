@@ -472,6 +472,7 @@ When the run engine executes a \texttt{collector} step, it sends a
         "type": "file",
         "label": "Error screenshot",
         "required": true,
+        "visible": true,
         "accept": ["image/png", "image/jpeg"],
         "maxSizeBytes": 10485760
       },
@@ -480,13 +481,21 @@ When the run engine executes a \texttt{collector} step, it sends a
         "type": "text",
         "label": "Describe what you observed",
         "required": true,
-        "multiline": true
+        "visible": true,
+        "multiline": true,
+        "validation": {
+          "minLength": 10,
+          "maxLength": 2000,
+          "pattern": "^[\\s\\S]+$",
+          "patternHint": "Description must not be empty"
+        }
       },
       {
         "name": "log_url",
         "type": "url",
         "label": "Link to related logs (optional)",
-        "required": false
+        "required": false,
+        "visible": true
       }
     ],
     "context": {
@@ -538,8 +547,30 @@ The provider returns the collected values and any uploaded artifacts:
                 §\ref{sec:collector_field_validation}.
           \item \texttt{label}: human-readable prompt text.
           \item \texttt{required}: boolean flag.
-          \item Type-specific constraints:
+          \item \texttt{visible}: boolean flag, pre-evaluated by the executor from
+                the field's \texttt{when} expression before the request is sent.
+                \texttt{true} means the field should be rendered; \texttt{false}
+                means the field should be hidden or skipped.  CLI providers SHOULD
+                skip fields where \texttt{visible: false}; rich UI providers SHOULD
+                show or hide the field dynamically as the user fills in earlier
+                fields, re-evaluating \texttt{when} client-side so the form responds
+                in real time without a round-trip to the executor.  If \texttt{when}
+                was absent on the field, \texttt{visible} is always \texttt{true}.
+                See §\ref{sec:conditional-field-eval} for the full conditional field
+                evaluation contract.
+          \item \texttt{validation} (optional object): client-side validation
+                constraints that providers MAY enforce before submitting values,
+                reducing unnecessary round-trips.  The executor always re-validates
+                server-side regardless of whether the provider enforced them:
                 \begin{itemize}
+                  \item \texttt{validation.pattern} — RE2 regex that the value must
+                        fully match (\texttt{text} fields only).
+                  \item \texttt{validation.patternHint} — human-readable message
+                        shown when \texttt{pattern} fails (e.g.\ \emph{``Must be
+                        a valid ticket reference: ABC-1234''}).
+                  \item \texttt{validation.minLength},
+                        \texttt{validation.maxLength} — character-count bounds for
+                        \texttt{text} fields.
                   \item \texttt{validation.min}, \texttt{validation.max},
                         \texttt{validation.step} — numeric bounds for
                         \texttt{number} and \texttt{integer} fields.

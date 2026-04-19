@@ -1,8 +1,14 @@
 # Assessment: Database Migration with Dry-Run and Validation
 
 **Completeness:** 8/10 (80%)  
-**Fidelity:** 7/10 (70%)  
+**Fidelity:** 8/10 (80%)  
 **Verdict:** PASS WITH NOTES
+
+## Gaps Fixed (field-types-p1)
+
+| Gap ID | Class | Severity | Resolution |
+|--------|-------|----------|------------|
+| G2-003 | G2 | ~~LOW~~ | **FIXED** — `maintenance_start` field now carries `validation.pattern` enforcing RFC 3339 datetime format (`YYYY-MM-DDTHH:MM:SS(Z\|±HH:MM)`), with `pattern_hint` shown on failure. Catches malformed inputs before the downstream `wait_maintenance_window` step. |
 
 ## Gaps Found
 

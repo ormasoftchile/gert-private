@@ -937,7 +937,7 @@ On completion, emits a JSON summary to \texttt{stdout}:
 
 \subsection{GitHub Actions Example}
 
-\begin{minted}{text}
+\begin{verbatim}
 - name: Run gert runbook
   id: gert_run
   run: |
@@ -954,7 +954,7 @@ On completion, emits a JSON summary to \texttt{stdout}:
   with:
     name: gert-trace
     path: .runbook/runs/${{ steps.gert_run.outputs.run_id }}/trace.jsonl
-\end{minted}
+\end{verbatim}
 
 \subsection{GitLab CI Example}
 

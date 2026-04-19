@@ -1616,7 +1616,7 @@ rejected.
 Typed storage ensures that template comparison operators in downstream steps work without
 manual coercion:
 
-\begin{minted}{text}
+\begin{verbatim}
 {{/* number/integer: .amount is float64, not a string */}}
 {{ if gt .amount 50000.0 }}HIGH_VALUE{{ end }}
 
@@ -1628,7 +1628,7 @@ manual coercion:
 
 {{/* date/datetime: .start_date is ISO 8601 string; parseable by time.Parse */}}
 {{ if lt .start_date "2026-07-01" }}BEFORE_CUTOVER{{ end }}
-\end{minted}
+\end{verbatim}
 
 \subsubsection*{Error Variable Schema}
 

@@ -288,7 +288,7 @@ flow:
 \subsection{Complete Annotated Example}
 \label{subsec:full-example}
 
-\begin{minted}{text}
+\begin{verbatim}
 $schema: "https://schemas.gert.dev/runbook/v2.json"
 apiVersion: runbook/v2
 id: service-health-check
@@ -403,7 +403,7 @@ flow:
                 outcome:
                   category: escalated
                   code: http_fail
-\end{minted}
+\end{verbatim}
 
 % ============================================================
 \section{Input and Output Declarations}
@@ -803,7 +803,7 @@ convert run to a string.''}.
 
 \paragraph{Example: exec form (unchanged)}
 
-\begin{minted}{text}
+\begin{verbatim}
 - step:
     id: tail_logs
     type: cli
@@ -817,11 +817,11 @@ convert run to a string.''}.
       effects: [filesystem.read]
       reads: [log_file]
       writes: [output]
-\end{minted}
+\end{verbatim}
 
 \paragraph{Example: run string form with explicit shell}
 
-\begin{minted}{text}
+\begin{verbatim}
 - step:
     id: run_script
     type: cli
@@ -832,22 +832,22 @@ convert run to a string.''}.
       fi
     capture:
       stdout: script_output
-\end{minted}
+\end{verbatim}
 
 \paragraph{Example: run string form with auto shell}
 
-\begin{minted}{text}
+\begin{verbatim}
 - step:
     id: echo_env
     type: cli
     run: echo "Environment is {{ .env }}"
     capture:
       stdout: echo_result
-\end{minted}
+\end{verbatim}
 
 \paragraph{Example: run map form (multi-shell)}
 
-\begin{minted}{text}
+\begin{verbatim}
 - step:
     id: clear_cache
     type: cli
@@ -857,7 +857,7 @@ convert run to a string.''}.
       pwsh: Remove-Item -Recurse -Force C:\tmp\cache\{{ .service }}
     capture:
       exit_code: clear_result
-\end{minted}
+\end{verbatim}
 
 % ─────────────────────────────────────────────────────────────────────────────
 % Figure: CLI step execution flow
@@ -1681,7 +1681,7 @@ Benefits of the questionnaire pattern:
 
 \textbf{Example: Incident triage form} (4-field form with conditional logic using \texttt{when})
 
-\begin{minted}{text}
+\begin{verbatim}
 - step:
     id: collect_incident_details
     type: collector
@@ -1716,7 +1716,7 @@ Benefits of the questionnaire pattern:
         type: boolean
         label: Customer-facing impact?
         when: "{{ or (eq .severity 'medium') (eq .severity 'critical') }}"
-\end{minted}
+\end{verbatim}
 
 \paragraph{Validation rules for \texttt{collector}}
 
@@ -1991,7 +1991,7 @@ capture:
   status:   json.items[0].status.phase
 \end{minted}
 
-\begin{minted}{text}
+\begin{verbatim}
 - step:
     id: list_pods
     type: tool
@@ -2009,7 +2009,7 @@ capture:
       effects: [k8s.read]
       reads: [namespace]
       writes: [pod_count, first_pod]
-\end{minted}
+\end{verbatim}
 
 % ─────────────────────────────────────────────────────────────────────────────
 % Figure: Tool invocation flow
@@ -2111,7 +2111,7 @@ When the runtime reaches a \texttt{wait\_for\_event} step it:
 
 \paragraph{Example 2 — Named channel / approval callback}
 
-\begin{minted}{text}
+\begin{verbatim}
 - step:
     id: wait_approval_callback
     type: wait_for_event
@@ -2128,7 +2128,7 @@ When the runtime reaches a \texttt{wait\_for\_event} step it:
       effects: []
       reads: [request_id]
       writes: [approved_by, decision]
-\end{minted}
+\end{verbatim}
 
 \paragraph{Transport Note}
 
@@ -2178,7 +2178,7 @@ to any steps that follow in the caller.
 \end{tabular}
 \end{center}
 
-\begin{minted}{text}
+\begin{verbatim}
 - step:
     id: run_db_checks
     type: include
@@ -2192,7 +2192,7 @@ to any steps that follow in the caller.
       effects: [db.read]
       reads: [target_db]
       writes: []
-\end{minted}
+\end{verbatim}
 
 \paragraph{Cycle Detection}
 The runtime builds a runbook dependency graph at load time by resolving all
@@ -2276,7 +2276,7 @@ At most one branch arm executes.  If no arm matches and no arm has an
 steps run.  The \texttt{else: true} marker (new in v2) designates a catch-all
 arm:
 
-\begin{minted}{text}
+\begin{verbatim}
 - step:
     id: route_on_env
     type: branch
@@ -2311,7 +2311,7 @@ arm:
               outcome:
                 category: escalated
                 code: unknown_env
-\end{minted}
+\end{verbatim}
 
 % ─────────────────────────────────────────────────────────────────────────────
 % Figure: Branch logic
@@ -2376,7 +2376,7 @@ The loop variable \texttt{\{\{\ .iteration\ \}\}} (0-indexed) is always availabl
 In list mode, \texttt{\{\{\ .item\ \}\}} (or the \texttt{as} name) holds the
 current element.
 
-\begin{minted}{text}
+\begin{verbatim}
 # List iteration
 - iterate:
     id: check_all_services
@@ -2420,7 +2420,7 @@ current element.
           title: Wait 15s
           command: sleep
           args: ["15"]
-\end{minted}
+\end{verbatim}
 
 % ─────────────────────────────────────────────────────────────────────────────
 % Figure: Iterate loop
@@ -2477,7 +2477,7 @@ execution.  After the join, all \texttt{capture} values from all branches are
 merged into the caller's variable map.  Write conflicts (two branches writing the
 same variable) are resolved by last-writer-wins and a warning is emitted.
 
-\begin{minted}{text}
+\begin{verbatim}
 - step:
     id: parallel_checks
     type: parallel
@@ -2510,7 +2510,7 @@ same variable) are resolved by last-writer-wins and a warning is emitted.
     join:
       wait_for: all
       on_failure: fail
-\end{minted}
+\end{verbatim}
 
 % ─────────────────────────────────────────────────────────────────────────────
 % Figure: Parallel fan-out / fan-in
@@ -2556,7 +2556,7 @@ same variable) are resolved by last-writer-wins and a warning is emitted.
 Evaluates a list of assertions against captured variables.  Fails the run if
 any assertion does not pass.
 
-\begin{minted}{text}
+\begin{verbatim}
 - step:
     id: verify_deployment
     type: assert
@@ -2572,7 +2572,7 @@ any assertion does not pass.
         subject: "{{ .api_response }}"
         path: "$.status"
         expected: "active"
-\end{minted}
+\end{verbatim}
 
 Assertion types: \texttt{contains}, \texttt{not\_contains}, \texttt{matches}
 (regex), \texttt{eq}, \texttt{ne}, \texttt{lt}, \texttt{gt}, \texttt{exit\_code},
@@ -2601,7 +2601,7 @@ The compensation steps execute in LIFO order relative to the sequence of
 Compensation steps share the same variable context as the point at which the
 \texttt{compensate} node was registered.
 
-\begin{minted}{text}
+\begin{verbatim}
 - step:
     id: scale_down
     type: tool
@@ -2630,7 +2630,7 @@ Compensation steps share the same variable context as the point at which the
               args:
                 deployment: "{{ .deployment }}"
                 replicas: "{{ .original_replicas }}"
-\end{minted}
+\end{verbatim}
 
 % ─────────────────────────────────────────────────────────────────────────────
 % Figure: Compensation (saga rollback) flow
@@ -2671,7 +2671,7 @@ Compensation steps share the same variable context as the point at which the
 Declares a terminal outcome and halts execution.  Renamed from \texttt{router}
 in v1.
 
-\begin{minted}{text}
+\begin{verbatim}
 - step:
     id: resolved
     type: end
@@ -2681,7 +2681,7 @@ in v1.
       code: dns_healthy
       meta:
         resolution_time: "{{ .elapsed }}"
-\end{minted}
+\end{verbatim}
 
 % ============================================================
 \section{Tool Definition Schema (v2)}
@@ -2695,7 +2695,7 @@ replaced by \texttt{tool/v2}.
 \subsection{Tool Definition Field Inventory}
 \label{subsec:tool-fields}
 
-\begin{minted}{text}
+\begin{verbatim}
 $schema: "https://schemas.gert.dev/tool/v2.json"
 apiVersion: tool/v2
 
@@ -2734,7 +2734,7 @@ actions:
       reads: [namespace]
     governance:
       action: allow
-\end{minted}
+\end{verbatim}
 
 \paragraph{New in v2}
 
@@ -2833,14 +2833,14 @@ x-otel-service-name: "payment-service"
 
 \paragraph{At the step level}
 
-\begin{minted}{text}
+\begin{verbatim}
 - step:
     id: deploy
     type: tool
     title: Deploy to production
     x-myorg-risk-level: high
     x-myorg-rollback-id: "{{ .deploy_id }}"
-\end{minted}
+\end{verbatim}
 
 \subsection{Extension Validation}
 
@@ -2976,7 +2976,7 @@ Both validation phases produce structured error reports with:
   \item Suggested fix (where computable)
 \end{itemize}
 
-\begin{minted}{bash}
+\begin{verbatim}
 $ gert validate service-health.runbook.yaml
 [SEM-003] step "check_http": tool action "head" not declared in
           tools/curl.tool.yaml (declared actions: get, post, download)
@@ -2985,7 +2985,7 @@ $ gert validate service-health.runbook.yaml
           is only written on branch "DNS check" — may be unbound
           --> service-health.runbook.yaml:51:12
           hint: add a default value in vars: or guard with {{ if .dns_result }}
-\end{minted}
+\end{verbatim}
 
 % ============================================================
 \section{Schema Artifacts}

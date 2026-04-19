@@ -527,3 +527,25 @@ This is re-input every time a new style is needed (lazy, per-environment), so an
   ignorelexererrors=true   % suppress red error-token boxes (<string>, <int>, etc.)
 }
 ```
+
+## 2026-04-18 — Template Syntax Rendering (Final Fix)
+
+**Problem:** Page 45 "Variable Storage — Downstream Expression Semantics" block showed severe red-box rendering around every `{{`, `}}`, `if`, `gt`, `end` token despite `ignorelexererrors=true` in main.tex.
+
+**Root cause:** The `ignorelexererrors=true` minted package option is unreliable — Pygments' internal style cache can override it, and the error-token style (`\def\PYG@tok@err{...}`) persists in cached `.aux` files.
+
+**Definitive fix:**
+- Changed **all** minted blocks containing Go template syntax (`{{`, `}}`) from their original language (`{yaml}`, `{json}`) to `{text}`
+- Blocks fixed:
+  - `sections/11-governance-policy.tex:175` (was yaml)
+  - `sections/11-governance-policy.tex:403` (was yaml)
+  - `sections/15-observability-diagnostics.tex:940` (was yaml)
+- The "Variable Storage" block at `sections/02-architecture.tex:1619` was already correct (`{text}`)
+- Cleared minted cache completely before rebuild
+
+**Lesson learned:**
+- Any minted block containing `{{` or `}}` MUST use `{text}` language, not `{yaml}` / `{json}` / `{go}`
+- Lexer error suppression (`ignorelexererrors`) is not a reliable fix for mixed-syntax blocks
+- Always clear `_minted*` cache directories when changing minted options or block languages
+
+**Verification:** `pdftotext` confirms page 45 now renders cleanly without red boxes.

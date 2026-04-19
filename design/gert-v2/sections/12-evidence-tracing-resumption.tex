@@ -35,7 +35,7 @@ The \texttt{<run-id>} is a URL-safe string assigned at run creation time (e.g.\ 
 
 Every line in \texttt{trace.jsonl} is a self-contained JSON object with a common envelope. Consumers MUST tolerate unknown fields to allow additive schema evolution.
 
-\begin{minted}{json}
+\begin{verbatim}
 {
   "event_id":  <string>,    // UUID v4 for correlation
   "sequence":  <int64>,     // monotonically increasing within this run
@@ -102,7 +102,7 @@ Emitted after a step exits cleanly.
     }
   ]
 }
-\end{minted}
+\end{verbatim}
 
 \subsubsection{\texttt{step/failed}}
 

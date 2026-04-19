@@ -172,7 +172,7 @@ is not supported in v2.0.
 
 Approval gates are declared in the step's \texttt{approvals} block:
 
-\begin{minted}{text}
+\begin{verbatim}
 steps:
   - id: delete_database
     kind: cli
@@ -184,7 +184,7 @@ steps:
       on_timeout: fail   # or: escalate
       escalate_to: ["senior-sre", "director-of-eng"]
       message: "Deleting {{ .targetNamespace }} is irreversible. Confirm change window."
-\end{minted}
+\end{verbatim}
 
 \subsection{UX Contract}
 
@@ -400,13 +400,13 @@ Individual steps may declare \texttt{requires\_role} to restrict who may trigger
 This is distinct from approval gates (which require external approval) — step role restriction
 \emph{prevents} a step from executing unless the actor themselves holds the required role.
 
-\begin{minted}{text}
+\begin{verbatim}
 steps:
   - id: promote_to_production
     kind: cli
     requires_role: "release-manager"
     command: "kubectl set image deployment/app app={{ .imageTag }}"
-\end{minted}
+\end{verbatim}
 
 \subsection{Separation of Duties}
 

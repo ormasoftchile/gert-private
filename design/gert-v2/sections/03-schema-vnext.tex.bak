@@ -1,0 +1,1495 @@
+% ============================================================
+% §03 — Schema vNext
+% Author: John (YAML/Schema Specialist)
+% Last updated: 2026-04-18
+% ============================================================
+
+\chapter{Schema vNext}
+
+\label{chap:schema}
+
+This chapter is the normative specification for all gert v2 data structures:
+runbook documents, tool definitions, and provider definitions.
+It supersedes all v1 schema documentation and defines the contracts that Brian's
+parser, Ken's runtime, and the VS~Code extension must implement.
+
+The design philosophy is \emph{minimal core, extensible periphery}: the core
+language fields that the runtime must understand are small, typed, and stable;
+everything else is declared as an extension with an explicit namespace.  Where
+v1 accumulated surface area organically, v2 draws a hard boundary and enforces
+it at parse time.
+
+% ============================================================
+\section{Schema Identity and Versioning}
+\label{sec:schema-identity}
+% ============================================================
+
+\subsection{apiVersion Values}
+\label{subsec:apiversion}
+
+Every gert document carries a mandatory \texttt{apiVersion} field that
+identifies both the document kind and the schema version.  The v2 values are:
+
+\begin{center}
+\begin{tabular}{lll}
+\hline
+\textbf{Document kind} & \textbf{v1 value} & \textbf{v2 value} \\
+\hline
+Runbook                & \texttt{runbook/v1} & \texttt{runbook/v2} \\
+Tool definition        & \texttt{tool/v0}    & \texttt{tool/v2}   \\
+Provider definition    & \texttt{provider/v0}& \texttt{provider/v2} \\
+\hline
+\end{tabular}
+\end{center}
+
+The format is \texttt{<kind>/<major>}.  Minor and patch changes do not alter
+the \texttt{apiVersion} string; they are tracked by the schema artifact version
+(see \S\ref{sec:schema-artifacts}).
+
+\subsection{Self-Description via \$schema}
+\label{subsec:self-description}
+
+Following JSON~Schema best practice and the pattern used by GitHub Actions,
+Argo~Workflows, and Kubernetes~CRDs, every v2 document \emph{should} carry a
+\texttt{\$schema} field pointing to the canonical JSON~Schema URL:
+
+\begin{verbatim}
+$schema: "https://schemas.gert.dev/runbook/v2.json"
+apiVersion: runbook/v2
+id: service-health
+name: Service Health Check
+...
+\end{verbatim}
+
+The \texttt{\$schema} field is optional at runtime (the runtime uses
+\texttt{apiVersion} for dispatch) but is \emph{strongly recommended} because:
+
+\begin{itemize}
+  \item VS~Code and JetBrains IDEs provide schema-backed auto-completion and
+        inline validation when \texttt{\$schema} is present.
+  \item The schema URL carries an implicit version contract: updating the URL
+        updates the validation rules visible to tooling.
+  \item It enables offline validation with any JSON~Schema Draft~2020-12
+        validator (ajv, jsonschema, check-jsonschema).
+\end{itemize}
+
+Schema URLs for each document kind:
+
+\begin{verbatim}
+https://schemas.gert.dev/runbook/v2.json
+https://schemas.gert.dev/tool/v2.json
+https://schemas.gert.dev/provider/v2.json
+\end{verbatim}
+
+\subsection{Versioning Strategy}
+\label{subsec:versioning-strategy}
+
+gert schema versioning follows a simplified semantic versioning model applied
+to the \texttt{apiVersion} major component:
+
+\begin{itemize}
+  \item \textbf{Major increment} (e.g.\ \texttt{runbook/v1} → \texttt{runbook/v2}):
+        A breaking change.  The parser \emph{must not} silently accept the old
+        format.  Automated migration is provided via \texttt{gert migrate}.
+  \item \textbf{Minor/patch changes within a major}: Additive, backward-compatible.
+        New optional fields may be added.  Existing fields may not be removed or
+        renamed.  The JSON~Schema artifact version tracks these with a semver
+        suffix (e.g.\ \texttt{runbook/v2.json} at artifact version
+        \texttt{2.1.0}).
+\end{itemize}
+
+\paragraph{What constitutes a breaking change}
+
+A breaking change is any of:
+\begin{itemize}
+  \item Renaming or removing a required field.
+  \item Narrowing an existing enum (removing a valid value).
+  \item Changing a field type (e.g.\ string → object).
+  \item Changing the meaning of a field such that existing runbooks produce
+        different runtime behavior.
+  \item Removing a step type.
+\end{itemize}
+
+Adding new optional fields, adding new enum values, and loosening existing
+constraints are \emph{not} breaking changes.
+
+\subsection{Compatibility Contract: v1 → v2}
+\label{subsec:compatibility-contract}
+
+\begin{center}
+\begin{tabular}{llp{6cm}}
+\hline
+\textbf{v1 field} & \textbf{v2 status} & \textbf{Notes} \\
+\hline
+\texttt{apiVersion: runbook/v0} & Removed & Handled by \texttt{gert migrate} \\
+\texttt{apiVersion: runbook/v1} & Deprecated & Compatibility mode in v2 parser \\
+\texttt{meta.name}              & Promoted  & Becomes top-level \texttt{name} \\
+\texttt{meta.kind}              & Promoted  & Becomes top-level \texttt{kind} \\
+\texttt{meta.description}       & Promoted  & Becomes top-level \texttt{description} \\
+\texttt{meta.vars}              & Retained  & Moved to top-level \texttt{vars} \\
+\texttt{meta.inputs}            & Retained  & Moved to top-level \texttt{inputs} \\
+\texttt{meta.governance}        & Retained  & Moved to top-level \texttt{governance} \\
+\texttt{meta.prose}             & Retained  & Moved to top-level \texttt{prose} \\
+\texttt{meta.defaults}          & Retained  & Moved to top-level \texttt{defaults} \\
+\texttt{imports}                & Retained  & Unchanged \\
+\texttt{tools}                  & Replaced  & Replaced by \texttt{toolRefs} (typed) \\
+\texttt{flow}                   & Retained  & Canonical execution root \\
+\texttt{tree}                   & Removed   & Use \texttt{flow} \\
+\texttt{steps}                  & Removed   & Flat step list was never canonical \\
+\texttt{step.type: collector}   & Renamed   & Becomes \texttt{type: manual} \\
+\texttt{step.type: router}      & Renamed   & Becomes \texttt{type: end} \\
+\texttt{step.type: choice}      & Retained  & Unchanged \\
+\texttt{step.type: noop}        & Removed   & Use \texttt{when:} guard on any step \\
+\texttt{step.type: extension}   & Retained  & Unchanged \\
+\texttt{step.with.argv}         & Deprecated& Use \texttt{type: cli} with \texttt{command:} \\
+\texttt{step.assertions}        & Deprecated& Use \texttt{step.type: assert} \\
+\hline
+\end{tabular}
+\end{center}
+
+The v2 parser reads \texttt{runbook/v1} documents in \textbf{compatibility mode}:
+all v1 field paths are accepted and silently normalized to their v2 equivalents
+before validation.  Running \texttt{gert migrate} permanently rewrites the file
+to v2 canonical form.  v2 will not support \texttt{runbook/v0}; documents at
+that version must be migrated to v1 first or directly to v2 via a two-stage
+migration.
+
+\subsection{\texttt{gert migrate} Behavior}
+\label{subsec:migrate}
+
+\begin{verbatim}
+# Dry-run preview
+gert migrate --dry-run runbook.yaml
+
+# In-place rewrite
+gert migrate runbook.yaml
+
+# Migrate a whole directory
+gert migrate ./runbooks/
+\end{verbatim}
+
+Migration rules applied automatically:
+\begin{enumerate}
+  \item Rewrite \texttt{apiVersion} to \texttt{runbook/v2}.
+  \item Add \texttt{\$schema} field.
+  \item Promote \texttt{meta.name}, \texttt{meta.kind}, \texttt{meta.description}
+        to top-level.
+  \item Move remaining \texttt{meta.*} fields to their v2 top-level equivalents.
+  \item Rename \texttt{tree:} to \texttt{flow:}.
+  \item Rename \texttt{step.type: collector} → \texttt{manual},
+        \texttt{step.type: router} → \texttt{end}.
+  \item Rewrite \texttt{tools: [name]} shorthand to \texttt{toolRefs:} typed
+        declarations.
+  \item Add \texttt{id:} to runbook if absent (derived from \texttt{name}).
+\end{enumerate}
+
+% ============================================================
+\section{Core Runbook Fields (v2)}
+\label{sec:core-fields}
+% ============================================================
+
+\subsection{Top-Level Field Inventory}
+\label{subsec:field-inventory}
+
+The v2 runbook document has the following top-level fields:
+
+\begin{center}
+\begin{tabular}{lllp{5.5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{\$schema}     & string  & No  & JSON~Schema URL (recommended) \\
+\texttt{apiVersion}   & string  & Yes & Must be \texttt{runbook/v2} \\
+\texttt{id}           & string  & Yes & Unique machine identifier (slug) \\
+\texttt{name}         & string  & Yes & Human-readable display name \\
+\texttt{kind}         & enum    & No  & \texttt{mitigation | reference | composable | rca} \\
+\texttt{description}  & string  & No  & Short prose summary \\
+\texttt{vars}         & map     & No  & Default variable values \\
+\texttt{inputs}       & map     & No  & Input declarations (\S\ref{sec:inputs-outputs}) \\
+\texttt{outputs}      & map     & No  & Output declarations (\S\ref{sec:inputs-outputs}) \\
+\texttt{toolRefs}     & array   & No  & Tool references (\S\ref{subsec:toolrefs}) \\
+\texttt{imports}      & map     & No  & Named runbook imports \\
+\texttt{defaults}     & object  & No  & Default step settings \\
+\texttt{governance}   & object  & No  & Governance policy \\
+\texttt{prose}        & object  & No  & Human-readable TSG sections \\
+\texttt{metadata}     & map     & No  & Arbitrary key-value annotations \\
+\texttt{flow}         & array   & Yes & Execution tree (TreeNode array) \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{id field}
+The \texttt{id} is a slug: lowercase alphanumeric with hyphens, matching
+\texttt{\^{}[a-z][a-z0-9-]*[a-z0-9]\$}.  It uniquely identifies a runbook within
+a project and is used by the \texttt{invoke} step and the trace record.  It must
+be stable across renames; changing it is a breaking change for any runbook that
+invokes it by id.
+
+\paragraph{kind values}
+\begin{itemize}
+  \item \texttt{mitigation} — Incident response procedure; governance defaults
+        to \texttt{require-approval} for destructive effects.
+  \item \texttt{reference} — Documentation-first runbook; dry-run by default.
+  \item \texttt{composable} — Sub-runbook intended for invoke from other
+        runbooks; not directly executable from CLI.
+  \item \texttt{rca} — Root-cause analysis template.
+\end{itemize}
+
+\subsection{toolRefs}
+\label{subsec:toolrefs}
+
+In v1, tools were declared as a flat string array (\texttt{tools: [curl, nslookup]}).
+In v2, \texttt{toolRefs} is a typed array that allows aliasing and explicit path
+overrides:
+
+\begin{verbatim}
+toolRefs:
+  - name: curl
+  - name: nslookup
+  - name: k8s
+    path: ./tools/k8s.tool.yaml   # override default discovery
+    alias: kubectl-wrapper        # optional local alias
+\end{verbatim}
+
+The default discovery path for \texttt{name: foo} is \texttt{tools/foo.tool.yaml}
+relative to the runbook file.  The \texttt{path} field overrides this.
+The \texttt{alias} field lets the runbook reference the tool by a local name
+that differs from the tool's declared \texttt{meta.name}.
+
+\subsection{Minimal Valid v2 Runbook}
+\label{subsec:minimal-runbook}
+
+\begin{verbatim}
+$schema: "https://schemas.gert.dev/runbook/v2.json"
+apiVersion: runbook/v2
+id: hello-world
+name: Hello World
+
+flow:
+  - step:
+      id: greet
+      type: cli
+      title: Print greeting
+      command: echo
+      args: ["Hello, world!"]
+      capture:
+        output: stdout
+  - step:
+      id: done
+      type: end
+      title: Complete
+      outcome:
+        category: resolved
+        code: success
+\end{verbatim}
+
+\subsection{Complete Annotated Example}
+\label{subsec:full-example}
+
+\begin{verbatim}
+$schema: "https://schemas.gert.dev/runbook/v2.json"
+apiVersion: runbook/v2
+id: service-health-check
+name: Service Health Check
+kind: mitigation
+description: |
+  Validate DNS resolution and HTTP endpoint reachability
+  for a named service. Escalates on failure.
+
+vars:
+  default_timeout: "30s"
+
+inputs:
+  hostname:
+    type: string
+    required: true
+    description: "Hostname to check"
+    from: prompt
+  incident_id:
+    type: string
+    required: false
+    description: "Incident tracking ID"
+    from: incident.id       # provider-resolved
+
+outputs:
+  health_status:
+    type: string
+    description: "Final health assessment"
+    from: captures.http_result
+
+toolRefs:
+  - name: curl
+  - name: nslookup
+
+governance:
+  rules:
+    - effects: ["network.probe"]
+      action: allow
+    - effects: ["service.restart"]
+      action: require-approval
+      min_approvers: 2
+  redact:
+    - pattern: "(?i)Authorization:\\s*\\S+"
+      replace: "Authorization: <redacted>"
+
+defaults:
+  timeout: "60s"
+
+prose:
+  safety: |
+    Run this runbook only during an active incident. Do not
+    loop — each execution creates a trace record.
+  prerequisites: "Requires curl >= 7.80 and nslookup on PATH."
+
+metadata:
+  team: platform-sre
+  runbook-url: "https://wiki.example.com/runbooks/service-health"
+  severity: P2
+
+flow:
+  - step:
+      id: check_dns
+      type: tool
+      title: "Resolve DNS: {{ .hostname }}"
+      tool:
+        name: nslookup
+        action: lookup
+        args:
+          host: "{{ .hostname }}"
+      capture:
+        dns_result: stdout
+      contract:
+        effects: ["network.probe"]
+        reads: ["hostname"]
+        writes: ["dns_result"]
+
+  - step:
+      id: check_http
+      type: tool
+      title: "HTTP health check: {{ .hostname }}"
+      tool:
+        name: curl
+        action: head
+        args:
+          url: "https://{{ .hostname }}/healthz"
+      capture:
+        http_result: stdout
+      timeout: "{{ .default_timeout }}"
+
+  - step:
+      id: evaluate
+      type: branch
+      title: Evaluate health results
+      branches:
+        - condition: '{{ contains .http_result "200" }}'
+          label: Healthy
+          steps:
+            - step:
+                id: resolved
+                type: end
+                title: Service is healthy
+                outcome:
+                  category: resolved
+                  code: http_ok
+        - condition: '{{ not (contains .http_result "200") }}'
+          label: Unhealthy
+          steps:
+            - step:
+                id: escalate
+                type: end
+                title: Escalate to on-call
+                outcome:
+                  category: escalated
+                  code: http_fail
+\end{verbatim}
+
+% ============================================================
+\section{Input and Output Declarations}
+\label{sec:inputs-outputs}
+% ============================================================
+
+\subsection{Input Declarations}
+\label{subsec:inputs}
+
+Inputs declare variables that must be resolved before execution begins.  In v2
+the \texttt{inputs} map is a top-level field (promoted from \texttt{meta.inputs}).
+
+\begin{verbatim}
+inputs:
+  <name>:
+    type: string | number | boolean | secret
+    required: true | false          # default: true
+    description: "..."
+    default: "..."                  # valid only when required: false
+    example: "..."
+    pattern: "^[a-z]+"             # regex validation (string only)
+    from: <binding>                 # resolution source
+\end{verbatim}
+
+\paragraph{type field}
+The \texttt{type} field (new in v2) declares the value's type.  Supported values:
+
+\begin{itemize}
+  \item \texttt{string} — Default. UTF-8 text.
+  \item \texttt{number} — Integer or float, passed as string in templates.
+  \item \texttt{boolean} — \texttt{true} or \texttt{false}.
+  \item \texttt{secret} — String, redacted in traces and log output.
+\end{itemize}
+
+\paragraph{from: binding syntax}
+
+The \texttt{from} field specifies how the value is resolved.  v2 binding
+forms:
+
+\begin{center}
+\begin{tabular}{lp{7.5cm}}
+\hline
+\textbf{Binding} & \textbf{Behavior} \\
+\hline
+\texttt{prompt}          & Ask the operator interactively at runtime \\
+\texttt{env.<NAME>}      & Read from environment variable \texttt{NAME} \\
+\texttt{file.<path>}     & Read first line from a local file \\
+\texttt{<provider>.<field>} & Delegate to a registered input provider (e.g.\ \texttt{incident.id}) \\
+\texttt{var.<name>}      & Copy from another variable or capture \\
+\hline
+\end{tabular}
+\end{center}
+
+If \texttt{from} is omitted, the field must have a \texttt{default} value or the
+runtime will reject the runbook at semantic validation time.
+
+\subsection{Output Declarations}
+\label{subsec:outputs}
+
+Outputs declare values that a composable runbook exposes to its caller via the
+\texttt{invoke} step's output extraction.
+
+\begin{verbatim}
+outputs:
+  <name>:
+    type: string | number | boolean | secret
+    description: "..."
+    from: captures.<captureName>    # must reference a capture variable
+\end{verbatim}
+
+The \texttt{from: captures.*} binding is the only supported form in v2.
+The named capture must be written by at least one step in the runbook; the
+semantic validator checks this.
+
+\subsection{Expression Language}
+\label{subsec:expressions}
+
+v2 retains \textbf{Go templates} (\texttt{text/template}) as the expression
+language for all interpolated fields (\texttt{title}, \texttt{args}, \texttt{when},
+\texttt{condition}, \texttt{instructions}, etc.).  The decision to retain Go
+templates is grounded in two facts:
+\begin{enumerate}
+  \item The v1 template engine is battle-tested and broadly used in v1 runbooks.
+  \item Go templates' pipelines and custom function maps provide sufficient
+        expressiveness for operational conditionals.
+\end{enumerate}
+
+The template data context is the \emph{run variable map}: all \texttt{vars},
+resolved \texttt{inputs}, and accumulated \texttt{captures} merged into a single
+flat \texttt{map[string]string}.  Access by dot notation:
+\texttt{\{\{\ .hostname\ \}\}}.
+
+\paragraph{Built-in template functions (v2 additions)}
+
+v2 adds a standard function library accessible in all templates:
+
+\begin{center}
+\begin{tabular}{ll}
+\hline
+\textbf{Function} & \textbf{Signature} \\
+\hline
+\texttt{contains}     & \texttt{(s, substr string) bool} \\
+\texttt{hasPrefix}    & \texttt{(s, prefix string) bool} \\
+\texttt{hasSuffix}    & \texttt{(s, suffix string) bool} \\
+\texttt{trim}         & \texttt{(s string) string} \\
+\texttt{toLower}      & \texttt{(s string) string} \\
+\texttt{toUpper}      & \texttt{(s string) string} \\
+\texttt{split}        & \texttt{(s, sep string) []string} \\
+\texttt{join}         & \texttt{(elems []string, sep string) string} \\
+\texttt{env}          & \texttt{(name string) string} \\
+\texttt{now}          & \texttt{() string} (RFC3339) \\
+\texttt{runID}        & \texttt{() string} \\
+\texttt{not}          & \texttt{(v bool) bool} \\
+\texttt{eq, ne, lt, gt, le, ge} & Standard comparison \\
+\hline
+\end{tabular}
+\end{center}
+
+All functions from \texttt{text/template} (built-ins: \texttt{and}, \texttt{or},
+\texttt{index}, \texttt{len}, \texttt{printf}, etc.) remain available.
+
+\paragraph{Template errors}
+
+In v2, a template evaluation error in a \texttt{condition} or \texttt{when}
+field is a hard step failure (not a soft skip).  The step transitions to
+\texttt{failed} and execution halts unless \texttt{continue\_on\_fail: true} is
+set on the step.
+
+% ============================================================
+\section{Step Types (v2 Inventory)}
+\label{sec:step-types}
+% ============================================================
+
+Each step in \texttt{flow} is a \texttt{TreeNode}: either a \texttt{step} object
+(with optional \texttt{branches} and \texttt{iterate} siblings) or a standalone
+\texttt{iterate} block.
+
+\subsection{Common Step Fields}
+\label{subsec:common-fields}
+
+The following fields are available on every step type:
+
+\begin{center}
+\begin{tabular}{lllp{5.5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{id}              & string  & Yes & Unique within the runbook \\
+\texttt{type}            & enum    & Yes & Step type (see below) \\
+\texttt{title}           & string  & No  & Template; displayed in TUI/trace \\
+\texttt{subtitle}        & string  & No  & Secondary template annotation \\
+\texttt{when}            & string  & No  & Guard expression; skips step if false \\
+\texttt{timeout}         & string  & No  & Duration (e.g.\ \texttt{30s}); overrides default \\
+\texttt{delay}           & string  & No  & Pre-execution pause (e.g.\ \texttt{5s}) \\
+\texttt{retry}           & object  & No  & Retry config (\S\ref{subsec:retry}) \\
+\texttt{continue\_on\_fail} & bool & No  & Continue execution on failure \\
+\texttt{scope}           & string  & No  & Named scope for variable isolation \\
+\texttt{export}          & string array & No & Variables to export from scope \\
+\texttt{capture}         & map     & No  & Output capture bindings \\
+\texttt{contract}        & object  & No  & Behavioral contract for governance \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{Retry configuration}
+\label{subsec:retry}
+
+\begin{verbatim}
+retry:
+  max: 3              # maximum retry attempts (required)
+  interval: "5s"      # initial wait between attempts
+  backoff: linear     # linear | exponential (default: linear)
+\end{verbatim}
+
+\paragraph{Step contract}
+
+The \texttt{contract} field annotates a step with its behavioral properties for
+governance policy evaluation:
+
+\begin{verbatim}
+contract:
+  effects:
+    - network.probe
+    - service.restart
+  reads:   [hostname, port]
+  writes:  [http_result]
+  deterministic: true
+  idempotent: false
+  secrets: [auth_token]
+\end{verbatim}
+
+Effects are free-form strings matched against \texttt{governance.rules[].effects}.
+The \texttt{secrets} list names variables whose values must be redacted in traces.
+
+\subsection{Step Type: cli}
+\label{subsec:step-cli}
+
+Executes a local command directly.  In the v2 runtime \texttt{cli} is the
+canonical command step; the v1 \texttt{with.argv} form is accepted in
+compatibility mode and rewritten to \texttt{cli} by the migration tool.
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{command}  & string       & Yes & Executable name or full path \\
+\texttt{args}     & string array & No  & Arguments (templates expanded) \\
+\texttt{env}      & map          & No  & Additional environment variables \\
+\texttt{workdir}  & string       & No  & Working directory \\
+\texttt{stdin}    & string       & No  & Template string piped to stdin \\
+\texttt{capture}  & map          & No  & \texttt{stdout | stderr | exit\_code} → var \\
+\hline
+\end{tabular}
+\end{center}
+
+Governance checks against the \texttt{allowed\_commands} / \texttt{denied\_commands}
+lists and any matching \texttt{governance.rules[].effects} are evaluated
+before the command executes.  If the rule action is \texttt{require-approval},
+the step pauses for human approval before proceeding.
+
+\begin{verbatim}
+- step:
+    id: tail_logs
+    type: cli
+    title: "Tail last 100 lines from {{ .log_file }}"
+    command: tail
+    args: ["-n", "100", "{{ .log_file }}"]
+    capture:
+      output: stdout
+      exit: exit_code
+    contract:
+      effects: [filesystem.read]
+      reads: [log_file]
+      writes: [output]
+\end{verbatim}
+
+\subsection{Step Type: manual}
+\label{subsec:step-manual}
+
+Prompts a human operator for evidence, approvals, or free-form input.  Renamed
+from \texttt{collector} in v1.  A \texttt{manual} step does not execute any
+command; it pauses execution and waits for the operator to provide the declared
+evidence items.
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{instructions}       & string  & No  & Markdown prompt displayed to operator \\
+\texttt{required\_evidence} & array   & No  & Evidence items (\S\ref{subsec:evidence}) \\
+\texttt{approvals}          & object  & No  & Approval gate config \\
+\texttt{choices}            & object  & No  & Radio-button choice selection \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{Evidence items}
+\label{subsec:evidence}
+
+\begin{verbatim}
+required_evidence:
+  - kind: text
+    name: summary_notes
+  - kind: checklist
+    name: preflight
+    items:
+      - "Verified monitoring dashboard"
+      - "Confirmed no other incidents in flight"
+  - kind: attachment
+    name: screenshot
+\end{verbatim}
+
+\paragraph{Approval gate}
+
+\begin{verbatim}
+approvals:
+  min: 2
+  roles: [DRI, change-manager]
+  timeout: 4h
+  on_timeout: escalate          # escalate | fail | skip
+  escalate_to: [manager]
+\end{verbatim}
+
+The \texttt{timeout} and \texttt{on\_timeout} fields are new in v2, addressing
+the SLA enforcement gap identified in the research brief.
+
+\begin{verbatim}
+- step:
+    id: validate_dashboard
+    type: manual
+    title: Validate monitoring dashboard
+    instructions: |
+      Check the Grafana dashboard for **{{ .hostname }}**.
+      Confirm error rate is below 1% and P99 < 500 ms.
+    required_evidence:
+      - kind: checklist
+        name: dashboard_check
+        items:
+          - "Error rate < 1%"
+          - "P99 latency < 500ms"
+    approvals:
+      min: 1
+      roles: [DRI]
+      timeout: 30m
+      on_timeout: fail
+\end{verbatim}
+
+\subsection{Step Type: tool}
+\label{subsec:step-tool}
+
+Invokes a named tool action.  The tool must be declared in \texttt{toolRefs}.
+The runtime dispatches to the tool's configured transport (stdio, jsonrpc, or
+mcp).
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{tool.name}    & string & Yes & Tool name (must match toolRefs entry) \\
+\texttt{tool.action}  & string & Yes & Action declared in tool definition \\
+\texttt{tool.args}    & map    & No  & Argument key-value map (templates expanded) \\
+\texttt{tool.version} & string & No  & Optional version pin \\
+\texttt{capture}      & map    & No  & \texttt{stdout | stderr | json.<path>} → var \\
+\hline
+\end{tabular}
+\end{center}
+
+Output capture in v2 adds a \texttt{json.<path>} form for JSON-structured tool
+outputs, eliminating the need for follow-up \texttt{cli} steps with \texttt{jq}:
+
+\begin{verbatim}
+capture:
+  pod_name: json.items[0].metadata.name
+  status:   json.items[0].status.phase
+\end{verbatim}
+
+\begin{verbatim}
+- step:
+    id: list_pods
+    type: tool
+    title: "List pods in {{ .namespace }}"
+    tool:
+      name: kubectl
+      action: get-pods
+      args:
+        namespace: "{{ .namespace }}"
+        output: json
+    capture:
+      pod_count: json.items | length
+      first_pod: json.items[0].metadata.name
+    contract:
+      effects: [k8s.read]
+      reads: [namespace]
+      writes: [pod_count, first_pod]
+\end{verbatim}
+
+\subsection{Step Type: invoke}
+\label{subsec:step-invoke}
+
+Invokes another runbook inline as a sub-procedure.  The invoked runbook's
+outputs are mapped into the caller's variable space.
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{invoke.runbook}  & string & Yes & Import alias or relative path \\
+\texttt{invoke.inputs}   & map    & No  & Input bindings (template-expanded values) \\
+\texttt{invoke.outputs}  & map    & No  & Output extraction: local-var → output-name \\
+\texttt{invoke.gate}     & object & No  & Stop-if conditions on child outcome \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{verbatim}
+imports:
+  connectivity: ./connectivity-check.runbook.yaml
+
+flow:
+  - step:
+      id: run_connectivity
+      type: invoke
+      title: Run connectivity check
+      invoke:
+        runbook: connectivity
+        inputs:
+          service_name: "{{ .hostname }}"
+          incident_id:  "{{ .incident_id }}"
+        outputs:
+          conn_status: health_status   # local var ← child output
+        gate:
+          stop_if: [escalated]
+\end{verbatim}
+
+\subsection{Step Type: branch}
+\label{subsec:step-branch}
+
+Evaluates a list of conditions and executes the first matching arm.  In v2,
+\texttt{branch} is an explicit first-class step type (as well as the inline
+\texttt{branches:} sibling on any step node).
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{branches}           & array  & Yes & List of Branch objects \\
+\texttt{branches[].condition} & string & Yes & Go template evaluating to \texttt{true}/\texttt{false} \\
+\texttt{branches[].label}   & string & No  & Display label for diagram/trace \\
+\texttt{branches[].steps}   & array  & No  & Steps to execute if condition matches \\
+\hline
+\end{tabular}
+\end{center}
+
+At most one branch arm executes.  If no arm matches and no arm has an
+\texttt{else: true} marker, execution continues past the branch node with no
+steps run.  The \texttt{else: true} marker (new in v2) designates a catch-all
+arm:
+
+\begin{verbatim}
+- step:
+    id: route_on_env
+    type: branch
+    title: Route by environment
+    branches:
+      - condition: '{{ eq .environment "production" }}'
+        label: Production path
+        steps:
+          - step:
+              id: require_approval
+              type: manual
+              title: Require change-manager approval
+              approvals:
+                min: 1
+                roles: [change-manager]
+      - condition: '{{ eq .environment "staging" }}'
+        label: Staging path
+        steps:
+          - step:
+              id: log_staging
+              type: cli
+              title: Log staging deploy
+              command: echo
+              args: ["Deploying to staging"]
+      - else: true
+        label: Unknown environment — abort
+        steps:
+          - step:
+              id: abort
+              type: end
+              title: Unknown environment
+              outcome:
+                category: escalated
+                code: unknown_env
+\end{verbatim}
+
+\subsection{Step Type: iterate}
+\label{subsec:step-iterate}
+
+Repeats a block of steps over a collection or until a convergence condition
+is met.  In v2 \texttt{iterate} is a TreeNode sibling (not a step type in the
+\texttt{step.type} enum) — it appears at the tree level alongside \texttt{step}
+nodes.
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{iterate.over}  & string & * & Template resolving to comma-separated list \\
+\texttt{iterate.as}    & string & No & Loop variable name (default: \texttt{item}) \\
+\texttt{iterate.max}   & int    & * & Max iterations (convergence mode) \\
+\texttt{iterate.until} & string & * & Convergence condition expression \\
+\texttt{iterate.collect} & map  & No & Accumulate captures across passes \\
+\texttt{iterate.steps} & array  & Yes & Steps to execute each pass \\
+\hline
+\multicolumn{4}{l}{* \texttt{over} or (\texttt{max} + \texttt{until}) required; mutually exclusive.} \\
+\end{tabular}
+\end{center}
+
+The loop variable \texttt{\{\{\ .iteration\ \}\}} (0-indexed) is always available.
+In list mode, \texttt{\{\{\ .item\ \}\}} (or the \texttt{as} name) holds the
+current element.
+
+\begin{verbatim}
+# List iteration
+- iterate:
+    id: check_all_services
+    over: "{{ .service_list }}"   # e.g. "api,worker,scheduler"
+    as: svc
+    collect:
+      results: "{{ .svc }}:{{ .http_result }}"
+    steps:
+      - step:
+          id: probe
+          type: tool
+          title: "Check {{ .svc }}"
+          tool:
+            name: curl
+            action: head
+            args:
+              url: "https://{{ .svc }}.internal/healthz"
+          capture:
+            http_result: stdout
+
+# Convergence iteration
+- iterate:
+    id: wait_for_deploy
+    max: 10
+    until: '{{ eq .deploy_status "Running" }}'
+    steps:
+      - step:
+          id: poll_deploy
+          type: tool
+          title: "Poll deployment (pass {{ .iteration }})"
+          tool:
+            name: kubectl
+            action: get-deploy-status
+            args:
+              name: "{{ .deployment }}"
+          capture:
+            deploy_status: json.status.phase
+      - step:
+          id: wait
+          type: cli
+          title: Wait 15s
+          command: sleep
+          args: ["15"]
+\end{verbatim}
+
+\subsection{Step Type: parallel}
+\label{subsec:step-parallel}
+
+Executes a set of independent step groups concurrently, then joins.  New in v2,
+addressing the fan-out/fan-in gap identified in Dennis's research brief.
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{branches}          & array  & Yes & Each branch is an independent group \\
+\texttt{join.wait\_for}    & enum   & No  & \texttt{all | any | majority} (default: \texttt{all}) \\
+\texttt{join.on\_failure}  & enum   & No  & \texttt{fail | continue} (default: \texttt{fail}) \\
+\hline
+\end{tabular}
+\end{center}
+
+Parallel branches are isolated from each other's variable writes during
+execution.  After the join, all \texttt{capture} values from all branches are
+merged into the caller's variable map.  Write conflicts (two branches writing the
+same variable) are resolved by last-writer-wins and a warning is emitted.
+
+\begin{verbatim}
+- step:
+    id: parallel_checks
+    type: parallel
+    title: Run DNS and HTTP checks concurrently
+    branches:
+      - label: DNS check
+        steps:
+          - step:
+              id: dns_check
+              type: tool
+              tool:
+                name: nslookup
+                action: lookup
+                args:
+                  host: "{{ .hostname }}"
+              capture:
+                dns_result: stdout
+      - label: HTTP check
+        steps:
+          - step:
+              id: http_check
+              type: tool
+              tool:
+                name: curl
+                action: head
+                args:
+                  url: "https://{{ .hostname }}/healthz"
+              capture:
+                http_result: stdout
+    join:
+      wait_for: all
+      on_failure: fail
+\end{verbatim}
+
+\subsection{Step Type: assert}
+\label{subsec:step-assert}
+
+Evaluates a list of assertions against captured variables.  Fails the run if
+any assertion does not pass.
+
+\begin{verbatim}
+- step:
+    id: verify_deployment
+    type: assert
+    title: Verify deployment succeeded
+    assert:
+      - type: contains
+        subject: "{{ .deploy_output }}"
+        expected: "successfully rolled out"
+      - type: eq
+        subject: "{{ .exit_code }}"
+        expected: "0"
+      - type: json_path
+        subject: "{{ .api_response }}"
+        path: "$.status"
+        expected: "active"
+\end{verbatim}
+
+Assertion types: \texttt{contains}, \texttt{not\_contains}, \texttt{matches}
+(regex), \texttt{eq}, \texttt{ne}, \texttt{lt}, \texttt{gt}, \texttt{exit\_code},
+\texttt{json\_path}.
+
+\subsection{Step Type: compensate}
+\label{subsec:step-compensate}
+
+New in v2.  Registers a compensation (rollback) action that is executed in
+reverse order if the run fails or is cancelled after this step.  Implements the
+saga pattern for long-running operational transactions.
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{compensate.on}   & enum  & No  & \texttt{failure | cancel | any} (default: \texttt{failure}) \\
+\texttt{compensate.steps}& array & Yes & Steps to execute as compensation \\
+\hline
+\end{tabular}
+\end{center}
+
+The compensation steps execute in LIFO order relative to the sequence of
+\texttt{compensate} nodes encountered during the forward execution pass.
+Compensation steps share the same variable context as the point at which the
+\texttt{compensate} node was registered.
+
+\begin{verbatim}
+- step:
+    id: scale_down
+    type: tool
+    title: Scale down service
+    tool:
+      name: kubectl
+      action: scale
+      args:
+        deployment: "{{ .deployment }}"
+        replicas: "0"
+
+- step:
+    id: register_scale_up
+    type: compensate
+    title: Compensation — scale back up on failure
+    compensate:
+      on: failure
+      steps:
+        - step:
+            id: scale_up_comp
+            type: tool
+            title: Restore service scale
+            tool:
+              name: kubectl
+              action: scale
+              args:
+                deployment: "{{ .deployment }}"
+                replicas: "{{ .original_replicas }}"
+\end{verbatim}
+
+\subsection{Step Type: end}
+\label{subsec:step-end}
+
+Declares a terminal outcome and halts execution.  Renamed from \texttt{router}
+in v1.
+
+\begin{verbatim}
+- step:
+    id: resolved
+    type: end
+    title: Incident resolved
+    outcome:
+      category: resolved       # resolved | escalated | no_action | needs_rca
+      code: dns_healthy
+      meta:
+        resolution_time: "{{ .elapsed }}"
+\end{verbatim}
+
+% ============================================================
+\section{Tool Definition Schema (v2)}
+\label{sec:tool-schema}
+% ============================================================
+
+Tool definitions describe callable tools: their actions, argument schemas,
+transport, and behavioral contract.  In v2 the \texttt{tool/v0} version is
+replaced by \texttt{tool/v2}.
+
+\subsection{Tool Definition Field Inventory}
+\label{subsec:tool-fields}
+
+\begin{verbatim}
+$schema: "https://schemas.gert.dev/tool/v2.json"
+apiVersion: tool/v2
+
+meta:
+  name: kubectl
+  version: "1.2"
+  description: Kubernetes CLI wrapper
+  binary: kubectl
+
+transport:
+  mode: stdio         # stdio | jsonrpc | mcp
+  # jsonrpc options:
+  # start: ["node", "server.js"]
+  # port: 3000
+  # mcp options:
+  # start: ["python", "mcp_server.py"]
+
+actions:
+  get-pods:
+    description: List pods in a namespace
+    argv: ["get", "pods", "-n", "{{ .namespace }}", "-o", "json"]
+    args:
+      namespace:
+        type: string
+        required: true
+        description: Kubernetes namespace
+      output:
+        type: string
+        required: false
+        default: json
+    capture:
+      stdout:
+        format: json    # json | text | lines
+    contract:
+      effects: [k8s.read]
+      reads: [namespace]
+    governance:
+      action: allow
+\end{verbatim}
+
+\paragraph{New in v2}
+
+\begin{itemize}
+  \item \texttt{capture.stdout.format} — declares the output format; enables
+        structured \texttt{json.<path>} capture in runbook steps.
+  \item \texttt{actions.<name>.contract} — per-action behavioral contract
+        automatically merged with any step-level contract override.
+  \item \texttt{actions.<name>.governance} — per-action governance policy;
+        overrides the runbook-level rules for this action only.
+  \item \texttt{meta.version} — explicit tool version for auditing and pinning.
+\end{itemize}
+
+% ============================================================
+\section{Provider Definition Schema (v2)}
+\label{sec:provider-schema}
+% ============================================================
+
+Provider definitions declare external input resolution services.
+In v2 the \texttt{provider/v0} version is replaced by \texttt{provider/v2}.
+
+\begin{verbatim}
+$schema: "https://schemas.gert.dev/provider/v2.json"
+apiVersion: provider/v2
+
+meta:
+  name: incident
+  version: "1.0"
+  description: PagerDuty incident context provider
+  kind: input-provider    # input-provider | enrichment-provider
+
+transport:
+  mode: jsonrpc
+  start: ["./providers/pagerduty-provider"]
+
+fields:
+  id:
+    type: string
+    description: Active incident ID
+  title:
+    type: string
+    description: Incident title
+  severity:
+    type: string
+    enum: [P1, P2, P3, P4]
+  affected_service:
+    type: string
+    description: Primary impacted service name
+
+capabilities:
+  - input-resolution
+\end{verbatim}
+
+The \texttt{fields} map defines the provider's schema.  Each field name
+corresponds to a \texttt{from: <provider>.<field>} binding in a runbook input.
+The semantic validator checks that all \texttt{from: <provider>.*} bindings
+reference a field declared in a loaded provider definition.
+
+% ============================================================
+\section{Namespace Convention for Extensions}
+\label{sec:namespaces}
+% ============================================================
+
+\subsection{The Extension Field Problem}
+
+Strict JSON Schema validation (\texttt{additionalProperties: false}) is a core
+v2 design constraint: unknown fields in a runbook must be rejected, not silently
+ignored.  At the same time, extensions must be able to attach metadata to steps,
+runbooks, and tool definitions without forking the core schema.
+
+\subsection{Convention: \texttt{x-<namespace>:} at the Field Level}
+
+v2 adopts the \textbf{\texttt{x-<namespace>}} prefix convention used by OpenAPI
+and GitHub Actions.  Extension fields must:
+
+\begin{enumerate}
+  \item Start with \texttt{x-}.
+  \item Be followed by a namespace component (lowercase alphanumeric and hyphens,
+        matching \texttt{[a-z][a-z0-9-]+}).
+  \item Be declared in an \textbf{extension manifest} registered via
+        \texttt{gert extension register} or in \texttt{gert.yaml}.
+\end{enumerate}
+
+\paragraph{At the runbook level}
+
+\begin{verbatim}
+$schema: "https://schemas.gert.dev/runbook/v2.json"
+apiVersion: runbook/v2
+id: deploy-service
+name: Deploy Service
+
+x-myorg-cost-center: "engineering-ops"
+x-myorg-change-id: "CHG-20260418-001"
+x-otel-service-name: "payment-service"
+\end{verbatim}
+
+\paragraph{At the step level}
+
+\begin{verbatim}
+- step:
+    id: deploy
+    type: tool
+    title: Deploy to production
+    x-myorg-risk-level: high
+    x-myorg-rollback-id: "{{ .deploy_id }}"
+\end{verbatim}
+
+\subsection{Extension Validation}
+
+\begin{enumerate}
+  \item \textbf{Unregistered extension fields} — The JSON~Schema validator
+        accepts any field matching \texttt{\^{}x-[a-z][a-z0-9-]+\$} without
+        requiring a registered schema.  This enables zero-friction annotation.
+        The \texttt{gert validate} command emits a \texttt{WARNING} for each
+        unregistered extension field.
+  \item \textbf{Registered extension fields} — An extension may ship a JSON
+        Schema fragment that constrains its field values.  Once registered, the
+        validator applies the fragment and reports violations as errors, not
+        warnings.
+  \item \textbf{Unknown non-extension fields} — Any field that does not match
+        a core field name and does not start with \texttt{x-} is a hard
+        validation error (\texttt{additionalProperties: false}).
+\end{enumerate}
+
+\subsection{Extension Registration Format}
+
+\begin{verbatim}
+# .gert/extensions/myorg.yaml
+apiVersion: extension/v1
+namespace: myorg
+description: MyOrg internal runbook annotations
+
+fields:
+  cost-center:
+    type: string
+    description: Cost center code for billing
+    pattern: "^[a-z]+-[a-z]+"
+  risk-level:
+    type: string
+    enum: [low, medium, high, critical]
+  change-id:
+    type: string
+    pattern: "^CHG-[0-9]{8}-[0-9]{3}$"
+  rollback-id:
+    type: string
+
+applies-to: [runbook, step]
+\end{verbatim}
+
+The extension schema is merged into the live JSON~Schema when the extension is
+registered, enabling IDE auto-completion for extension fields as well.
+
+% ============================================================
+\section{Structural vs.\ Semantic Validation}
+\label{sec:validation}
+% ============================================================
+
+v2 validation runs in two sequential phases.  Both must pass for a runbook to
+be considered valid.
+
+\subsection{Phase 1: Structural Validation}
+\label{subsec:structural}
+
+Structural validation is pure JSON~Schema~Draft~2020-12 evaluation.  It checks:
+
+\begin{itemize}
+  \item \textbf{Required fields} present (\texttt{id}, \texttt{name},
+        \texttt{apiVersion}, \texttt{flow}).
+  \item \textbf{Field types} correct (string vs.\ integer vs.\ object vs.\ array).
+  \item \textbf{Enum values} valid (e.g.\ \texttt{kind} must be one of the
+        four defined values).
+  \item \textbf{Pattern constraints} satisfied (e.g.\ \texttt{id} must match
+        slug pattern; \texttt{timeout} must match \texttt{[0-9]+(s|m|h)}).
+  \item \textbf{minItems} / \textbf{minLength} constraints met
+        (e.g.\ \texttt{flow} must have at least one node;
+        \texttt{choices.options} must have at least two options).
+  \item \textbf{additionalProperties} — no unknown core fields present.
+\end{itemize}
+
+Structural validation is performed by the generated JSON~Schema artifact
+(see \S\ref{sec:schema-artifacts}).  It is stateless: it does not load tool
+definitions, resolve imports, or evaluate templates.
+
+\paragraph{Implementation note for Brian}
+
+The Go runtime uses the \texttt{invopop/jsonschema} library to generate the
+JSON~Schema from struct tags at startup (no static file required), then validates
+the parsed YAML document against it.  The \texttt{yaml.v3 KnownFields(true)}
+call provides an additional pre-JSON-Schema pass that rejects unknown fields
+before the struct is even unmarshalled.
+
+\subsection{Phase 2: Semantic Validation}
+\label{subsec:semantic}
+
+Semantic validation enforces domain rules that cannot be expressed in
+JSON~Schema.  It runs after structural validation and requires the full runbook
+AST and loaded tool/provider definitions.  Semantic checks include:
+
+\begin{enumerate}
+  \item \textbf{Step ID uniqueness} — All step IDs in the flat walk of the tree
+        must be unique within the runbook.
+  \item \textbf{Invoke target resolution} — Every \texttt{invoke.runbook} value
+        must resolve to a declared \texttt{imports} alias or a relative file path
+        that exists on disk.
+  \item \textbf{Branch condition variable references} — Each \texttt{condition}
+        template references only variables that are in scope at that point in the
+        execution tree (declared as \texttt{inputs}, \texttt{vars}, or captured
+        by an earlier step on a reachable path).
+  \item \textbf{Tool reference resolution} — Every \texttt{tool.name} in a tool
+        step must match a declared \texttt{toolRefs} entry, and the named
+        \texttt{.tool.yaml} file must be loadable and structurally valid.
+  \item \textbf{Tool action existence} — The \texttt{tool.action} must be
+        declared in the referenced tool definition.
+  \item \textbf{Provider binding resolution} — Every \texttt{inputs.*.from:
+        <provider>.<field>} must resolve to a loaded provider whose field
+        manifest declares that field name.
+  \item \textbf{Circular invoke detection} — The invoke graph must be a DAG;
+        any cycle is a semantic error.
+  \item \textbf{Capture write-before-read} — A step that reads a captured
+        variable via a template must have a reachable predecessor step that
+        writes it; a warning is emitted if the write is only on some branches.
+  \item \textbf{Governance policy pre-check} — The static governance rules are
+        evaluated against the step contracts declared in the runbook.  Any
+        step with an effect that would trigger \texttt{deny} is flagged as a
+        semantic error.  Steps that would trigger \texttt{require-approval} are
+        flagged as warnings.
+  \item \textbf{Output declaration completeness} — Every declared \texttt{output}
+        must reference a capture name that is written by at least one step.
+  \item \textbf{Compensate ordering} — Each \texttt{compensate} step must appear
+        after the step it is compensating for in tree walk order.
+\end{enumerate}
+
+\paragraph{Error reporting}
+
+Both validation phases produce structured error reports with:
+\begin{itemize}
+  \item Error code (e.g.\ \texttt{SCH-001}, \texttt{SEM-007})
+  \item File path and YAML line/column (where available)
+  \item Human-readable message
+  \item Suggested fix (where computable)
+\end{itemize}
+
+\begin{verbatim}
+$ gert validate service-health.runbook.yaml
+[SEM-003] step "check_http": tool action "head" not declared in
+          tools/curl.tool.yaml (declared actions: get, post, download)
+          --> service-health.runbook.yaml:34:7
+[SEM-007] step "eval": template references variable "dns_result" which
+          is only written on branch "DNS check" — may be unbound
+          --> service-health.runbook.yaml:51:12
+          hint: add a default value in vars: or guard with {{ if .dns_result }}
+\end{verbatim}
+
+% ============================================================
+\section{Schema Artifacts}
+\label{sec:schema-artifacts}
+% ============================================================
+
+\subsection{Shipped Artifacts}
+
+gert v2 ships the following schema artifacts:
+
+\begin{center}
+\begin{tabular}{lp{9cm}}
+\hline
+\textbf{Artifact} & \textbf{Description} \\
+\hline
+\texttt{runbook.v2.schema.json}   & JSON~Schema Draft~2020-12 for runbook documents \\
+\texttt{tool.v2.schema.json}      & JSON~Schema for tool definitions \\
+\texttt{provider.v2.schema.json}  & JSON~Schema for provider definitions \\
+\hline
+\end{tabular}
+\end{center}
+
+All three schemas are generated at runtime from Go struct tags via
+\texttt{invopop/jsonschema} and served by \texttt{gert schema export}.
+They are also embedded in the binary and served at
+\texttt{https://schemas.gert.dev/*} for IDE tooling.
+
+\subsection{\texttt{gert schema export}}
+
+\begin{verbatim}
+# Export runbook schema (default)
+gert schema export
+
+# Export specific schema
+gert schema export --kind runbook   # runbook | tool | provider | bundle
+
+# Export full bundle (all three)
+gert schema export --kind bundle > gert-v2-schemas.json
+
+# Validate a document against the exported schema
+gert schema export | check-jsonschema --schemafile - runbook.yaml
+\end{verbatim}
+
+The \texttt{bundle} format is a JSON object with three keys:
+\texttt{runbook}, \texttt{tool}, and \texttt{provider}.
+
+\subsection{VS Code Integration}
+
+The gert VS~Code extension configures schema-backed YAML validation via the
+\texttt{yaml-language-server} extension:
+
+\begin{verbatim}
+# .vscode/settings.json (auto-generated by gert vscode init)
+{
+  "yaml.schemas": {
+    "https://schemas.gert.dev/runbook/v2.json": "**/*.runbook.yaml",
+    "https://schemas.gert.dev/tool/v2.json":    "**/*.tool.yaml",
+    "https://schemas.gert.dev/provider/v2.json": "**/*.provider.yaml"
+  }
+}
+\end{verbatim}
+
+Because the schema URL matches the \texttt{\$schema} field embedded in each
+document, IDEs with built-in JSON~Schema support (VS~Code 1.80+, IntelliJ 2024+)
+pick up validation and auto-completion without any per-project configuration.
+
+The gert VS~Code extension additionally provides:
+\begin{itemize}
+  \item Step-type-aware field completion via the \texttt{schema/stepFields}
+        JSON-RPC method (returns the field set for a given \texttt{type} value).
+  \item Tool argument completion via \texttt{schema/toolArgs} (returns the
+        \texttt{args} schema for a given tool+action pair from the live tool
+        catalog).
+  \item Inline governance warnings derived from \texttt{exec/dryRun} pre-check.
+\end{itemize}
+
+\subsection{Schema Version Manifest}
+
+Each schema artifact carries a version manifest in its \texttt{\$id} and a
+\texttt{x-gert-version} annotation:
+
+\begin{verbatim}
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.gert.dev/runbook/v2.json",
+  "x-gert-version": "2.0.0",
+  "x-gert-released": "2026-04-18",
+  "title": "gert runbook v2",
+  ...
+}
+\end{verbatim}
+
+Automated compatibility testing (part of the gert CI pipeline) runs every
+v1 example runbook through the v2 compatibility parser and asserts no regression,
+and runs every v2 example through the exported JSON~Schema validator.

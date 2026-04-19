@@ -1,8 +1,14 @@
 # Assessment: New Employee Onboarding
 
-**Completeness:** 9/10 (90%)  
+**Completeness:** 10/10 (100%)  
 **Fidelity:** 10/10 (100%)  
-**Verdict:** PASS WITH NOTES
+**Verdict:** PASS
+
+## Gaps Closed (field-types-p2)
+
+| Gap ID | Class | Severity | Resolution |
+|--------|-------|----------|------------|
+| G2-005 | G2 | ~~MEDIUM~~ | **FIXED** — `manager` field in `collect_employee_info` converted from `type: text` to `type: autocomplete` with `options_from.provider: hr-directory`. Operator now gets live search against the employee directory rather than having to type the manager name free-form. |
 
 ## Gaps Closed (field-types-p1)
 
@@ -28,9 +34,9 @@
 ## Translation Notes
 
 1. **Step 1 (Collect Info):** Used `type: collector` with 7 fields. Department and office
-   location now use `type: select` with static option lists — no more `# GAP:` workarounds.
-   Start date uses `type: date`. Manager field remains `type: text` (no autocomplete
-   support yet).
+   location use `type: select` with static option lists. Start date uses `type: date`.
+   Manager field now uses `type: autocomplete` with `options_from.provider: hr-directory` —
+   the P2 live-search field type resolves the gap noted in earlier passes.
 
 2. **Boolean fields:** All yes/no fields (background check, compliance booleans, training
    confirmations, access confirmation, manager approval) now use `type: boolean`.
@@ -63,4 +69,3 @@
 - Add calendar-aware timeout support: `timeout: {value: 2, unit: business_days, calendar: us_federal_holidays}`
 - Add `type: task` step for self-service assignments (assignee completes task, not approves)
 - Add `on_timeout: auto_approve` option for approval gates
-- Add autocomplete field type for employee directory lookups

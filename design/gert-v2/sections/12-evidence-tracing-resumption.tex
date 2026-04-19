@@ -37,27 +37,28 @@ Every line in \texttt{trace.jsonl} is a self-contained JSON object with a common
 
 \begin{verbatim}
 {
-  "seq":       <int64>,     // monotonically increasing within this run
-  "type":      <string>,    // event type (see §12.1.3)
+  "event_id":  <string>,    // UUID v4 for correlation
+  "sequence":  <int64>,     // monotonically increasing within this run
+  "kind":      <string>,    // event kind (see §12.1.3)
   "timestamp": <RFC3339>,   // UTC timestamp with sub-second precision
   "run_id":    <string>,    // run identifier
   "path":      <array>,     // tree-path to the active node (may be null)
-  "data":      <object>     // type-specific payload (see below)
+  "payload":   <object>     // kind-specific payload (see below)
 }
-\end{verbatim}
+\end{verbatim>
 
-The \texttt{seq} field provides a total order over events in a single run. It is assigned by the \texttt{RunStore.WriteTrace} implementation and is not trusted for cross-run ordering.
+The \texttt{sequence} field provides a total order over events in a single run. It is assigned by the \texttt{RunStore.WriteTrace} implementation and is not trusted for cross-run ordering. The \texttt{event\_id} field is a UUID v4 assigned at event emission time for correlation with external systems.
 
 \subsection{Event Type Catalogue}
 
-The following event types are normative in v2. All user-supplied string fields (command arguments, outputs, prompt responses) pass through the redaction pipeline before being written.
+The following event kinds are normative in v2. All user-supplied string fields (command arguments, outputs, prompt responses) pass through the redaction pipeline before being written.
 
 \subsubsection{\texttt{run/started}}
 
 Emitted once, as the first event in every trace file.
 
 \begin{verbatim}
-"data": {
+"payload": {
   "runbook_id":    <string>,  // runbook name/path
   "user":          <string>,  // actor identity
   "mode":          <string>,  // "real" | "replay" | "dry-run"
@@ -65,26 +66,26 @@ Emitted once, as the first event in every trace file.
   "client":        <string>,  // "cli" | "tui" | "web" | "mcp"
   "parent_run_id": <string>   // omitted if not an invoke child
 }
-\end{verbatim}
+\end{verbatim>
 
 \subsubsection{\texttt{step/started}}
 
 Emitted immediately before executing a step.
 
 \begin{verbatim}
-"data": {
+"payload": {
   "step_id":   <string>,  // stable step identifier
   "step_type": <string>,  // "cli" | "manual" | "tool" | "invoke"
   "step_name": <string>   // human-readable name from runbook YAML
 }
-\end{verbatim}
+\end{verbatim>
 
 \subsubsection{\texttt{step/completed}}
 
 Emitted after a step exits cleanly.
 
 \begin{verbatim}
-"data": {
+"payload": {
   "step_id":    <string>,
   "exit_status": <int>,      // exit code for cli steps; 0 for others
   "duration_ms": <int64>,    // wall-clock duration in milliseconds

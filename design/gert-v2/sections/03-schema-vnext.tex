@@ -520,12 +520,33 @@ v2 adds a standard function library accessible in all templates:
 \texttt{runID}        & \texttt{() string} \\
 \texttt{not}          & \texttt{(v bool) bool} \\
 \texttt{eq, ne, lt, gt, le, ge} & Standard comparison \\
+\texttt{fromYAML}     & \texttt{(s string) interface\{\}} \\
+\texttt{fromJSON}     & \texttt{(s string) interface\{\}} \\
 \hline
 \end{tabular}
 \end{center}
 
 All functions from \texttt{text/template} (built-ins: \texttt{and}, \texttt{or},
 \texttt{index}, \texttt{len}, \texttt{printf}, etc.) remain available.
+
+\paragraph{\texttt{fromYAML} and \texttt{fromJSON}}
+\texttt{fromYAML} and \texttt{fromJSON} parse a raw string variable into a structured
+\texttt{interface\{\}} value.  They are the primary mechanism for traversing values
+collected from \texttt{text} fields that declare \texttt{format: yaml} or
+\texttt{format: json} (see §\ref{sec:collector_field_validation}).  The raw string is
+\emph{always} what is stored in the run variable; these functions perform the
+parse on each template evaluation.  A parse error in a template expression is a hard
+step failure.
+
+\begin{verbatim}
+{{/* Access a key from a JSON-typed text field */}}
+{{ $cfg := fromJSON .service_config }}
+{{ $cfg.region }}
+
+{{/* Access a nested key from a YAML-typed text field */}}
+{{ $spec := fromYAML .deploy_spec }}
+{{ $spec.replicas }}
+\end{verbatim}
 
 \paragraph{Template errors}
 
@@ -869,12 +890,72 @@ Each field is an object with:
 \texttt{default}    & any     & No  & Pre-filled default value (must match field type) \\
 \texttt{validation} & object  & No  & Type-specific validation constraints \\
 \texttt{options}    & array   & No  & Option list for \texttt{select} type \\
-\texttt{options\_from} & object & No & Dynamic option list provider for \texttt{select} type \\
-\texttt{multiple}   & bool    & No  & Allow multiple selections for \texttt{select} type (default: false) \\
+\texttt{options\_from} & object & No & Dynamic option list provider for \texttt{select} and \texttt{autocomplete} types \\
+\texttt{multiple}   & bool    & No  & Allow multiple selections for \texttt{select} and \texttt{autocomplete} types (default: false) \\
 \texttt{multiline}  & bool    & No  & Enable multi-line textarea for \texttt{text} type (default: false) \\
+\texttt{ephemeral}  & bool    & No  & Value is never written to the audit log and never persisted; in-memory only for the duration of the run (default: false) \\
 \hline
 \end{tabular}
 \end{center}
+
+\paragraph{Ephemeral fields}
+\label{par:ephemeral-fields}
+
+When a field carries \texttt{ephemeral: true}, gert applies the following
+constraints to the collected value:
+
+\begin{itemize}
+  \item \textbf{Variable binding:} The value \emph{is} bound into the runbook
+        variable space and may be used in downstream template expressions (e.g.\
+        \texttt{\{\{ .deploy\_token \}\}}) for the duration of the current run.
+  \item \textbf{Audit log:} The audit record for this field writes
+        \texttt{"[REDACTED]"} instead of the actual value.  The field name,
+        type, and timestamp are still recorded; only the value is suppressed.
+  \item \textbf{Persistence:} The value is \emph{never} written to any store —
+        not the JSONL trace, not the evidence artifact store, not any variable
+        snapshot.  It exists only in the in-memory execution context.
+  \item \textbf{Run suspension:} If the run is suspended after collection (e.g.\
+        after a \texttt{wait\_for\_event} step) and then resumed, ephemeral
+        field values are gone.  The \texttt{collector} step must be re-executed
+        and the operator must re-supply the values.
+\end{itemize}
+
+\texttt{ephemeral: true} is valid on any field type, but is semantically
+meaningful on \texttt{text}, \texttt{select}, and \texttt{boolean} fields.
+Setting it on \texttt{file} or \texttt{image} fields is a validation
+\emph{warning} (not an error) — file content is large and a
+\texttt{[REDACTED]} placeholder in the audit trail is still useful; however,
+the \emph{file payload} will not be persisted to the artifact store.
+
+\begin{quote}
+\textbf{Security note:} Ephemeral fields reduce audit footprint for secrets.
+They do \emph{not} prevent the value from being transmitted to tool steps or
+sub-processes.  Authors are responsible for ensuring ephemeral values are only
+passed to secure execution contexts.
+\end{quote}
+
+\begin{verbatim}
+- id: collect_credentials
+  type: collector
+  label: "Deploy credentials"
+  fields:
+    - id: deploy_user
+      type: text
+      label: "Service account username"
+      required: true
+    - id: deploy_token
+      type: text
+      label: "Deploy token"
+      required: true
+      ephemeral: true    # never written to audit log or persisted
+    - id: target_env
+      type: select
+      label: "Target environment"
+      required: true
+      options:
+        - { value: "staging",    label: "Staging" }
+        - { value: "production", label: "Production" }
+\end{verbatim}
 
 \paragraph{Dynamic Forms}
 \label{par:dynamic-forms}
@@ -910,22 +991,23 @@ order guarantees:
 \paragraph{Field type inventory}
 \label{par:collector-field-types}
 
-\texttt{collector} supports nine field types:
+\texttt{collector} supports ten field types:
 
 \begin{center}
 \begin{tabular}{lp{4.5cm}p{4.5cm}}
 \hline
 \textbf{Type} & \textbf{Description} & \textbf{Notes} \\
 \hline
-\texttt{text}     & Single-line or multi-line text input & Set \texttt{multiline: true} for textarea \\
-\texttt{number}   & Integer or float numeric input & Supports \texttt{validation.min}, \texttt{max}, \texttt{step} \\
-\texttt{integer}  & Integer-only numeric input & Shorthand for \texttt{number} with \texttt{step: 1} \\
-\texttt{date}     & ISO 8601 date (YYYY-MM-DD) & UI hint: date picker \\
-\texttt{datetime} & RFC 3339 datetime with timezone & UI hint: datetime picker \\
-\texttt{boolean}  & True/false checkbox & Stored as boolean in variable space \\
-\texttt{select}   & Dropdown or option list & Set \texttt{multiple: true} for multi-select \\
-\texttt{file}     & File attachment & Stored as artifact with SHA256 hash \\
-\texttt{image}    & Image/screenshot attachment & Stored as artifact \\
+\texttt{text}         & Single-line or multi-line text input & Set \texttt{multiline: true} for textarea; \texttt{format} for structured validation \\
+\texttt{number}       & Integer or float numeric input & Supports \texttt{validation.min}, \texttt{max}, \texttt{step} \\
+\texttt{integer}      & Integer-only numeric input & Shorthand for \texttt{number} with \texttt{step: 1} \\
+\texttt{date}         & ISO 8601 date (YYYY-MM-DD) & UI hint: date picker \\
+\texttt{datetime}     & RFC 3339 datetime with timezone & UI hint: datetime picker \\
+\texttt{boolean}      & True/false checkbox & Stored as boolean in variable space \\
+\texttt{select}       & Dropdown or option list & Set \texttt{multiple: true} for multi-select \\
+\texttt{autocomplete} & Live search text field & Options fetched from provider as user types; degrades to \texttt{select} in CLI \\
+\texttt{file}         & File attachment & Stored as artifact with SHA256 hash \\
+\texttt{image}        & Image/screenshot attachment & Stored as artifact \\
 \hline
 \end{tabular}
 \end{center}
@@ -939,7 +1021,7 @@ any field where newlines are meaningful.
 
 \paragraph{Text field validation constraints}
 
-The optional \texttt{validation} object on a \texttt{text} field supports four
+The optional \texttt{validation} object on a \texttt{text} field supports five
 sub-fields:
 
 \begin{center}
@@ -951,6 +1033,7 @@ sub-fields:
 \texttt{pattern\_hint} & string  & No & Human-readable error shown when pattern validation fails \\
 \texttt{min\_length}   & integer & No & Minimum character count ($\geq 0$) \\
 \texttt{max\_length}   & integer & No & Maximum character count ($> 0$; must exceed \texttt{min\_length} when both are present) \\
+\texttt{format}        & enum    & No & Structural parse validation for \texttt{multiline: true} fields: \texttt{yaml}, \texttt{json}, or \texttt{toml} \\
 \hline
 \end{tabular}
 \end{center}
@@ -982,6 +1065,60 @@ sub-fields:
     min_length: 20
     max_length: 500
 \end{verbatim}
+
+\paragraph{Structured multiline format validation}
+\label{par:text-format}
+\label{sec:collector_field_validation}
+
+When a \texttt{text} field has \texttt{multiline: true}, the optional
+\texttt{validation.format} field declares that the submitted value must be
+parseable as a specific structured data format:
+
+\begin{itemize}
+  \item \texttt{format: yaml} — value must parse as valid YAML.
+  \item \texttt{format: json} — value must parse as valid JSON.
+  \item \texttt{format: toml} — value must parse as valid TOML~v2.1.
+        \emph{Note: TOML format validation is deferred to a future release;
+        declaring it is a validation warning in v2.0.}
+  \item No \texttt{format} (default) — plain text; no structural validation.
+\end{itemize}
+
+Parse validation occurs \emph{after submission}.  On failure, the operator
+is re-prompted with the message:
+\texttt{"Value must be valid \{FORMAT\}.  Please correct and resubmit."}
+On success, the value is stored as a raw string — the original text, not a
+parsed object.  Parsing is validation only.
+
+\begin{quote}
+\textbf{Note:} The stored value is always a string.  Downstream template
+expressions that need to traverse the structure must use gert's
+\texttt{fromYAML}/\texttt{fromJSON} template functions.
+\end{quote}
+
+\begin{verbatim}
+# YAML-format multiline field
+- id: config_patch
+  type: text
+  label: "Configuration patch (YAML)"
+  multiline: true
+  required: true
+  validation:
+    format: yaml
+    min_length: 10
+
+# JSON-format multiline field
+- id: event_payload
+  type: text
+  label: "Event payload (JSON)"
+  multiline: true
+  required: true
+  validation:
+    format: json
+\end{verbatim}
+
+\texttt{validation.format} is silently ignored when \texttt{multiline} is
+\texttt{false} or absent — a validation warning is emitted at schema load
+time.
 
 \subsubsection{Field type: \texttt{number}}
 \label{subsubsec:field-number}
@@ -1192,6 +1329,65 @@ and the stored variable becomes an array of selected values.
       label: Payments
 \end{verbatim}
 
+\subsubsection{Field type: \texttt{autocomplete}}
+\label{subsubsec:field-autocomplete}
+
+A text field with live search: as the operator types, the configured
+\texttt{options\_from} provider is queried and matching options are returned
+in real time.  Useful for searching service names, users, ticket IDs,
+configuration keys, and any other dataset too large to enumerate statically.
+
+\texttt{autocomplete} behaves like \texttt{select} in its storage and
+validation semantics — the selected value is stored as a string (or an
+array of strings when \texttt{multiple: true}).  It differs in that options
+are fetched dynamically on each keystroke rather than declared inline.
+
+The \texttt{options\_from} object for an \texttt{autocomplete} field extends
+the \texttt{select} variant with two additional search-control fields:
+
+\begin{center}
+\begin{tabular}{lllp{4.5cm}}
+\hline
+\textbf{options\_from field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{provider}     & string  & Yes & Input provider ID that handles search queries \\
+\texttt{field}        & string  & Yes & Provider input field that receives the search query string \\
+\texttt{min\_chars}   & integer & No  & Minimum characters typed before search fires (default: 2) \\
+\texttt{debounce\_ms} & integer & No  & Debounce delay in milliseconds (default: 300) \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{quote}
+\textbf{CLI / non-interactive fallback:} Providers that do not support
+live search \emph{must} gracefully degrade to a \texttt{select} by calling
+the provider once with an empty query string to fetch all available options.
+The resulting list is then rendered as a standard dropdown.
+\end{quote}
+
+\begin{verbatim}
+# Live service search
+- name: affected_service
+  type: autocomplete
+  label: "Affected service"
+  required: true
+  options_from:
+    provider: service-registry
+    field: query
+    min_chars: 2
+    debounce_ms: 300
+
+# Multi-select user lookup
+- name: reviewers
+  type: autocomplete
+  label: "Reviewers"
+  multiple: true
+  options_from:
+    provider: hr-directory
+    field: query
+    min_chars: 2
+\end{verbatim}
+
 \paragraph{Approval gate}
 \label{subsec:approval-gate}
 
@@ -1350,6 +1546,25 @@ Benefits of the questionnaire pattern:
   \item For \texttt{text} fields, \texttt{validation.pattern\_hint} is
         silently ignored when \texttt{validation.pattern} is absent
         (warning, not error).
+  \item For \texttt{autocomplete} fields, \texttt{options\_from} \textbf{MUST}
+        be present and \textbf{MUST} include both \texttt{provider} and
+        \texttt{field}.  \texttt{options} (static list) is not valid on
+        \texttt{autocomplete} fields and is a schema validation error.
+  \item For \texttt{autocomplete} fields, \texttt{options\_from.min\_chars}
+        \textbf{MUST} be $\geq 0$ when specified (default 2).
+        \texttt{options\_from.debounce\_ms} \textbf{MUST} be $\geq 0$ (default 300).
+  \item \texttt{validation.format} is only meaningful when \texttt{multiline:
+        true} is also set.  If \texttt{format} is declared on a
+        non-multiline field, a validation warning is emitted and the
+        constraint is ignored at runtime.
+  \item \texttt{validation.format: toml} is a validation warning in v2.0
+        (TOML parse validation is deferred); the runbook is accepted and the
+        format constraint is not enforced at runtime.
+  \item A field with \texttt{ephemeral: true} and \texttt{type: file} or
+        \texttt{type: image} is a validation \emph{warning} (not error).
+        File payloads are large; writing \texttt{[REDACTED]} in the audit
+        trail is acceptable, but authors should consider whether attachment
+        evidence is appropriate alongside an ephemeral field.
 \end{itemize}
 
 \subsection{Step Type: approve}

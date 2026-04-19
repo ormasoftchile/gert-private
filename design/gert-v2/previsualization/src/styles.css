@@ -1,0 +1,200 @@
+:root {
+  --bg: #f4f3ed;
+  --panel: #fffdf6;
+  --ink: #0d1a24;
+  --muted: #45525f;
+  --line: #ccd5dd;
+  --accent: #d95f02;
+  --trigger: #2b8cbe;
+  --human: #b35806;
+  --decision: #d94801;
+  --control: #5e3c99;
+  --automation: #1b9e77;
+  --comp: #e7298a;
+  --terminal: #111111;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: radial-gradient(circle at 20% 0%, #fff8e8 0%, var(--bg) 45%, #eceff4 100%);
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) 1fr;
+  width: 100%;
+  height: 100%;
+}
+
+.app-sidebar {
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 92%, white);
+  padding: 1rem;
+  overflow: auto;
+}
+
+.app-sidebar h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.app-sidebar p {
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+
+.field-label {
+  display: block;
+  margin: 0.75rem 0 0.3rem;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+.scenario-select {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.scenario-meta {
+  margin-top: 0.75rem;
+  padding: 0.7rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.legend {
+  list-style: none;
+  padding: 0;
+  margin: 0.4rem 0 0;
+  display: grid;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.swatch {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  border: 1px solid #00000044;
+}
+
+.swatch--trigger { background: var(--trigger); }
+.swatch--human { background: var(--human); }
+.swatch--decision { background: var(--decision); }
+.swatch--control { background: var(--control); }
+.swatch--automation { background: var(--automation); }
+.swatch--compensation { background: var(--comp); }
+.swatch--terminal { background: var(--terminal); }
+
+.canvas-wrap {
+  width: 100%;
+  height: 100%;
+}
+
+.panel-note {
+  background: #ffffffd4;
+  backdrop-filter: blur(2px);
+  border: 1px solid var(--line);
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  max-width: 280px;
+}
+
+.rb-node {
+  width: 260px;
+  border: 2px solid #00000022;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 20px #00000015;
+  padding: 0.5rem 0.6rem 0.7rem;
+}
+
+.rb-node--selected {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, white), 0 10px 26px #00000024;
+}
+
+.rb-node__head {
+  margin-bottom: 0.3rem;
+}
+
+.rb-node__stereotype {
+  display: inline-block;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+  font-weight: 600;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.rb-node__title {
+  font-weight: 650;
+  font-size: 0.95rem;
+  margin-bottom: 0.15rem;
+}
+
+.rb-node__subtitle {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.rb-node__notes {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: #31475d;
+  border-top: 1px dashed var(--line);
+  padding-top: 0.35rem;
+}
+
+.rb-node--trigger .rb-node__stereotype { background: var(--trigger); }
+.rb-node--human .rb-node__stereotype { background: var(--human); }
+.rb-node--decision .rb-node__stereotype { background: var(--decision); }
+.rb-node--control .rb-node__stereotype { background: var(--control); }
+.rb-node--automation .rb-node__stereotype { background: var(--automation); }
+.rb-node--compensation .rb-node__stereotype { background: var(--comp); }
+.rb-node--terminal .rb-node__stereotype { background: var(--terminal); }
+
+.rb-handle {
+  width: 9px;
+  height: 9px;
+  border: 2px solid #fff;
+  background: #203243;
+}
+
+@media (max-width: 960px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .app-sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    max-height: 40vh;
+  }
+}

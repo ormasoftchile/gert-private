@@ -237,7 +237,7 @@ Every approval decision is written to the trace as an immutable record:
 \begin{verbatim}
 // governance/approvalRequired
 {
-  "seq": 14,
+  "sequence": 14,
   "event": "governance/approvalRequired",
   "stepId": "delete_database",
   "message": "Deleting prod-ns is irreversible. Confirm change window.",
@@ -249,7 +249,7 @@ Every approval decision is written to the trace as an immutable record:
 
 // governance/approvalDecision (written once per decision)
 {
-  "seq": 15,
+  "sequence": 15,
   "event": "governance/approvalDecision",
   "stepId": "delete_database",
   "actor": "alice@corp.com",
@@ -261,7 +261,7 @@ Every approval decision is written to the trace as an immutable record:
 
 // governance/approvalGranted (written when quorum is met)
 {
-  "seq": 16,
+  "sequence": 16,
   "event": "governance/approvalGranted",
   "stepId": "delete_database",
   "approvals": ["alice@corp.com", "bob@corp.com"],
@@ -483,7 +483,7 @@ The trace file is protected by:
   \item \textbf{SHA256 evidence hash:} at run completion, the SHA256 of the entire trace
         file is written as the final record and also stored in a sidecar
         \texttt{trace.sha256} file.
-  \item \textbf{Monotonic sequence numbers:} every trace event has a \texttt{seq} field
+  \item \textbf{Monotonic sequence numbers:} every trace event has a \texttt{sequence} field
         (incrementing integer). Gaps in sequence numbers signal corruption or tampering.
 \end{itemize}
 

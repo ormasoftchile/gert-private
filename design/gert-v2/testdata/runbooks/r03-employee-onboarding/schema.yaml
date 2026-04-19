@@ -65,10 +65,14 @@ flow:
             - value: Finance
               label: Finance
         - name: manager
-          type: text
+          type: autocomplete
           label: Manager name
           required: true
-          hint: Use autocomplete from employee directory
+          options_from:
+            provider: hr-directory
+            field: query
+            min_chars: 2
+            debounce_ms: 300
         - name: job_title
           type: text
           label: Job title

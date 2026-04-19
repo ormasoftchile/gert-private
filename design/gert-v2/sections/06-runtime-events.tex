@@ -1,4 +1,5 @@
 \chapter{Runtime Events and Determinism}
+\label{ch:events}
 
 Gert v2 is an event-driven system. Every state change in the runtime---run initiation, step advancement, governance checks, tool invocations, human interactions---produces a structured event. Events serve three purposes: (1) adapters (TUI, Web, VS Code) subscribe to events to render UI state without coupling to execution logic, (2) events are appended to the JSONL trace file for audit and replay (§12), and (3) events propagate to observability systems for real-time monitoring and alerting.
 

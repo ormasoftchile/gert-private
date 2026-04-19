@@ -1050,7 +1050,9 @@ For each field in submission order:
     count); \texttt{validation.pattern} (RE2 regex — see below);
     \texttt{validation.pattern\_hint} (shown on pattern failure).
     \texttt{multiline: true} is a UI hint only; no effect on validation or storage.
-  & JSON string \\
+    If \texttt{format: yaml} or \texttt{format: json} is declared, structural
+    parse validation is applied \emph{after} the pattern check (see below).
+  & JSON string (raw; parsed form not stored) \\
 \hline
 \texttt{number}
   & Parse as IEEE~754 float64 (reject non-numeric input).
@@ -1130,8 +1132,9 @@ than a single-line input box when \texttt{multiline: true} is set.
 \subsubsection*{\texttt{text} Field Pattern Validation}
 % ─────────────────────────────────────────────────────────────────────────────
 
-\texttt{text} fields support optional length and pattern constraints applied
-\emph{after} the required check.  The full sequence for a \texttt{text} field is:
+\texttt{text} fields support optional length, pattern, and structural-format
+constraints applied \emph{after} the required check.  The full sequence for a
+\texttt{text} field is:
 
 \begin{enumerate}
   \item \textbf{Required check} — same as all field types (step 1 of the general
@@ -1144,8 +1147,21 @@ than a single-line input box when \texttt{multiline: true} is set.
         and test the full value against the RE2 regex.  On failure, the re-prompt
         error message is \texttt{validation.pattern\_hint} if present; otherwise the
         generic message \emph{``Value does not match required format''} is used.
-  \item \textbf{Re-prompt} — any failure at steps 2--4 triggers a re-prompt (same
-        3-attempt limit as the general algorithm).
+  \item \textbf{Format check} — if \texttt{format: yaml} is declared, attempt
+        \texttt{yaml.Unmarshal([]byte(value), \&interface\{\})}.  On error, re-prompt
+        with \emph{``Value must be valid YAML.''}.  If \texttt{format: json} is
+        declared, attempt \texttt{json.Unmarshal([]byte(value), \&interface\{\})}.
+        On error, re-prompt with \emph{``Value must be valid JSON.''}.  Both checks
+        are \textbf{parse-only}: the parsed result is discarded; the value remains a
+        raw string in the run variable.  Downstream steps use the \texttt{fromYAML}
+        and \texttt{fromJSON} template functions for traversal
+        (see §\ref{subsec:expressions}).  If both \texttt{validation.pattern}
+        and \texttt{format} are declared, both must pass; the pattern check (step 4)
+        runs first.
+  \item \textbf{Re-prompt} — any failure at steps 2--5 triggers a re-prompt.  The
+        3-attempt limit is a \textbf{combined total} across all validation steps: if
+        the operator fails step 2 once, step 4 once, and step 5 once, the step fails
+        on the third attempt regardless of which check failed each time.
 \end{enumerate}
 
 \paragraph{RE2 vs ECMA~262.}
@@ -1304,6 +1320,63 @@ populates the \texttt{gert.error} reserved run variable:
 The \texttt{gert.error} variable is a reserved JSON object populated on any step
 failure. A subsequent \texttt{branch} step may inspect it to route to an error-handling
 path. Each new step failure overwrites the previous value.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsubsection*{Ephemeral Field Handling}
+\label{sec:ephemeral-field-handling}
+% ─────────────────────────────────────────────────────────────────────────────
+
+A \texttt{collector} field may declare \texttt{ephemeral: true} to indicate that its
+value is sensitive and must never be written to any durable store.
+
+\paragraph{Audit redaction.}
+After a field value passes all validation checks, the executor writes the step's output
+to the JSONL trace file.  For fields where \texttt{ephemeral: true}:
+
+\begin{itemize}
+  \item The JSONL audit record stores the string literal \texttt{"[REDACTED]"} as the
+        field value — not the actual value.
+  \item The \emph{actual} value IS placed in the in-memory \texttt{VariableScope} for
+        the duration of the run and is available to downstream steps via normal template
+        expressions.
+  \item The actual value is \textbf{NEVER written to disk} in any log, trace, snapshot,
+        or checkpoint file.  This includes the run trace (\texttt{trace.jsonl}), the
+        per-step checkpoint (\texttt{snapshots/<stepID>.json}), and the evidence hash
+        record.
+\end{itemize}
+
+\paragraph{Go interface contract.}
+The in-memory \texttt{VariableScope} type MUST expose the method:
+
+\begin{verbatim}
+IsEphemeral(key string) bool
+\end{verbatim}
+
+The JSONL trace writer calls \texttt{IsEphemeral} for every variable before serialising
+a \texttt{step/completed} or \texttt{collector/submitted} event.  If the method returns
+\texttt{true}, the writer substitutes \texttt{"[REDACTED]"} for the value in the emitted
+JSON.  No other layer in the stack applies this substitution — the redaction responsibility
+belongs exclusively to the trace writer.
+
+\paragraph{Tool step compatibility.}
+Ephemeral values MAY be passed as arguments to \texttt{type: tool} steps.  The tool
+receives the plaintext value.  This is intentional: \texttt{ephemeral: true} is an
+\emph{audit redaction} feature, not end-to-end encryption.  Runbook authors are
+responsible for using ephemeral fields only with tools that handle the value securely.
+
+\paragraph{Suspension/resume constraint.}
+When a run is suspended (e.g., a \texttt{wait\_for\_event} or \texttt{approve} step
+puts the run into \texttt{WAITING} state), the in-memory \texttt{VariableScope} is not
+persisted.  Because ephemeral values exist only in memory, they are \textbf{dropped} on
+suspension.  On resume, any downstream step that requires an ephemeral variable will
+find it absent from the reconstructed scope.
+
+\begin{tcolorbox}[colback=yellow!10,colframe=orange!60,title=Constraint: ephemeral variables and suspension]
+Steps that depend on ephemeral variables MUST appear before any \texttt{wait\_for\_event}
+or \texttt{approve} step that could suspend the run.  The schema validator SHOULD emit a
+load-time warning (not a hard error in v2.0) if an ephemeral variable is referenced in a
+step that follows a suspendable step in the same runbook's execution path.
+\end{tcolorbox}
 
 \subsection{Cancellation}
 

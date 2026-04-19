@@ -749,6 +749,96 @@ in their handshake response.  If the run engine encounters an \texttt{options\_f
 binding and the matched provider does not advertise \texttt{getOptions: true}, the step
 fails with \texttt{options\_from.capability\_not\_supported}.
 
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Autocomplete Search Protocol}
+\label{sec:autocomplete-search-protocol}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The \texttt{type: autocomplete} field in a \texttt{collector} step requires live-search
+support from the input provider.  The run engine issues \texttt{inputProvider/search}
+RPC calls as the operator types, with debouncing handled by the UI layer.
+
+\subsubsection*{\texttt{inputProvider/search} Request}
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "search-1",
+  "method": "inputProvider/search",
+  "params": {
+    "provider":  "service-registry",
+    "field":     "query",
+    "query":     "pay",
+    "minChars":  2,
+    "runId":     "20260418T142300-abc12345",
+    "variables": {
+      "region": "us-west"
+    }
+  }
+}
+\end{verbatim}
+
+\paragraph{Request fields.}
+\begin{itemize}
+  \item \texttt{provider} — the provider ID from \texttt{options\_from.provider} (or
+        the field's dedicated \texttt{autocomplete.provider} binding).
+  \item \texttt{field} — the field ID within the step, allowing a single provider to
+        serve multiple autocomplete fields.
+  \item \texttt{query} — the current text typed by the operator.  May be an empty
+        string \texttt{""} on initial focus or during CLI degradation (see below).
+  \item \texttt{minChars} — the minimum character count declared on the field.  The
+        run engine does not issue the RPC until \texttt{len(query) >= minChars}; this
+        field is informational for the provider.
+  \item \texttt{runId} — the current run ID (for audit and logging on the provider side).
+  \item \texttt{variables} — the current run variable scope at dispatch time.  Providers
+        MAY use this to filter results contextually (e.g., return only services in the
+        operator's selected region).
+\end{itemize}
+
+\subsubsection*{\texttt{inputProvider/search} Response}
+
+\begin{verbatim}
+{
+  "jsonrpc": "2.0",
+  "id": "search-1",
+  "result": {
+    "results": [
+      { "value": "payments-api", "label": "Payments API" },
+      { "value": "payroll-svc",  "label": "Payroll Service" }
+    ],
+    "hasMore": false
+  }
+}
+\end{verbatim}
+
+\paragraph{Response fields.}
+\begin{itemize}
+  \item \texttt{results} — array of \texttt{\{value, label\}} objects.  \texttt{value}
+        is the string stored in the run variable on selection; \texttt{label} is the
+        human-readable text shown in the UI.
+  \item \texttt{hasMore} (boolean) — if \texttt{true}, the UI SHOULD display a hint
+        such as \emph{``Showing top N results — keep typing to narrow.''}.  A
+        \texttt{false} value indicates the full matching set is returned.
+\end{itemize}
+
+\paragraph{Timeout contract.}
+Providers MUST return within \textbf{500\,ms}.  If no response is received within this
+window, the run engine treats the call as timed out, returns an empty results list, and
+allows the operator to retry by continuing to type.  The timeout is measured from the
+moment the RPC request is sent on the transport.
+
+\paragraph{CLI degradation.}
+The built-in \texttt{prompt} provider does not support real-time search.  When an
+\texttt{autocomplete} field is dispatched to a CLI provider, the run engine issues a
+single \texttt{inputProvider/search} call with \texttt{query: ""} to retrieve all
+available options, then presents the result as a standard \texttt{select} list.  Typing
+ahead is not supported in CLI mode.
+
+\paragraph{Capability declaration.}
+Providers that implement \texttt{inputProvider/search} MUST declare \texttt{search: true}
+in their capability advertisement (see matrix below).  A provider that does not advertise
+\texttt{search: true} will have autocomplete fields degraded to the CLI path automatically.
+
 \subsection{Provider Capability Matrix}
 \label{subsec:provider-capability-matrix}
 
@@ -756,17 +846,23 @@ Not all providers support all interactive step types.  The following table
 shows which step types each built-in provider supports:
 
 \begin{center}
-\begin{tabular}{|l|c|c|c|c|c|}
+\begin{tabular}{|l|c|c|c|c|c|c|}
 \hline
-\textbf{Provider} & \textbf{Input Resolution} & \textbf{choice} & \textbf{decision} & \textbf{collector} & \textbf{getOptions} \\
+\textbf{Provider} & \textbf{Input Resolution} & \textbf{choice} & \textbf{decision} & \textbf{collector} & \textbf{getOptions} & \textbf{search} \\
 \hline
-\texttt{prompt}   & Yes & Yes & Yes & Yes & No  \\
-\texttt{env}      & Yes & No  & No  & No  & No  \\
-\texttt{file}     & Yes & No  & No  & No  & No  \\
-\texttt{workspace}& Yes & No  & No  & No  & No  \\
+\texttt{prompt}   & Yes & Yes & Yes & Yes & No  & No  \\
+\texttt{env}      & Yes & No  & No  & No  & No  & No  \\
+\texttt{file}     & Yes & No  & No  & No  & No  & No  \\
+\texttt{workspace}& Yes & No  & No  & No  & No  & No  \\
 \hline
 \end{tabular}
 \end{center}
+
+\noindent
+\texttt{search: false} for all built-in providers reflects CLI degradation: autocomplete
+fields degrade to a standard select when the active provider cannot perform live search.
+Rich UI providers (e.g., the VS~Code extension's built-in provider) SHOULD declare
+\texttt{search: true} to enable real-time autocomplete rendering.
 
 External providers (PagerDuty, ServiceNow, Slack, etc.) MAY implement any
 combination of these contracts.  A provider that implements
@@ -784,7 +880,8 @@ during the handshake phase:
       "choice": true,
       "decision": false,
       "collector": true,
-      "getOptions": true
+      "getOptions": true,
+      "search": true
     }
   }
 }

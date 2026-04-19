@@ -64,569 +64,606 @@
 \contentsline {paragraph}{Deadlock detection.}{31}{section*.145}%
 \contentsline {paragraph}{Audit trail.}{31}{section*.146}%
 \contentsline {paragraph}{Input Provider integration.}{32}{section*.147}%
-\contentsline {subsection}{\numberline {3.3.6}Cancellation}{33}{subsection.158}%
-\contentsline {subsection}{\numberline {3.3.7}Crash Recovery}{33}{subsection.163}%
-\contentsline {section}{\numberline {3.4}Concurrency Model}{33}{section.164}%
-\contentsline {subsection}{\numberline {3.4.1}Per-Process Run Isolation}{33}{subsection.165}%
-\contentsline {paragraph}{Rationale.}{34}{section*.166}%
-\contentsline {subsection}{\numberline {3.4.2}Goroutine Model}{34}{subsection.167}%
-\contentsline {subsection}{\numberline {3.4.3}Thread Safety at Component Boundaries}{34}{subsection.168}%
-\contentsline {section}{\numberline {3.5}\texttt {gert serve} Integration}{34}{section.169}%
-\contentsline {subsection}{\numberline {3.5.1}Architectural Position}{35}{subsection.170}%
-\contentsline {subsection}{\numberline {3.5.2}Event Forwarding}{35}{subsection.176}%
-\contentsline {subsection}{\numberline {3.5.3}Crash Recovery in \texttt {gert serve}}{35}{subsection.177}%
-\contentsline {subsection}{\numberline {3.5.4}Event Dispatcher}{35}{subsection.178}%
-\contentsline {subsection}{\numberline {3.5.5}RPC Method Summary}{37}{subsection.182}%
-\contentsline {chapter}{\numberline {4}Schema vNext}{39}{chapter.183}%
-\contentsline {section}{\numberline {4.1}Schema Identity and Versioning}{39}{section.184}%
-\contentsline {subsection}{\numberline {4.1.1}apiVersion Values}{39}{subsection.185}%
-\contentsline {subsection}{\numberline {4.1.2}Self-Description via \$schema}{40}{subsection.186}%
-\contentsline {subsection}{\numberline {4.1.3}Versioning Strategy}{40}{subsection.187}%
-\contentsline {paragraph}{What constitutes a breaking change}{41}{section*.188}%
-\contentsline {subsection}{\numberline {4.1.4}Compatibility Contract: v1 → v2}{42}{subsection.189}%
-\contentsline {subsection}{\numberline {4.1.5}\texttt {gert migrate} Behavior}{43}{subsection.190}%
-\contentsline {section}{\numberline {4.2}Core Runbook Fields (v2)}{43}{section.200}%
-\contentsline {subsection}{\numberline {4.2.1}Top-Level Field Inventory}{43}{subsection.201}%
-\contentsline {paragraph}{id field}{44}{section*.202}%
-\contentsline {paragraph}{kind values}{44}{section*.203}%
-\contentsline {subsection}{\numberline {4.2.2}toolRefs}{45}{subsection.204}%
-\contentsline {subsection}{\numberline {4.2.3}Minimal Valid v2 Runbook}{45}{subsection.205}%
-\contentsline {subsection}{\numberline {4.2.4}Complete Annotated Example}{46}{subsection.206}%
-\contentsline {section}{\numberline {4.3}Input and Output Declarations}{49}{section.207}%
-\contentsline {subsection}{\numberline {4.3.1}Input Declarations}{49}{subsection.208}%
-\contentsline {paragraph}{type field}{49}{section*.209}%
-\contentsline {paragraph}{from: binding syntax}{50}{section*.210}%
-\contentsline {subsection}{\numberline {4.3.2}Output Declarations}{50}{subsection.211}%
-\contentsline {subsection}{\numberline {4.3.3}Expression Language}{50}{subsection.212}%
-\contentsline {paragraph}{Built-in template functions (v2 additions)}{51}{section*.215}%
-\contentsline {paragraph}{Template errors}{51}{section*.216}%
-\contentsline {section}{\numberline {4.4}Step Types (v2 Inventory)}{51}{section.217}%
-\contentsline {subsection}{\numberline {4.4.1}Common Step Fields}{52}{subsection.218}%
-\contentsline {paragraph}{Retry configuration}{53}{section*.219}%
-\contentsline {paragraph}{Step contract}{53}{section*.220}%
-\contentsline {subsection}{\numberline {4.4.2}Step Type: cli}{54}{subsection.221}%
-\contentsline {subsection}{\numberline {4.4.3}Step Type: choice}{55}{subsection.222}%
-\contentsline {paragraph}{Option structure}{55}{section*.223}%
-\contentsline {paragraph}{Constraints}{55}{section*.224}%
-\contentsline {paragraph}{Example: Environment selection}{55}{section*.225}%
-\contentsline {subsection}{\numberline {4.4.4}Step Type: decision}{56}{subsection.226}%
-\contentsline {paragraph}{Route structure}{56}{section*.227}%
-\contentsline {paragraph}{Constraints}{57}{section*.228}%
-\contentsline {paragraph}{Example: Incident response fork}{57}{section*.229}%
-\contentsline {subsection}{\numberline {4.4.5}Step Type: collector}{58}{subsection.230}%
-\contentsline {paragraph}{Field structure}{58}{section*.231}%
-\contentsline {paragraph}{Field types}{58}{section*.232}%
-\contentsline {paragraph}{Approval gate}{59}{section*.233}%
-\contentsline {paragraph}{Example: Incident evidence collection}{59}{section*.234}%
-\contentsline {subsection}{\numberline {4.4.6}Step Type: approve}{60}{subsection.235}%
-\contentsline {paragraph}{approvals block}{61}{section*.236}%
-\contentsline {paragraph}{Business-Day Timeout}{62}{section*.237}%
-\contentsline {paragraph}{Quorum Approval}{63}{section*.238}%
-\contentsline {paragraph}{Validation Rules}{64}{section*.239}%
-\contentsline {subsection}{\numberline {4.4.7}Step Type: tool}{64}{subsection.246}%
-\contentsline {subsection}{\numberline {4.4.8}Step Type: wait\_for\_event}{66}{subsection.247}%
-\contentsline {paragraph}{Example 1 — Prometheus alert webhook}{67}{section*.252}%
-\contentsline {paragraph}{Example 2 — Named channel / approval callback}{68}{section*.253}%
-\contentsline {paragraph}{Transport Note}{68}{section*.254}%
-\contentsline {paragraph}{Security Note}{69}{section*.255}%
-\contentsline {subsection}{\numberline {4.4.9}Step Type: include}{69}{subsection.256}%
-\contentsline {paragraph}{Cycle Detection}{70}{section*.257}%
-\contentsline {paragraph}{Difference from Sub-Procedure Call}{70}{section*.258}%
-\contentsline {subsection}{\numberline {4.4.10}Step Type: branch}{70}{subsection.259}%
-\contentsline {subsection}{\numberline {4.4.11}Step Type: iterate}{72}{subsection.260}%
-\contentsline {subsection}{\numberline {4.4.12}Step Type: parallel}{74}{subsection.261}%
-\contentsline {subsection}{\numberline {4.4.13}Step Type: assert}{75}{subsection.262}%
-\contentsline {subsection}{\numberline {4.4.14}Step Type: compensate}{76}{subsection.263}%
-\contentsline {subsection}{\numberline {4.4.15}Step Type: end}{77}{subsection.264}%
-\contentsline {section}{\numberline {4.5}Tool Definition Schema (v2)}{77}{section.265}%
-\contentsline {subsection}{\numberline {4.5.1}Tool Definition Field Inventory}{77}{subsection.266}%
-\contentsline {paragraph}{New in v2}{79}{section*.267}%
-\contentsline {section}{\numberline {4.6}Provider Definition Schema (v2)}{79}{section.268}%
-\contentsline {section}{\numberline {4.7}Namespace Convention for Extensions}{80}{section.269}%
-\contentsline {subsection}{\numberline {4.7.1}The Extension Field Problem}{80}{subsection.270}%
-\contentsline {subsection}{\numberline {4.7.2}Convention: \texttt {x-<namespace>:} at the Field Level}{80}{subsection.271}%
-\contentsline {paragraph}{At the runbook level}{81}{section*.275}%
-\contentsline {paragraph}{At the step level}{81}{section*.276}%
-\contentsline {subsection}{\numberline {4.7.3}Extension Validation}{81}{subsection.277}%
-\contentsline {subsection}{\numberline {4.7.4}Extension Registration Format}{81}{subsection.281}%
-\contentsline {section}{\numberline {4.8}Structural vs.\ Semantic Validation}{82}{section.282}%
-\contentsline {subsection}{\numberline {4.8.1}Phase 1: Structural Validation}{82}{subsection.283}%
-\contentsline {paragraph}{Implementation note for Brian}{83}{section*.284}%
-\contentsline {subsection}{\numberline {4.8.2}Phase 2: Semantic Validation}{83}{subsection.285}%
-\contentsline {paragraph}{Error reporting}{84}{section*.297}%
-\contentsline {section}{\numberline {4.9}Schema Artifacts}{85}{section.298}%
-\contentsline {subsection}{\numberline {4.9.1}Shipped Artifacts}{85}{subsection.299}%
-\contentsline {subsection}{\numberline {4.9.2}\texttt {gert schema export}}{85}{subsection.300}%
-\contentsline {subsection}{\numberline {4.9.3}VS Code Integration}{85}{subsection.301}%
-\contentsline {subsection}{\numberline {4.9.4}Schema Version Manifest}{86}{subsection.302}%
-\contentsline {chapter}{\numberline {5}Extension Runtime}{87}{chapter.303}%
-\contentsline {section}{\numberline {5.1}Architecture Overview}{87}{section.304}%
-\contentsline {section}{\numberline {5.2}Capability Taxonomy}{88}{section.312}%
-\contentsline {section}{\numberline {5.3}Extension Manifest Format}{88}{section.314}%
-\contentsline {section}{\numberline {5.4}Extension Discovery}{89}{section.315}%
-\contentsline {section}{\numberline {5.5}Handshake and Lifecycle Protocol}{90}{section.320}%
-\contentsline {subsection}{\numberline {5.5.1}extension/initialize (host \textrightarrow {} extension)}{90}{subsection.321}%
-\contentsline {subsection}{\numberline {5.5.2}contributions/list (host \textrightarrow {} extension)}{92}{subsection.322}%
-\contentsline {subsection}{\numberline {5.5.3}extension/ping (host \textrightarrow {} extension)}{92}{subsection.323}%
-\contentsline {subsection}{\numberline {5.5.4}extension/shutdown (host \textrightarrow {} extension)}{93}{subsection.324}%
-\contentsline {subsection}{\numberline {5.5.5}Lifecycle State Machine}{93}{subsection.325}%
-\contentsline {section}{\numberline {5.6}Versioning and Compatibility}{94}{section.334}%
-\contentsline {section}{\numberline {5.7}Sandboxing and Process Isolation}{94}{section.335}%
-\contentsline {subsection}{\numberline {5.7.1}Process Isolation}{94}{subsection.336}%
-\contentsline {subsection}{\numberline {5.7.2}Capability Enforcement}{95}{subsection.337}%
-\contentsline {subsection}{\numberline {5.7.3}Timeout and Crash Handling}{95}{subsection.338}%
-\contentsline {chapter}{\numberline {6}Tool Runtime}{98}{chapter.339}%
-\contentsline {section}{\numberline {6.1}Tool Discovery}{98}{section.340}%
-\contentsline {subsection}{\numberline {6.1.1}Name Resolution Order}{99}{subsection.348}%
-\contentsline {section}{\numberline {6.2}Tool Definition Schema (v2)}{99}{section.353}%
-\contentsline {subsection}{\numberline {6.2.1}Transport-Specific Fields}{100}{subsection.354}%
-\contentsline {paragraph}{stdio}{100}{section*.355}%
-\contentsline {paragraph}{stdio-jsonrpc}{101}{section*.356}%
-\contentsline {paragraph}{mcp}{101}{section*.357}%
-\contentsline {section}{\numberline {6.3}Transport Layer}{101}{section.358}%
-\contentsline {subsection}{\numberline {6.3.1}stdio Transport}{101}{subsection.359}%
-\contentsline {paragraph}{Process establishment.}{101}{section*.360}%
-\contentsline {paragraph}{Invocation envelope.}{101}{section*.361}%
-\contentsline {paragraph}{Response envelope.}{101}{section*.362}%
-\contentsline {paragraph}{Error envelope.}{101}{section*.363}%
-\contentsline {subsection}{\numberline {6.3.2}stdio-jsonrpc Transport}{102}{subsection.364}%
-\contentsline {paragraph}{Process establishment.}{102}{section*.365}%
-\contentsline {paragraph}{Invocation envelope.}{102}{section*.366}%
-\contentsline {paragraph}{Response envelope.}{102}{section*.367}%
-\contentsline {paragraph}{Error envelope.}{103}{section*.368}%
-\contentsline {subsection}{\numberline {6.3.3}MCP Transport}{103}{subsection.369}%
-\contentsline {section}{\numberline {6.4}Invocation Context}{104}{section.370}%
-\contentsline {section}{\numberline {6.5}Capability Gate}{104}{section.371}%
-\contentsline {section}{\numberline {6.6}Output Capture}{104}{section.374}%
-\contentsline {paragraph}{Redaction.}{105}{section*.375}%
-\contentsline {section}{\numberline {6.7}MCP Tool Integration}{105}{section.376}%
-\contentsline {subsection}{\numberline {6.7.1}MCP Server Declaration}{105}{subsection.377}%
-\contentsline {subsection}{\numberline {6.7.2}MCP Discovery}{105}{subsection.378}%
-\contentsline {subsection}{\numberline {6.7.3}MCP Tool Invocation}{106}{subsection.383}%
-\contentsline {subsection}{\numberline {6.7.4}MCP vs stdio-jsonrpc Differences}{106}{subsection.384}%
-\contentsline {section}{\numberline {6.8}Cancellation and Timeout}{107}{section.385}%
-\contentsline {paragraph}{Per-tool timeout.}{107}{section*.386}%
-\contentsline {paragraph}{Cancellation propagation.}{107}{section*.387}%
-\contentsline {section}{\numberline {6.9}Tool Versioning}{108}{section.392}%
-\contentsline {chapter}{\numberline {7}Runtime Events and Determinism}{109}{chapter.393}%
-\contentsline {section}{\numberline {7.1}Event System Design}{109}{section.394}%
-\contentsline {subsection}{\numberline {7.1.1}Role of Events}{109}{subsection.395}%
-\contentsline {subsection}{\numberline {7.1.2}Delivery Semantics}{110}{subsection.396}%
-\contentsline {paragraph}{At-least-once delivery.}{110}{section*.397}%
-\contentsline {paragraph}{In-order per run.}{110}{section*.398}%
-\contentsline {paragraph}{Replay determinism.}{110}{section*.399}%
-\contentsline {section}{\numberline {7.2}Event Envelope}{110}{section.400}%
-\contentsline {paragraph}{Sequence numbers.}{111}{section*.401}%
-\contentsline {paragraph}{Timestamps.}{111}{section*.402}%
-\contentsline {paragraph}{Event IDs.}{111}{section*.403}%
-\contentsline {section}{\numberline {7.3}Event Catalog}{111}{section.404}%
-\contentsline {subsection}{\numberline {7.3.1}Run Lifecycle Events}{112}{subsection.405}%
-\contentsline {subsubsection}{\texttt {run/started}}{112}{section*.406}%
-\contentsline {subsubsection}{\texttt {run/completed}}{112}{section*.407}%
-\contentsline {subsubsection}{\texttt {run/cancelled}}{113}{section*.408}%
-\contentsline {subsection}{\numberline {7.3.2}Step Lifecycle Events}{113}{subsection.409}%
-\contentsline {subsubsection}{\texttt {step/started}}{113}{section*.410}%
-\contentsline {subsubsection}{\texttt {step/completed}}{113}{section*.411}%
-\contentsline {subsubsection}{\texttt {step/failed}}{114}{section*.412}%
-\contentsline {subsubsection}{\texttt {step/skipped}}{114}{section*.413}%
-\contentsline {subsubsection}{\texttt {step/retrying}}{115}{section*.414}%
-\contentsline {subsection}{\numberline {7.3.3}Governance Events}{115}{subsection.415}%
-\contentsline {subsubsection}{\texttt {governance/command\_checked}}{115}{section*.416}%
-\contentsline {subsubsection}{\texttt {governance/approval\_requested}}{116}{section*.417}%
-\contentsline {subsubsection}{\texttt {governance/approval\_received}}{116}{section*.418}%
-\contentsline {subsubsection}{\texttt {governance/redaction\_applied}}{116}{section*.419}%
-\contentsline {subsection}{\numberline {7.3.4}Extension and Tool Events}{117}{subsection.420}%
-\contentsline {subsubsection}{\texttt {extension/loaded}}{117}{section*.421}%
-\contentsline {subsubsection}{\texttt {extension/unloaded}}{117}{section*.422}%
-\contentsline {subsubsection}{\texttt {tool/invoked}}{117}{section*.423}%
-\contentsline {subsubsection}{\texttt {tool/completed}}{118}{section*.424}%
-\contentsline {subsection}{\numberline {7.3.5}Human-in-the-Loop Events}{118}{subsection.425}%
-\contentsline {subsubsection}{\texttt {input/prompted}}{118}{section*.426}%
-\contentsline {subsubsection}{\texttt {input/received}}{119}{section*.427}%
-\contentsline {subsection}{\numberline {7.3.6}Saga and Compensation Events (v2.1+)}{119}{subsection.428}%
-\contentsline {subsubsection}{\texttt {saga/compensation\_triggered}}{119}{section*.429}%
-\contentsline {subsubsection}{\texttt {saga/compensation\_completed}}{119}{section*.430}%
-\contentsline {section}{\numberline {7.4}Event Channels}{120}{section.431}%
-\contentsline {subsection}{\numberline {7.4.1}In-Process Event Bus}{120}{subsection.432}%
-\contentsline {paragraph}{Purpose.}{120}{section*.433}%
-\contentsline {paragraph}{Implementation.}{120}{section*.434}%
-\contentsline {paragraph}{Subscriber API.}{120}{section*.435}%
-\contentsline {paragraph}{Lifecycle.}{120}{section*.436}%
-\contentsline {subsection}{\numberline {7.4.2}WebSocket Broadcast (HTTP Adapter)}{120}{subsection.437}%
-\contentsline {paragraph}{Purpose.}{120}{section*.438}%
-\contentsline {paragraph}{Implementation.}{121}{section*.439}%
-\contentsline {paragraph}{Wire format.}{121}{section*.440}%
-\contentsline {paragraph}{Delivery semantics.}{121}{section*.441}%
-\contentsline {subsection}{\numberline {7.4.3}JSONL Trace File}{121}{subsection.442}%
-\contentsline {paragraph}{Purpose.}{121}{section*.443}%
-\contentsline {paragraph}{Implementation.}{121}{section*.444}%
-\contentsline {paragraph}{Format.}{121}{section*.445}%
-\contentsline {section}{\numberline {7.5}Event Subscriptions}{121}{section.446}%
-\contentsline {subsection}{\numberline {7.5.1}Programmatic Subscription API}{121}{subsection.447}%
-\contentsline {paragraph}{Example use cases.}{122}{section*.448}%
-\contentsline {section}{\numberline {7.6}Wire Format}{122}{section.449}%
-\contentsline {subsection}{\numberline {7.6.1}Concrete Example: \texttt {step/started}}{122}{subsection.450}%
-\contentsline {subsection}{\numberline {7.6.2}Concrete Example: \texttt {governance/approval\_requested}}{123}{subsection.451}%
-\contentsline {section}{\numberline {7.7}Required vs.\ Optional Events}{123}{section.452}%
-\contentsline {paragraph}{Adapter compatibility.}{124}{section*.453}%
-\contentsline {section}{\numberline {7.8}Determinism and Replay Semantics}{124}{section.454}%
-\contentsline {subsection}{\numberline {7.8.1}Replay Mode}{124}{subsection.455}%
-\contentsline {paragraph}{Replay guarantees.}{124}{section*.456}%
-\contentsline {subsection}{\numberline {7.8.2}Non-determinism Boundaries}{125}{subsection.457}%
-\contentsline {chapter}{\numberline {8}Security and Trust}{126}{chapter.458}%
-\contentsline {section}{\numberline {8.1}Threat Model}{126}{section.459}%
-\contentsline {section}{\numberline {8.2}Extension Trust Model}{126}{section.461}%
-\contentsline {subsection}{\numberline {8.2.1}Trust Levels}{126}{subsection.462}%
-\contentsline {paragraph}{Local trusted.}{126}{section*.463}%
-\contentsline {paragraph}{Project-scoped.}{127}{section*.464}%
-\contentsline {paragraph}{Remote/signed.}{127}{section*.465}%
-\contentsline {subsection}{\numberline {8.2.2}Extension Signature Format}{128}{subsection.466}%
-\contentsline {paragraph}{Signature verification algorithm.}{128}{section*.467}%
-\contentsline {subsection}{\numberline {8.2.3}Extension Verification Command}{129}{subsection.473}%
-\contentsline {section}{\numberline {8.3}Process Isolation}{129}{section.474}%
-\contentsline {subsection}{\numberline {8.3.1}Isolation Mechanisms}{129}{subsection.475}%
-\contentsline {paragraph}{Separate OS process.}{129}{section*.476}%
-\contentsline {paragraph}{Filesystem access control.}{129}{section*.477}%
-\contentsline {paragraph}{Network access control.}{130}{section*.478}%
-\contentsline {paragraph}{Environment variable isolation.}{130}{section*.479}%
-\contentsline {paragraph}{Crash isolation.}{130}{section*.480}%
-\contentsline {section}{\numberline {8.4}Credential and Secret Handling}{131}{section.485}%
-\contentsline {subsection}{\numberline {8.4.1}Secret Resolution and Redaction}{131}{subsection.486}%
-\contentsline {paragraph}{Input provider sensitivity marking.}{131}{section*.487}%
-\contentsline {paragraph}{Tool sensitive inputs.}{131}{section*.488}%
-\contentsline {paragraph}{Mandatory redaction.}{132}{section*.489}%
-\contentsline {subsection}{\numberline {8.4.2}Secret Storage Policy}{132}{subsection.490}%
-\contentsline {section}{\numberline {8.5}Transport Security}{132}{section.491}%
-\contentsline {subsection}{\numberline {8.5.1}TLS Requirements}{132}{subsection.494}%
-\contentsline {paragraph}{Localhost exception.}{132}{section*.495}%
-\contentsline {paragraph}{Non-localhost listeners.}{133}{section*.496}%
-\contentsline {subsection}{\numberline {8.5.2}Client Authentication}{133}{subsection.497}%
-\contentsline {paragraph}{Bearer token authentication.}{133}{section*.498}%
-\contentsline {paragraph}{Mutual TLS (mTLS).}{133}{section*.499}%
-\contentsline {subsection}{\numberline {8.5.3}WebSocket Security}{134}{subsection.500}%
-\contentsline {subsection}{\numberline {8.5.4}Extension JSON-RPC Transport}{134}{subsection.501}%
-\contentsline {section}{\numberline {8.6}RBAC for \texttt {gert serve}}{134}{section.502}%
-\contentsline {subsection}{\numberline {8.6.1}Actor Identity}{134}{subsection.503}%
-\contentsline {subsection}{\numberline {8.6.2}Roles}{135}{subsection.504}%
-\contentsline {paragraph}{Viewer.}{135}{section*.505}%
-\contentsline {paragraph}{Operator.}{135}{section*.506}%
-\contentsline {paragraph}{Admin.}{135}{section*.507}%
-\contentsline {subsection}{\numberline {8.6.3}Role Assignment}{136}{subsection.508}%
-\contentsline {subsection}{\numberline {8.6.4}Approval Authorizer Role}{136}{subsection.509}%
-\contentsline {section}{\numberline {8.7}Audit Non-Repudiation}{137}{section.515}%
-\contentsline {subsection}{\numberline {8.7.1}Governance Decision Recording}{137}{subsection.516}%
-\contentsline {subsection}{\numberline {8.7.2}Trace File Integrity (HMAC Chaining)}{138}{subsection.517}%
-\contentsline {subsection}{\numberline {8.7.3}SHA256 Evidence Capture}{139}{subsection.522}%
-\contentsline {section}{\numberline {8.8}Supply Chain Security}{139}{section.523}%
-\contentsline {subsection}{\numberline {8.8.1}Tool Binary Checksums}{139}{subsection.524}%
-\contentsline {subsection}{\numberline {8.8.2}\texttt {gert verify} Command}{140}{subsection.529}%
-\contentsline {subsection}{\numberline {8.8.3}Extension Signature Verification}{140}{subsection.530}%
-\contentsline {section}{\numberline {8.9}Security Recommendations}{140}{section.531}%
-\contentsline {chapter}{\numberline {9}Testing and Acceptance}{142}{chapter.540}%
-\contentsline {section}{\numberline {9.1}Test Framework}{142}{section.541}%
-\contentsline {subsection}{\numberline {9.1.1}Standard Library and testify}{142}{subsection.542}%
-\contentsline {subsection}{\numberline {9.1.2}Test Packages}{143}{subsection.543}%
-\contentsline {section}{\numberline {9.2}The \texttt {gert test} Feature}{143}{section.544}%
-\contentsline {subsection}{\numberline {9.2.1}Scenario Replay Testing}{143}{subsection.545}%
-\contentsline {subsection}{\numberline {9.2.2}Test Assertions (\texttt {test.yaml})}{144}{subsection.546}%
-\contentsline {subsection}{\numberline {9.2.3}v1 Scenario Compatibility}{144}{subsection.547}%
-\contentsline {section}{\numberline {9.3}Contract Tests}{145}{section.548}%
-\contentsline {subsection}{\numberline {9.3.1}Core Runtime Contract}{145}{subsection.549}%
-\contentsline {subsection}{\numberline {9.3.2}Schema Contract Tests}{145}{subsection.550}%
-\contentsline {subsection}{\numberline {9.3.3}Extension Manifest and Handshake Tests}{146}{subsection.551}%
-\contentsline {subsection}{\numberline {9.3.4}Tool Invocation Envelope Tests}{146}{subsection.552}%
-\contentsline {subsection}{\numberline {9.3.5}Event Bus Determinism Tests}{146}{subsection.553}%
-\contentsline {section}{\numberline {9.4}Integration Test Strategy}{147}{section.554}%
-\contentsline {subsection}{\numberline {9.4.1}End-to-End Fixture Runs}{147}{subsection.555}%
-\contentsline {subsection}{\numberline {9.4.2}Fixture Runbook Corpus}{147}{subsection.556}%
-\contentsline {subsection}{\numberline {9.4.3}Trace Assertion Helpers}{148}{subsection.557}%
-\contentsline {section}{\numberline {9.5}Regression Testing}{148}{section.558}%
-\contentsline {subsection}{\numberline {9.5.1}v1 Runbook Corpus as Fixtures}{148}{subsection.559}%
-\contentsline {subsection}{\numberline {9.5.2}Golden Trace Comparisons}{149}{subsection.564}%
-\contentsline {section}{\numberline {9.6}Performance Acceptance Criteria}{149}{section.569}%
-\contentsline {section}{\numberline {9.7}Extension Test Harness}{150}{section.570}%
-\contentsline {subsection}{\numberline {9.7.1}Overview}{150}{subsection.571}%
-\contentsline {subsection}{\numberline {9.7.2}Harness Capabilities}{150}{subsection.572}%
-\contentsline {subsection}{\numberline {9.7.3}Mocking the Extension Transport}{151}{subsection.573}%
-\contentsline {section}{\numberline {9.8}Acceptance Criteria}{151}{section.574}%
-\contentsline {section}{\numberline {9.9}CI/CD Integration}{152}{section.583}%
-\contentsline {subsection}{\numberline {9.9.1}PR Gate (every pull request)}{152}{subsection.584}%
-\contentsline {subsection}{\numberline {9.9.2}Integration Gate (merge to main)}{152}{subsection.590}%
-\contentsline {subsection}{\numberline {9.9.3}Nightly Gate}{152}{subsection.594}%
-\contentsline {chapter}{\numberline {10}Open Questions}{153}{chapter.598}%
-\contentsline {chapter}{\numberline {11}Migration and Compatibility}{159}{chapter.611}%
-\contentsline {section}{\numberline {11.1}v1 → v2 Compatibility Matrix}{159}{section.612}%
-\contentsline {paragraph}{Key takeaways:}{160}{section*.613}%
-\contentsline {section}{\numberline {11.2}Schema Migration: Runbook YAML}{161}{section.614}%
-\contentsline {subsection}{\numberline {11.2.1}Breaking Changes Summary}{161}{subsection.615}%
-\contentsline {subsection}{\numberline {11.2.2}Before and After Example}{161}{subsection.619}%
-\contentsline {subsection}{\numberline {11.2.3}Field Mapping Table}{164}{subsection.620}%
-\contentsline {section}{\numberline {11.3}Automated Migration Tool}{164}{section.621}%
-\contentsline {subsection}{\numberline {11.3.1}Command Specification}{164}{subsection.622}%
-\contentsline {subsection}{\numberline {11.3.2}Flags}{165}{subsection.623}%
-\contentsline {subsection}{\numberline {11.3.3}Migration Algorithm}{165}{subsection.624}%
-\contentsline {subsection}{\numberline {11.3.4}Diff Report}{166}{subsection.636}%
-\contentsline {subsection}{\numberline {11.3.5}Error Handling}{166}{subsection.637}%
-\contentsline {section}{\numberline {11.4}Provider and Tool Migration}{167}{section.641}%
-\contentsline {subsection}{\numberline {11.4.1}Tool Definitions (\texttt {.tool.yaml})}{167}{subsection.642}%
-\contentsline {paragraph}{Migration tool support.}{167}{section*.646}%
-\contentsline {subsection}{\numberline {11.4.2}Provider Definitions (\texttt {.provider.yaml})}{168}{subsection.647}%
-\contentsline {paragraph}{Migration tool support.}{168}{section*.650}%
-\contentsline {section}{\numberline {11.5}Extension Migration}{168}{section.651}%
-\contentsline {subsection}{\numberline {11.5.1}Handshake Protocol Changes}{168}{subsection.652}%
-\contentsline {subsection}{\numberline {11.5.2}Extension Compatibility Shim}{169}{subsection.656}%
-\contentsline {subsection}{\numberline {11.5.3}Extension Author Checklist}{169}{subsection.657}%
-\contentsline {section}{\numberline {11.6}Trace Format Migration}{170}{section.663}%
-\contentsline {subsection}{\numberline {11.6.1}Breaking Changes in JSONL Trace}{170}{subsection.664}%
-\contentsline {paragraph}{Field mapping:}{170}{section*.665}%
-\contentsline {subsection}{\numberline {11.6.2}Trace Replay Compatibility}{170}{subsection.666}%
-\contentsline {subsection}{\numberline {11.6.3}Trace Archive Migration Tool}{171}{subsection.671}%
-\contentsline {section}{\numberline {11.7}Rollout Strategy}{171}{section.672}%
-\contentsline {subsection}{\numberline {11.7.1}Recommended Adoption Path}{171}{subsection.673}%
-\contentsline {paragraph}{Phase 1: Read-Only Validation (Week 1-2)}{171}{section*.674}%
-\contentsline {paragraph}{Phase 2: Schema Migration (Week 3-4)}{171}{section*.679}%
-\contentsline {paragraph}{Phase 3: Extension and Tool Migration (Week 5-6)}{172}{section*.684}%
-\contentsline {paragraph}{Phase 4: Integration Migration (Week 7-8)}{172}{section*.689}%
-\contentsline {subsection}{\numberline {11.7.2}Parallel Operation}{172}{subsection.694}%
-\contentsline {subsection}{\numberline {11.7.3}Timeline}{172}{subsection.695}%
-\contentsline {section}{\numberline {11.8}v1 Compatibility Shim}{173}{section.696}%
-\contentsline {subsection}{\numberline {11.8.1}Decision: Provide a v1 Compatibility Shim for 6 Months}{173}{subsection.697}%
-\contentsline {paragraph}{Rationale:}{173}{section*.698}%
-\contentsline {subsection}{\numberline {11.8.2}Shim Behavior}{173}{subsection.699}%
-\contentsline {subsection}{\numberline {11.8.3}Shim Removal}{174}{subsection.704}%
-\contentsline {section}{\numberline {11.9}Open Questions and Risks}{174}{section.705}%
-\contentsline {subsection}{\numberline {11.9.1}Open Questions}{174}{subsection.706}%
-\contentsline {subsection}{\numberline {11.9.2}Migration Risks}{174}{subsection.710}%
-\contentsline {section}{\numberline {11.10}Summary}{175}{section.714}%
-\contentsline {chapter}{\numberline {12}Governance and Policy}{176}{chapter.715}%
-\contentsline {section}{\numberline {12.1}Governance Primitives}{176}{section.716}%
-\contentsline {subsection}{\numberline {12.1.1}Command Allowlist (\texttt {allowed\_commands})}{176}{subsection.717}%
-\contentsline {subsection}{\numberline {12.1.2}Command Denylist (\texttt {denied\_commands})}{177}{subsection.718}%
-\contentsline {subsection}{\numberline {12.1.3}Environment Variable Blocking (\texttt {deny\_env\_vars})}{177}{subsection.719}%
-\contentsline {subsection}{\numberline {12.1.4}Output Redaction (\texttt {redact})}{178}{subsection.720}%
-\contentsline {subsection}{\numberline {12.1.5}Approval Gates}{178}{subsection.721}%
-\contentsline {section}{\numberline {12.2}Policy Evaluation Model}{179}{section.722}%
-\contentsline {paragraph}{Order of precedence.}{179}{section*.723}%
-\contentsline {section}{\numberline {12.3}Approval Gate Design}{179}{section.728}%
-\contentsline {subsection}{\numberline {12.3.1}Schema Declaration}{179}{subsection.729}%
-\contentsline {subsection}{\numberline {12.3.2}UX Contract}{180}{subsection.730}%
-\contentsline {subsection}{\numberline {12.3.3}Approval Decision Protocol}{180}{subsection.735}%
-\contentsline {subsection}{\numberline {12.3.4}Approval Recording in the Trace}{181}{subsection.736}%
-\contentsline {subsection}{\numberline {12.3.5}Timeout and Escalation}{182}{subsection.737}%
-\contentsline {section}{\numberline {12.4}Policy-as-Code Direction}{183}{section.738}%
-\contentsline {subsection}{\numberline {12.4.1}v2.0: Structured YAML Policy Blocks}{183}{subsection.739}%
-\contentsline {subsection}{\numberline {12.4.2}v2.1+: OPA Integration Hooks}{183}{subsection.740}%
-\contentsline {section}{\numberline {12.5}RBAC Model}{184}{section.743}%
-\contentsline {subsection}{\numberline {12.5.1}Identity Establishment}{184}{subsection.744}%
-\contentsline {subsection}{\numberline {12.5.2}Runbook-Level Access Control}{185}{subsection.745}%
-\contentsline {subsection}{\numberline {12.5.3}Step-Level Role Restriction}{185}{subsection.746}%
-\contentsline {subsection}{\numberline {12.5.4}Separation of Duties}{185}{subsection.747}%
-\contentsline {section}{\numberline {12.6}Redaction}{186}{section.748}%
-\contentsline {subsection}{\numberline {12.6.1}Pattern-Based Redaction}{186}{subsection.749}%
-\contentsline {subsection}{\numberline {12.6.2}Explicit Field Marking (v2.1)}{186}{subsection.750}%
-\contentsline {subsection}{\numberline {12.6.3}Redaction Guarantees}{186}{subsection.751}%
-\contentsline {section}{\numberline {12.7}Audit Trail Requirements}{186}{section.752}%
-\contentsline {subsection}{\numberline {12.7.1}Trace Integrity}{187}{subsection.753}%
-\contentsline {subsection}{\numberline {12.7.2}Compliance Alignment}{187}{subsection.754}%
-\contentsline {section}{\numberline {12.8}Extension-Contributed Policy}{188}{section.755}%
-\contentsline {subsection}{\numberline {12.8.1}Extension Policy Rule Schema}{188}{subsection.760}%
-\contentsline {chapter}{\numberline {13}Evidence, Tracing, and Resumption}{189}{chapter.761}%
-\contentsline {section}{\numberline {13.1}Trace File Format}{189}{section.762}%
-\contentsline {subsection}{\numberline {13.1.1}File Location and Naming}{189}{subsection.763}%
-\contentsline {subsection}{\numberline {13.1.2}JSONL Envelope}{190}{subsection.764}%
-\contentsline {subsubsection}{\texttt {step/failed}}{192}{section*.765}%
-\contentsline {subsubsection}{\texttt {step/skipped}}{192}{section*.766}%
-\contentsline {subsubsection}{\texttt {step/retrying}}{192}{section*.767}%
-\contentsline {subsubsection}{\texttt {tool/invoked}}{193}{section*.768}%
-\contentsline {subsubsection}{\texttt {tool/responded}}{193}{section*.769}%
-\contentsline {subsubsection}{\texttt {manual/prompted}}{193}{section*.770}%
-\contentsline {subsubsection}{\texttt {manual/completed}}{193}{section*.771}%
-\contentsline {subsubsection}{\texttt {governance/blocked}}{194}{section*.772}%
-\contentsline {subsubsection}{\texttt {governance/approved}}{194}{section*.773}%
-\contentsline {subsubsection}{\texttt {run/completed}}{194}{section*.774}%
-\contentsline {subsubsection}{\texttt {run/failed}}{195}{section*.775}%
-\contentsline {subsubsection}{\texttt {checkpoint}}{195}{section*.776}%
-\contentsline {subsection}{\numberline {13.1.3}Crash Safety}{195}{subsection.777}%
-\contentsline {subsection}{\numberline {13.1.4}Tamper Evidence}{196}{subsection.778}%
-\contentsline {section}{\numberline {13.2}Evidence Capture}{196}{section.779}%
-\contentsline {subsection}{\numberline {13.2.1}What Constitutes Evidence}{196}{subsection.780}%
-\contentsline {subsection}{\numberline {13.2.2}SHA256 Hashing}{197}{subsection.781}%
-\contentsline {subsection}{\numberline {13.2.3}File Attachments}{197}{subsection.782}%
-\contentsline {subsection}{\numberline {13.2.4}Evidence Retention}{198}{subsection.785}%
-\contentsline {section}{\numberline {13.3}Run State Snapshots}{198}{section.786}%
-\contentsline {subsection}{\numberline {13.3.1}Checkpoint Model}{198}{subsection.787}%
-\contentsline {subsection}{\numberline {13.3.2}Atomic Snapshot Write}{199}{subsection.788}%
-\contentsline {subsection}{\numberline {13.3.3}Minimum Resumption State}{199}{subsection.789}%
-\contentsline {section}{\numberline {13.4}Run Resumption}{200}{section.790}%
-\contentsline {subsection}{\numberline {13.4.1}The \texttt {gert exec --resume} Contract}{200}{subsection.791}%
-\contentsline {subsection}{\numberline {13.4.2}Resumability by Step Type}{200}{subsection.799}%
-\contentsline {subsection}{\numberline {13.4.3}Idempotency Guidance}{201}{subsection.800}%
-\contentsline {subsection}{\numberline {13.4.4}Partial Step Resumption}{201}{subsection.801}%
-\contentsline {section}{\numberline {13.5}Replay Mode}{202}{section.805}%
-\contentsline {subsection}{\numberline {13.5.1}Overview}{202}{subsection.806}%
-\contentsline {subsection}{\numberline {13.5.2}Scenario File Format}{202}{subsection.807}%
-\contentsline {subsection}{\numberline {13.5.3}Replay Semantics}{203}{subsection.808}%
-\contentsline {subsection}{\numberline {13.5.4}Determinism Requirement}{203}{subsection.809}%
-\contentsline {section}{\numberline {13.6}OpenTelemetry Integration}{203}{section.810}%
-\contentsline {subsection}{\numberline {13.6.1}Rationale}{203}{subsection.811}%
-\contentsline {subsection}{\numberline {13.6.2}Span Hierarchy}{204}{subsection.812}%
-\contentsline {subsection}{\numberline {13.6.3}Span Attributes}{205}{subsection.813}%
-\contentsline {subsection}{\numberline {13.6.4}Relationship to JSONL Trace}{205}{subsection.814}%
-\contentsline {subsection}{\numberline {13.6.5}Configuration}{205}{subsection.815}%
-\contentsline {section}{\numberline {13.7}Implementation Notes for Go}{206}{section.816}%
-\contentsline {chapter}{\numberline {14}Adapter Contracts}{208}{chapter.817}%
-\contentsline {section}{\numberline {14.1}What is an Adapter Contract?}{208}{section.818}%
-\contentsline {paragraph}{Example consumers:}{209}{section*.823}%
-\contentsline {section}{\numberline {14.2}Contract Categories}{209}{section.824}%
-\contentsline {subsection}{\numberline {14.2.1}JSON-RPC Execution Contract (\texttt {exec/v2})}{209}{subsection.825}%
-\contentsline {paragraph}{Contract version:}{209}{section*.826}%
-\contentsline {paragraph}{Transport:}{209}{section*.827}%
-\contentsline {paragraph}{Methods:}{209}{table.caption.829}%
-\contentsline {paragraph}{Request schema — \texttt {exec/start}:}{209}{section*.830}%
-\contentsline {paragraph}{Response schema — \texttt {exec/start}:}{210}{section*.831}%
-\contentsline {paragraph}{Error envelope:}{211}{section*.832}%
-\contentsline {paragraph}{Stability guarantee:}{211}{section*.833}%
-\contentsline {subsection}{\numberline {14.2.2}WebSocket Event Stream Contract (\texttt {events/v2})}{211}{subsection.834}%
-\contentsline {paragraph}{Contract version:}{211}{section*.835}%
-\contentsline {paragraph}{Transport:}{212}{section*.836}%
-\contentsline {paragraph}{Connection lifecycle:}{212}{section*.837}%
-\contentsline {paragraph}{Subscribe message:}{212}{section*.842}%
-\contentsline {paragraph}{Event envelope:}{212}{section*.843}%
-\contentsline {paragraph}{Reconnection protocol:}{213}{section*.844}%
-\contentsline {paragraph}{Stability guarantee:}{213}{section*.845}%
-\contentsline {subsection}{\numberline {14.2.3}Tool Invocation Contract (\texttt {tool/v2})}{213}{subsection.846}%
-\contentsline {paragraph}{Contract version:}{213}{section*.847}%
-\contentsline {paragraph}{Transport:}{213}{section*.848}%
-\contentsline {paragraph}{Invocation request:}{214}{section*.849}%
-\contentsline {paragraph}{Success response:}{214}{section*.850}%
-\contentsline {paragraph}{Error response:}{215}{section*.851}%
-\contentsline {paragraph}{Cancellation request:}{215}{section*.852}%
-\contentsline {paragraph}{MCP tool adapter:}{216}{section*.853}%
-\contentsline {paragraph}{Stability guarantee:}{216}{section*.858}%
-\contentsline {subsection}{\numberline {14.2.4}Extension Handshake Contract (\texttt {extension/v2})}{216}{subsection.859}%
-\contentsline {paragraph}{Contract version:}{216}{section*.860}%
-\contentsline {paragraph}{Transport:}{216}{section*.861}%
-\contentsline {paragraph}{Initialize request:}{216}{section*.862}%
-\contentsline {paragraph}{Initialize response:}{217}{section*.863}%
-\contentsline {paragraph}{Heartbeat (ping/pong):}{217}{section*.864}%
-\contentsline {paragraph}{Stability guarantee:}{218}{section*.865}%
-\contentsline {section}{\numberline {14.3}Contract Versioning}{218}{section.866}%
-\contentsline {subsection}{\numberline {14.3.1}Version Declaration}{218}{subsection.867}%
-\contentsline {paragraph}{HTTP-based contracts (JSON-RPC, WebSocket):}{218}{section*.868}%
-\contentsline {paragraph}{stdio-based contracts (tool, extension):}{219}{section*.869}%
-\contentsline {subsection}{\numberline {14.3.2}Breaking vs. Non-Breaking Changes}{219}{subsection.870}%
-\contentsline {paragraph}{Non-breaking changes (minor version, no contract version bump):}{219}{section*.871}%
-\contentsline {paragraph}{Breaking changes (major version bump):}{220}{section*.872}%
-\contentsline {subsection}{\numberline {14.3.3}Deprecation Policy}{220}{subsection.873}%
-\contentsline {subsection}{\numberline {14.3.4}Forward and Backward Compatibility}{221}{subsection.874}%
-\contentsline {paragraph}{Forward compatibility (clients):}{221}{section*.875}%
-\contentsline {paragraph}{Backward compatibility (servers):}{221}{section*.876}%
-\contentsline {section}{\numberline {14.4}Error Codes}{221}{section.877}%
-\contentsline {paragraph}{Error envelope structure:}{221}{section*.879}%
-\contentsline {paragraph}{Error code stability:}{222}{section*.880}%
-\contentsline {section}{\numberline {14.5}Contract Test Suite}{222}{section.881}%
-\contentsline {subsection}{\numberline {14.5.1}Test Suite Structure}{222}{subsection.882}%
-\contentsline {subsection}{\numberline {14.5.2}Running Contract Tests}{223}{subsection.883}%
-\contentsline {subsection}{\numberline {14.5.3}Contract Test CI Integration}{223}{subsection.884}%
-\contentsline {section}{\numberline {14.6}Reference Implementations}{224}{section.885}%
-\contentsline {paragraph}{VS Code extension.}{224}{section*.886}%
-\contentsline {paragraph}{Built-in tools.}{224}{section*.887}%
-\contentsline {paragraph}{MCP adapter.}{224}{section*.888}%
-\contentsline {section}{\numberline {14.7}Contract Stability Guarantees}{224}{section.889}%
-\contentsline {section}{\numberline {14.8}Contract Documentation and Tooling}{225}{section.895}%
-\contentsline {subsection}{\numberline {14.8.1}OpenAPI Specifications}{225}{subsection.896}%
-\contentsline {subsection}{\numberline {14.8.2}JSON Schema Validation}{225}{subsection.897}%
-\contentsline {subsection}{\numberline {14.8.3}Client Library Generation}{225}{subsection.898}%
-\contentsline {chapter}{\numberline {15}Input Provider Framework}{227}{chapter.899}%
-\contentsline {section}{\numberline {15.1}Design Goals}{227}{section.900}%
-\contentsline {section}{\numberline {15.2}Provider Definition Schema}{227}{section.901}%
-\contentsline {section}{\numberline {15.3}Resolution Protocol}{229}{section.902}%
-\contentsline {subsection}{\numberline {15.3.1}Resolution Flow}{229}{subsection.903}%
-\contentsline {subsection}{\numberline {15.3.2}Resolution Request Envelope}{230}{subsection.910}%
-\contentsline {subsection}{\numberline {15.3.3}Resolution Response Envelope}{230}{subsection.911}%
-\contentsline {subsection}{\numberline {15.3.4}Resolution Error Handling}{231}{subsection.912}%
-\contentsline {subsection}{\numberline {15.3.5}Resolution Caching}{232}{subsection.913}%
-\contentsline {section}{\numberline {15.4}Built-in Providers}{232}{section.914}%
-\contentsline {subsection}{\numberline {15.4.1}env}{232}{subsection.915}%
-\contentsline {subsection}{\numberline {15.4.2}file}{232}{subsection.916}%
-\contentsline {subsection}{\numberline {15.4.3}prompt}{233}{subsection.917}%
-\contentsline {subsection}{\numberline {15.4.4}workspace}{233}{subsection.918}%
-\contentsline {section}{\numberline {15.5}Interactive Step Type Contracts}{234}{section.919}%
-\contentsline {subsection}{\numberline {15.5.1}Choice Step Contract}{234}{subsection.920}%
-\contentsline {paragraph}{Request envelope.}{234}{section*.921}%
-\contentsline {paragraph}{Response envelope.}{235}{section*.922}%
-\contentsline {paragraph}{Contract requirements.}{235}{section*.923}%
-\contentsline {paragraph}{Built-in prompt provider behaviour.}{235}{section*.924}%
-\contentsline {subsection}{\numberline {15.5.2}Decision (Router) Step Contract}{235}{subsection.925}%
-\contentsline {paragraph}{Request envelope.}{236}{section*.926}%
-\contentsline {paragraph}{Response envelope.}{236}{section*.927}%
-\contentsline {paragraph}{Contract requirements.}{236}{section*.928}%
-\contentsline {paragraph}{Built-in prompt provider behaviour.}{237}{section*.929}%
-\contentsline {subsection}{\numberline {15.5.3}Collector Step Contract}{237}{subsection.930}%
-\contentsline {paragraph}{Request envelope.}{237}{section*.931}%
-\contentsline {paragraph}{Response envelope.}{238}{section*.932}%
-\contentsline {paragraph}{Contract requirements.}{239}{section*.933}%
-\contentsline {paragraph}{Built-in prompt provider behaviour.}{240}{section*.934}%
-\contentsline {subsection}{\numberline {15.5.4}Provider Capability Matrix}{240}{subsection.935}%
-\contentsline {section}{\numberline {15.6}Provider Composition}{241}{section.936}%
-\contentsline {section}{\numberline {15.7}Provider Lifecycle}{242}{section.937}%
-\contentsline {paragraph}{Process model.}{242}{section*.938}%
-\contentsline {paragraph}{Startup.}{242}{section*.939}%
-\contentsline {paragraph}{Shutdown.}{242}{section*.940}%
-\contentsline {paragraph}{Crash handling.}{242}{section*.941}%
-\contentsline {chapter}{\numberline {16}Observability and Diagnostics}{243}{chapter.942}%
-\contentsline {section}{\numberline {16.1}Observability Model}{243}{section.943}%
-\contentsline {subsection}{\numberline {16.1.1}Metrics: Aggregated Performance Indicators}{243}{subsection.944}%
-\contentsline {subsection}{\numberline {16.1.2}Distributed Tracing: Execution Flow Visualization}{244}{subsection.945}%
-\contentsline {subsection}{\numberline {16.1.3}Structured Logging: Detailed Contextual Events}{245}{subsection.946}%
-\contentsline {section}{\numberline {16.2}OpenTelemetry Integration}{245}{section.947}%
-\contentsline {subsection}{\numberline {16.2.1}Span Hierarchy and Attributes}{245}{subsection.948}%
-\contentsline {subsubsection}{Root Span: \texttt {gert.run}}{246}{section*.949}%
-\contentsline {subsubsection}{Child Span: \texttt {gert.step}}{246}{section*.957}%
-\contentsline {subsubsection}{Grandchild Span: \texttt {gert.tool.invoke}}{247}{section*.967}%
-\contentsline {subsubsection}{Grandchild Span: \texttt {gert.input.resolve}}{247}{section*.977}%
-\contentsline {subsubsection}{Grandchild Span: \texttt {gert.governance.check}}{247}{section*.983}%
-\contentsline {subsection}{\numberline {16.2.2}Span Status and Error Handling}{248}{subsection.989}%
-\contentsline {subsection}{\numberline {16.2.3}Context Propagation}{249}{subsection.995}%
-\contentsline {subsubsection}{W3C Trace Context Headers}{249}{section*.996}%
-\contentsline {subsubsection}{Baggage}{249}{section*.997}%
-\contentsline {subsection}{\numberline {16.2.4}OTLP Exporter Configuration}{249}{subsection.1000}%
-\contentsline {subsubsection}{OTLP Export (Production)}{250}{section*.1001}%
-\contentsline {subsubsection}{Console Export (Development)}{250}{section*.1002}%
-\contentsline {subsection}{\numberline {16.2.5}Sampling Strategy}{250}{subsection.1003}%
-\contentsline {section}{\numberline {16.3}Metrics Catalog}{251}{section.1004}%
-\contentsline {subsection}{\numberline {16.3.1}Run Metrics}{251}{subsection.1005}%
-\contentsline {subsection}{\numberline {16.3.2}Step Metrics}{251}{subsection.1007}%
-\contentsline {subsection}{\numberline {16.3.3}Tool Invocation Metrics}{251}{subsection.1009}%
-\contentsline {subsection}{\numberline {16.3.4}Approval Metrics}{252}{subsection.1011}%
-\contentsline {subsection}{\numberline {16.3.5}Extension Metrics}{252}{subsection.1013}%
-\contentsline {subsection}{\numberline {16.3.6}Metrics Endpoint}{252}{subsection.1015}%
-\contentsline {subsection}{\numberline {16.3.7}Push-Based Metrics (OTLP)}{253}{subsection.1016}%
-\contentsline {section}{\numberline {16.4}Structured Logging}{253}{section.1017}%
-\contentsline {subsection}{\numberline {16.4.1}Log Line Format}{254}{subsection.1018}%
-\contentsline {subsection}{\numberline {16.4.2}Required Fields}{254}{subsection.1029}%
-\contentsline {subsection}{\numberline {16.4.3}Contextual Fields (When Applicable)}{254}{subsection.1030}%
-\contentsline {subsection}{\numberline {16.4.4}Log Levels}{255}{subsection.1031}%
-\contentsline {subsection}{\numberline {16.4.5}Sensitive Data Handling}{255}{subsection.1032}%
-\contentsline {subsection}{\numberline {16.4.6}Log Output Configuration}{256}{subsection.1040}%
-\contentsline {subsection}{\numberline {16.4.7}Log Aggregation and Correlation}{256}{subsection.1041}%
-\contentsline {section}{\numberline {16.5}Health and Readiness Endpoints}{256}{section.1042}%
-\contentsline {subsection}{\numberline {16.5.1}Liveness Endpoint}{257}{subsection.1043}%
-\contentsline {subsection}{\numberline {16.5.2}Readiness Endpoint}{257}{subsection.1050}%
-\contentsline {subsection}{\numberline {16.5.3}Kubernetes Probe Configuration}{258}{subsection.1064}%
-\contentsline {section}{\numberline {16.6}Diagnostics Commands}{258}{section.1087}%
-\contentsline {subsection}{\numberline {16.6.1}\texttt {gert diagnose}}{258}{subsection.1088}%
-\contentsline {subsection}{\numberline {16.6.2}\texttt {gert trace show}}{260}{subsection.1094}%
-\contentsline {subsection}{\numberline {16.6.3}\texttt {gert trace export}}{260}{subsection.1095}%
-\contentsline {subsection}{\numberline {16.6.4}\texttt {gert run list}}{261}{subsection.1096}%
-\contentsline {section}{\numberline {16.7}Integration Recipes}{261}{section.1110}%
-\contentsline {subsection}{\numberline {16.7.1}Prometheus + Grafana}{261}{subsection.1111}%
-\contentsline {subsection}{\numberline {16.7.2}Jaeger (Distributed Tracing)}{262}{subsection.1119}%
-\contentsline {subsection}{\numberline {16.7.3}Loki + Grafana (Log Aggregation)}{263}{subsection.1120}%
-\contentsline {subsection}{\numberline {16.7.4}Datadog / New Relic (OTLP-Compatible SaaS)}{263}{subsection.1140}%
-\contentsline {section}{\numberline {16.8}Observability for CI/CD Pipelines}{264}{section.1141}%
-\contentsline {subsection}{\numberline {16.8.1}JSON Output Mode}{264}{subsection.1142}%
-\contentsline {subsection}{\numberline {16.8.2}GitHub Actions Example}{265}{subsection.1153}%
-\contentsline {subsection}{\numberline {16.8.3}GitLab CI Example}{265}{subsection.1171}%
-\contentsline {section}{\numberline {16.9}Summary}{266}{section.1184}%
-\contentsline {chapter}{References}{267}{chapter*.1185}%
+\contentsline {subsection}{\numberline {3.3.6}Collector Field Validation Contract}{33}{subsection.158}%
+\contentsline {paragraph}{RE2 vs ECMA~262.}{36}{section*.174}%
+\contentsline {paragraph}{Evaluation model.}{36}{section*.176}%
+\contentsline {paragraph}{Input provider integration.}{37}{section*.180}%
+\contentsline {paragraph}{Variable binding on skip.}{37}{section*.181}%
+\contentsline {paragraph}{Load-time validation — forward reference check.}{38}{section*.182}%
+\contentsline {paragraph}{Audit redaction.}{39}{section*.189}%
+\contentsline {paragraph}{Go interface contract.}{39}{section*.190}%
+\contentsline {paragraph}{Tool step compatibility.}{40}{section*.191}%
+\contentsline {paragraph}{Suspension/resume constraint.}{40}{section*.192}%
+\contentsline {subsection}{\numberline {3.3.7}Cancellation}{40}{subsection.193}%
+\contentsline {subsection}{\numberline {3.3.8}Crash Recovery}{41}{subsection.198}%
+\contentsline {section}{\numberline {3.4}Concurrency Model}{41}{section.199}%
+\contentsline {subsection}{\numberline {3.4.1}Per-Process Run Isolation}{41}{subsection.200}%
+\contentsline {paragraph}{Rationale.}{41}{section*.201}%
+\contentsline {subsection}{\numberline {3.4.2}Goroutine Model}{41}{subsection.202}%
+\contentsline {subsection}{\numberline {3.4.3}Thread Safety at Component Boundaries}{42}{subsection.203}%
+\contentsline {section}{\numberline {3.5}\texttt {gert serve} Integration}{42}{section.204}%
+\contentsline {subsection}{\numberline {3.5.1}Architectural Position}{42}{subsection.205}%
+\contentsline {subsection}{\numberline {3.5.2}Event Forwarding}{43}{subsection.211}%
+\contentsline {subsection}{\numberline {3.5.3}Crash Recovery in \texttt {gert serve}}{43}{subsection.212}%
+\contentsline {subsection}{\numberline {3.5.4}Event Dispatcher}{43}{subsection.213}%
+\contentsline {subsection}{\numberline {3.5.5}RPC Method Summary}{45}{subsection.217}%
+\contentsline {chapter}{\numberline {4}Schema vNext}{46}{chapter.218}%
+\contentsline {section}{\numberline {4.1}Schema Identity and Versioning}{46}{section.219}%
+\contentsline {subsection}{\numberline {4.1.1}apiVersion Values}{46}{subsection.220}%
+\contentsline {subsection}{\numberline {4.1.2}Self-Description via \$schema}{47}{subsection.221}%
+\contentsline {subsection}{\numberline {4.1.3}Versioning Strategy}{47}{subsection.222}%
+\contentsline {paragraph}{What constitutes a breaking change}{48}{section*.223}%
+\contentsline {subsection}{\numberline {4.1.4}Compatibility Contract: v1 → v2}{49}{subsection.224}%
+\contentsline {subsection}{\numberline {4.1.5}\texttt {gert migrate} Behavior}{50}{subsection.225}%
+\contentsline {section}{\numberline {4.2}Core Runbook Fields (v2)}{50}{section.235}%
+\contentsline {subsection}{\numberline {4.2.1}Top-Level Field Inventory}{50}{subsection.236}%
+\contentsline {paragraph}{id field}{51}{section*.237}%
+\contentsline {paragraph}{kind values}{51}{section*.238}%
+\contentsline {subsection}{\numberline {4.2.2}toolRefs}{52}{subsection.239}%
+\contentsline {subsection}{\numberline {4.2.3}Minimal Valid v2 Runbook}{52}{subsection.240}%
+\contentsline {subsection}{\numberline {4.2.4}Complete Annotated Example}{53}{subsection.241}%
+\contentsline {section}{\numberline {4.3}Input and Output Declarations}{56}{section.242}%
+\contentsline {subsection}{\numberline {4.3.1}Input Declarations}{56}{subsection.243}%
+\contentsline {paragraph}{type field}{56}{section*.244}%
+\contentsline {paragraph}{from: binding syntax}{57}{section*.245}%
+\contentsline {subsection}{\numberline {4.3.2}Output Declarations}{57}{subsection.246}%
+\contentsline {subsection}{\numberline {4.3.3}Expression Language}{57}{subsection.247}%
+\contentsline {paragraph}{Built-in template functions (v2 additions)}{58}{section*.250}%
+\contentsline {paragraph}{\texttt {fromYAML} and \texttt {fromJSON}}{58}{section*.251}%
+\contentsline {paragraph}{Template errors}{59}{section*.252}%
+\contentsline {section}{\numberline {4.4}Step Types (v2 Inventory)}{59}{section.253}%
+\contentsline {subsection}{\numberline {4.4.1}Common Step Fields}{60}{subsection.254}%
+\contentsline {paragraph}{Retry configuration}{61}{section*.255}%
+\contentsline {paragraph}{Step contract}{61}{section*.256}%
+\contentsline {subsection}{\numberline {4.4.2}Step Type: cli}{62}{subsection.257}%
+\contentsline {subsection}{\numberline {4.4.3}Step Type: choice}{63}{subsection.258}%
+\contentsline {paragraph}{Option structure}{63}{section*.259}%
+\contentsline {paragraph}{Constraints}{63}{section*.260}%
+\contentsline {paragraph}{Example: Environment selection}{64}{section*.261}%
+\contentsline {subsection}{\numberline {4.4.4}Step Type: decision}{64}{subsection.262}%
+\contentsline {paragraph}{Route structure}{65}{section*.263}%
+\contentsline {paragraph}{Constraints}{65}{section*.264}%
+\contentsline {paragraph}{Example: Incident response fork}{65}{section*.265}%
+\contentsline {subsection}{\numberline {4.4.5}Step Type: collector}{66}{subsection.266}%
+\contentsline {paragraph}{Field structure}{66}{section*.267}%
+\contentsline {paragraph}{Ephemeral fields}{68}{section*.268}%
+\contentsline {paragraph}{Dynamic Forms}{69}{section*.269}%
+\contentsline {paragraph}{Field type inventory}{70}{section*.275}%
+\contentsline {subsubsection}{Field type: \texttt {text}}{70}{section*.276}%
+\contentsline {paragraph}{Text field validation constraints}{70}{section*.277}%
+\contentsline {paragraph}{Structured multiline format validation}{72}{section*.278}%
+\contentsline {subsubsection}{Field type: \texttt {number}}{73}{section*.279}%
+\contentsline {subsubsection}{Field type: \texttt {integer}}{74}{section*.280}%
+\contentsline {subsubsection}{Field type: \texttt {date}}{74}{section*.281}%
+\contentsline {subsubsection}{Field type: \texttt {datetime}}{75}{section*.282}%
+\contentsline {subsubsection}{Field type: \texttt {boolean}}{75}{section*.283}%
+\contentsline {subsubsection}{Field type: \texttt {select}}{76}{section*.284}%
+\contentsline {paragraph}{options — static list}{76}{section*.285}%
+\contentsline {paragraph}{options\_from — dynamic provider}{76}{section*.286}%
+\contentsline {subsubsection}{Field type: \texttt {autocomplete}}{77}{section*.287}%
+\contentsline {paragraph}{Approval gate}{79}{section*.288}%
+\contentsline {paragraph}{Example: Incident evidence collection}{79}{section*.289}%
+\contentsline {paragraph}{Questionnaire Pattern}{80}{section*.290}%
+\contentsline {paragraph}{Validation rules for \texttt {collector}}{81}{section*.291}%
+\contentsline {subsection}{\numberline {4.4.6}Step Type: approve}{83}{subsection.292}%
+\contentsline {paragraph}{approvals block}{84}{section*.293}%
+\contentsline {paragraph}{Business-Day Timeout}{85}{section*.294}%
+\contentsline {paragraph}{Quorum Approval}{86}{section*.295}%
+\contentsline {paragraph}{Validation Rules}{87}{section*.296}%
+\contentsline {subsection}{\numberline {4.4.7}Step Type: tool}{87}{subsection.303}%
+\contentsline {subsection}{\numberline {4.4.8}Step Type: wait\_for\_event}{89}{subsection.304}%
+\contentsline {paragraph}{Example 1 — Prometheus alert webhook}{90}{section*.309}%
+\contentsline {paragraph}{Example 2 — Named channel / approval callback}{91}{section*.310}%
+\contentsline {paragraph}{Transport Note}{91}{section*.311}%
+\contentsline {paragraph}{Security Note}{92}{section*.312}%
+\contentsline {subsection}{\numberline {4.4.9}Step Type: include}{92}{subsection.313}%
+\contentsline {paragraph}{Cycle Detection}{93}{section*.314}%
+\contentsline {paragraph}{Difference from Sub-Procedure Call}{93}{section*.315}%
+\contentsline {subsection}{\numberline {4.4.10}Step Type: branch}{93}{subsection.316}%
+\contentsline {subsection}{\numberline {4.4.11}Step Type: iterate}{95}{subsection.317}%
+\contentsline {subsection}{\numberline {4.4.12}Step Type: parallel}{97}{subsection.318}%
+\contentsline {subsection}{\numberline {4.4.13}Step Type: assert}{98}{subsection.319}%
+\contentsline {subsection}{\numberline {4.4.14}Step Type: compensate}{99}{subsection.320}%
+\contentsline {subsection}{\numberline {4.4.15}Step Type: end}{100}{subsection.321}%
+\contentsline {section}{\numberline {4.5}Tool Definition Schema (v2)}{100}{section.322}%
+\contentsline {subsection}{\numberline {4.5.1}Tool Definition Field Inventory}{100}{subsection.323}%
+\contentsline {paragraph}{New in v2}{102}{section*.324}%
+\contentsline {section}{\numberline {4.6}Provider Definition Schema (v2)}{102}{section.325}%
+\contentsline {section}{\numberline {4.7}Namespace Convention for Extensions}{103}{section.326}%
+\contentsline {subsection}{\numberline {4.7.1}The Extension Field Problem}{103}{subsection.327}%
+\contentsline {subsection}{\numberline {4.7.2}Convention: \texttt {x-<namespace>:} at the Field Level}{103}{subsection.328}%
+\contentsline {paragraph}{At the runbook level}{104}{section*.332}%
+\contentsline {paragraph}{At the step level}{104}{section*.333}%
+\contentsline {subsection}{\numberline {4.7.3}Extension Validation}{104}{subsection.334}%
+\contentsline {subsection}{\numberline {4.7.4}Extension Registration Format}{104}{subsection.338}%
+\contentsline {section}{\numberline {4.8}Structural vs.\ Semantic Validation}{105}{section.339}%
+\contentsline {subsection}{\numberline {4.8.1}Phase 1: Structural Validation}{105}{subsection.340}%
+\contentsline {paragraph}{Implementation note for Brian}{106}{section*.341}%
+\contentsline {subsection}{\numberline {4.8.2}Phase 2: Semantic Validation}{106}{subsection.342}%
+\contentsline {paragraph}{Error reporting}{107}{section*.354}%
+\contentsline {section}{\numberline {4.9}Schema Artifacts}{108}{section.355}%
+\contentsline {subsection}{\numberline {4.9.1}Shipped Artifacts}{108}{subsection.356}%
+\contentsline {subsection}{\numberline {4.9.2}\texttt {gert schema export}}{108}{subsection.357}%
+\contentsline {subsection}{\numberline {4.9.3}VS Code Integration}{108}{subsection.358}%
+\contentsline {subsection}{\numberline {4.9.4}Schema Version Manifest}{109}{subsection.359}%
+\contentsline {chapter}{\numberline {5}Extension Runtime}{110}{chapter.360}%
+\contentsline {section}{\numberline {5.1}Architecture Overview}{110}{section.361}%
+\contentsline {section}{\numberline {5.2}Capability Taxonomy}{111}{section.369}%
+\contentsline {section}{\numberline {5.3}Extension Manifest Format}{111}{section.371}%
+\contentsline {section}{\numberline {5.4}Extension Discovery}{112}{section.372}%
+\contentsline {section}{\numberline {5.5}Handshake and Lifecycle Protocol}{113}{section.377}%
+\contentsline {subsection}{\numberline {5.5.1}extension/initialize (host \textrightarrow {} extension)}{113}{subsection.378}%
+\contentsline {subsection}{\numberline {5.5.2}contributions/list (host \textrightarrow {} extension)}{115}{subsection.379}%
+\contentsline {subsection}{\numberline {5.5.3}extension/ping (host \textrightarrow {} extension)}{115}{subsection.380}%
+\contentsline {subsection}{\numberline {5.5.4}extension/shutdown (host \textrightarrow {} extension)}{116}{subsection.381}%
+\contentsline {subsection}{\numberline {5.5.5}Lifecycle State Machine}{116}{subsection.382}%
+\contentsline {section}{\numberline {5.6}Versioning and Compatibility}{117}{section.391}%
+\contentsline {section}{\numberline {5.7}Sandboxing and Process Isolation}{117}{section.392}%
+\contentsline {subsection}{\numberline {5.7.1}Process Isolation}{117}{subsection.393}%
+\contentsline {subsection}{\numberline {5.7.2}Capability Enforcement}{118}{subsection.394}%
+\contentsline {subsection}{\numberline {5.7.3}Timeout and Crash Handling}{118}{subsection.395}%
+\contentsline {chapter}{\numberline {6}Tool Runtime}{121}{chapter.396}%
+\contentsline {section}{\numberline {6.1}Tool Discovery}{121}{section.397}%
+\contentsline {subsection}{\numberline {6.1.1}Name Resolution Order}{122}{subsection.405}%
+\contentsline {section}{\numberline {6.2}Tool Definition Schema (v2)}{122}{section.410}%
+\contentsline {subsection}{\numberline {6.2.1}Transport-Specific Fields}{123}{subsection.411}%
+\contentsline {paragraph}{stdio}{123}{section*.412}%
+\contentsline {paragraph}{stdio-jsonrpc}{124}{section*.413}%
+\contentsline {paragraph}{mcp}{124}{section*.414}%
+\contentsline {section}{\numberline {6.3}Transport Layer}{124}{section.415}%
+\contentsline {subsection}{\numberline {6.3.1}stdio Transport}{124}{subsection.416}%
+\contentsline {paragraph}{Process establishment.}{124}{section*.417}%
+\contentsline {paragraph}{Invocation envelope.}{124}{section*.418}%
+\contentsline {paragraph}{Response envelope.}{124}{section*.419}%
+\contentsline {paragraph}{Error envelope.}{124}{section*.420}%
+\contentsline {subsection}{\numberline {6.3.2}stdio-jsonrpc Transport}{125}{subsection.421}%
+\contentsline {paragraph}{Process establishment.}{125}{section*.422}%
+\contentsline {paragraph}{Invocation envelope.}{125}{section*.423}%
+\contentsline {paragraph}{Response envelope.}{125}{section*.424}%
+\contentsline {paragraph}{Error envelope.}{126}{section*.425}%
+\contentsline {subsection}{\numberline {6.3.3}MCP Transport}{126}{subsection.426}%
+\contentsline {section}{\numberline {6.4}Invocation Context}{127}{section.427}%
+\contentsline {section}{\numberline {6.5}Capability Gate}{127}{section.428}%
+\contentsline {section}{\numberline {6.6}Output Capture}{127}{section.431}%
+\contentsline {paragraph}{Redaction.}{128}{section*.432}%
+\contentsline {section}{\numberline {6.7}MCP Tool Integration}{128}{section.433}%
+\contentsline {subsection}{\numberline {6.7.1}MCP Server Declaration}{128}{subsection.434}%
+\contentsline {subsection}{\numberline {6.7.2}MCP Discovery}{128}{subsection.435}%
+\contentsline {subsection}{\numberline {6.7.3}MCP Tool Invocation}{129}{subsection.440}%
+\contentsline {subsection}{\numberline {6.7.4}MCP vs stdio-jsonrpc Differences}{129}{subsection.441}%
+\contentsline {section}{\numberline {6.8}Cancellation and Timeout}{130}{section.442}%
+\contentsline {paragraph}{Per-tool timeout.}{130}{section*.443}%
+\contentsline {paragraph}{Cancellation propagation.}{130}{section*.444}%
+\contentsline {section}{\numberline {6.9}Tool Versioning}{131}{section.449}%
+\contentsline {chapter}{\numberline {7}Runtime Events and Determinism}{132}{chapter.450}%
+\contentsline {section}{\numberline {7.1}Event System Design}{132}{section.451}%
+\contentsline {subsection}{\numberline {7.1.1}Role of Events}{132}{subsection.452}%
+\contentsline {subsection}{\numberline {7.1.2}Delivery Semantics}{133}{subsection.453}%
+\contentsline {paragraph}{At-least-once delivery.}{133}{section*.454}%
+\contentsline {paragraph}{In-order per run.}{133}{section*.455}%
+\contentsline {paragraph}{Replay determinism.}{133}{section*.456}%
+\contentsline {section}{\numberline {7.2}Event Envelope}{133}{section.457}%
+\contentsline {paragraph}{Sequence numbers.}{134}{section*.458}%
+\contentsline {paragraph}{Timestamps.}{134}{section*.459}%
+\contentsline {paragraph}{Event IDs.}{134}{section*.460}%
+\contentsline {section}{\numberline {7.3}Event Catalog}{134}{section.461}%
+\contentsline {subsection}{\numberline {7.3.1}Run Lifecycle Events}{135}{subsection.462}%
+\contentsline {subsubsection}{\texttt {run/started}}{135}{section*.463}%
+\contentsline {subsubsection}{\texttt {run/completed}}{135}{section*.464}%
+\contentsline {subsubsection}{\texttt {run/cancelled}}{136}{section*.465}%
+\contentsline {subsection}{\numberline {7.3.2}Step Lifecycle Events}{136}{subsection.466}%
+\contentsline {subsubsection}{\texttt {step/started}}{136}{section*.467}%
+\contentsline {subsubsection}{\texttt {step/completed}}{136}{section*.468}%
+\contentsline {subsubsection}{\texttt {step/failed}}{137}{section*.469}%
+\contentsline {subsubsection}{\texttt {step/skipped}}{137}{section*.470}%
+\contentsline {subsubsection}{\texttt {step/retrying}}{138}{section*.471}%
+\contentsline {subsection}{\numberline {7.3.3}Governance Events}{138}{subsection.472}%
+\contentsline {subsubsection}{\texttt {governance/command\_checked}}{138}{section*.473}%
+\contentsline {subsubsection}{\texttt {governance/approval\_requested}}{139}{section*.474}%
+\contentsline {subsubsection}{\texttt {governance/approval\_received}}{139}{section*.475}%
+\contentsline {subsubsection}{\texttt {governance/redaction\_applied}}{139}{section*.476}%
+\contentsline {subsection}{\numberline {7.3.4}Extension and Tool Events}{140}{subsection.477}%
+\contentsline {subsubsection}{\texttt {extension/loaded}}{140}{section*.478}%
+\contentsline {subsubsection}{\texttt {extension/unloaded}}{140}{section*.479}%
+\contentsline {subsubsection}{\texttt {tool/invoked}}{140}{section*.480}%
+\contentsline {subsubsection}{\texttt {tool/completed}}{141}{section*.481}%
+\contentsline {subsection}{\numberline {7.3.5}Human-in-the-Loop Events}{141}{subsection.482}%
+\contentsline {subsubsection}{\texttt {input/prompted}}{141}{section*.483}%
+\contentsline {subsubsection}{\texttt {input/received}}{142}{section*.484}%
+\contentsline {subsection}{\numberline {7.3.6}Saga and Compensation Events (v2.1+)}{142}{subsection.485}%
+\contentsline {subsubsection}{\texttt {saga/compensation\_triggered}}{142}{section*.486}%
+\contentsline {subsubsection}{\texttt {saga/compensation\_completed}}{142}{section*.487}%
+\contentsline {section}{\numberline {7.4}Event Channels}{143}{section.488}%
+\contentsline {subsection}{\numberline {7.4.1}In-Process Event Bus}{143}{subsection.489}%
+\contentsline {paragraph}{Purpose.}{143}{section*.490}%
+\contentsline {paragraph}{Implementation.}{143}{section*.491}%
+\contentsline {paragraph}{Subscriber API.}{143}{section*.492}%
+\contentsline {paragraph}{Lifecycle.}{143}{section*.493}%
+\contentsline {subsection}{\numberline {7.4.2}WebSocket Broadcast (HTTP Adapter)}{143}{subsection.494}%
+\contentsline {paragraph}{Purpose.}{143}{section*.495}%
+\contentsline {paragraph}{Implementation.}{144}{section*.496}%
+\contentsline {paragraph}{Wire format.}{144}{section*.497}%
+\contentsline {paragraph}{Delivery semantics.}{144}{section*.498}%
+\contentsline {subsection}{\numberline {7.4.3}JSONL Trace File}{144}{subsection.499}%
+\contentsline {paragraph}{Purpose.}{144}{section*.500}%
+\contentsline {paragraph}{Implementation.}{144}{section*.501}%
+\contentsline {paragraph}{Format.}{144}{section*.502}%
+\contentsline {section}{\numberline {7.5}Event Subscriptions}{144}{section.503}%
+\contentsline {subsection}{\numberline {7.5.1}Programmatic Subscription API}{144}{subsection.504}%
+\contentsline {paragraph}{Example use cases.}{145}{section*.505}%
+\contentsline {section}{\numberline {7.6}Wire Format}{145}{section.506}%
+\contentsline {subsection}{\numberline {7.6.1}Concrete Example: \texttt {step/started}}{145}{subsection.507}%
+\contentsline {subsection}{\numberline {7.6.2}Concrete Example: \texttt {governance/approval\_requested}}{146}{subsection.508}%
+\contentsline {section}{\numberline {7.7}Required vs.\ Optional Events}{146}{section.509}%
+\contentsline {paragraph}{Adapter compatibility.}{147}{section*.510}%
+\contentsline {section}{\numberline {7.8}Determinism and Replay Semantics}{147}{section.511}%
+\contentsline {subsection}{\numberline {7.8.1}Replay Mode}{147}{subsection.512}%
+\contentsline {paragraph}{Replay guarantees.}{147}{section*.513}%
+\contentsline {subsection}{\numberline {7.8.2}Non-determinism Boundaries}{148}{subsection.514}%
+\contentsline {chapter}{\numberline {8}Security and Trust}{149}{chapter.515}%
+\contentsline {section}{\numberline {8.1}Threat Model}{149}{section.516}%
+\contentsline {section}{\numberline {8.2}Extension Trust Model}{149}{section.518}%
+\contentsline {subsection}{\numberline {8.2.1}Trust Levels}{149}{subsection.519}%
+\contentsline {paragraph}{Local trusted.}{149}{section*.520}%
+\contentsline {paragraph}{Project-scoped.}{150}{section*.521}%
+\contentsline {paragraph}{Remote/signed.}{150}{section*.522}%
+\contentsline {subsection}{\numberline {8.2.2}Extension Signature Format}{151}{subsection.523}%
+\contentsline {paragraph}{Signature verification algorithm.}{151}{section*.524}%
+\contentsline {subsection}{\numberline {8.2.3}Extension Verification Command}{152}{subsection.530}%
+\contentsline {section}{\numberline {8.3}Process Isolation}{152}{section.531}%
+\contentsline {subsection}{\numberline {8.3.1}Isolation Mechanisms}{152}{subsection.532}%
+\contentsline {paragraph}{Separate OS process.}{152}{section*.533}%
+\contentsline {paragraph}{Filesystem access control.}{152}{section*.534}%
+\contentsline {paragraph}{Network access control.}{153}{section*.535}%
+\contentsline {paragraph}{Environment variable isolation.}{153}{section*.536}%
+\contentsline {paragraph}{Crash isolation.}{153}{section*.537}%
+\contentsline {section}{\numberline {8.4}Credential and Secret Handling}{154}{section.542}%
+\contentsline {subsection}{\numberline {8.4.1}Secret Resolution and Redaction}{154}{subsection.543}%
+\contentsline {paragraph}{Input provider sensitivity marking.}{154}{section*.544}%
+\contentsline {paragraph}{Tool sensitive inputs.}{154}{section*.545}%
+\contentsline {paragraph}{Mandatory redaction.}{155}{section*.546}%
+\contentsline {subsection}{\numberline {8.4.2}Secret Storage Policy}{155}{subsection.547}%
+\contentsline {section}{\numberline {8.5}Transport Security}{155}{section.548}%
+\contentsline {subsection}{\numberline {8.5.1}TLS Requirements}{155}{subsection.551}%
+\contentsline {paragraph}{Localhost exception.}{155}{section*.552}%
+\contentsline {paragraph}{Non-localhost listeners.}{156}{section*.553}%
+\contentsline {subsection}{\numberline {8.5.2}Client Authentication}{156}{subsection.554}%
+\contentsline {paragraph}{Bearer token authentication.}{156}{section*.555}%
+\contentsline {paragraph}{Mutual TLS (mTLS).}{156}{section*.556}%
+\contentsline {subsection}{\numberline {8.5.3}WebSocket Security}{157}{subsection.557}%
+\contentsline {subsection}{\numberline {8.5.4}Extension JSON-RPC Transport}{157}{subsection.558}%
+\contentsline {section}{\numberline {8.6}RBAC for \texttt {gert serve}}{157}{section.559}%
+\contentsline {subsection}{\numberline {8.6.1}Actor Identity}{157}{subsection.560}%
+\contentsline {subsection}{\numberline {8.6.2}Roles}{158}{subsection.561}%
+\contentsline {paragraph}{Viewer.}{158}{section*.562}%
+\contentsline {paragraph}{Operator.}{158}{section*.563}%
+\contentsline {paragraph}{Admin.}{158}{section*.564}%
+\contentsline {subsection}{\numberline {8.6.3}Role Assignment}{159}{subsection.565}%
+\contentsline {subsection}{\numberline {8.6.4}Approval Authorizer Role}{159}{subsection.566}%
+\contentsline {section}{\numberline {8.7}Audit Non-Repudiation}{160}{section.572}%
+\contentsline {subsection}{\numberline {8.7.1}Governance Decision Recording}{160}{subsection.573}%
+\contentsline {subsection}{\numberline {8.7.2}Trace File Integrity (HMAC Chaining)}{161}{subsection.574}%
+\contentsline {subsection}{\numberline {8.7.3}SHA256 Evidence Capture}{162}{subsection.579}%
+\contentsline {section}{\numberline {8.8}Supply Chain Security}{162}{section.580}%
+\contentsline {subsection}{\numberline {8.8.1}Tool Binary Checksums}{162}{subsection.581}%
+\contentsline {subsection}{\numberline {8.8.2}\texttt {gert verify} Command}{163}{subsection.586}%
+\contentsline {subsection}{\numberline {8.8.3}Extension Signature Verification}{163}{subsection.587}%
+\contentsline {section}{\numberline {8.9}Security Recommendations}{163}{section.588}%
+\contentsline {chapter}{\numberline {9}Testing and Acceptance}{165}{chapter.597}%
+\contentsline {section}{\numberline {9.1}Test Framework}{165}{section.598}%
+\contentsline {subsection}{\numberline {9.1.1}Standard Library and testify}{165}{subsection.599}%
+\contentsline {subsection}{\numberline {9.1.2}Test Packages}{166}{subsection.600}%
+\contentsline {section}{\numberline {9.2}The \texttt {gert test} Feature}{166}{section.601}%
+\contentsline {subsection}{\numberline {9.2.1}Scenario Replay Testing}{166}{subsection.602}%
+\contentsline {subsection}{\numberline {9.2.2}Test Assertions (\texttt {test.yaml})}{167}{subsection.603}%
+\contentsline {subsection}{\numberline {9.2.3}v1 Scenario Compatibility}{167}{subsection.604}%
+\contentsline {section}{\numberline {9.3}Contract Tests}{168}{section.605}%
+\contentsline {subsection}{\numberline {9.3.1}Core Runtime Contract}{168}{subsection.606}%
+\contentsline {subsection}{\numberline {9.3.2}Schema Contract Tests}{168}{subsection.607}%
+\contentsline {subsection}{\numberline {9.3.3}Extension Manifest and Handshake Tests}{169}{subsection.608}%
+\contentsline {subsection}{\numberline {9.3.4}Tool Invocation Envelope Tests}{169}{subsection.609}%
+\contentsline {subsection}{\numberline {9.3.5}Event Bus Determinism Tests}{169}{subsection.610}%
+\contentsline {section}{\numberline {9.4}Integration Test Strategy}{170}{section.611}%
+\contentsline {subsection}{\numberline {9.4.1}End-to-End Fixture Runs}{170}{subsection.612}%
+\contentsline {subsection}{\numberline {9.4.2}Fixture Runbook Corpus}{170}{subsection.613}%
+\contentsline {subsection}{\numberline {9.4.3}Trace Assertion Helpers}{171}{subsection.614}%
+\contentsline {section}{\numberline {9.5}Regression Testing}{171}{section.615}%
+\contentsline {subsection}{\numberline {9.5.1}v1 Runbook Corpus as Fixtures}{171}{subsection.616}%
+\contentsline {subsection}{\numberline {9.5.2}Golden Trace Comparisons}{172}{subsection.621}%
+\contentsline {section}{\numberline {9.6}Performance Acceptance Criteria}{172}{section.626}%
+\contentsline {section}{\numberline {9.7}Extension Test Harness}{173}{section.627}%
+\contentsline {subsection}{\numberline {9.7.1}Overview}{173}{subsection.628}%
+\contentsline {subsection}{\numberline {9.7.2}Harness Capabilities}{173}{subsection.629}%
+\contentsline {subsection}{\numberline {9.7.3}Mocking the Extension Transport}{174}{subsection.630}%
+\contentsline {section}{\numberline {9.8}Acceptance Criteria}{174}{section.631}%
+\contentsline {section}{\numberline {9.9}CI/CD Integration}{175}{section.640}%
+\contentsline {subsection}{\numberline {9.9.1}PR Gate (every pull request)}{175}{subsection.641}%
+\contentsline {subsection}{\numberline {9.9.2}Integration Gate (merge to main)}{175}{subsection.647}%
+\contentsline {subsection}{\numberline {9.9.3}Nightly Gate}{175}{subsection.651}%
+\contentsline {chapter}{\numberline {10}Open Questions}{176}{chapter.655}%
+\contentsline {chapter}{\numberline {11}Migration and Compatibility}{182}{chapter.668}%
+\contentsline {section}{\numberline {11.1}v1 → v2 Compatibility Matrix}{182}{section.669}%
+\contentsline {paragraph}{Key takeaways:}{183}{section*.670}%
+\contentsline {section}{\numberline {11.2}Schema Migration: Runbook YAML}{184}{section.671}%
+\contentsline {subsection}{\numberline {11.2.1}Breaking Changes Summary}{184}{subsection.672}%
+\contentsline {subsection}{\numberline {11.2.2}Before and After Example}{184}{subsection.676}%
+\contentsline {subsection}{\numberline {11.2.3}Field Mapping Table}{187}{subsection.677}%
+\contentsline {section}{\numberline {11.3}Automated Migration Tool}{187}{section.678}%
+\contentsline {subsection}{\numberline {11.3.1}Command Specification}{187}{subsection.679}%
+\contentsline {subsection}{\numberline {11.3.2}Flags}{188}{subsection.680}%
+\contentsline {subsection}{\numberline {11.3.3}Migration Algorithm}{188}{subsection.681}%
+\contentsline {subsection}{\numberline {11.3.4}Diff Report}{189}{subsection.693}%
+\contentsline {subsection}{\numberline {11.3.5}Error Handling}{189}{subsection.694}%
+\contentsline {section}{\numberline {11.4}Provider and Tool Migration}{190}{section.698}%
+\contentsline {subsection}{\numberline {11.4.1}Tool Definitions (\texttt {.tool.yaml})}{190}{subsection.699}%
+\contentsline {paragraph}{Migration tool support.}{190}{section*.703}%
+\contentsline {subsection}{\numberline {11.4.2}Provider Definitions (\texttt {.provider.yaml})}{191}{subsection.704}%
+\contentsline {paragraph}{Migration tool support.}{191}{section*.707}%
+\contentsline {section}{\numberline {11.5}Extension Migration}{191}{section.708}%
+\contentsline {subsection}{\numberline {11.5.1}Handshake Protocol Changes}{191}{subsection.709}%
+\contentsline {subsection}{\numberline {11.5.2}Extension Compatibility Shim}{192}{subsection.713}%
+\contentsline {subsection}{\numberline {11.5.3}Extension Author Checklist}{192}{subsection.714}%
+\contentsline {section}{\numberline {11.6}Trace Format Migration}{193}{section.720}%
+\contentsline {subsection}{\numberline {11.6.1}Breaking Changes in JSONL Trace}{193}{subsection.721}%
+\contentsline {paragraph}{Field mapping:}{193}{section*.722}%
+\contentsline {subsection}{\numberline {11.6.2}Trace Replay Compatibility}{193}{subsection.723}%
+\contentsline {subsection}{\numberline {11.6.3}Trace Archive Migration Tool}{194}{subsection.728}%
+\contentsline {section}{\numberline {11.7}Rollout Strategy}{194}{section.729}%
+\contentsline {subsection}{\numberline {11.7.1}Recommended Adoption Path}{194}{subsection.730}%
+\contentsline {paragraph}{Phase 1: Read-Only Validation (Week 1-2)}{194}{section*.731}%
+\contentsline {paragraph}{Phase 2: Schema Migration (Week 3-4)}{194}{section*.736}%
+\contentsline {paragraph}{Phase 3: Extension and Tool Migration (Week 5-6)}{195}{section*.741}%
+\contentsline {paragraph}{Phase 4: Integration Migration (Week 7-8)}{195}{section*.746}%
+\contentsline {subsection}{\numberline {11.7.2}Parallel Operation}{195}{subsection.751}%
+\contentsline {subsection}{\numberline {11.7.3}Timeline}{195}{subsection.752}%
+\contentsline {section}{\numberline {11.8}v1 Compatibility Shim}{196}{section.753}%
+\contentsline {subsection}{\numberline {11.8.1}Decision: Provide a v1 Compatibility Shim for 6 Months}{196}{subsection.754}%
+\contentsline {paragraph}{Rationale:}{196}{section*.755}%
+\contentsline {subsection}{\numberline {11.8.2}Shim Behavior}{196}{subsection.756}%
+\contentsline {subsection}{\numberline {11.8.3}Shim Removal}{197}{subsection.761}%
+\contentsline {section}{\numberline {11.9}Open Questions and Risks}{197}{section.762}%
+\contentsline {subsection}{\numberline {11.9.1}Open Questions}{197}{subsection.763}%
+\contentsline {subsection}{\numberline {11.9.2}Migration Risks}{197}{subsection.767}%
+\contentsline {section}{\numberline {11.10}Summary}{198}{section.771}%
+\contentsline {chapter}{\numberline {12}Governance and Policy}{199}{chapter.772}%
+\contentsline {section}{\numberline {12.1}Governance Primitives}{199}{section.773}%
+\contentsline {subsection}{\numberline {12.1.1}Command Allowlist (\texttt {allowed\_commands})}{199}{subsection.774}%
+\contentsline {subsection}{\numberline {12.1.2}Command Denylist (\texttt {denied\_commands})}{200}{subsection.775}%
+\contentsline {subsection}{\numberline {12.1.3}Environment Variable Blocking (\texttt {deny\_env\_vars})}{200}{subsection.776}%
+\contentsline {subsection}{\numberline {12.1.4}Output Redaction (\texttt {redact})}{201}{subsection.777}%
+\contentsline {subsection}{\numberline {12.1.5}Approval Gates}{201}{subsection.778}%
+\contentsline {section}{\numberline {12.2}Policy Evaluation Model}{202}{section.779}%
+\contentsline {paragraph}{Order of precedence.}{202}{section*.780}%
+\contentsline {section}{\numberline {12.3}Approval Gate Design}{202}{section.785}%
+\contentsline {subsection}{\numberline {12.3.1}Schema Declaration}{202}{subsection.786}%
+\contentsline {subsection}{\numberline {12.3.2}UX Contract}{203}{subsection.787}%
+\contentsline {subsection}{\numberline {12.3.3}Approval Decision Protocol}{203}{subsection.792}%
+\contentsline {subsection}{\numberline {12.3.4}Approval Recording in the Trace}{204}{subsection.793}%
+\contentsline {subsection}{\numberline {12.3.5}Timeout and Escalation}{205}{subsection.794}%
+\contentsline {section}{\numberline {12.4}Policy-as-Code Direction}{206}{section.795}%
+\contentsline {subsection}{\numberline {12.4.1}v2.0: Structured YAML Policy Blocks}{206}{subsection.796}%
+\contentsline {subsection}{\numberline {12.4.2}v2.1+: OPA Integration Hooks}{206}{subsection.797}%
+\contentsline {section}{\numberline {12.5}RBAC Model}{207}{section.800}%
+\contentsline {subsection}{\numberline {12.5.1}Identity Establishment}{207}{subsection.801}%
+\contentsline {subsection}{\numberline {12.5.2}Runbook-Level Access Control}{208}{subsection.802}%
+\contentsline {subsection}{\numberline {12.5.3}Step-Level Role Restriction}{208}{subsection.803}%
+\contentsline {subsection}{\numberline {12.5.4}Separation of Duties}{208}{subsection.804}%
+\contentsline {section}{\numberline {12.6}Redaction}{209}{section.805}%
+\contentsline {subsection}{\numberline {12.6.1}Pattern-Based Redaction}{209}{subsection.806}%
+\contentsline {subsection}{\numberline {12.6.2}Explicit Field Marking (v2.1)}{209}{subsection.807}%
+\contentsline {subsection}{\numberline {12.6.3}Redaction Guarantees}{209}{subsection.808}%
+\contentsline {section}{\numberline {12.7}Audit Trail Requirements}{209}{section.809}%
+\contentsline {subsection}{\numberline {12.7.1}Trace Integrity}{210}{subsection.810}%
+\contentsline {subsection}{\numberline {12.7.2}Compliance Alignment}{210}{subsection.811}%
+\contentsline {section}{\numberline {12.8}Extension-Contributed Policy}{211}{section.812}%
+\contentsline {subsection}{\numberline {12.8.1}Extension Policy Rule Schema}{211}{subsection.817}%
+\contentsline {chapter}{\numberline {13}Evidence, Tracing, and Resumption}{212}{chapter.818}%
+\contentsline {section}{\numberline {13.1}Trace File Format}{212}{section.819}%
+\contentsline {subsection}{\numberline {13.1.1}File Location and Naming}{212}{subsection.820}%
+\contentsline {subsection}{\numberline {13.1.2}JSONL Envelope}{213}{subsection.821}%
+\contentsline {subsubsection}{\texttt {step/failed}}{215}{section*.822}%
+\contentsline {subsubsection}{\texttt {step/skipped}}{215}{section*.823}%
+\contentsline {subsubsection}{\texttt {step/retrying}}{215}{section*.824}%
+\contentsline {subsubsection}{\texttt {tool/invoked}}{216}{section*.825}%
+\contentsline {subsubsection}{\texttt {tool/responded}}{216}{section*.826}%
+\contentsline {subsubsection}{\texttt {manual/prompted}}{216}{section*.827}%
+\contentsline {subsubsection}{\texttt {manual/completed}}{216}{section*.828}%
+\contentsline {subsubsection}{\texttt {governance/blocked}}{217}{section*.829}%
+\contentsline {subsubsection}{\texttt {governance/approved}}{217}{section*.830}%
+\contentsline {subsubsection}{\texttt {run/completed}}{217}{section*.831}%
+\contentsline {subsubsection}{\texttt {run/failed}}{218}{section*.832}%
+\contentsline {subsubsection}{\texttt {checkpoint}}{218}{section*.833}%
+\contentsline {subsection}{\numberline {13.1.3}Crash Safety}{218}{subsection.834}%
+\contentsline {subsection}{\numberline {13.1.4}Tamper Evidence}{219}{subsection.835}%
+\contentsline {section}{\numberline {13.2}Evidence Capture}{219}{section.836}%
+\contentsline {subsection}{\numberline {13.2.1}What Constitutes Evidence}{219}{subsection.837}%
+\contentsline {subsection}{\numberline {13.2.2}SHA256 Hashing}{220}{subsection.838}%
+\contentsline {subsection}{\numberline {13.2.3}File Attachments}{220}{subsection.839}%
+\contentsline {subsection}{\numberline {13.2.4}Evidence Retention}{221}{subsection.842}%
+\contentsline {section}{\numberline {13.3}Run State Snapshots}{221}{section.843}%
+\contentsline {subsection}{\numberline {13.3.1}Checkpoint Model}{221}{subsection.844}%
+\contentsline {subsection}{\numberline {13.3.2}Atomic Snapshot Write}{222}{subsection.845}%
+\contentsline {subsection}{\numberline {13.3.3}Minimum Resumption State}{222}{subsection.846}%
+\contentsline {section}{\numberline {13.4}Run Resumption}{223}{section.847}%
+\contentsline {subsection}{\numberline {13.4.1}The \texttt {gert exec --resume} Contract}{223}{subsection.848}%
+\contentsline {subsection}{\numberline {13.4.2}Resumability by Step Type}{223}{subsection.856}%
+\contentsline {subsection}{\numberline {13.4.3}Idempotency Guidance}{224}{subsection.857}%
+\contentsline {subsection}{\numberline {13.4.4}Partial Step Resumption}{224}{subsection.858}%
+\contentsline {section}{\numberline {13.5}Replay Mode}{225}{section.862}%
+\contentsline {subsection}{\numberline {13.5.1}Overview}{225}{subsection.863}%
+\contentsline {subsection}{\numberline {13.5.2}Scenario File Format}{225}{subsection.864}%
+\contentsline {subsection}{\numberline {13.5.3}Replay Semantics}{226}{subsection.865}%
+\contentsline {subsection}{\numberline {13.5.4}Determinism Requirement}{226}{subsection.866}%
+\contentsline {section}{\numberline {13.6}OpenTelemetry Integration}{226}{section.867}%
+\contentsline {subsection}{\numberline {13.6.1}Rationale}{226}{subsection.868}%
+\contentsline {subsection}{\numberline {13.6.2}Span Hierarchy}{227}{subsection.869}%
+\contentsline {subsection}{\numberline {13.6.3}Span Attributes}{228}{subsection.870}%
+\contentsline {subsection}{\numberline {13.6.4}Relationship to JSONL Trace}{228}{subsection.871}%
+\contentsline {subsection}{\numberline {13.6.5}Configuration}{228}{subsection.872}%
+\contentsline {section}{\numberline {13.7}Implementation Notes for Go}{229}{section.873}%
+\contentsline {chapter}{\numberline {14}Adapter Contracts}{231}{chapter.874}%
+\contentsline {section}{\numberline {14.1}What is an Adapter Contract?}{231}{section.875}%
+\contentsline {paragraph}{Example consumers:}{232}{section*.880}%
+\contentsline {section}{\numberline {14.2}Contract Categories}{232}{section.881}%
+\contentsline {subsection}{\numberline {14.2.1}JSON-RPC Execution Contract (\texttt {exec/v2})}{232}{subsection.882}%
+\contentsline {paragraph}{Contract version:}{232}{section*.883}%
+\contentsline {paragraph}{Transport:}{232}{section*.884}%
+\contentsline {paragraph}{Methods:}{232}{table.caption.886}%
+\contentsline {paragraph}{Request schema — \texttt {exec/start}:}{232}{section*.887}%
+\contentsline {paragraph}{Response schema — \texttt {exec/start}:}{233}{section*.888}%
+\contentsline {paragraph}{Error envelope:}{234}{section*.889}%
+\contentsline {paragraph}{Stability guarantee:}{234}{section*.890}%
+\contentsline {subsection}{\numberline {14.2.2}WebSocket Event Stream Contract (\texttt {events/v2})}{234}{subsection.891}%
+\contentsline {paragraph}{Contract version:}{234}{section*.892}%
+\contentsline {paragraph}{Transport:}{235}{section*.893}%
+\contentsline {paragraph}{Connection lifecycle:}{235}{section*.894}%
+\contentsline {paragraph}{Subscribe message:}{235}{section*.899}%
+\contentsline {paragraph}{Event envelope:}{235}{section*.900}%
+\contentsline {paragraph}{Reconnection protocol:}{236}{section*.901}%
+\contentsline {paragraph}{Stability guarantee:}{236}{section*.902}%
+\contentsline {subsection}{\numberline {14.2.3}Tool Invocation Contract (\texttt {tool/v2})}{236}{subsection.903}%
+\contentsline {paragraph}{Contract version:}{236}{section*.904}%
+\contentsline {paragraph}{Transport:}{236}{section*.905}%
+\contentsline {paragraph}{Invocation request:}{237}{section*.906}%
+\contentsline {paragraph}{Success response:}{237}{section*.907}%
+\contentsline {paragraph}{Error response:}{238}{section*.908}%
+\contentsline {paragraph}{Cancellation request:}{238}{section*.909}%
+\contentsline {paragraph}{MCP tool adapter:}{239}{section*.910}%
+\contentsline {paragraph}{Stability guarantee:}{239}{section*.915}%
+\contentsline {subsection}{\numberline {14.2.4}Extension Handshake Contract (\texttt {extension/v2})}{239}{subsection.916}%
+\contentsline {paragraph}{Contract version:}{239}{section*.917}%
+\contentsline {paragraph}{Transport:}{239}{section*.918}%
+\contentsline {paragraph}{Initialize request:}{239}{section*.919}%
+\contentsline {paragraph}{Initialize response:}{240}{section*.920}%
+\contentsline {paragraph}{Heartbeat (ping/pong):}{240}{section*.921}%
+\contentsline {paragraph}{Stability guarantee:}{241}{section*.922}%
+\contentsline {section}{\numberline {14.3}Contract Versioning}{241}{section.923}%
+\contentsline {subsection}{\numberline {14.3.1}Version Declaration}{241}{subsection.924}%
+\contentsline {paragraph}{HTTP-based contracts (JSON-RPC, WebSocket):}{241}{section*.925}%
+\contentsline {paragraph}{stdio-based contracts (tool, extension):}{242}{section*.926}%
+\contentsline {subsection}{\numberline {14.3.2}Breaking vs. Non-Breaking Changes}{242}{subsection.927}%
+\contentsline {paragraph}{Non-breaking changes (minor version, no contract version bump):}{242}{section*.928}%
+\contentsline {paragraph}{Breaking changes (major version bump):}{243}{section*.929}%
+\contentsline {subsection}{\numberline {14.3.3}Deprecation Policy}{243}{subsection.930}%
+\contentsline {subsection}{\numberline {14.3.4}Forward and Backward Compatibility}{244}{subsection.931}%
+\contentsline {paragraph}{Forward compatibility (clients):}{244}{section*.932}%
+\contentsline {paragraph}{Backward compatibility (servers):}{244}{section*.933}%
+\contentsline {section}{\numberline {14.4}Error Codes}{244}{section.934}%
+\contentsline {paragraph}{Error envelope structure:}{244}{section*.936}%
+\contentsline {paragraph}{Error code stability:}{245}{section*.937}%
+\contentsline {section}{\numberline {14.5}Contract Test Suite}{245}{section.938}%
+\contentsline {subsection}{\numberline {14.5.1}Test Suite Structure}{245}{subsection.939}%
+\contentsline {subsection}{\numberline {14.5.2}Running Contract Tests}{246}{subsection.940}%
+\contentsline {subsection}{\numberline {14.5.3}Contract Test CI Integration}{246}{subsection.941}%
+\contentsline {section}{\numberline {14.6}Reference Implementations}{247}{section.942}%
+\contentsline {paragraph}{VS Code extension.}{247}{section*.943}%
+\contentsline {paragraph}{Built-in tools.}{247}{section*.944}%
+\contentsline {paragraph}{MCP adapter.}{247}{section*.945}%
+\contentsline {section}{\numberline {14.7}Contract Stability Guarantees}{247}{section.946}%
+\contentsline {section}{\numberline {14.8}Contract Documentation and Tooling}{248}{section.952}%
+\contentsline {subsection}{\numberline {14.8.1}OpenAPI Specifications}{248}{subsection.953}%
+\contentsline {subsection}{\numberline {14.8.2}JSON Schema Validation}{248}{subsection.954}%
+\contentsline {subsection}{\numberline {14.8.3}Client Library Generation}{248}{subsection.955}%
+\contentsline {chapter}{\numberline {15}Input Provider Framework}{250}{chapter.956}%
+\contentsline {section}{\numberline {15.1}Design Goals}{250}{section.957}%
+\contentsline {section}{\numberline {15.2}Provider Definition Schema}{250}{section.958}%
+\contentsline {section}{\numberline {15.3}Resolution Protocol}{252}{section.959}%
+\contentsline {subsection}{\numberline {15.3.1}Resolution Flow}{252}{subsection.960}%
+\contentsline {subsection}{\numberline {15.3.2}Resolution Request Envelope}{253}{subsection.967}%
+\contentsline {subsection}{\numberline {15.3.3}Resolution Response Envelope}{253}{subsection.968}%
+\contentsline {subsection}{\numberline {15.3.4}Resolution Error Handling}{254}{subsection.969}%
+\contentsline {subsection}{\numberline {15.3.5}Resolution Caching}{255}{subsection.970}%
+\contentsline {section}{\numberline {15.4}Built-in Providers}{255}{section.971}%
+\contentsline {subsection}{\numberline {15.4.1}env}{255}{subsection.972}%
+\contentsline {subsection}{\numberline {15.4.2}file}{255}{subsection.973}%
+\contentsline {subsection}{\numberline {15.4.3}prompt}{256}{subsection.974}%
+\contentsline {subsection}{\numberline {15.4.4}workspace}{256}{subsection.975}%
+\contentsline {section}{\numberline {15.5}Interactive Step Type Contracts}{257}{section.976}%
+\contentsline {subsection}{\numberline {15.5.1}Choice Step Contract}{257}{subsection.977}%
+\contentsline {paragraph}{Request envelope.}{257}{section*.978}%
+\contentsline {paragraph}{Response envelope.}{258}{section*.979}%
+\contentsline {paragraph}{Contract requirements.}{258}{section*.980}%
+\contentsline {paragraph}{Built-in prompt provider behaviour.}{258}{section*.981}%
+\contentsline {subsection}{\numberline {15.5.2}Decision (Router) Step Contract}{259}{subsection.982}%
+\contentsline {paragraph}{Request envelope.}{259}{section*.983}%
+\contentsline {paragraph}{Response envelope.}{259}{section*.984}%
+\contentsline {paragraph}{Contract requirements.}{260}{section*.985}%
+\contentsline {paragraph}{Built-in prompt provider behaviour.}{260}{section*.986}%
+\contentsline {subsection}{\numberline {15.5.3}Collector Step Contract}{260}{subsection.987}%
+\contentsline {paragraph}{Request envelope.}{260}{section*.988}%
+\contentsline {paragraph}{Response envelope.}{262}{section*.989}%
+\contentsline {paragraph}{Contract requirements.}{262}{section*.990}%
+\contentsline {paragraph}{Built-in prompt provider behaviour.}{265}{section*.991}%
+\contentsline {subsection}{\numberline {15.5.4}Dynamic Options Protocol}{265}{subsection.992}%
+\contentsline {paragraph}{Request fields.}{266}{section*.999}%
+\contentsline {paragraph}{Response fields.}{267}{section*.1001}%
+\contentsline {paragraph}{Capability declaration.}{267}{section*.1002}%
+\contentsline {subsection}{\numberline {15.5.5}Autocomplete Search Protocol}{267}{subsection.1003}%
+\contentsline {paragraph}{Request fields.}{268}{section*.1005}%
+\contentsline {paragraph}{Response fields.}{269}{section*.1007}%
+\contentsline {paragraph}{Timeout contract.}{269}{section*.1008}%
+\contentsline {paragraph}{CLI degradation.}{269}{section*.1009}%
+\contentsline {paragraph}{Capability declaration.}{269}{section*.1010}%
+\contentsline {subsection}{\numberline {15.5.6}Provider Capability Matrix}{270}{subsection.1011}%
+\contentsline {section}{\numberline {15.6}Provider Composition}{271}{section.1012}%
+\contentsline {section}{\numberline {15.7}Provider Lifecycle}{271}{section.1013}%
+\contentsline {paragraph}{Process model.}{271}{section*.1014}%
+\contentsline {paragraph}{Startup.}{271}{section*.1015}%
+\contentsline {paragraph}{Shutdown.}{271}{section*.1016}%
+\contentsline {paragraph}{Crash handling.}{272}{section*.1017}%
+\contentsline {chapter}{\numberline {16}Observability and Diagnostics}{273}{chapter.1018}%
+\contentsline {section}{\numberline {16.1}Observability Model}{273}{section.1019}%
+\contentsline {subsection}{\numberline {16.1.1}Metrics: Aggregated Performance Indicators}{273}{subsection.1020}%
+\contentsline {subsection}{\numberline {16.1.2}Distributed Tracing: Execution Flow Visualization}{274}{subsection.1021}%
+\contentsline {subsection}{\numberline {16.1.3}Structured Logging: Detailed Contextual Events}{275}{subsection.1022}%
+\contentsline {section}{\numberline {16.2}OpenTelemetry Integration}{275}{section.1023}%
+\contentsline {subsection}{\numberline {16.2.1}Span Hierarchy and Attributes}{275}{subsection.1024}%
+\contentsline {subsubsection}{Root Span: \texttt {gert.run}}{276}{section*.1025}%
+\contentsline {subsubsection}{Child Span: \texttt {gert.step}}{276}{section*.1033}%
+\contentsline {subsubsection}{Grandchild Span: \texttt {gert.tool.invoke}}{277}{section*.1043}%
+\contentsline {subsubsection}{Grandchild Span: \texttt {gert.input.resolve}}{277}{section*.1053}%
+\contentsline {subsubsection}{Grandchild Span: \texttt {gert.governance.check}}{277}{section*.1059}%
+\contentsline {subsection}{\numberline {16.2.2}Span Status and Error Handling}{278}{subsection.1065}%
+\contentsline {subsection}{\numberline {16.2.3}Context Propagation}{279}{subsection.1071}%
+\contentsline {subsubsection}{W3C Trace Context Headers}{279}{section*.1072}%
+\contentsline {subsubsection}{Baggage}{279}{section*.1073}%
+\contentsline {subsection}{\numberline {16.2.4}OTLP Exporter Configuration}{279}{subsection.1076}%
+\contentsline {subsubsection}{OTLP Export (Production)}{280}{section*.1077}%
+\contentsline {subsubsection}{Console Export (Development)}{280}{section*.1078}%
+\contentsline {subsection}{\numberline {16.2.5}Sampling Strategy}{280}{subsection.1079}%
+\contentsline {section}{\numberline {16.3}Metrics Catalog}{281}{section.1080}%
+\contentsline {subsection}{\numberline {16.3.1}Run Metrics}{281}{subsection.1081}%
+\contentsline {subsection}{\numberline {16.3.2}Step Metrics}{281}{subsection.1083}%
+\contentsline {subsection}{\numberline {16.3.3}Tool Invocation Metrics}{281}{subsection.1085}%
+\contentsline {subsection}{\numberline {16.3.4}Approval Metrics}{282}{subsection.1087}%
+\contentsline {subsection}{\numberline {16.3.5}Extension Metrics}{282}{subsection.1089}%
+\contentsline {subsection}{\numberline {16.3.6}Metrics Endpoint}{282}{subsection.1091}%
+\contentsline {subsection}{\numberline {16.3.7}Push-Based Metrics (OTLP)}{283}{subsection.1092}%
+\contentsline {section}{\numberline {16.4}Structured Logging}{283}{section.1093}%
+\contentsline {subsection}{\numberline {16.4.1}Log Line Format}{284}{subsection.1094}%
+\contentsline {subsection}{\numberline {16.4.2}Required Fields}{284}{subsection.1105}%
+\contentsline {subsection}{\numberline {16.4.3}Contextual Fields (When Applicable)}{284}{subsection.1106}%
+\contentsline {subsection}{\numberline {16.4.4}Log Levels}{285}{subsection.1107}%
+\contentsline {subsection}{\numberline {16.4.5}Sensitive Data Handling}{285}{subsection.1108}%
+\contentsline {subsection}{\numberline {16.4.6}Log Output Configuration}{286}{subsection.1116}%
+\contentsline {subsection}{\numberline {16.4.7}Log Aggregation and Correlation}{286}{subsection.1117}%
+\contentsline {section}{\numberline {16.5}Health and Readiness Endpoints}{286}{section.1118}%
+\contentsline {subsection}{\numberline {16.5.1}Liveness Endpoint}{287}{subsection.1119}%
+\contentsline {subsection}{\numberline {16.5.2}Readiness Endpoint}{287}{subsection.1126}%
+\contentsline {subsection}{\numberline {16.5.3}Kubernetes Probe Configuration}{288}{subsection.1140}%
+\contentsline {section}{\numberline {16.6}Diagnostics Commands}{288}{section.1163}%
+\contentsline {subsection}{\numberline {16.6.1}\texttt {gert diagnose}}{288}{subsection.1164}%
+\contentsline {subsection}{\numberline {16.6.2}\texttt {gert trace show}}{290}{subsection.1170}%
+\contentsline {subsection}{\numberline {16.6.3}\texttt {gert trace export}}{290}{subsection.1171}%
+\contentsline {subsection}{\numberline {16.6.4}\texttt {gert run list}}{291}{subsection.1172}%
+\contentsline {section}{\numberline {16.7}Integration Recipes}{291}{section.1186}%
+\contentsline {subsection}{\numberline {16.7.1}Prometheus + Grafana}{291}{subsection.1187}%
+\contentsline {subsection}{\numberline {16.7.2}Jaeger (Distributed Tracing)}{292}{subsection.1195}%
+\contentsline {subsection}{\numberline {16.7.3}Loki + Grafana (Log Aggregation)}{293}{subsection.1196}%
+\contentsline {subsection}{\numberline {16.7.4}Datadog / New Relic (OTLP-Compatible SaaS)}{293}{subsection.1216}%
+\contentsline {section}{\numberline {16.8}Observability for CI/CD Pipelines}{294}{section.1217}%
+\contentsline {subsection}{\numberline {16.8.1}JSON Output Mode}{294}{subsection.1218}%
+\contentsline {subsection}{\numberline {16.8.2}GitHub Actions Example}{295}{subsection.1229}%
+\contentsline {subsection}{\numberline {16.8.3}GitLab CI Example}{295}{subsection.1247}%
+\contentsline {section}{\numberline {16.9}Summary}{296}{section.1260}%
+\contentsline {chapter}{References}{297}{chapter*.1261}%

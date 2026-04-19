@@ -96,3 +96,46 @@ Wrote `/Volumes/Projects/gert/.squad/tmp/brian-implementability-notes.md` coveri
 - The edit tool failed to match verbatim blocks due to whitespace; used Python string replacement instead.
 - build/ is in .gitignore; commit only main.pdf at repo root, not build/main.pdf.
 - Bidirectional Runtime Core <-> Extension Host peer relationship shown with two bent arrows (to[bend right=12]) in each direction.
+
+## Learnings — Phase 1 (2026-04-19)
+
+### Phase 1 Parser Implemented at `v2/internal/parser/`
+
+Implemented the full Phase 1 parser for gert v2 runbooks. All 26 tests pass; all 10 fixtures (r01-r10) parse successfully.
+
+**New files:**
+- `v2/internal/parser/parser.go` — implements `pkg/parser.Parser` interface
+- `v2/internal/parser/unmarshal.go` — YAML to schema types with two-phase type dispatch
+- `v2/internal/parser/validate_structural.go` — JSON Schema (Draft 2020-12) validation
+- `v2/internal/parser/validate_semantic.go` — cross-field semantic rules
+- `v2/internal/parser/errors.go` — ValidationError / ValidationErrors types
+- `v2/internal/parser/parser_test.go` — 26 tagged tests (all passing)
+- `v2/schemas/schema.go` — go:embed wrapper for runbook.schema.json
+
+**Modified files (schema type extensions):**
+- `v2/pkg/schema/runbook.go` — GovernanceConfig with GovernanceRule/RedactRule types
+- `v2/pkg/schema/steps.go` — ToolInvocation.Args changed to map[string]any
+- `v2/pkg/schema/step.go` — added StepTypeExtension = "extension"
+- `v2/schemas/runbook.schema.json` — relaxed additionalProperties on multiple types to match fixtures
+
+### Key Technical Finding: yaml.v3 duplicate-key panic
+
+`schema.Step` has overlapping YAML field names across multiple inline spec structs (e.g. "prompt" in ChoiceSpec/CollectorSpec/DecisionSpec). yaml.v3 panics when encountering `schema.Step` transitively via `FlowNode.Step` during any Decode() call. The parser uses raw `*yaml.Node` extraction with type-dispatched spec decoding to avoid this entirely. This should be documented as a schema design constraint for future phases — inline specs with overlapping keys cannot coexist in a yaml.v3-decoded struct.
+
+### Libraries
+- YAML: gopkg.in/yaml.v3 v3.0.1
+- JSON Schema: github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
+
+### Two-Phase Validation
+1. Structural: JSON Schema Draft 2020-12
+2. Semantic: duplicate step IDs, nested parallel detection (parallel/nested-forbidden), signal allow-list, path normalization, branch/approve/collector constraints
+
+### Fixture Notes
+- All r01-r10 pass
+- r10 had a YAML quoting bug (shell escaping in fixture) — fixed in fixture file
+- r02 uses `over: null` for convergence-mode iterate — schema accepts string-or-null
+- Fixtures use `type: extension` (v1 retained step type) — added to StepType enum
+
+### Cross-Agent Notes
+- For Barbara/Ken: schema.Step needs a JoinSpec field for parallel steps — current design loses join: data
+- For John: ToolInvocation.args relaxed to map[string]any — spec update needed

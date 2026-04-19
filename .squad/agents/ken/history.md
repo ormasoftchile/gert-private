@@ -769,3 +769,42 @@ Barbara addressed all 7 defects from the initial Phase 0 rejection. Verified eac
 **Forward observation (non-blocking):** `ResolvedStep.Spec any` is acceptable for Phase 0 (polymorphic step kinds) but should become a typed interface or tagged union in Phase 1.
 
 **Verdict written to:** `.squad/decisions/inbox/ken-phase0-rereview.md`
+
+### 2026-04-19 — Phase 1: Typed StepSpec Interface
+
+**Requested by:** Cristian  
+**Task:** Implement the typed `StepSpec` interface noted as non-blocking in Phase 0 re-review.
+
+**Implementation:**
+
+1. **New interface** `v2/pkg/engine/stepspec.go`:
+   ```go
+   type StepSpec interface {
+       StepKind() string
+   }
+   ```
+
+2. **Updated `ResolvedStep`** in `v2/pkg/engine/run.go`:
+   - `Spec` field changed from `any` to `StepSpec`
+
+3. **Implemented `StepKind()` on 14 concrete types** in `v2/pkg/schema/steps.go`:
+   - `CLISpec` → `"cli"`
+   - `ToolCallSpec` → `"tool"`
+   - `IncludeSpec` → `"include"`
+   - `ChoiceSpec` → `"choice"`
+   - `DecisionSpec` → `"decision"`
+   - `CollectorSpec` → `"collector"`
+   - `BranchSpec` → `"branch"`
+   - `IterateNode` → `"iterate"`
+   - `ParallelNode` → `"parallel"`
+   - `ApproveSpec` → `"approve"`
+   - `AssertSpec` → `"assert"`
+   - `CompensateSpec` → `"compensate"`
+   - `WaitForEventSpec` → `"wait_for_event"`
+   - `EndSpec` → `"end"`
+
+**Build Status:** ✓ `go build ./...` succeeds
+
+**Decision recorded:** `.squad/decisions/inbox/ken-stepspec-interface.md`
+
+**Impact:** Type-safe step dispatch in engine; compiler now ensures all step types implement `StepSpec`.

@@ -493,10 +493,19 @@ All 43 Unicode errors eliminated. Final build: CLEAN.
 
 ## Learnings
 
-### fcolorbox override for minted error tokens
-To suppress Pygments Token.Error red boxes inside minted environments (e.g. from Go template syntax in YAML blocks), add this after the setminted blocks in main.tex:
-  \AtBeginEnvironment{minted}{\renewcommand{\fcolorbox}[4][]{#4}}
-This removes the red-bordered box without affecting minted own frame=leftline machinery.
+### fcolorbox override for minted error tokens (SUPERSEDED — did not work)
+The initial attempt used `\AtBeginEnvironment{minted}{\renewcommand{\fcolorbox}[4][]{#4}}`. This did NOT work in minted v3 because the `\PYG` macros are called inside `MintedVerbatim` (an inner environment), not `minted`. The `\fcolorbox` redefinition was scoped to the wrong group.
+
+### Correct fix: override PYG@tok@err directly (minted v3)
+The `friendly.style.minted` cache file defines:
+  `\@namedef{PYG@tok@err}{\def\PYG@bc##1{{\setlength{\fboxsep}{\string -\fboxrule}\fcolorbox[rgb]{1.00,0.00,0.00}{1,1,1}{\strut ##1}}}}`
+Override it as a no-op AFTER the style file loads, using AtBeginDocument registered after \usepackage{minted}:
+  ```
+  \makeatletter
+  \AtBeginDocument{\@namedef{PYG@tok@err}{}}
+  \makeatother
+  ```
+Minted v3 loads style files via its own AtBeginDocument hooks. Since ours is registered after \usepackage{minted}, it runs last and wins. Result: err tokens render as plain unstyled text — no box, no red border.
 
 ### Mixed YAML + Go template blocks must use {text}
 Any \begin{minted}{yaml} (or {json}) block whose content contains Go template expressions ({{ }}, {{ if }}, {{/* */}}) must be re-languaged to \begin{minted}{text}. The YAML/JSON Pygments lexers classify those characters as Token.Error, causing red boxes. text = no highlighting, clean monospace, no error tokens.

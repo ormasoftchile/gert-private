@@ -34,6 +34,22 @@ This is a LaTeX document using the MastersThesis class. Sections are in `design/
 
 ## Learnings
 
+### 2026-04-18 — wait_for_event Integration Build (273 pages, CLEAN)
+
+**Task:** Build after John (§03) and Ken (§02) added wait_for_event content.
+
+**Build result:** CLEAN — zero fatal errors, zero undefined references.
+
+**Page count:** 273 pages (up from 260 pages, +13 pages / +5% growth)
+- §02 grew by ~257 lines: Event Dispatcher component, WAITING run state, suspend/resume pseudocode, Go EventDispatcher interface, serve-only constraint, HMAC webhook security scheme
+- §03 grew by full wait_for_event subsection: 7-field normative spec, 2 YAML examples, transport/security notes
+
+**LaTeX fixes required:** None. Both John and Ken wrote clean LaTeX. No escaping issues, no undefined commands, no tabular mismatches, no duplicate labels.
+
+**Warnings (cosmetic only):** Two overfull \hbox instances (37pt and 13pt) — minor, not fixed per policy.
+
+**Commit:** f00f16b — `schema: add type:wait_for_event step type`
+
 ### Bibliography Infrastructure Added (2026-04-18)
 
 Successfully implemented complete bibliography/references system for the gert v2 design document.
@@ -258,3 +274,25 @@ All 43 Unicode errors eliminated. Final build: CLEAN.
 - Exit code: 0 (success)
 
 **Status:** ✅ COMPLETE — Document builds CLEAN, ready for distribution
+
+
+### 2026-04-18 — GAP-1/GAP-2 Build (283 pages, CLEAN)
+
+**Task:** Build document after John (§03 schema) and Ken (§02 architecture) added GAP-1 and GAP-2 content.
+
+**Build result:**
+- Zero fatal errors — compiled clean on first pass
+- No LaTeX fixes required (John and Ken's new content was already well-formed)
+- Biber: 29/29 citations resolved
+- Page count: **283 pages** (up from 260 pages previously, +23 pages)
+- PDF size: 1,035,898 bytes (~1 MB)
+- Commit: `8d4e3cf`
+
+**Content added this build:**
+- §02: Business Calendar Engine + Quorum Approval Tracker subsections (Ken)
+- §03: `approve` step extended with `timeout_business_days`, `timezone`, `business_calendar`, `approvals.mode/pool/required`; 6 validation rules; step type count 13 to 14 (John)
+- testdata: R7 and R8 updated from FAIL to PASS WITH NOTES
+
+**Fixes required:** None — content compiled clean without modification.
+
+**Status:** ✅ COMPLETE — No fixes needed, document builds clean at 283 pages

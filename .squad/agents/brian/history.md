@@ -45,3 +45,45 @@ This is a LaTeX document using the MastersThesis class. Sections are in `design/
 
 Full research brief: `.squad/tmp/dennis-research-brief.md`
 Decision inbox: `.squad/decisions/inbox/dennis-research-foundations.md` → merged to `.squad/decisions.md`
+
+## Learnings — 2026-04-18
+
+### §12 Written From Scratch
+
+Wrote the complete `12-evidence-tracing-resumption.tex` section. Key decisions embedded:
+- JSONL trace lives at `.runbook/runs/<run-id>/trace.jsonl`; 14 normative event types defined
+- `DurableEvent` envelope with `seq`, `type`, `timestamp`, `run_id`, `path`, `data` fields
+- Crash safety via `O_APPEND` + single `write(2)` + `fsync` per event
+- Optional HMAC-SHA256 tamper evidence on each event (`GERT_TRACE_KEY` env)
+- Evidence: text, checklist, attachment (SHA256 content-addressed in `attachments/`)
+- Snapshot format already exists in v1 (`RunState` JSON) — preserved in v2 with `version` field added
+- Partial step resumption: idempotent tools re-issued; non-idempotent tools treated as failed
+- Replay mode uses scenario YAML; v1 scenario format is forward-compatible
+- OTel is opt-in (no-op tracer when `OTEL_EXPORTER_OTLP_ENDPOINT` unset); zero overhead default
+
+### §08 Expanded
+
+Expanded `08-testing-and-acceptance.tex` from 4 bullets to a full testing strategy covering:
+- Test framework: Go `testing` + testify; table-driven tests as canonical pattern
+- `gert test`: scenario discovery convention, test.yaml assertions, v1 scenario compatibility
+- Contract tests for each interface boundary (runtime, schema, extension, tool, event bus)
+- Integration test strategy with fixture corpus covering all step types
+- Regression: v1 corpus at 95% pass rate target; golden trace comparison
+- Performance targets: step startup <10ms p50, trace write <5ms p50
+- Extension test harness via `pkg/exttest` package
+- CI/CD: PR gate (unit+schema+contract+lint+vet), merge gate (integration+regression+golden), nightly (bench+race)
+
+### Go Implementability Brief
+
+Wrote `/Volumes/Projects/gert/.squad/tmp/brian-implementability-notes.md` covering:
+- Top 5 concerns: event bus blocking, context propagation, saga compensation, parallel iterate safety, serve JSON-RPC compatibility
+- Recommended package structure rooted at `pkg/` with clean `ext/` boundary
+- Key interfaces: Runtime, Planner, EventBus, TraceWriter, RunStore, CommandExecutor, EvidenceCollector, GovernanceEngine
+- Channels over mutexes for event bus; sequential engine loop (no goroutine-per-step)
+- v1 patterns to preserve and anti-patterns to eliminate documented
+
+### Cross-Agent Flags
+
+- **For Ken**: §02 needs interface definitions matching the interfaces in the implementability brief.
+- **For John**: `DurableEvent.data` is `json.RawMessage` — needs discriminated union JSON Schema per event type.
+- **For Leslie**: §08 uses `\begin{tabular}` and `[label=\arabic*.]` — confirm `enumitem` is in the preamble.

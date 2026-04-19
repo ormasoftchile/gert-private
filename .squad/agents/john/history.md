@@ -40,8 +40,11 @@ This is a LaTeX document using the MastersThesis class. Sections are in `design/
 - **Outbound notify/send** steps (Slack, PagerDuty, email, external API calls) belong as
   `type: tool` with the tool declared in `toolRefs`. This already works in the v2 schema.
 - **Inbound event receive** steps (wait for webhook, wait for SIEM alert, wait for callback)
-  are GAP-3: `type: wait_for_event` does not yet exist in the schema. Use a `type: cli` stub
-  with a `# GAP: no wait_for_event step type yet` comment as placeholder.
+  are now covered by `type: wait_for_event` (GAP-3 resolved 2026-04-19). The step pauses
+  execution, opens an inbound endpoint, captures payload fields into run variables, and
+  resumes when the event arrives. Timeout + on_timeout control fallback behavior.
+  Key fields: `event.source` (webhook/message/signal/channel), `event.id`, `event.filter`,
+  `event.payload_schema`, `capture`, `timeout`, `on_timeout`.
 
 ## Cross-Agent Notes from Ken's Architectural Review (2026-04-18)
 
@@ -286,3 +289,178 @@ Persisted all 10 runbooks from Dennis corpus as permanent dev fixtures.
 Each directory: source.md, schema.yaml, assessment.md.
 R1-R3: verbatim from john-schema-translations.md. R4-R10: new best-effort translations.
 Verdicts: 1 PASS, 7 PASS WITH NOTES, 2 FAIL (R7, R8).
+
+---
+
+## 2026-04-19 — Added type:wait_for_event Step Type (GAP-3)
+
+**Requested by:** ormasoftchile
+**Output:** sections/03-schema-vnext.tex (new subsection), testdata r01 + r05 updated
+
+Resolved GAP-3 from the schema stress test. `type: wait_for_event` is now a
+first-class step type in §03, positioned between `tool` and `invoke`.
+
+**Spec added:**
+- Pause/resume model: runtime opens inbound endpoint, suspends run record,
+  resumes on matching event, captures payload fields into variables.
+- 7 fields: event.source, event.id, event.filter, event.payload_schema,
+  capture, timeout, on_timeout.
+- 2 YAML examples: Prometheus alert webhook (r01-k8s-incident context) and
+  named channel approval callback (generic pattern).
+- Transport Note: 4 source types (webhook/message/signal/channel), endpoint
+  available as `{{ .gert.event.<id>.endpoint }}`.
+- Security Note: one-time HMAC token per run, available as
+  `{{ .gert.event.<id>.token }}`.
+- Step type summary table added at top of Section 6 (Step Types v2 Inventory)
+  listing all 13 types with section refs.
+
+**Testdata updated:**
+- r01-k8s-incident/schema.yaml: detect_alert step converted from cli stub to
+  wait_for_event with Prometheus webhook source.
+- r05-security-breach/schema.yaml: receive_alert step converted from cli stub to
+  wait_for_event with SIEM webhook source.
+
+**Decision inbox:** .squad/decisions/inbox/john-wait-for-event-spec.md
+
+
+---
+
+## 2026-04-19 — GAP-1 + GAP-2 Resolved: Business-Day Timeouts and M-of-N Quorum
+
+**Requested by:** ormasoftchile
+**Output:** sections/03-schema-vnext.tex (new subsection), testdata r07 + r08 updated
+
+Resolved GAP-1 (business-day timeouts) and GAP-2 (M-of-N quorum approval) from
+the schema stress test. Both gaps were blocking R7 (Financial Approval) and R8
+(FDA Release) from passing validation.
+
+### GAP-1: Business-Day Timeout
+
+Added three new fields to the approve step type:
+- timeout_business_days (integer) — timeout in business days; mutually exclusive with timeout
+- timezone (string) — IANA timezone name; required when timeout_business_days is set
+- business_calendar (string) — named calendar ID (e.g. us-federal, uk-banking); defaults to Mon-Fri no holidays
+
+Runtime counting rules: clock starts when step enters waiting state; weekends + holidays per
+calendar do not count; day boundaries determined by timezone.
+
+### GAP-2: M-of-N Quorum Approval
+
+Extended the approvals block with three new fields:
+- approvals.mode (string) — all (default), any, or quorum
+- approvals.pool (string[]) — eligible roles for quorum; mutually exclusive with roles
+- approvals.required (integer) — approvals needed from pool; must be >= 1 and <= len(pool)
+
+Quorum semantics: runtime accepts approvals from any pool member; step proceeds once required
+is reached; rejections are recorded and may trigger automatic failure if quorum becomes
+unreachable.
+
+### New Step Type: type: approve
+
+Created a new first-class subsection{Step Type: approve} in Section 03 (between collector and tool).
+The approve step is a standalone approval gate with no data-collection fields.
+Step type inventory updated from 13 to 14 types.
+
+### Validation Rules Documented (6 rules)
+1. timeout and timeout_business_days mutually exclusive
+2. timeout_business_days requires timezone
+3. mode: quorum requires both pool and required
+4. required must be >= 1 and <= len(pool)
+5. roles and pool mutually exclusive
+6. mode: all / any requires roles (not pool)
+
+### Testdata Updated
+- R7 Financial Approval: 7 approval steps converted from wall-clock hours to timeout_business_days;
+  board approval (step 7b) converted from min:3/roles:[board-member] to mode:quorum/pool:[5 named members]/required:3;
+  assessment updated FAIL => PASS WITH NOTES
+- R8 FDA Release: 7 approval steps converted from wall-clock hours to timeout_business_days;
+  assessment updated FAIL => PASS WITH NOTES (CRITICAL gaps G4-001 and G2-001 remain)
+
+**Decision inbox:** .squad/decisions/inbox/john-gap1-gap2-approve.md
+
+---
+
+## 2026-04-19 — type:invoke Renamed to type:include
+
+**Requested by:** ormasoftchile
+**Output:** sections/03-schema-vnext.tex, testdata r04 + r09 updated, decision inbox written
+
+Renamed the step type `invoke` to `include` throughout the schema spec and all testdata runbooks.
+
+### Semantic Clarifications Added to §03
+
+- **Inline expansion semantics**: `type: include` expands another runbook's steps directly into the caller's run path — not a sub-procedure call.
+- **Shared variable space**: The included runbook shares the caller's variable scope; no input/output mapping needed or supported.
+- **Audit trace**: Included steps appear inline in the run trace and audit log, with no sub-run or separate audit entry.
+- **Cycle detection**: The runtime builds a runbook dependency graph at load time; cyclic includes (direct or transitive) are a hard validation error with the full chain reported (`cyclic include detected: A → B → A`).
+- **Future type:call**: Isolated scope with explicit I/O mapping is deferred to a future `type: call` step type (post-v2.0).
+
+### Field Table Changes
+
+Old `invoke` fields removed: `invoke.inputs`, `invoke.outputs`, `invoke.gate`.
+New `include` fields: `include.runbook` (required), `include.with` (variable overrides, optional), `include.when` (skip condition, optional).
+
+### Files Changed
+
+- `sections/03-schema-vnext.tex`: subsection renamed, prose rewritten, field table updated, YAML example replaced, two new paragraphs (Cycle Detection, Difference from Sub-Procedure Call), inventory table updated, validation rules updated, Output Declarations section updated, runbook `id` field prose updated, `composable` kind description updated.
+- `testdata/runbooks/r04-soc2-evidence/schema.yaml`: 7x `type: invoke` to `type: include`, `invoke:` to `include:`, `inputs:` to `with:`, added NOTE comment.
+- `testdata/runbooks/r09-oncall-escalation/schema.yaml`: 1x `type: invoke` to `type: include`, `invoke:` to `include:`, `inputs:` to `with:`, added NOTE comment.
+
+**Decision inbox:** .squad/decisions/inbox/john-invoke-renamed-include.md
+
+---
+
+## 2026-04-19 — Collector Field Types P2: ephemeral, autocomplete, format
+
+**Requested by:** ormasoftchile
+**Output:** sections/03-schema-vnext.tex, testdata r03 updated, decision inbox written
+
+Implemented all three P2 field-type improvements to §03 Schema vNext and updated
+testdata runbooks where applicable.
+
+### P2-A: `ephemeral: true` attribute
+
+- Added `ephemeral` row to the field structure table (default: false).
+- Added new paragraph "Ephemeral fields" with full semantics:
+  - Value IS bound to variable space and usable in downstream templates.
+  - Value is NEVER written to JSONL audit log (`[REDACTED]` placeholder).
+  - Value is NEVER persisted to any store; in-memory only for run duration.
+  - If run is suspended and resumed, ephemeral values are gone; re-collect required.
+- Added ephemeral + type: file/image validation warning rule.
+- Added security note: ephemeral fields reduce audit footprint but do not prevent
+  downstream transmission; authors must ensure secure contexts.
+- Added YAML example with deploy credentials collector step.
+- Testdata: no existing collector fields matched secret-name criteria (token/password/
+  key/secret/credential); no testdata changes for P2-A.
+
+### P2-B: `type: autocomplete` field type
+
+- Updated `options_from` description in field structure table to cover both `select`
+  and `autocomplete`.
+- Updated `multiple` description to cover both `select` and `autocomplete`.
+- Updated field type inventory: nine → ten field types; added `autocomplete` row.
+- Added subsection "Field type: autocomplete" with:
+  - `options_from` extended table (provider, field, min_chars, debounce_ms).
+  - CLI/non-interactive graceful degradation note.
+  - YAML examples (live service search, multi-select user lookup).
+- Added validation rules: `options_from` required (provider + field); `options` not
+  valid on autocomplete; min_chars and debounce_ms range constraints.
+- Testdata r03: `manager` field converted from `type: text` to `type: autocomplete`
+  with `options_from.provider: hr-directory` (previously had hint "Use autocomplete
+  from employee directory"). Score 9/10 → 10/10; verdict PASS.
+
+### P2-C: `format` validation for multiline text
+
+- Updated text validation table from 4 to 5 sub-fields; added `format` enum row.
+- Added paragraph "Structured multiline format validation" with:
+  - format: yaml / json / toml (toml deferred with warning note).
+  - Re-prompt behavior on parse failure.
+  - Stored value is always raw string (parsing is validation-only).
+  - Note on fromYAML/fromJSON template functions for downstream traversal.
+  - YAML examples (config_patch, event_payload).
+  - Warning: format ignored when multiline is false.
+- Added validation rules: format on non-multiline is warning; toml is warning in v2.0.
+- Testdata: no existing multiline fields are clearly YAML/JSON (all are prose);
+  no testdata changes for P2-C.
+
+**Decision inbox:** .squad/decisions/inbox/john-field-types-p2.md

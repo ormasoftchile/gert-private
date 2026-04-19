@@ -368,3 +368,238 @@ Updated §02 (Architecture) to replace all references to the old `manual` step t
 **Document status:** 260 pages, all cross-references valid, ready for implementation handoff
 
 **Status:** ✅ COMPLETE
+
+### 2026-04-18 — Schema Stress Test: Architectural Review (Part A)
+
+**What was done:**
+
+Performed independent architectural analysis of the 10-runbook corpus against the gert v2 schema spec. John's translations were not yet available, so this is a predictive analysis based on schema capabilities vs. runbook requirements.
+
+**Overall Verdict: NEEDS TARGETED FIXES**
+
+The schema is architecturally sound for 80% of use cases but has 3 systemic gaps blocking 6/10 runbooks from clean translation:
+
+**Top 3 Systemic Gaps:**
+1. **No business-day timeout (S1)** — `timeout` uses wall-clock duration, not calendar-aware business days. Blocks enterprise approval workflows (Runbooks 3, 7, 8).
+2. **No M-of-N quorum approval (S2)** — `approvals.min` can't express "3 of 5 must approve" with explicit pool. Blocks multi-party governance (Runbooks 7, 8, 10).
+3. **No external event trigger (S3)** — No mechanism to pause for webhook callback (e.g., FDA clearance). HIGH severity but has polling workaround.
+
+**Per-Runbook Predictions:**
+- PASS: 4 (Runbooks 4, 6, 10 + conditional 9)
+- PASS WITH NOTES: 4 (Runbooks 1, 2, 5, 8)
+- FAIL: 2 (Runbooks 3, 7 — blocked by business-day + quorum gaps)
+
+**Schema Improvement Recommendations:**
+- CRITICAL: Business-day timeout (§03, §11), M-of-N quorum approval (§03, §14)
+- IMPORTANT: External event trigger (§03, §02, §06, §13)
+- NICE-TO-HAVE: Choice timeout default, dynamic approver lookup, datetime delay
+
+**Design Limitations (Intentional):**
+- No backward goto (DAG-only execution)
+- No dynamic step generation
+- No live-streaming dashboard
+- No weighted voting in approvals
+
+**Deliverables:**
+1. `.squad/tmp/ken-stress-conclusions.md` — Full analysis report (25KB)
+2. `.squad/decisions/inbox/ken-stress-test-verdict.md` — Executive summary for team review
+3. Updated history with findings
+
+**Verdict for ormasoftchile:** Schema ready for SRE/DevOps/Compliance use cases. Not yet ready for enterprise governance (finance, HR, regulated). Fix S1 (business-day) + S2 (quorum) before declaring implementation-ready.
+
+**Status:** ✅ PART A COMPLETE. Awaiting John's translations for Part B cross-validation.
+
+### 2026-04-19 — wait_for_event architecture specification added to §02
+
+**What was done:**
+
+Specified the full runtime architecture for the new `wait_for_event` step type in
+`design/gert-v2/sections/02-architecture.tex`. Four targeted additions:
+
+1. **Step type classification table** — Added a new **Synchronisation** category row
+   (alongside Execution, Interactive, Control Flow). `wait_for_event` is the sole member.
+   Marked as serve-only in the table description.
+
+2. **Dispatch section** — Added `wait_for_event` dispatch entry explaining the suspend/register
+   pattern and forward-referencing the executor contract subsection.
+
+3. **Wait-for-Event Executor Contract subsection** (Lifecycle Model) — Comprehensive spec:
+   - WAITING state table: distinguishes WAITING (system-driven) from PAUSED (user-driven);
+     documents all transitions: WAITING→RUNNING (event arrival), WAITING→FAILED (timeout/fail),
+     WAITING→RUNNING/branch (timeout/branch).
+   - Pause/resume protocol: 3-step suspend sequence (persist → register → suspend) and
+     6-step resume sequence (load → schema validate → filter match → capture → trace → advance).
+   - Executor pseudocode: suspend path, resume path, and timeout path in verbatim block.
+   - Run persistence requirement: enumerates exactly what the snapshot must contain;
+     mandates re-registration of WAITING listeners on gert serve restart.
+   - Serve-only constraint: explicit error message for gert run rejection; nil
+     DispatcherHandle as the enforcement mechanism.
+   - HMAC security note: 32-byte crypto/rand secret, HMAC-SHA256 over request body,
+     X-Gert-Signature header, one-time use, injected as gert.event.<id>.token.
+
+4. **Event Dispatcher component** (gert serve Integration section) — New subsection with:
+   - Five responsibilities: listener lifecycle, webhook transport, channel transport,
+     message broker (pluggable stub), signal transport, timeout min-heap.
+   - Full Go EventDispatcher interface definition with ListenerRegistration struct.
+   - Availability constraint: nil DispatcherHandle in gert run; enforcement in dispatch,
+     not in the public Runtime interface.
+   - HTTP endpoint POST /events/{run-id}/{event-id} added to RPC method summary.
+
+**Key architectural decisions made:**
+
+- WAITING is a distinct run state from PAUSED; both must be surfaced differently in UX.
+- Run serialization scope: step index + depth + all variables + call stack + listener
+  registration record (includes absolute timeout deadline, not relative duration).
+- Restart survival: gert serve MUST re-register WAITING listeners on startup; past-deadline
+  listeners are immediately resolved via the timeout path.
+- Message broker transport is pluggable (factory-registered by type string), analogous to
+  ToolTransport. Ships as no-op stub in v2.0.
+- HMAC token is injected as a run variable (gert.event.<id>.token), ensuring it is
+  unique per run and never appears in committed runbook YAML.
+- Enforcement of serve-only constraint is in Runtime Core dispatch (nil handle check),
+  with an optional Planner warning as a UX convenience.
+- filter mismatch is NOT a validation error — the event is silently discarded and the
+  listener remains registered (multiple deliveries may occur until a matching one arrives).
+
+**Files changed:**
+- `design/gert-v2/sections/02-architecture.tex` — ~170 lines added across four locations
+- `.squad/decisions/inbox/ken-wait-for-event-runtime.md` — decision record written
+
+### 2026-04-19 — GAP-1 (Business Calendar Engine) + GAP-2 (Quorum Approval Tracker) added to §02
+
+**What was done:**
+
+Added two new subsections under a new `\subsection{Approve Step Executor Contract}` in
+`design/gert-v2/sections/02-architecture.tex`.
+
+Also extended the Step Type Classification table with an **Approval Gate** row for the
+`approve` step type, cross-referencing the new subsection.
+
+**GAP-1: Business Calendar Engine**
+- New stateless component within Runtime Core (no external process for built-in calendars).
+- Go `BusinessCalendar` interface: `IsBusinessDay`, `AddBusinessDays`, `ElapsedBusinessDays`.
+- Built-in calendars for v2.0: `default` (Mon-Fri, no holidays), `us-federal` (US federal
+  holidays), `uk-banking` (England/Wales bank holidays).
+- Custom calendar definitions deferred to v2.1.
+- Key architectural decision: one-time conversion at step activation.
+  `deadline = calendar.AddBusinessDays(now, timeout_business_days, tz)` is computed once
+  and stored as a plain `time.Time`. The existing min-heap timeout scheduler checks
+  `now >= deadline` with no calendar involvement — business logic is isolated to activation.
+- If both `timeout_business_days` and `timeout` are present, the earlier deadline applies;
+  Planner emits a warning.
+
+**GAP-2: Quorum Approval Tracker**
+- `ApprovalRecord` struct per active approve step instance (persisted to run store).
+- Three modes: `all` (len(approvals)==len(pool)), `any` (>=1), `quorum` (>=required).
+- Each pool member may submit exactly one approval; duplicates -> `ErrDuplicateApproval`.
+- Rejections recorded in audit trail; do not block unless quorum is mathematically impossible.
+- Deadlock detection: after every decision, checks remaining possible approvals >= required.
+  If impossible -> `QuorumImpossible` failure immediately.
+- Full electronic-signature audit trail (`approve/decision` trace events): satisfies SOC 2
+  Type II and FDA 21 CFR Part 11.
+- Input Provider method: `input/submitApproval` with `run_id`, `step_id`, `decision`,
+  `notes`. Runtime validates identity against pool before recording.
+
+**Composition:**
+- Both mechanisms compose freely: activation computes deadline (GAP-1) and initialises
+  ApprovalRecord (GAP-2) independently. Whichever fires first wins.
+
+**Files changed:**
+- `design/gert-v2/sections/02-architecture.tex` — ~180 lines added (classification table
+  row + approve executor contract subsection with two sub-sub-sections + composition note)
+- `.squad/decisions/inbox/ken-gap1-gap2-runtime.md` — decision record written
+
+**Status:** COMPLETE. Awaiting Leslie to compile and commit.
+
+### 2026-04-19 — P0 field types executor contract added to §02 and §14
+
+**What was done:**
+
+Added runtime execution semantics for the new P0 field types (number, integer, date,
+datetime, boolean, select, multiline, choice/multiple) being added to the schema by John.
+
+**Changes to `design/gert-v2/sections/02-architecture.tex`:**
+
+1. **Collector dispatch bullet** — extended to reference field-type validation and typed
+   storage. Now documents that each type produces a correctly-typed JSON variable
+   (float64, int64, bool, array, string) rather than a raw string.
+
+2. **New `\subsection{Collector Field Validation Contract}` (~130 lines)** — inserted
+   between the Approve Step Executor Contract and Cancellation:
+   - 5-step validation algorithm: required check → type coercion → constraint check →
+     re-prompt (up to 3 attempts) → fail with `gert.error`
+   - Per-type validation and storage rules table (10 types)
+   - `multiline: true` UI-hint-only note
+   - Variable storage section with downstream template expression examples
+   - `gert.error` schema for validation failures
+
+**Changes to `design/gert-v2/sections/14-input-provider-framework.tex`:**
+
+1. **Choice contract** — added two new items: `multiple: true` (response becomes array)
+   and `options_from` (triggers `inputProvider/getOptions`).
+
+2. **Collector contract — type list** — extended from 5 types to full 10-type enumeration
+   with cross-reference to §02 validation table.
+
+3. **Collector contract — type-specific constraints** — replaced single-line bullet with
+   expanded itemize block covering all type-specific constraint fields (validation.min/max,
+   validation.step, options/options_from, multiple, min/max_selections, multiline, accept,
+   maxSizeBytes).
+
+4. **Collector prompt provider paragraph** — extended to describe prompt rendering for
+   each new type (boolean → [y/N], select → numbered/checkbox list, number/date/datetime
+   → free-text with format validation).
+
+5. **New `\subsection{Dynamic Options Protocol}` (~80 lines)** — inserted after the
+   Collector Step Contract, before Provider Capability Matrix:
+   - 4-step fetch sequence (lookup → start → request → merge)
+   - Full `inputProvider/getOptions` request/response JSON-RPC schema
+   - Request fields documented (providerId, field, variables, context)
+   - `cacheTtlSeconds` response field for in-run caching
+   - Error cases: unknown_provider, fetch_failed, capability_not_supported
+
+6. **Capability matrix** — added `getOptions` column; all built-in providers: No.
+
+7. **Capability declaration example** — added `"getOptions": true` field.
+
+**PDF build result:** 297 pages (up from 256 before this session).
+
+**Decision record:** `.squad/decisions/inbox/ken-field-types-executor.md`
+
+**Status:** COMPLETE.
+
+**What was done:**
+
+Renamed all `invoke` step type references to `include` in §02 and added a full include
+executor contract subsection.
+
+**Specific changes made to `design/gert-v2/sections/02-architecture.tex`:**
+
+1. **Planner verbatim block (line ~74, ~104, ~114, ~118):** Updated inline comments to use
+   `include` in place of `invoke` throughout the Planner and ExecutionPlan/ResolvedStep type
+   definitions.
+
+2. **Dispatch bullet list (~line 406):** Replaced the `invoke:` bullet (which said "inlined
+   at plan time; no special dispatch required") with a full `include:` executor algorithm:
+   resolve → cycle check → eval `when` → apply `with` overrides → inline expand → continue.
+   Expanded steps carry an `Origin` breadcrumb.
+
+3. **Step Type Classification table (~line 444):** Updated the Control Flow row: renamed
+   `invoke` to `include` in the step types column; rewrote description to reflect
+   inline-expansion semantics (referenced runbook's steps replace the include step in the
+   queue; include step itself not emitted to trace).
+
+4. **Added `\subsection{Include Step Executor Contract}` (~line 461 area):** Replaced the
+   one-line "invoke is somewhat special" note with a full normative subsection:
+   - Numbered executor algorithm (6 steps)
+   - Key architectural properties (no new run context, no separate audit entry, shared scope,
+     include step invisible in trace)
+   - Cycle detection subsubsection: load-time DFS, error format, full transitive closure
+   - `\paragraph{Future: Sub-Procedure Call}` deferred to post-v2.0
+
+5. **Run Persistence section (~line 640):** Updated "Call stack" comment from `invoke`-inlined
+   to `include`-inlined.
+
+**Decision record:** `.squad/decisions/inbox/ken-include-executor-contract.md`
+
+**Status:** COMPLETE. Awaiting Leslie to compile and commit.

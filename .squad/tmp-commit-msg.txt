@@ -1,6 +1,13 @@
-scribe: session log, orchestration entries, decision inbox merge (2026-03-18)
+Phase 2 implementation: Planner + FakeRunbookLoader + FakeToolRegistry
 
-- Added orchestration-log entries for Kurapika, Gon, Killua, Hisoka
-- Added session log for 2026-03-18 workflow full push (parallel sprint)
-- Merged 16 inbox decision entries into decisions.md (deduplicated)
-- Removed merged inbox files
+- Phase 2 Planner: Core planner implementation in v2/internal/planner/
+  * planCtx struct for mutable state accumulation
+  * flattenNodes, resolveStep, resolveInclude, resolveTool, specForStep
+  * 13/13 tests passing, clean build and vet
+  * 7 design decisions documented
+
+- Phase 2 Test Utilities: FakeRunbookLoader and FakeToolRegistry in v2/pkg/testutil/
+  * FakeToolRegistry.Lookup uses (ctx, name, action string) interface
+  * Supports planner test infrastructure
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>

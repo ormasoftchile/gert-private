@@ -164,3 +164,31 @@ Parser Phase 1 fixes complete. Ready for Phase 2 planning logic.
 - All 5 correctness gaps (S1–S5) resolved
 
 **Next:** Implement concrete Planner logic using Ken's interface design. Barbara ready with testutil real types. Build clean, ready for integration.
+
+## Learnings — Phase 2 Planner (2026-04-19)
+
+### Phase 2 Planner Implemented at `v2/internal/planner/`
+
+Implemented the full Phase 2 planner. All 13 tests pass; `go build ./... && go vet ./...` clean.
+
+**Modified files:**
+- `v2/internal/planner/planner.go` — replaced stub with full implementation
+- `v2/internal/planner/planner_test.go` — removed all t.Skip, fixed max-depth test path building, added 7 canonical test names + TestPlanner_TopoSort
+
+**Key design decisions:**
+- `planCtx` struct accumulates mutable state (tools map, seen map) across recursive calls — avoids threading extra params through every function
+- Include steps inline child runbook steps directly into the flat step list (`ResolvedStep` has no sub-plan field)
+- Declaration order IS the topological order — no BFS needed since schema has no `next` field
+- Cycle detection uses permanent path marking (as specified), known diamond-dep limitation noted in decisions
+- `specForStep` returns `rawSpec{kind}` fallback for nil spec pointers — prevents panics on malformed input
+- Errors use existing `pkg/planner.PlanError{Code: plannerPkg.ErrXxx}` — test assertions use pkg sentinels, no duplicate internal errors file needed
+
+**Test coverage (13 tests):**
+- TestPlanner_MinimalRunbook, TestPlanner_ImportResolution, TestPlanner_ImportCycleDetected
+- TestPlanner_MaxDepthExceeded, TestPlanner_ToolDiscovery, TestPlanner_UnknownTool, TestPlanner_TopoSort
+- TestPlan_BasicRunbook, TestPlan_IncludeResolution, TestPlan_ToolResolution
+- TestPlan_ImportCycleDetection, TestPlan_ToolNotFound, TestPlan_MaxDepthExceeded
+
+**Cross-agent notes:**
+- For Barbara: inline fakes in planner_test.go; replace with pkg/testutil when ready
+- For Ken: no engine type changes needed; all schema specs already implement StepKind()

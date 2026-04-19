@@ -453,3 +453,27 @@ testutil integration complete. Test infrastructure now uses real engine/eventbus
 - No existing tests outside pkg/testutil depend on stub types
 
 **Next:** Phase 2 integration tests using real types. Brian planner logic ready to test. Ken's Planner design ready for executor implementation.
+
+---
+
+## 2026-04-19: Planner Fakes
+
+**Status:** Complete
+**Requested by:** Cristian
+
+Wrote two new testutil fakes for planner testing.
+
+### Key interface finding
+
+`planner.ToolRegistry.Lookup` signature is `(ctx context.Context, name string, action string)` -- takes two separate strings, not a `schema.ToolRef`. Adjusted `LookupCalls` to `[]ToolLookupCall` (local struct with Name/Action fields).
+
+### Deliverables
+
+- `v2/pkg/testutil/fake_runbook_loader.go` -- FakeRunbookLoader implements planner.RunbookLoader
+- `v2/pkg/testutil/fake_tool_registry.go` -- FakeToolRegistry implements planner.ToolRegistry
+
+Both are thread-safe (sync.Mutex), have compile-time interface guards.
+
+### Build result
+`go build ./...` clean
+`go vet ./...` clean

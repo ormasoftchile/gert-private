@@ -4044,3 +4044,107 @@ Barbara (Integrations Specialist) fixed all 7 Phase 0 defects. Build and vet: `g
 **Verdict:** APPROVED ✅
 
 All 7 defects verified as resolved. Phase 0 complete and coherent. Ready for Phase 1 implementation.
+# Implementation Decisions — Phase 2 Planner
+
+**Author:** Brian  
+**Date:** 2026-04-19  
+**Status:** Implemented — all 13 tests pass
+
+---
+
+## Decision 1: Error types — reuse `pkg/planner.PlanError`, no new `internal/planner/errors.go`
+
+The task charter asked for internal error types (`ErrIncludeCycle{Path}`, etc.).  
+After reviewing the test skeleton, all test assertions use `errors.Is(err, plannerPkg.Err*)` against the sentinel errors already defined in `pkg/planner/planner.go`. Creating parallel internal error types would either:
+
+- Duplicate the sentinel definitions, or  
+- Require the tests to be rewritten
+
+**Decision:** Use `pkg/planner.PlanError{Code: plannerPkg.ErrXxx, ...}` throughout. `PlanError.Unwrap()` returns the code, so `errors.Is` chains work correctly. No `internal/planner/errors.go` created.
+
+---
+
+## Decision 2: `planCtx` struct for mutable accumulation
+
+Rather than threading `tools map[string]*schema.ToolDef` and `seen map[string]bool` as parameters through every recursive call, I introduced a `planCtx` struct that holds both.
+
+```
+planCtx{
+    p:     *impl,         // configuration (immutable)
+    tools: map[string]*schema.ToolDef,  // accumulated tool defs
+    seen:  map[string]bool,             // visited runbook paths
+}
+```
+
+Methods on `planCtx` (`flattenNodes`, `resolveStep`, `resolveInclude`, `resolveTool`) are all non-recursive wrt the struct — they share state naturally.
+
+---
+
+## Decision 3: Flatten strategy (include inlining, not sub-plan nesting)
+
+The task spec mentioned "store the nested `*ExecutionPlan` in the `ResolvedStep`", but `engine.ResolvedStep` has no such field. The actual struct has `Spec engine.StepSpec`.
+
+**Decision:** Include steps are fully inlined — the child runbook's steps are appended directly to the parent's step list, in declaration order. No wrapper step is emitted for the include itself.
+
+This is the simplest correct approach and matches the test expectation (`len(plan.Steps) == 1` when parent has one include step that wraps a one-step child runbook).
+
+---
+
+## Decision 4: Topo sort strategy — declaration order (BFS not needed)
+
+The task described a BFS topo sort following `next` fields. The actual schema step type has no `next` field — flow order is implicit via the `[]FlowNode` array.
+
+**Decision:** Declaration order is the topological order for linear flows. The flattener walks `[]FlowNode` in slice order. For parallel branches, each branch's steps are appended in branch declaration order after the parallel header. For iterate, body steps follow the iterate header. This is deterministic and matches the test expectation.
+
+---
+
+## Decision 5: Cycle detection — permanent path marking
+
+Per the task spec: track `visited map[string]bool` permanently (not "currently in stack"). This means diamond dependencies (A→B, A→C→B) would be incorrectly rejected as cycles. This is a known limitation of the permanent-marking approach; a future improvement can switch to "in-stack" semantics (add on enter, remove on exit).
+
+---
+
+## Decision 6: `specForStep` fallback — `rawSpec{kind}`
+
+For steps where the typed spec pointer is nil (malformed input), `specForStep` returns a `rawSpec{kind: string(step.Type)}` that satisfies `engine.StepSpec`. This prevents panics on nil pointer dereferences while still emitting the correct `Kind` in the `ResolvedStep`.
+
+---
+
+## Decision 7: `BranchSpec` and `CompensateSpec` inline their sub-flows
+
+Both step types carry nested `[]FlowNode` in their spec structs. The flattener handles them in `resolveStep` as special cases: it emits the container step first, then recursively flattens the nested steps at `depth+1`. The runtime can identify branch/compensate boundaries by the `Kind` field of the container step.
+
+---
+
+## Cross-Agent Notes
+
+- **For Barbara**: Test fakes (`fakeLoader`, `fakeRegistry`) are in `internal/planner/planner_test.go`. Replace with `pkg/testutil` types when available.
+- **For Ken**: `engine.ResolvedStep.Spec` is `engine.StepSpec` (not a concrete type). All schema spec types already implement `StepKind() string`. No changes needed to engine types.
+- **For Cristian**: Phase 2 planner is complete. `go build ./... && go vet ./... && go test ./internal/planner/... -v -count=1` — all 13 tests pass, no vet warnings.
+# Decision: FakeToolRegistry uses name+action strings, not schema.ToolRef
+
+**Date:** 2026-04-19  
+**Author:** Barbara  
+**Context:** Writing FakeToolRegistry for planner tests
+
+## Decision
+
+`FakeToolRegistry.LookupCalls` uses a local `ToolLookupCall{Name, Action string}` struct
+rather than `[]schema.ToolRef` as specified in the task description.
+
+## Reason
+
+`planner.ToolRegistry.Lookup` has signature:
+
+```go
+Lookup(ctx context.Context, name string, action string) (*schema.ToolDef, error)
+```
+
+`schema.ToolRef` has no `Action` field — it has `Name`, `Path`, `Alias`, `Source`, `Actions []string`.
+Recording raw `schema.ToolRef` values in LookupCalls would be misleading and would require
+constructing a ToolRef just to record what the caller passed as plain strings.
+
+## Impact
+
+Tests asserting on `LookupCalls` use `ToolLookupCall{Name: "...", Action: "..."}` instead of `schema.ToolRef`.
+This is clearer and matches the actual call-site semantics.

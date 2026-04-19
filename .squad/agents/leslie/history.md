@@ -34,6 +34,37 @@ This is a LaTeX document using the MastersThesis class. Sections are in `design/
 
 ## Learnings
 
+### 2026-04-19 — Mass minted Conversion + 3 New Diagrams (321 pages, CLEAN)
+
+**Task:** Convert all YAML/Go/JSON verbatim and lstlisting blocks to minted across all 16 sections; add 3 new TikZ diagrams.
+
+**Build result:** CLEAN — zero hard errors (`!` lines = 0). 7 non-fatal warnings (all cosmetic). Pre-existing 73 citation warnings unchanged.
+
+**Page count:** 321 pages (down from 324 due to minted formatting being slightly more compact than verbatim for some blocks; the bibliography section renders fully with biber pass).
+
+**Commit:** d35a486 — `docs: mass-convert code blocks to minted + add 3 more diagrams`
+
+**Conversion summary:**
+- 260 code blocks converted across 13 files
+  - yaml: 96, json: 85, go: 24, bash: 13, text: 42
+- 42 blocks intentionally left as verbatim: ASCII trees, HTTP headers, CLI terminal output (✓✗), error message strings, file path trees, JSON-RPC arrow diagrams
+- `\usepackage{listings}` removed from main.tex (conflicted with minted v3 tocbasic `lol` extension registration)
+- Added `scripts/convert_to_minted.py` — reusable Python script for future conversions
+- Added `scripts/pypath/python3` — wrapper routing `latexminted` to Python 3.13 (Python 3.14 breaks `latexminted` 0.5.0 argparse API: removed `color` kwarg from `add_parser`)
+
+**TikZ style fix:**
+- Changed `text centered` → `align=center` in both `stepbox` and `catbox` styles in main.tex
+- `text centered` does NOT support `\\` line breaks in LR mode; `align=center` does
+- This fix is backwards-compatible; all existing diagrams use single-line node text
+
+**New diagrams:**
+1. `fig:governance-enforcement-points` — §07 Security. 4-stage horizontal pipeline (Runbook Load → Run Start → Step Dispatch → Execute Step). Governance check `catbox` nodes above each stage (dashed arrows). BLOCKED `stepbox` nodes below with `align=center` midway labels. Placed between threat model table and Extension Trust Model section.
+2. `fig:event-flow-timeline` — §06 Runtime Events. Vertical time axis with 8 event dots; mandatory events (solid) vs conditional governance events (lightly filled); step group `gertfit` brackets on the left; dashed arc for step-pause-approval loop. Placed before the Event Catalog section.
+3. `fig:provider-resolution-flow` — §14 Input Provider. 6-stage horizontal pipeline with two fallback branches: no-match → interactive prompt; unresolved → fallback field. Already-running bypass arc over the `Start Provider` stage. Placed before the Resolution Flow enumerate list.
+
+**Build infrastructure note:**
+Run `PATH="$PROJECT_ROOT/scripts/pypath:$PATH" python3 scripts/latex.py build` to ensure latexminted uses Python 3.13. The wrapper at `scripts/pypath/python3` is a shell script: `exec /opt/homebrew/bin/python3.13 "$@"`.
+
 ### 2026-04-19 — Architecture Overview + Execution Lifecycle Diagrams (324 pages, CLEAN)
 
 **Task:** Add two TikZ diagrams to §02: an architecture dependency graph and an execution lifecycle state machine.

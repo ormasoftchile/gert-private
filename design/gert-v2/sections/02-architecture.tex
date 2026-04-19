@@ -59,6 +59,36 @@ the dependency graph.
 \end{figure}
 
 % ─────────────────────────────────────────────────────────────────────────────
+% Figure: Dependency direction convention legend
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.6cm and 1.8cm, scale=0.9, transform shape]
+  %% ── Example 1: A depends on B ───────────────────────────────────────────────
+  \node[stepbox] (dd-a1) {A};
+  \node[stepbox, right=of dd-a1] (dd-b1) {B};
+  \draw[gertarrow] (dd-a1) -- (dd-b1);
+  \node[below=0.25cm of dd-a1, font=\small\itshape, color=black!60] {caller};
+  \node[below=0.25cm of dd-b1, font=\small\itshape, color=black!60] {dependency};
+  \node[font=\small, right=0.4cm of dd-b1] (dd-label1)
+       {\textrightarrow\ \textit{``A depends on B''}};
+
+  %% ── Example 2: Transitive dependency ────────────────────────────────────────
+  \node[stepbox, below=1.4cm of dd-a1] (dd-a2) {A};
+  \node[stepbox, right=of dd-a2]       (dd-b2) {B};
+  \node[stepbox, right=of dd-b2]       (dd-c2) {C};
+  \draw[gertarrow] (dd-a2) -- (dd-b2);
+  \draw[gertarrow] (dd-b2) -- (dd-c2);
+  \draw[gertarrow, dashed, bend right=35] (dd-a2) to
+       node[below, font=\scriptsize\itshape, color=black!55] {transitive} (dd-c2);
+  \node[font=\small, right=0.4cm of dd-c2] (dd-label2)
+       {\textrightarrow\ \textit{``A transitively depends on C''}};
+\end{tikzpicture}
+\caption{Dependency direction convention: an arrow from A to B means \emph{A depends on B} (A imports/uses B). Arrows flow \emph{toward} the depended-upon component.}
+\label{fig:dependency-direction}
+\end{figure}
+
+% ─────────────────────────────────────────────────────────────────────────────
 \section{Primary Components}
 % ─────────────────────────────────────────────────────────────────────────────
 

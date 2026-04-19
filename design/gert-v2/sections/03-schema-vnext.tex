@@ -859,6 +859,43 @@ convert run to a string.''}.
       exit_code: clear_result
 \end{minted}
 
+% ─────────────────────────────────────────────────────────────────────────────
+% Figure: CLI step execution flow
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[node distance=0.5cm and 0.9cm, scale=0.85, transform shape]
+  \node[stepbox] (cli-parse)   {Parse Step\\Fields};
+  \node[stepbox, right=of cli-parse]   (cli-gov)     {Governance\\Check};
+  \node[stepbox, right=of cli-gov]     (cli-shell)   {Resolve Shell\\(\texttt{auto/bash/sh})};
+  \node[stepbox, right=of cli-shell]   (cli-build)   {Build Command\\or Script};
+  \node[stepbox, right=of cli-build]   (cli-exec)    {Exec Process\\(fork/exec)};
+  \node[stepbox, right=of cli-exec]    (cli-capture) {Capture\\stdout/stderr};
+  \node[stepbox, right=of cli-capture] (cli-exit)    {Evaluate\\Exit Code};
+
+  %% Terminal outcomes
+  \node[stepbox, below=1.2cm of cli-gov,  fill=black!10] (cli-blocked) {BLOCKED\\(denied)};
+  \node[stepbox, below=1.2cm of cli-exit, fill=black!3]  (cli-pass)    {PASSED};
+  \node[stepbox, below right=0.5cm and 0.1cm of cli-exit, fill=black!10] (cli-fail) {FAILED\\(non-zero exit)};
+
+  %% Main flow arrows
+  \draw[gertarrow] (cli-parse)   -- (cli-gov);
+  \draw[gertarrow] (cli-gov)     -- (cli-shell);
+  \draw[gertarrow] (cli-shell)   -- (cli-build);
+  \draw[gertarrow] (cli-build)   -- (cli-exec);
+  \draw[gertarrow] (cli-exec)    -- (cli-capture);
+  \draw[gertarrow] (cli-capture) -- (cli-exit);
+
+  %% Branch arrows
+  \draw[gertarrow] (cli-gov)  -- node[left, font=\scriptsize\itshape] {denied} (cli-blocked);
+  \draw[gertarrow] (cli-exit) -- node[left, font=\scriptsize\itshape] {exit=0} (cli-pass);
+  \draw[gertarrow] (cli-exit) -| node[right, font=\scriptsize\itshape, pos=0.25] {exit$\neq$0} (cli-fail);
+\end{tikzpicture}}
+\caption{\texttt{type: cli} step execution flow: from field parsing through governance check, shell resolution, command building, process execution, output capture, and exit-code evaluation.}
+\label{fig:cli-step-execution}
+\end{figure}
+
 \subsection{Step Type: choice}
 \label{subsec:step-choice}
 
@@ -1737,6 +1774,50 @@ Benefits of the questionnaire pattern:
         evidence is appropriate alongside an ephemeral field.
 \end{itemize}
 
+% ─────────────────────────────────────────────────────────────────────────────
+% Figure: Collector input triad — choice / decision / collector
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.0cm and 1.6cm, scale=0.85, transform shape]
+  %% ── choice ──────────────────────────────────────────────────────────────────
+  \node[catbox] (tri-choice-lbl) {\texttt{type: choice}};
+  \node[stepbox, below=0.5cm of tri-choice-lbl] (tri-choice-q) {Prompt: pick\\one option};
+  \node[stepbox, below=0.5cm of tri-choice-q]   (tri-choice-v) {Store selected\\value in var};
+  \draw[gertarrow] (tri-choice-q) -- (tri-choice-v);
+  \node[below=0.3cm of tri-choice-v, font=\scriptsize\itshape, color=black!55]
+       {value-capture only};
+
+  %% ── decision ────────────────────────────────────────────────────────────────
+  \node[catbox, right=2.6cm of tri-choice-lbl] (tri-dec-lbl) {\texttt{type: decision}};
+  \node[stepbox, below=0.5cm of tri-dec-lbl]   (tri-dec-q)   {Prompt: pick\\a path};
+  \node[stepbox, below left=0.5cm and 0.5cm  of tri-dec-q] (tri-dec-p1) {Branch A\\steps};
+  \node[stepbox, below right=0.5cm and 0.5cm of tri-dec-q] (tri-dec-p2) {Branch B\\steps};
+  \draw[gertarrow] (tri-dec-q) -- (tri-dec-p1);
+  \draw[gertarrow] (tri-dec-q) -- (tri-dec-p2);
+  \node[below=1.05cm of tri-dec-q, font=\scriptsize\itshape, color=black!55]
+       {control-flow fork};
+
+  %% ── collector ───────────────────────────────────────────────────────────────
+  \node[catbox, right=2.6cm of tri-dec-lbl] (tri-col-lbl) {\texttt{type: collector}};
+  \node[stepbox, below=0.5cm of tri-col-lbl] (tri-col-form) {Present all\\fields at once};
+  \node[stepbox, below=0.5cm of tri-col-form] (tri-col-val) {Validate \&\\store each field};
+  \draw[gertarrow] (tri-col-form) -- (tri-col-val);
+  \node[below=0.3cm of tri-col-val, font=\scriptsize\itshape, color=black!55]
+       {structured multi-field input};
+
+  %% ── vertical dividers ───────────────────────────────────────────────────────
+  \begin{scope}[on background layer]
+    \draw[dashed, black!25] ([xshift=1.3cm]tri-choice-lbl.north east) --
+                            ([xshift=1.3cm]tri-choice-v.south east);
+    \draw[dashed, black!25] ([xshift=1.3cm]tri-dec-lbl.north east) --
+                            ([xshift=1.3cm, yshift=-1.6cm]tri-dec-lbl.south east);
+  \end{scope}
+\end{tikzpicture}
+\caption{Human-input step triad: \texttt{choice} captures a single selection as a value; \texttt{decision} forks execution to the chosen branch; \texttt{collector} presents multiple typed fields atomically and stores all captured values.}
+\label{fig:collector-triad}
+\end{figure}
+
 \subsection{Step Type: approve}
 \label{subsec:step-approve}
 
@@ -1930,6 +2011,41 @@ capture:
       writes: [pod_count, first_pod]
 \end{minted}
 
+% ─────────────────────────────────────────────────────────────────────────────
+% Figure: Tool invocation flow
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[node distance=0.5cm and 0.9cm, scale=0.85, transform shape]
+  \node[stepbox] (ti-resolve)  {Resolve Tool\\from toolRefs};
+  \node[stepbox, right=of ti-resolve]  (ti-transport) {Select Transport\\(stdio/jsonrpc/mcp)};
+  \node[stepbox, right=of ti-transport] (ti-auth)     {Authenticate\\(if required)};
+  \node[stepbox, right=of ti-auth]     (ti-invoke)    {Invoke Action\\with args};
+  \node[stepbox, right=of ti-invoke]   (ti-stream)    {Stream /\\Await Result};
+  \node[stepbox, right=of ti-stream]   (ti-capture)   {Capture Output\\to variables};
+
+  %% Failure branch
+  \node[stepbox, below=1.2cm of ti-resolve, fill=black!10] (ti-notfound) {FAILED\\(tool not found)};
+  \node[stepbox, below=1.2cm of ti-invoke,  fill=black!10] (ti-invokerr) {FAILED\\(invocation error)};
+  \node[stepbox, below=1.2cm of ti-capture, fill=black!3]  (ti-pass)     {PASSED};
+
+  %% Main flow
+  \draw[gertarrow] (ti-resolve)   -- (ti-transport);
+  \draw[gertarrow] (ti-transport) -- (ti-auth);
+  \draw[gertarrow] (ti-auth)      -- (ti-invoke);
+  \draw[gertarrow] (ti-invoke)    -- (ti-stream);
+  \draw[gertarrow] (ti-stream)    -- (ti-capture);
+
+  %% Branches
+  \draw[gertarrow] (ti-resolve) -- node[left,  font=\scriptsize\itshape] {not found} (ti-notfound);
+  \draw[gertarrow] (ti-invoke)  -- node[left,  font=\scriptsize\itshape] {error}     (ti-invokerr);
+  \draw[gertarrow] (ti-capture) -- node[left,  font=\scriptsize\itshape] {ok}        (ti-pass);
+\end{tikzpicture}}
+\caption{\texttt{type: tool} invocation flow: tool resolution, transport selection, authentication, action invocation, result streaming, and output capture.  A missing tool or invocation error terminates the step as \textsc{failed}.}
+\label{fig:tool-invocation-flow}
+\end{figure}
+
 \subsection{Step Type: wait\_for\_event}
 \label{subsec:step-wait-for-event}
 
@@ -2101,6 +2217,40 @@ mapping), that is the responsibility of a future step type
 (\texttt{type: call} or \texttt{type: delegate}).  That capability is
 \textbf{not in v2.0 scope}.
 
+% ─────────────────────────────────────────────────────────────────────────────
+% Figure: Include inlining
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.6cm and 1.2cm, scale=0.85, transform shape]
+  %% ── Parent runbook ──────────────────────────────────────────────────────────
+  \node[stepbox] (inc-s1)      {Step 1\\(parent)};
+  \node[stepbox, below=of inc-s1] (inc-inc) {\texttt{type: include}};
+  \node[stepbox, below=of inc-inc] (inc-s3) {Step 3\\(parent)};
+
+  \draw[gertarrow] (inc-s1)  -- (inc-inc);
+  \draw[gertarrow] (inc-inc) -- (inc-s3);
+
+  %% ── Child runbook (inlined) ──────────────────────────────────────────────────
+  \node[stepbox, right=2.4cm of inc-inc] (inc-c1) {Child Step A};
+  \node[stepbox, below=0.5cm of inc-c1] (inc-c2) {Child Step B};
+  \draw[gertarrow] (inc-c1) -- (inc-c2);
+
+  %% ── Dashed box around inlined content ────────────────────────────────────────
+  \begin{scope}[on background layer]
+    \node[gertfit, fit=(inc-c1)(inc-c2)] (inc-box) {};
+  \end{scope}
+  \node[above=2pt of inc-box, font=\scriptsize\sffamily\itshape, color=black!55]
+       {inlined from child runbook (shared scope)};
+
+  %% ── Expansion arrows ─────────────────────────────────────────────────────────
+  \draw[gertarrow] (inc-inc) -- node[above, font=\scriptsize\itshape] {expand} (inc-c1);
+  \draw[gertarrow] (inc-c2)  -- node[below, font=\scriptsize\itshape] {continue} (inc-s3);
+\end{tikzpicture}
+\caption{\texttt{type: include} inlines the child runbook's steps into the parent's execution path. All included steps share the parent variable scope; no sub-run boundary is created.}
+\label{fig:include-inlining}
+\end{figure}
+
 \subsection{Step Type: branch}
 \label{subsec:step-branch}
 
@@ -2162,6 +2312,41 @@ arm:
                 category: escalated
                 code: unknown_env
 \end{minted}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% Figure: Branch logic
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.7cm and 1.6cm, scale=0.85, transform shape]
+  %% ── Entry ────────────────────────────────────────────────────────────────────
+  \node[stepbox] (br-entry) {Evaluate\\Conditions};
+
+  %% ── Decision diamond ─────────────────────────────────────────────────────────
+  \node[diamond, draw=black!70, fill=black!5, aspect=2.5,
+        below=0.8cm of br-entry, font=\small, align=center] (br-dia) {arm match?};
+  \draw[gertarrow] (br-entry) -- (br-dia);
+
+  %% ── True branch ──────────────────────────────────────────────────────────────
+  \node[stepbox, below left=1.0cm and 1.8cm of br-dia]  (br-arm1) {Arm 1\\steps};
+  \node[stepbox, below=0.5cm of br-arm1]                (br-arm2) {Arm 2\\steps};
+  \draw[gertarrow] (br-dia)  -| node[above left, font=\scriptsize\itshape, pos=0.3]
+       {first match} (br-arm1);
+
+  %% ── else / no-match ──────────────────────────────────────────────────────────
+  \node[stepbox, below right=1.0cm and 1.8cm of br-dia] (br-else) {\texttt{else: true}\\arm (optional)};
+  \draw[gertarrow] (br-dia) -| node[above right, font=\scriptsize\itshape, pos=0.3]
+       {no match} (br-else);
+
+  %% ── Merge ────────────────────────────────────────────────────────────────────
+  \node[stepbox, below=3.0cm of br-dia] (br-cont) {Continue\\execution};
+  \draw[gertarrow] (br-arm1) |- (br-cont);
+  \draw[gertarrow] (br-arm2) |- (br-cont);
+  \draw[gertarrow] (br-else) |- (br-cont);
+\end{tikzpicture}
+\caption{\texttt{type: branch} evaluates each arm's condition in order and executes the first matching arm. At most one arm runs. If no arm matches and no \texttt{else} arm is defined, execution continues with no steps run.}
+\label{fig:branch-logic}
+\end{figure}
 
 \subsection{Step Type: iterate}
 \label{subsec:step-iterate}
@@ -2237,6 +2422,38 @@ current element.
           args: ["15"]
 \end{minted}
 
+% ─────────────────────────────────────────────────────────────────────────────
+% Figure: Iterate loop
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.7cm and 1.4cm, scale=0.85, transform shape]
+  %% ── Nodes ────────────────────────────────────────────────────────────────────
+  \node[stepbox] (it-init)  {Initialize\\Iterator};
+  \node[stepbox, below=of it-init]  (it-cond)  {Test Condition\\(or items remain?)};
+  \node[stepbox, below=of it-cond]  (it-body)  {Execute Body\\Steps};
+  \node[stepbox, below=of it-body]  (it-incr)  {Increment /\\Advance Item};
+  \node[stepbox, right=2.2cm of it-cond, fill=black!3] (it-exit) {Exit Loop\\(continue run)};
+  \node[stepbox, below right=0.5cm and 2.2cm of it-cond, fill=black!10] (it-maxerr) {FAILED\\(max exceeded)};
+
+  %% ── Arrows ────────────────────────────────────────────────────────────────────
+  \draw[gertarrow] (it-init) -- (it-cond);
+  \draw[gertarrow] (it-cond) -- node[left, font=\scriptsize\itshape] {true / has item} (it-body);
+  \draw[gertarrow] (it-body) -- (it-incr);
+  \draw[gertarrow] (it-cond) -- node[above, font=\scriptsize\itshape] {false / exhausted} (it-exit);
+
+  %% Loop back arrow
+  \draw[gertarrow] (it-incr.east) -- ++(1.2,0) |-
+       node[right, font=\scriptsize\itshape, pos=0.25] {next pass} (it-cond.east);
+
+  %% Max exceeded
+  \draw[gertarrow] (it-cond.east) -- node[right, font=\scriptsize\itshape, pos=0.6]
+       {max reached} (it-maxerr);
+\end{tikzpicture}
+\caption{\texttt{type: iterate} loop: the condition (items remaining or \texttt{until} expression) is tested before each pass. The body executes, the iterator advances, and the loop repeats until the condition is false, items are exhausted, or \texttt{max} iterations are reached.}
+\label{fig:iterate-loop}
+\end{figure}
+
 \subsection{Step Type: parallel}
 \label{subsec:step-parallel}
 
@@ -2294,6 +2511,44 @@ same variable) are resolved by last-writer-wins and a warning is emitted.
       wait_for: all
       on_failure: fail
 \end{minted}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% Figure: Parallel fan-out / fan-in
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.6cm and 1.0cm, scale=0.85, transform shape]
+  %% ── Fork ─────────────────────────────────────────────────────────────────────
+  \node[stepbox] (par-fork) {Fork\\(dispatch all)};
+
+  %% ── Branches ─────────────────────────────────────────────────────────────────
+  \node[stepbox, below left=1.2cm and 2.2cm of par-fork]  (par-b1) {Branch 1\\steps\ldots};
+  \node[stepbox, below=1.2cm of par-fork]                 (par-b2) {Branch 2\\steps\ldots};
+  \node[stepbox, below right=1.2cm and 2.2cm of par-fork] (par-b3) {Branch N\\steps\ldots};
+
+  \draw[gertarrow] (par-fork) -- (par-b1);
+  \draw[gertarrow] (par-fork) -- (par-b2);
+  \draw[gertarrow] (par-fork) -- (par-b3);
+
+  %% ── Join ─────────────────────────────────────────────────────────────────────
+  \node[stepbox, below=2.8cm of par-fork] (par-join) {Join\\(\texttt{all | any | majority})};
+
+  \draw[gertarrow] (par-b1) -- (par-join);
+  \draw[gertarrow] (par-b2) -- (par-join);
+  \draw[gertarrow] (par-b3) -- (par-join);
+
+  %% ── Merge variables ──────────────────────────────────────────────────────────
+  \node[stepbox, below=0.7cm of par-join, fill=black!3] (par-merge) {Merge captured\\variables};
+  \draw[gertarrow] (par-join) -- (par-merge);
+
+  %% ── Failure bypass ───────────────────────────────────────────────────────────
+  \node[stepbox, right=2.4cm of par-join, fill=black!10] (par-fail) {FAILED\\(\texttt{on\_failure: fail})};
+  \draw[gertarrow, dashed] (par-join) -- node[above, font=\scriptsize\itshape]
+       {branch failed} (par-fail);
+\end{tikzpicture}
+\caption{\texttt{type: parallel} fan-out/fan-in: all branches are dispatched concurrently. The join node waits for the configured quorum (\texttt{all}, \texttt{any}, or \texttt{majority}), then merges captured variables. A branch failure triggers the \texttt{on\_failure} policy.}
+\label{fig:parallel-fanout}
+\end{figure}
 
 \subsection{Step Type: assert}
 \label{subsec:step-assert}
@@ -2376,6 +2631,39 @@ Compensation steps share the same variable context as the point at which the
                 deployment: "{{ .deployment }}"
                 replicas: "{{ .original_replicas }}"
 \end{minted}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% Figure: Compensation (saga rollback) flow
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.6cm and 1.3cm, scale=0.85, transform shape]
+  %% ── Forward execution ────────────────────────────────────────────────────────
+  \node[stepbox] (cmp-s1)       {Step A\\(\texttt{compensate} registered)};
+  \node[stepbox, right=of cmp-s1]  (cmp-s2) {Step B\\(\texttt{compensate} registered)};
+  \node[stepbox, right=of cmp-s2]  (cmp-s3) {Step C\\(failure point)};
+
+  \draw[gertarrow] (cmp-s1) -- (cmp-s2);
+  \draw[gertarrow] (cmp-s2) -- (cmp-s3);
+
+  %% ── Failure trigger ──────────────────────────────────────────────────────────
+  \node[stepbox, below=1.3cm of cmp-s3, fill=black!10] (cmp-fail) {FAILED /\\CANCELLED};
+  \draw[gertarrow] (cmp-s3) -- node[right, font=\scriptsize\itshape] {failure} (cmp-fail);
+
+  %% ── Compensation reverse execution ───────────────────────────────────────────
+  \node[stepbox, below=1.3cm of cmp-s2] (cmp-undo-b) {Compensate B\\(reverse order)};
+  \node[stepbox, below=1.3cm of cmp-s1] (cmp-undo-a) {Compensate A\\(reverse order)};
+
+  \draw[gertarrow] (cmp-fail)   -- node[above, font=\scriptsize\itshape] {trigger} (cmp-undo-b);
+  \draw[gertarrow] (cmp-undo-b) -- node[above, font=\scriptsize\itshape] {then}    (cmp-undo-a);
+
+  %% ── Annotation ────────────────────────────────────────────────────────────────
+  \node[below=0.4cm of cmp-undo-a, font=\small\itshape, color=black!55]
+       {saga pattern: undo in reverse registration order};
+\end{tikzpicture}
+\caption{\texttt{type: compensate} saga flow: each compensation step is registered during forward execution. On failure or cancellation, registered compensations fire in reverse order, implementing the saga pattern for long-running operational transactions.}
+\label{fig:compensation-flow}
+\end{figure}
 
 \subsection{Step Type: end}
 \label{subsec:step-end}

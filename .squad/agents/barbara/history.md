@@ -348,3 +348,40 @@ Builtin Tool Stubs (Phase 6 deliverables):
 **Decision inbox written:** `.squad/decisions/inbox/barbara-testutil-scaffold.md`
 
 **All fake dependencies (FakeStepExecutor, FakeEventDispatcher, TimeController) are in place for TDD.** Ken can write platform tests against these fakes immediately. Brian can wire FakeStepExecutor into engine unit tests once he defines the real Step/StepResult types.
+
+---
+
+## Phase 0 Revision — 2026-04-19
+
+**Task:** Fix all 7 defects from Ken's Phase 0 rejection. Brian locked out per reviewer rejection lockout protocol.
+
+**D1 (CRITICAL):** `schemas/runbook.schema.json` — corrected `apiVersion` const from `"gert.run/v2"` to `"runbook/v2"`.
+
+**D2 (HIGH):** `pkg/extension/host.go` — added `context.Context` as first parameter to `Load` and `Shutdown`.
+
+**D3 (HIGH):** `pkg/extension/host.go` — `ContributedTools()` now returns `[]*schema.ToolDef`, `ContributedProviders()` returns `[]*schema.ProviderDef`. Deleted `ContributedTool` and `ContributedProvider` thin wrapper structs.
+
+**D4 (HIGH):** `pkg/extension/host.go` — `ContributedPolicyRules()` now returns `[]governance.PolicyRule`. Deleted `ContributedPolicyRule` thin wrapper struct.
+
+**D5 (HIGH):** `pkg/engine/planner.go` — `Plan` second parameter changed from `any` to `*parser.ParsedRunbook`.
+
+**D6 (HIGH):** Created `pkg/parser/parser.go` and `pkg/parser/doc.go`. Defines `Parser` interface (`Parse` + `ParseBytes`) and `ParsedRunbook` / `ParseWarning` types.
+
+**D7 (MEDIUM):** `pkg/engine/run.go` — `ExecutionPlan.Tools` typed as `map[string]*schema.ToolDef`, `.Providers` as `map[string]*schema.ProviderDef`, `.Governance` as `governance.GovernancePolicy`.
+
+**Build:** `go build ./...` exit 0. `go vet ./...` exit 0. Both clean.
+
+### Key type names discovered in pkg/schema and pkg/governance
+
+**pkg/schema:**
+- `ToolDef` — full tool definition (Transport, Actions map, ArgDef, etc.)
+- `ProviderDef` — full provider definition (Transport, Fields map, etc.)
+- `Runbook` — top-level runbook struct
+- `Step`, `FlowNode`, `StepType` — step representation
+
+**pkg/governance:**
+- `GovernancePolicy` — interface (CheckCommand, FilterEnvVars, RedactionPatterns)
+- `PolicyRule` — struct (ID, Description, Allow AllowList, Deny DenyList, DenyEnvVars []string, Redact []RedactionPattern)
+- `AllowList`, `DenyList`, `RedactionPattern` — supporting types
+
+**Decision inbox written:** `.squad/decisions/inbox/barbara-phase0-revision.md`

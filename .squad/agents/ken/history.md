@@ -721,3 +721,51 @@ Created `v2/pkg/platform/` — the OS abstraction layer for all platform-depende
 - `go test ./v2/pkg/platform/...` — 4/4 PASS
 - All platform-dependent behavior is now injectable — enables hermetic unit tests across all v2 consumers
 - Locked decisions (Windows Tier 2, OS-specific signal allow-list) are encoded directly in real.go
+
+### 2026-04-19 — Phase 0 Architectural Review
+
+**Task:** Review Brian's Phase 0 foundation at `/Volumes/Projects/gert/v2/` and issue APPROVED or REJECTED verdict before Phase 1 begins.
+
+**Verdict: REJECTED**
+
+**What passes:**
+- `go build ./...` is clean
+- No circular imports; `pkg/` never imports `cmd/`
+- All 14 step types present in `pkg/schema/`
+- TraceEvent catalog: all 22 event kinds including locked `event/received` and `step/resumed`
+- EventDispatcher.Wait signature correct; consume semantics correct
+- Engine/RunHandle interface: all methods present with proper context propagation and io.EOF contract
+- TraceEvent envelope fields match spec §06
+
+**7 defects blocking Phase 1:**
+
+1. **D1 (CRITICAL)** — `schemas/runbook.schema.json` `apiVersion` const is `"gert.run/v2"` — must be `"runbook/v2"` per spec §03. Every valid runbook will fail schema validation.
+2. **D2** — `pkg/extension/host.go`: `Load` and `Shutdown` missing `context.Context`. Spec §02 requires `ctx` on both.
+3. **D3** — `pkg/extension/host.go`: `ContributedTools()` and `ContributedProviders()` return thin wrappers instead of `[]*schema.ToolDef` and `[]*schema.ProviderDef`.
+4. **D4** — `pkg/extension/host.go`: `ContributedPolicyRules()` returns `[]ContributedPolicyRule` (ID+description only) instead of `[]governance.PolicyRule` (full rule content).
+5. **D5** — `pkg/engine/planner.go`: `Planner.Plan` takes `rb any` instead of `*ParsedRunbook`.
+6. **D6** — No `pkg/parser/` package. `Parser` interface and `ParsedRunbook` type missing entirely.
+7. **D7** — `pkg/engine/run.go`: `ExecutionPlan.Tools/Providers/Governance` typed as `any` instead of `*schema.ToolDef`, `*schema.ProviderDef`, `*governance.GovernancePolicy`.
+
+**Verdict written to:** `.squad/decisions/inbox/ken-phase0-review.md`
+
+### 2026-04-19 — Phase 0 Re-Review
+
+**Requested by:** Cristian
+**Result:** APPROVED
+
+Barbara addressed all 7 defects from the initial Phase 0 rejection. Verified each fix against the live source:
+
+- **D1** RESOLVED — `runbook.schema.json` `apiVersion` const is `"runbook/v2"`, no `"gert.run/v2"` remaining.
+- **D2** RESOLVED — `host.go` `Load` and `Shutdown` both accept `context.Context`.
+- **D3** RESOLVED — `host.go` `ContributedTools`/`ContributedProviders` return `[]*schema.ToolDef` / `[]*schema.ProviderDef`.
+- **D4** RESOLVED — `host.go` `ContributedPolicyRules` returns `[]governance.PolicyRule`.
+- **D5** RESOLVED — `planner.go` `Plan(ctx context.Context, rb *parser.ParsedRunbook, opts PlanOptions)` — `rb` is no longer `any`.
+- **D6** RESOLVED — `pkg/parser/parser.go` created with `Parser` interface and `ParsedRunbook` type and correct signatures.
+- **D7** RESOLVED — `run.go` all direct `ExecutionPlan` fields are concrete types (`[]ResolvedStep`, `map[string]*schema.ToolDef`, `map[string]*schema.ProviderDef`, `governance.GovernancePolicy`).
+
+`go build ./...` and `go vet ./...` both exit 0.
+
+**Forward observation (non-blocking):** `ResolvedStep.Spec any` is acceptable for Phase 0 (polymorphic step kinds) but should become a typed interface or tagged union in Phase 1.
+
+**Verdict written to:** `.squad/decisions/inbox/ken-phase0-rereview.md`

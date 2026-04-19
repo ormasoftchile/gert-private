@@ -450,6 +450,11 @@ webhook, message queue, OS signal, or named in-process channel. Persists full ru
 storage; resumes when the Event Dispatcher delivers a matching, validated event. Valid only in
 \texttt{gert serve} mode — rejected at runtime in \texttt{gert run} (local CLI) mode. \\
 \hline
+\textbf{Approval Gate} & approve & Pause execution pending sign-off from one or more authorised
+identities. Supports \texttt{all}/\texttt{any}/\texttt{quorum} modes with an explicit approver
+pool. Optionally enforces a business-day timeout (GAP-1) and M-of-N quorum tracking (GAP-2). See
+§\ref{sec:approve_executor_contract}. \\
+\hline
 \end{tabular}
 \end{center}
 
@@ -676,6 +681,247 @@ cryptographically random one-time HMAC signing secret. The Event Dispatcher:
 
 The token is intentionally injected as a run variable (not hard-coded in the runbook YAML)
 so it is unique per run and never committed to source control.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Approve Step Executor Contract}
+\label{sec:approve_executor_contract}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The \texttt{approve} step is a first-class step type that pauses the run until one or more
+authorised identities submit a sign-off decision via the Input Provider interface. Two new
+capabilities — \textbf{business-day timeouts} (GAP-1) and \textbf{M-of-N quorum tracking}
+(GAP-2) — extend the base approval gate without changing its fundamental PAUSED-state
+semantics.
+
+% ─────────────────────────────────────────────────────────────────
+\subsubsection*{GAP-1: Business Calendar Engine}
+\label{sec:business_calendar}
+% ─────────────────────────────────────────────────────────────────
+
+\paragraph{Motivation.}
+Enterprise approval runbooks express deadlines in \emph{business days} (``respond within
+3 business days''), not wall-clock durations. The existing \texttt{timeout} field is
+wall-clock only and cannot satisfy this requirement.
+
+\paragraph{Component responsibilities.}
+The \textbf{Business Calendar Engine} is a stateless utility component within the Runtime
+Core (no external process, no network calls for built-in calendars). Its responsibilities
+are:
+
+\begin{itemize}
+  \item Determine whether a given instant is a business moment (Monday–Friday,
+        non-holiday in the specified calendar and timezone).
+  \item Calculate the wall-clock deadline that is exactly $N$ business days from a
+        given start instant.
+  \item Enumerate elapsed business days between two instants (for reporting and audit).
+  \item Load and cache named business calendars; built-in calendars are compiled into
+        the gert binary. Custom calendar definitions are deferred to v2.1.
+\end{itemize}
+
+\paragraph{Go interface.}
+
+\begin{verbatim}
+type BusinessCalendar interface {
+    // IsBusinessDay reports whether t falls on a business day (Mon–Fri, non-holiday)
+    // in the given timezone.
+    IsBusinessDay(t time.Time, tz *time.Location) bool
+
+    // AddBusinessDays returns the instant that is exactly n business days after t
+    // in the given timezone.  n must be >= 0.
+    AddBusinessDays(t time.Time, days int, tz *time.Location) time.Time
+
+    // ElapsedBusinessDays counts completed business days between start and end
+    // in the given timezone.  Returns 0 if end <= start.
+    ElapsedBusinessDays(start, end time.Time, tz *time.Location) int
+}
+\end{verbatim}
+
+\paragraph{Built-in calendars for v2.0.}
+
+\begin{center}
+\begin{tabular}{|l|p{9cm}|}
+\hline
+\textbf{Calendar ID} & \textbf{Definition} \\
+\hline
+\texttt{default}    & Monday–Friday, no holidays. Appropriate for organisations that
+                      define their own holiday schedule externally. \\
+\hline
+\texttt{us-federal} & Monday–Friday, US federal public holidays (New Year's Day,
+                      Martin Luther King Jr.\ Day, Presidents' Day, Memorial Day,
+                      Juneteenth, Independence Day, Labor Day, Columbus Day,
+                      Veterans Day, Thanksgiving, Christmas). \\
+\hline
+\texttt{uk-banking} & Monday–Friday, UK bank holidays for England and Wales
+                      (New Year's Day, Good Friday, Easter Monday, Early May Bank
+                      Holiday, Spring Bank Holiday, Summer Bank Holiday, Christmas,
+                      Boxing Day). \\
+\hline
+\end{tabular}
+\end{center}
+
+Custom calendar definitions (YAML-declared holiday lists referenced by a named ID) are
+\textbf{deferred to v2.1} as a future-work item.
+
+\paragraph{Timeout calculation at activation.}
+The key architectural decision for business-day timeouts is a \textbf{one-time conversion
+at step activation}: when the runtime dispatches an \texttt{approve} step that carries
+\texttt{timeout\_business\_days}, it immediately calls:
+
+\begin{verbatim}
+deadline = calendar.AddBusinessDays(now, step.timeout_business_days, tz)
+\end{verbatim}
+
+The resulting \texttt{deadline} is a plain \texttt{time.Time} value stored in the run
+state snapshot alongside the step. The existing timeout enforcement mechanism (the
+Event Dispatcher's min-heap scheduler or the polling goroutine) then checks
+\texttt{now >= deadline} at regular intervals — \emph{no business-calendar logic is
+needed at check time}. This design means the Business Calendar Engine is invoked
+exactly once per activate step and is entirely absent from the hot-polling path.
+
+\begin{itemize}
+  \item \textbf{timezone} is resolved from the step's \texttt{timezone} field (IANA
+        timezone string, e.g.\ \texttt{America/New\_York}). If absent, the operator's
+        local timezone is used; runbooks that require determinism SHOULD specify an
+        explicit timezone.
+  \item \textbf{calendar} is resolved from the step's \texttt{business\_calendar} field.
+        Defaults to \texttt{default} if absent.
+  \item If \texttt{timeout\_business\_days} and \texttt{timeout} (wall-clock) are both
+        present on the same step, the \emph{earlier} of the two computed deadlines
+        applies. A Planner warning is emitted to flag the redundancy.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────
+\subsubsection*{GAP-2: Quorum Approval Tracker}
+\label{sec:quorum_tracker}
+% ─────────────────────────────────────────────────────────────────
+
+\paragraph{Motivation.}
+Financial and regulatory runbooks require ``3 of 5 department heads must approve''
+semantics. The previous \texttt{approvals.min} field was a bare integer with no explicit
+approver pool, making identity validation and audit reconstruction impossible.
+
+\paragraph{Approval state per step instance.}
+The runtime maintains an \texttt{ApprovalRecord} for each active \texttt{approve} step
+instance:
+
+\begin{verbatim}
+ApprovalRecord {
+  step_id:     string
+  run_id:      string
+  mode:        all | any | quorum
+  pool:        []string    // eligible approver role names
+  required:    int         // 0 = all (for mode: all / any)
+  approvals:   []Approval  // received approvals
+  rejections:  []Approval  // received rejections
+}
+
+Approval {
+  approver_id: string      // verified identity of the submitter
+  role:        string      // which pool role the approver satisfied
+  timestamp:   time.Time
+  notes:       string      // optional free-text from the approver
+}
+\end{verbatim}
+
+The \texttt{ApprovalRecord} is persisted to the run store at each update (same durable
+store as run snapshots) so it survives a process restart.
+
+\paragraph{Progression rules.}
+
+\begin{center}
+\begin{tabular}{|l|p{9cm}|}
+\hline
+\textbf{Mode} & \textbf{Proceed when} \\
+\hline
+\texttt{all}    & \texttt{len(approvals) == len(pool)} — every pool member has approved. \\
+\hline
+\texttt{any}    & \texttt{len(approvals) >= 1} — at least one pool member has approved. \\
+\hline
+\texttt{quorum} & \texttt{len(approvals) >= required} — the required count is reached. \\
+\hline
+\end{tabular}
+\end{center}
+
+Deduplication: each pool member may submit \textbf{exactly one} approval. If the same
+\texttt{approver\_id} submits a second approval for the same step instance, the runtime
+rejects the submission with \texttt{ErrDuplicateApproval} and returns an error to the
+caller — it is not silently ignored.
+
+Rejections are recorded in the audit trail and do \emph{not} block progression by
+themselves, \emph{unless} quorum becomes mathematically impossible (see Deadlock
+Detection below).
+
+\paragraph{Deadlock detection.}
+After \emph{every} approval or rejection event, the runtime evaluates:
+
+\begin{verbatim}
+remaining_possible = len(pool) - len(rejections) - len(approvals)
+if (len(approvals) + remaining_possible) < required:
+    // quorum is impossible — fail immediately
+    step.state = FAILED
+    emit(step/failed, {reason: "QuorumImpossible", ...})
+\end{verbatim}
+
+For \texttt{mode: all}, \texttt{required} is treated as \texttt{len(pool)} for this
+check. For \texttt{mode: any}, the check is skipped (one approval always suffices unless
+the pool is empty, which is a schema validation error). If the check fires, the step
+fails immediately with error code \texttt{QuorumImpossible}; the \texttt{on\_timeout}
+policy does \emph{not} apply.
+
+\paragraph{Audit trail.}
+Every approval and rejection is appended to the run's append-only trace as a
+\texttt{approve/decision} trace event containing:
+\texttt{approver\_id}, \texttt{role}, \texttt{decision} (\texttt{approve}
+or \texttt{reject}), \texttt{timestamp} (RFC 3339), and \texttt{notes}.
+
+This satisfies electronic-signature audit requirements including SOC 2 Type II and
+FDA 21 CFR Part 11.
+
+\paragraph{Input Provider integration.}
+Approval decisions are delivered via the Input Provider JSON-RPC interface. The
+\texttt{approve} step executor registers a pending input request of type
+\texttt{input/submitApproval} with the fields:
+
+\begin{verbatim}
+{
+  "run_id":   string,          // identifies the run
+  "step_id":  string,          // identifies the approve step
+  "decision": "approve"|"reject",
+  "notes":    string           // optional
+}
+\end{verbatim}
+
+Before recording the decision, the runtime:
+\begin{enumerate}
+  \item Resolves the caller's \texttt{approver\_id} from the authenticated session (or
+        the \texttt{--as} flag in CLI mode).
+  \item Verifies that \texttt{approver\_id} maps to at least one role in
+        \texttt{approvals.pool}. Unknown identities receive \texttt{ErrNotAuthorised}.
+  \item Checks for duplicate submission (\texttt{ErrDuplicateApproval} if already recorded).
+  \item Appends the \texttt{Approval} or rejection record to the \texttt{ApprovalRecord}.
+  \item Re-evaluates the progression rule and the deadlock-detection invariant.
+  \item Persists the updated \texttt{ApprovalRecord} to the run store.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────
+\subsubsection*{Composition: Business-Day Timeout with Quorum Approval}
+% ─────────────────────────────────────────────────────────────────
+
+Both GAP-1 and GAP-2 \textbf{compose freely}. A step may declare
+\texttt{timeout\_business\_days}, \texttt{timezone}, \texttt{business\_calendar}, and
+\texttt{approvals} (\texttt{mode: quorum}) simultaneously. At step activation:
+
+\begin{enumerate}
+  \item The Business Calendar Engine computes the wall-clock \texttt{deadline}.
+  \item The Quorum Tracker initialises an empty \texttt{ApprovalRecord}.
+  \item The step enters PAUSED state; the timeout min-heap is armed with the deadline.
+\end{enumerate}
+
+The two mechanisms then run \textbf{independently}: the Quorum Tracker processes each
+incoming approval/rejection without consulting the calendar, and the timeout scheduler
+checks \texttt{now >= deadline} without consulting the quorum state. Whichever condition
+fires first wins: quorum reached → step proceeds; deadline fired → \texttt{on\_timeout}
+policy governs the outcome.
 
 \subsection{Cancellation}
 

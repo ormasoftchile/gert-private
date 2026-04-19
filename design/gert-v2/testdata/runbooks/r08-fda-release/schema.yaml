@@ -67,7 +67,8 @@ flow:
       approvals:
         min: 1
         roles: [quality-assurance]
-        timeout: 120h # GAP: prose says "5 business days"
+        timeout_business_days: 5
+        timezone: "America/New_York"
         on_timeout: escalate
         escalate_to: [qa-manager]
 
@@ -102,7 +103,8 @@ flow:
       approvals:
         min: 1
         roles: [risk-management]
-        timeout: 120h # GAP: prose says "5 business days"
+        timeout_business_days: 5
+        timezone: "America/New_York"
         on_timeout: escalate
         escalate_to: [risk-manager]
 
@@ -138,7 +140,8 @@ flow:
       approvals:
         min: 1
         roles: [clinical-affairs]
-        timeout: 240h # GAP: prose says "10 business days"
+        timeout_business_days: 10
+        timezone: "America/New_York"
         on_timeout: escalate
         escalate_to: [clinical-manager]
 
@@ -177,7 +180,8 @@ flow:
       approvals:
         min: 1
         roles: [security-team]
-        timeout: 120h # GAP: prose says "5 business days"
+        timeout_business_days: 5
+        timezone: "America/New_York"
         on_timeout: escalate
         escalate_to: [security-manager]
 
@@ -202,7 +206,8 @@ flow:
       approvals:
         min: 1
         roles: [regulatory-affairs]
-        timeout: 120h # GAP: prose says "5 business days"
+        timeout_business_days: 5
+        timezone: "America/New_York"
         on_timeout: fail
 
   # Step 6: Branch by Submission Type
@@ -305,7 +310,8 @@ flow:
                 approvals:
                   min: 1
                   roles: [regulatory-affairs]
-                  timeout: 720h # GAP: prose says "30 business days"
+                  timeout_business_days: 30
+                  timezone: "America/New_York"
                   on_timeout: fail
 
             - step:
@@ -419,7 +425,8 @@ flow:
       approvals:
         min: 2
         roles: [quality-manager, ceo]
-        timeout: 120h # GAP: prose says "5 business days"
+        timeout_business_days: 5
+        timezone: "America/New_York"
         on_timeout: fail
 
   # Step 11: Sign SBOM

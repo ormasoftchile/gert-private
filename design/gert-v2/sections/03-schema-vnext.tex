@@ -541,26 +541,27 @@ Each step in \texttt{flow} is a \texttt{TreeNode}: either a \texttt{step} object
 (with optional \texttt{branches} and \texttt{iterate} siblings) or a standalone
 \texttt{iterate} block.
 
-v2 defines thirteen step types:
+v2 defines fourteen step types:
 
 \begin{center}
 \begin{tabular}{lp{8cm}}
 \hline
 \textbf{Type} & \textbf{Purpose} \\
 \hline
-\texttt{cli}            & Execute a local command (\S\ref{subsec:step-cli}) \\
-\texttt{choice}         & Operator selects from predefined options (\S\ref{subsec:step-choice}) \\
-\texttt{decision}       & Operator selects an execution path (\S\ref{subsec:step-decision}) \\
-\texttt{collector}      & Operator provides unstructured input/files (\S\ref{subsec:step-collector}) \\
-\texttt{tool}           & Invoke a declared tool action (\S\ref{subsec:step-tool}) \\
+\texttt{cli}              & Execute a local command (\S\ref{subsec:step-cli}) \\
+\texttt{choice}           & Operator selects from predefined options (\S\ref{subsec:step-choice}) \\
+\texttt{decision}         & Operator selects an execution path (\S\ref{subsec:step-decision}) \\
+\texttt{collector}        & Operator provides unstructured input/files (\S\ref{subsec:step-collector}) \\
+\texttt{approve}          & Standalone approval gate with quorum and business-day timeout (\S\ref{subsec:step-approve}) \\
+\texttt{tool}             & Invoke a declared tool action (\S\ref{subsec:step-tool}) \\
 \texttt{wait\_for\_event} & Pause until an inbound event arrives (\S\ref{subsec:step-wait-for-event}) \\
-\texttt{invoke}         & Call another runbook as a sub-procedure (\S\ref{subsec:step-invoke}) \\
-\texttt{branch}         & Conditional fan-out to labelled step sequences (\S\ref{subsec:step-branch}) \\
-\texttt{iterate}        & Loop over a collection (\S\ref{subsec:step-iterate}) \\
-\texttt{parallel}       & Fan-out concurrent branches with join semantics (\S\ref{subsec:step-parallel}) \\
-\texttt{assert}         & Evaluate a guard expression and halt on failure (\S\ref{subsec:step-assert}) \\
-\texttt{compensate}     & Declare a saga compensation action (\S\ref{subsec:step-compensate}) \\
-\texttt{end}            & Declare a terminal outcome (\S\ref{subsec:step-end}) \\
+\texttt{invoke}           & Call another runbook as a sub-procedure (\S\ref{subsec:step-invoke}) \\
+\texttt{branch}           & Conditional fan-out to labelled step sequences (\S\ref{subsec:step-branch}) \\
+\texttt{iterate}          & Loop over a collection (\S\ref{subsec:step-iterate}) \\
+\texttt{parallel}         & Fan-out concurrent branches with join semantics (\S\ref{subsec:step-parallel}) \\
+\texttt{assert}           & Evaluate a guard expression and halt on failure (\S\ref{subsec:step-assert}) \\
+\texttt{compensate}       & Declare a saga compensation action (\S\ref{subsec:step-compensate}) \\
+\texttt{end}              & Declare a terminal outcome (\S\ref{subsec:step-end}) \\
 \hline
 \end{tabular}
 \end{center}
@@ -926,6 +927,149 @@ After the user provides the requested evidence and approval is granted, the
 collected values are available as \texttt{\{\{ .incident\_summary \}\}},
 \texttt{\{\{ .error\_log \}\}}, etc.  File and image attachments are stored as
 artifacts in the execution trace with SHA256 hashes for tamper-evidence.
+
+\subsection{Step Type: approve}
+\label{subsec:step-approve}
+
+An \texttt{approve} step is a dedicated, standalone approval gate that suspends
+execution until one or more authorized roles explicitly approve (or until the
+configured timeout fires).  Unlike the inline \texttt{approvals} block available
+on \texttt{collector} and \texttt{choice} steps, \texttt{approve} carries no
+data-collection fields --- its sole purpose is to capture an authoritative
+go/no-go decision and record it in the run audit trail.
+
+\begin{center}
+\begin{tabular}{lllp{4.8cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{title}                    & string  & No  & Human-readable approval prompt \\
+\texttt{approvals}                & object  & Yes & Approval gate config (see below) \\
+\texttt{timeout}                  & string  & No  & Wall-clock duration (e.g.\ \texttt{48h}); mutually exclusive with \texttt{timeout\_business\_days} \\
+\texttt{timeout\_business\_days}  & integer & No  & Timeout in business days; mutually exclusive with \texttt{timeout}; requires \texttt{timezone} \\
+\texttt{timezone}                 & string  & No  & IANA timezone (e.g.\ \texttt{America/New\_York}); required when \texttt{timeout\_business\_days} is set \\
+\texttt{business\_calendar}       & string  & No  & Named calendar ID (e.g.\ \texttt{us-federal}, \texttt{uk-banking}); defaults to Mon--Fri with no holidays \\
+\texttt{on\_timeout}              & string  & No  & \texttt{fail}, \texttt{continue}, or \texttt{branch:<id>} \\
+\texttt{contract}                 & object  & No  & Behavioral contract for governance \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{approvals block}
+
+The \texttt{approvals} object controls who may approve and the quorum semantics:
+
+\begin{center}
+\begin{tabular}{lllp{4.8cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{mode}     & string   & No  & \texttt{all} (default) --- all listed roles must approve; \texttt{any} --- one approval suffices; \texttt{quorum} --- M-of-N from \texttt{pool} \\
+\texttt{roles}    & string[] & No  & Authorized role names; used with \texttt{mode: all} or \texttt{mode: any}; mutually exclusive with \texttt{pool} \\
+\texttt{pool}     & string[] & No  & Eligible role names for quorum; used with \texttt{mode: quorum}; mutually exclusive with \texttt{roles} \\
+\texttt{required} & integer  & No  & Number of approvals required from \texttt{pool}; used with \texttt{mode: quorum}; must be $\geq 1$ and $\leq$ \texttt{len(pool)} \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{Business-Day Timeout}
+
+\texttt{timeout\_business\_days: 3} means the approval must be granted within
+3 working days from the moment the \texttt{approve} step became active.  The
+runtime counts elapsed business days using the following rules:
+
+\begin{itemize}
+  \item The clock starts when the step enters the \texttt{waiting} state.
+  \item Weekends (Saturday and Sunday) do not count toward the timeout.
+  \item Holidays defined in the named \texttt{business\_calendar} do not count.
+  \item If \texttt{business\_calendar} is omitted, the calendar defaults to
+        Monday--Friday with no holidays.
+  \item \texttt{timezone} determines the midnight boundary used for day counting;
+        it is required whenever \texttt{timeout\_business\_days} is set.
+\end{itemize}
+
+If both \texttt{timeout} and \texttt{timeout\_business\_days} are present in the
+same step, schema validation \textbf{MUST} reject the runbook with a structural
+error before execution begins.  The \texttt{on\_timeout} semantics remain
+unchanged: \texttt{fail} terminates the run, \texttt{continue} advances to the
+next step, and \texttt{branch:<id>} jumps to the named branch.
+
+\begin{verbatim}
+- step:
+    id: legal_review
+    type: approve
+    title: "Legal team approval"
+    approvals:
+      roles: [legal-counsel]
+    timeout_business_days: 5
+    timezone: "America/New_York"
+    business_calendar: us-federal
+    on_timeout: branch:escalate_legal
+    contract:
+      effects: [approval.legal]
+      reads: []
+      writes: []
+\end{verbatim}
+
+\paragraph{Quorum Approval}
+
+Setting \texttt{mode: quorum} together with \texttt{pool} and \texttt{required}
+enables M-of-N approval semantics:
+
+\begin{itemize}
+  \item The runtime accepts approvals from any role listed in \texttt{pool}.
+  \item Once the number of distinct approvals reaches \texttt{required}, the step
+        proceeds immediately without waiting for remaining pool members.
+  \item Each pool member may approve only once; their identity (role + principal)
+        is recorded in the run audit trail.
+  \item If a pool member explicitly rejects, the rejection is recorded in the
+        audit trail.  A rejection does not by itself block the step --- the step
+        is blocked only if so many members have rejected that the remaining
+        approvers can no longer reach \texttt{required}.  (For example, if
+        \texttt{required: 2} and \texttt{pool} has 3 members and 2 reject, the
+        step immediately fails because quorum is no longer reachable.)
+\end{itemize}
+
+\begin{verbatim}
+- step:
+    id: security_quorum
+    type: approve
+    title: "Security committee approval (2 of 5)"
+    approvals:
+      mode: quorum
+      pool: [security-lead, ciso, security-eng-1,
+             security-eng-2, security-eng-3]
+      required: 2
+    timeout_business_days: 3
+    timezone: "Europe/London"
+    on_timeout: fail
+    contract:
+      effects: [approval.security]
+      reads: []
+      writes: []
+\end{verbatim}
+
+\paragraph{Validation Rules}
+
+The following conditions are schema validation errors that \textbf{MUST} be
+reported before execution:
+
+\begin{enumerate}
+  \item \texttt{timeout} and \texttt{timeout\_business\_days} are mutually
+        exclusive; both present is an error.
+  \item \texttt{timeout\_business\_days} requires \texttt{timezone}; omitting
+        \texttt{timezone} when \texttt{timeout\_business\_days} is set is an
+        error.
+  \item \texttt{approvals.mode: quorum} requires both \texttt{approvals.pool}
+        and \texttt{approvals.required}; either missing is an error.
+  \item \texttt{approvals.required} must satisfy $1 \leq \texttt{required} \leq
+        \texttt{len(pool)}$; violating this range is an error.
+  \item \texttt{approvals.roles} and \texttt{approvals.pool} are mutually
+        exclusive; both present is an error.
+  \item \texttt{approvals.mode: all} or \texttt{mode: any} requires
+        \texttt{approvals.roles} (not \texttt{pool}); using \texttt{pool} with
+        these modes is an error.
+\end{enumerate}
 
 \subsection{Step Type: tool}
 \label{subsec:step-tool}

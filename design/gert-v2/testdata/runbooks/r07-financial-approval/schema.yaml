@@ -90,7 +90,8 @@ flow:
       approvals:
         min: 1
         roles: [manager] # GAP: should be dynamic lookup of requester's specific manager
-        timeout: 48h # GAP: prose says "2 business days"
+        timeout_business_days: 2
+        timezone: "America/New_York"
         on_timeout: escalate
         escalate_to: [director]
 
@@ -127,7 +128,8 @@ flow:
       approvals:
         min: 1
         roles: [finance-team]
-        timeout: 72h # GAP: prose says "3 business days"
+        timeout_business_days: 3
+        timezone: "America/New_York"
         on_timeout: escalate
         escalate_to: [finance-director]
 
@@ -162,7 +164,8 @@ flow:
                 approvals:
                   min: 1
                   roles: [department-director] # GAP: dynamic lookup from org chart
-                  timeout: 72h # GAP: prose says "3 business days"
+                  timeout_business_days: 3
+                  timezone: "America/New_York"
                   on_timeout: escalate
                   escalate_to: [vp]
 
@@ -188,7 +191,8 @@ flow:
                 approvals:
                   min: 1
                   roles: [department-vp] # GAP: dynamic lookup from org chart
-                  timeout: 120h # GAP: prose says "5 business days"
+                  timeout_business_days: 5
+                  timezone: "America/New_York"
                   on_timeout: escalate
                   escalate_to: [cfo]
 
@@ -214,7 +218,8 @@ flow:
                 approvals:
                   min: 1
                   roles: [cfo]
-                  timeout: 168h # GAP: prose says "7 business days"
+                  timeout_business_days: 7
+                  timezone: "America/New_York"
                   on_timeout: escalate
                   escalate_to: [ceo]
 
@@ -238,9 +243,11 @@ flow:
                     label: "Type 'yes' to approve"
                     required: true
                 approvals:
-                  min: 3 # Quorum: 3 of 5 must approve
-                  roles: [board-member]
-                  timeout: 336h # GAP: prose says "14 business days"
+                  mode: quorum
+                  pool: [board-member-1, board-member-2, board-member-3, board-member-4, board-member-5]
+                  required: 3
+                  timeout_business_days: 14
+                  timezone: "America/New_York"
                   on_timeout: fail
 
   # Step 8: Vendor Notification
@@ -278,7 +285,8 @@ flow:
       approvals:
         min: 1
         roles: [procurement-team]
-        timeout: 240h # GAP: prose says "10 business days"
+        timeout_business_days: 10
+        timezone: "America/New_York"
         on_timeout: escalate
         escalate_to: [procurement-manager]
 

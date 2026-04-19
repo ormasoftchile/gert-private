@@ -411,6 +411,17 @@ For each step, the runtime executes the following sequence:
   \item \textbf{iterate:} Evaluate the iteration expression. Write
         \texttt{event/iteratePassStart}. Execute body steps. Write
         \texttt{event/iteratePassEnd}. Repeat until condition is false.
+  \item \textbf{wait\_for\_event:} Serialise run state to the run store. Register an event
+        listener with the Event Dispatcher (source, event ID, filter predicate, and timeout).
+        Set run state to \texttt{WAITING} and return to caller — execution is suspended.
+        When the matching event arrives, the Event Dispatcher rehydrates the run, validates
+        the payload against \texttt{event.payload\_schema}, applies \texttt{event.filter}
+        conditions, writes captured variables via \texttt{capture} mappings, and resumes
+        at the next step. If \texttt{timeout} elapses before an event arrives the
+        \texttt{on\_timeout} policy governs the outcome (see
+        §\ref{sec:wait_for_event_contract}). This dispatch path is only available in
+        \texttt{gert serve} mode; \texttt{gert run} MUST reject the step with error:
+        \texttt{"step type 'wait\_for\_event' requires gert serve mode"}.
 \end{itemize}
 
 \subsubsection*{Step Type Classification}
@@ -433,6 +444,11 @@ form data and artifacts (files, images). All three write evidence to trace. \\
 \textbf{Control Flow} & branch, iterate, invoke & Alter execution path or loop body. \texttt{branch}
 evaluates predicates at runtime. \texttt{iterate} repeats a body until a condition is false.
 \texttt{invoke} is resolved at plan time; body steps appear inline with incremented depth. \\
+\hline
+\textbf{Synchronisation} & wait\_for\_event & Suspend the run until an external event arrives via
+webhook, message queue, OS signal, or named in-process channel. Persists full run state to durable
+storage; resumes when the Event Dispatcher delivers a matching, validated event. Valid only in
+\texttt{gert serve} mode — rejected at runtime in \texttt{gert run} (local CLI) mode. \\
 \hline
 \end{tabular}
 \end{center}
@@ -497,6 +513,169 @@ The checkpoint written after each completed step is sufficient to resume a run a
 process restart. The checkpoint records: completed step IDs, current variable bindings,
 current evidence values, and the trace sequence number. Resumption is initiated by calling
 \texttt{Runtime.Resume(runID)} from any adapter.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Wait-for-Event Executor Contract}
+\label{sec:wait_for_event_contract}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsubsection*{WAITING Run State}
+
+The \texttt{wait\_for\_event} step introduces a new \textbf{WAITING} run state that is distinct
+from the existing user-initiated \textbf{PAUSED} state:
+
+\begin{center}
+\begin{tabular}{|l|l|p{7.5cm}|}
+\hline
+\textbf{State} & \textbf{Trigger} & \textbf{Exit Condition} \\
+\hline
+\texttt{RUNNING}  & \texttt{exec/start} or resume & Active step execution loop. \\
+\hline
+\texttt{PAUSED}   & User-initiated pause; interactive / approval step & \texttt{SubmitEvidence} or \texttt{Approve} RPC call from adapter. \\
+\hline
+\texttt{WAITING}  & \texttt{wait\_for\_event} step reached & Event Dispatcher delivers a matching event (\texttt{WAITING→RUNNING}); or timeout expires with \texttt{on\_timeout: fail} (\texttt{WAITING→FAILED}); or timeout expires with \texttt{on\_timeout: branch:<id>} (\texttt{WAITING→RUNNING}, jump to branch target). \\
+\hline
+\texttt{COMPLETED} & All steps finished & Terminal. \\
+\hline
+\texttt{FAILED}   & Unhandled error or \texttt{on\_timeout: fail} & Terminal (unless compensated in v2.1). \\
+\hline
+\end{tabular}
+\end{center}
+
+\texttt{WAITING} is a \emph{system-driven} suspension: the run is blocked on an external signal,
+not on user input. Clients MUST differentiate the two states in UX (e.g.\ ``awaiting webhook''
+vs.\ ``awaiting approval'') and MUST NOT send \texttt{exec/next} while the run is in
+\texttt{WAITING} state.
+
+\subsubsection*{Pause / Resume Protocol}
+
+When the step execution loop reaches a \texttt{wait\_for\_event} step it MUST:
+
+\begin{enumerate}
+  \item \textbf{Serialise run state} — write the full run snapshot (step index, all variable
+        bindings, call stack, active listener registration) to the run store (embedded BoltDB /
+        SQLite, same store used for checkpoint snapshots).
+  \item \textbf{Register event listener} — call
+        \texttt{EventDispatcher.Register(runID, eventID, source, filter, payloadSchema, timeout)}.
+        The Dispatcher returns a registration token.
+  \item \textbf{Suspend} — set \texttt{run.state = WAITING}, write a
+        \texttt{step/waiting} trace event (includes \texttt{event.source}, \texttt{event.id},
+        timeout deadline), and return from the execution goroutine. The run goroutine is now
+        idle; no \texttt{Next} call is outstanding.
+\end{enumerate}
+
+When the Event Dispatcher delivers a matching event to a \texttt{WAITING} run it MUST:
+
+\begin{enumerate}
+  \item Load the serialised run state from the run store via \texttt{store.Load(runID)}.
+  \item Validate the payload against \texttt{step.event.payload\_schema} (JSON Schema Draft
+        2020-12). Validation failure → \texttt{FAILED} with schema violation detail.
+  \item Apply \texttt{step.event.filter} key-value predicates against the payload. Mismatch
+        is treated as a non-matching event (listener remains registered; the event is
+        discarded).
+  \item Apply \texttt{step.capture} mappings: extract \texttt{json.<path>} fields from the
+        payload and write them into \texttt{run.variables}.
+  \item Write a \texttt{step/eventReceived} trace event (event source, sanitised payload
+        summary, captured variable names).
+  \item Set \texttt{run.state = RUNNING} and call \texttt{ExecuteNextStep(run)}.
+\end{enumerate}
+
+\subsubsection*{Executor Pseudocode}
+
+\begin{verbatim}
+// Suspend path
+ExecuteStep(step: WaitForEvent, run: Run):
+  store.Persist(run)                          // 1. durable checkpoint
+  token = dispatcher.Register(               // 2. register listener
+    run.id, step.event.id, step.event.source,
+    step.event.filter, step.event.payload_schema,
+    step.timeout)
+  run.variables["gert.event."+step.event.id+".token"] = token  // HMAC token
+  run.state = WAITING
+  emit(step/waiting, {event_id: step.event.id, deadline: now()+step.timeout})
+  return (suspended)                          // 3. goroutine exits
+
+// Resume path
+OnEventArrived(run_id, event_id, payload):
+  run  = store.Load(run_id)                   // 1. rehydrate
+  step = run.currentStep()                    //    (WaitForEvent step)
+  ValidatePayload(payload, step.event.payload_schema)  // 2. schema check
+  if not MatchFilter(payload, step.event.filter):      // 3. filter
+    return  // discard; listener stays registered
+  ApplyCapture(payload, step.capture, run.variables)   // 4. capture
+  emit(step/eventReceived, {run_id, event_id})         // 5. trace
+  run.state = RUNNING
+  ExecuteNextStep(run)                        // 6. advance
+
+// Timeout path
+OnTimeout(run_id, event_id):
+  run = store.Load(run_id)
+  step = run.currentStep()
+  switch step.on_timeout:
+    case "fail":
+      run.state = FAILED
+      emit(step/failed, {reason: "wait_for_event timeout"})
+    case "continue":
+      run.state = RUNNING
+      ExecuteNextStep(run)
+    case "branch:<step-id>":
+      run.state = RUNNING
+      run.stepCursor = resolve(step-id)
+      ExecuteNextStep(run)
+\end{verbatim}
+
+\subsubsection*{Run Persistence Requirement}
+
+Runs in \texttt{WAITING} state MUST survive a \texttt{gert serve} process restart. The
+serialised run snapshot written in step 1 above MUST include:
+
+\begin{itemize}
+  \item Current step index and depth.
+  \item All variable bindings (including \texttt{gert.event.*} tokens).
+  \item Call stack (for \texttt{invoke}-inlined steps).
+  \item The active event listener registration (run ID, event ID, source, filter, timeout
+        deadline as an absolute timestamp).
+\end{itemize}
+
+On \texttt{gert serve} restart, the server MUST re-register all persisted \texttt{WAITING}
+listener records with the Event Dispatcher before accepting new connections. Listeners whose
+timeout deadline has already passed are immediately moved to the timeout resolution path.
+
+\subsubsection*{Serve-Only Constraint}
+
+\texttt{wait\_for\_event} is only valid when running under \texttt{gert serve}. If a runbook
+containing a \texttt{wait\_for\_event} step is executed via \texttt{gert run} (local CLI,
+non-server mode), the Runtime Core MUST fail at dispatch time with:
+
+\begin{verbatim}
+step type 'wait_for_event' requires gert serve mode
+\end{verbatim}
+
+The Planner MAY emit a validation warning for \texttt{wait\_for\_event} steps in non-serve
+context (aiding the user before execution begins), but the enforcement point is the Runtime
+Core dispatch.
+
+\subsubsection*{Security: HMAC Token for Webhook Transport}
+
+When \texttt{event.source: webhook}, each \texttt{wait\_for\_event} registration generates a
+cryptographically random one-time HMAC signing secret. The Event Dispatcher:
+
+\begin{enumerate}
+  \item Generates 32 random bytes via \texttt{crypto/rand}.
+  \item Stores the secret alongside the listener registration in the run store.
+  \item Exposes the HTTP endpoint \texttt{POST /events/\{run-id\}/\{event-id\}} and
+        validates incoming requests using \texttt{HMAC-SHA256} over the raw request body
+        (header: \texttt{X-Gert-Signature: sha256=<hex>}).
+  \item Injects the secret into the run variable
+        \texttt{gert.event.\{event-id\}.token} so the runbook author can communicate it to
+        the external system (e.g.\ via a preceding \texttt{cli} step that calls
+        \texttt{curl --data-urlencode}).
+  \item Rejects requests with invalid or missing signatures with \texttt{HTTP 401}.
+  \item Invalidates the secret after the first accepted delivery (one-time use).
+\end{enumerate}
+
+The token is intentionally injected as a run variable (not hard-coded in the runbook YAML)
+so it is unique per run and never committed to source control.
 
 \subsection{Cancellation}
 
@@ -608,6 +787,80 @@ extension discovers the interrupted run, calls \texttt{exec/resume}, and receive
 \texttt{RunHandle} over the same session. The trace and checkpoint on disk ensure no
 steps are lost.
 
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Event Dispatcher}
+\label{sec:event_dispatcher}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The \textbf{Event Dispatcher} is a new runtime component that lives exclusively inside the
+\texttt{gert serve} process. It is not instantiated by \texttt{gert run}.
+
+\subsubsection*{Responsibilities}
+
+\begin{itemize}
+  \item \textbf{Listener lifecycle} — maintain an in-memory registry of active event listeners
+        (indexed by \texttt{run\_id + event\_id}). Each entry records: source type, filter
+        predicates, payload schema URL, timeout deadline, and HMAC secret (webhook source only).
+        Persist the registry to the run store so it survives process restart.
+  \item \textbf{Webhook transport} — expose \texttt{POST /events/\{run-id\}/\{event-id\}}
+        authenticated with \texttt{HMAC-SHA256} (see security note in
+        §\ref{sec:wait_for_event_contract}). Parse the request body as JSON and dispatch to
+        the matching listener. Return \texttt{HTTP 202 Accepted} on success; \texttt{404} if
+        no listener is registered; \texttt{401} on signature failure; \texttt{410 Gone} if
+        the run is no longer in \texttt{WAITING} state.
+  \item \textbf{Channel transport} — maintain an in-process \texttt{map[string]chan Payload}
+        keyed by \texttt{event.id}. Any component within the same \texttt{gert serve} process
+        can post to a named channel via \texttt{EventDispatcher.Send(eventID, payload)}.
+  \item \textbf{Message broker transport} — delegate to a pluggable \texttt{MessageBroker}
+        interface (implementation-defined for v2.0; a no-op stub ships by default). The
+        interface follows the same pattern as the \texttt{ToolTransport} plug-in model: a
+        registered factory function keyed by broker type string.
+  \item \textbf{Signal transport} — register \texttt{os/signal} handlers scoped to a specific
+        run. Signal handling is multiplexed: the same OS signal may be registered by multiple
+        active listeners (e.g.\ \texttt{SIGUSR1} on two concurrent waiting runs). Each
+        listener receives its own notification; signal handlers are deregistered on listener
+        expiry or run completion.
+  \item \textbf{Timeout enforcement} — maintain a min-heap of timeout deadlines. A background
+        goroutine fires on the earliest deadline and invokes \texttt{OnTimeout(runID, eventID)}.
+\end{itemize}
+
+\subsubsection*{Go Interface}
+
+\begin{verbatim}
+type EventDispatcher interface {
+    // Register creates a listener for an inbound event on a waiting run.
+    // Returns a one-time HMAC token (non-empty for webhook source only).
+    Register(ctx context.Context, reg ListenerRegistration) (token string, err error)
+
+    // Deregister removes a listener (called on run completion or cancellation).
+    Deregister(runID, eventID string) error
+
+    // Send posts a payload to a named in-process channel listener.
+    Send(eventID string, payload json.RawMessage) error
+
+    // RestoreFromStore re-registers all WAITING listeners after process restart.
+    RestoreFromStore(store RunStore) error
+}
+
+type ListenerRegistration struct {
+    RunID          string
+    EventID        string
+    Source         EventSource          // webhook | message | signal | channel
+    Filter         map[string]string
+    PayloadSchema  string               // JSON Schema URL, may be empty
+    TimeoutAt      time.Time
+    OnTimeout      TimeoutPolicy        // fail | continue | branch:<step-id>
+}
+\end{verbatim}
+
+\subsubsection*{Availability Constraint}
+
+The Event Dispatcher is instantiated by \texttt{gert serve} only. It is \textbf{not} part of
+the \texttt{Runtime} interface exposed to step executors directly; instead, the Runtime Core
+receives a \texttt{DispatcherHandle} at construction time (nil in \texttt{gert run} mode).
+The \texttt{wait\_for\_event} dispatch path checks for a nil handle and fails immediately
+with the serve-mode error before attempting any state serialisation.
+
 \subsection{RPC Method Summary}
 
 \begin{verbatim}
@@ -621,4 +874,8 @@ exec/resume         → Resume a previously interrupted run
 runbook/validate    → Validate a runbook YAML (parse + plan, no exec)
 runbook/diagram     → Generate a Mermaid or ASCII diagram
 event/<type>        → Notification from server to client (not a request)
+
+// HTTP endpoints (gert serve --http, Event Dispatcher)
+POST /events/{run-id}/{event-id}  → Deliver a webhook event to a waiting run
+                                    (HMAC-SHA256 authenticated)
 \end{verbatim}

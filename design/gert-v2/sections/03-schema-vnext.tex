@@ -6,7 +6,7 @@
 
 \chapter{Schema vNext}
 
-\label{chap:schema}
+\label{ch:schema}
 
 This chapter is the normative specification for all gert v2 data structures:
 runbook documents, tool definitions, and provider definitions.
@@ -541,6 +541,30 @@ Each step in \texttt{flow} is a \texttt{TreeNode}: either a \texttt{step} object
 (with optional \texttt{branches} and \texttt{iterate} siblings) or a standalone
 \texttt{iterate} block.
 
+v2 defines thirteen step types:
+
+\begin{center}
+\begin{tabular}{lp{8cm}}
+\hline
+\textbf{Type} & \textbf{Purpose} \\
+\hline
+\texttt{cli}            & Execute a local command (\S\ref{subsec:step-cli}) \\
+\texttt{choice}         & Operator selects from predefined options (\S\ref{subsec:step-choice}) \\
+\texttt{decision}       & Operator selects an execution path (\S\ref{subsec:step-decision}) \\
+\texttt{collector}      & Operator provides unstructured input/files (\S\ref{subsec:step-collector}) \\
+\texttt{tool}           & Invoke a declared tool action (\S\ref{subsec:step-tool}) \\
+\texttt{wait\_for\_event} & Pause until an inbound event arrives (\S\ref{subsec:step-wait-for-event}) \\
+\texttt{invoke}         & Call another runbook as a sub-procedure (\S\ref{subsec:step-invoke}) \\
+\texttt{branch}         & Conditional fan-out to labelled step sequences (\S\ref{subsec:step-branch}) \\
+\texttt{iterate}        & Loop over a collection (\S\ref{subsec:step-iterate}) \\
+\texttt{parallel}       & Fan-out concurrent branches with join semantics (\S\ref{subsec:step-parallel}) \\
+\texttt{assert}         & Evaluate a guard expression and halt on failure (\S\ref{subsec:step-assert}) \\
+\texttt{compensate}     & Declare a saga compensation action (\S\ref{subsec:step-compensate}) \\
+\texttt{end}            & Declare a terminal outcome (\S\ref{subsec:step-end}) \\
+\hline
+\end{tabular}
+\end{center}
+
 \subsection{Common Step Fields}
 \label{subsec:common-fields}
 
@@ -952,6 +976,113 @@ capture:
       reads: [namespace]
       writes: [pod_count, first_pod]
 \end{verbatim}
+
+\subsection{Step Type: wait\_for\_event}
+\label{subsec:step-wait-for-event}
+
+Pauses runbook execution until an inbound event arrives on a declared source.
+Use this step type whenever a runbook must suspend and wait for an external
+signal before proceeding — a Prometheus alert webhook, an approval callback
+from a ticketing system, a SIEM event, a message-queue message, or an
+OS/process signal.
+
+When the runtime reaches a \texttt{wait\_for\_event} step it:
+\begin{enumerate}
+  \item Opens the declared inbound endpoint (HTTP listener, queue consumer, or
+        internal channel) for the lifetime of the wait.
+  \item Suspends the run record in state \texttt{waiting\_for\_event}.
+  \item When a matching event arrives and passes any declared \texttt{event.filter}
+        and \texttt{event.payload\_schema} checks, it captures payload fields into
+        run variables (via \texttt{capture}) and resumes execution at the next step.
+  \item If the \texttt{timeout} expires before a matching event arrives, the step
+        behaves according to \texttt{on\_timeout}: \texttt{fail} (default),
+        \texttt{continue} (skip and proceed), or
+        \texttt{branch:<step-id>} (jump to the named step).
+\end{enumerate}
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{event.source}         & string & Yes & Event source type: \texttt{webhook}, \texttt{message}, \texttt{signal}, or \texttt{channel} \\
+\texttt{event.id}             & string & No  & Logical event name or channel (e.g.\ \texttt{prometheus.alert.firing}); templates expanded \\
+\texttt{event.filter}         & map    & No  & Key-value pairs that must match in the incoming event payload \\
+\texttt{event.payload\_schema} & string & No  & JSON~Schema URL to validate the incoming payload before capture \\
+\texttt{capture}              & map    & No  & \texttt{json.<path>} → variable; maps event payload fields to run variables \\
+\texttt{timeout}              & string & No  & Wall-clock duration (e.g.\ \texttt{30m}, \texttt{2h}); default: no timeout \\
+\texttt{on\_timeout}          & string & No  & \texttt{fail} (default), \texttt{continue}, or \texttt{branch:<step-id>} \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{Example 1 — Prometheus alert webhook}
+
+\begin{verbatim}
+- step:
+    id: wait_prometheus_alert
+    type: wait_for_event
+    title: "Wait for Prometheus alert to fire"
+    event:
+      source: webhook
+      id: prometheus.alert.firing
+      filter:
+        alertname: "HighErrorRate"
+        severity: critical
+    capture:
+      alert_value: json.commonAnnotations.value
+      alert_labels: json.commonLabels
+    timeout: 30m
+    on_timeout: fail
+    contract:
+      effects: []
+      reads: []
+      writes: [alert_value, alert_labels]
+\end{verbatim}
+
+\paragraph{Example 2 — Named channel / approval callback}
+
+\begin{verbatim}
+- step:
+    id: wait_approval_callback
+    type: wait_for_event
+    title: "Wait for external approval system callback"
+    event:
+      source: channel
+      id: "approval.{{ .request_id }}"
+    capture:
+      approved_by: json.approver
+      decision: json.decision
+    timeout: 48h
+    on_timeout: branch:escalate_approval
+    contract:
+      effects: []
+      reads: [request_id]
+      writes: [approved_by, decision]
+\end{verbatim}
+
+\paragraph{Transport Note}
+
+The runtime is responsible for exposing the inbound endpoint; the runbook schema
+only declares intent.  The specific endpoint URL or address is runtime-determined
+and available to subsequent steps as \texttt{\{\{\ .gert.event.<id>.endpoint\ \}\}}.
+Event source semantics:
+\begin{itemize}
+  \item \texttt{webhook} — runtime opens an HTTP~POST listener; the sender POSTs a JSON body.
+  \item \texttt{message} — runtime subscribes to a message-queue topic or queue name
+        given by \texttt{event.id}.
+  \item \texttt{signal} — runtime registers a named OS or process signal handler.
+  \item \texttt{channel} — runtime uses a gert-internal named channel, enabling
+        runbook-to-runbook or tool-to-runbook event delivery.
+\end{itemize}
+
+\paragraph{Security Note}
+
+Webhook endpoints are authenticated per run.  The runtime generates a one-time
+HMAC token when the endpoint is opened; the token is available as
+\texttt{\{\{\ .gert.event.<id>.token\ \}\}} for use in configuring the sending
+system (e.g.\ embedding in a Prometheus alertmanager receiver URL).  The token
+is single-use and expires when the endpoint closes (on resume or timeout).
 
 \subsection{Step Type: invoke}
 \label{subsec:step-invoke}

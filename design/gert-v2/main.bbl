@@ -1,0 +1,904 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.3 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{nyt/global//global/global/global}
+    \entry{aws-step-functions}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=3eb2c1a57a8160029f036e3dcbf84bf1}{%
+           family={{Amazon Web Services}},
+           familyi={A\bibinitperiod}}}%
+      }
+      \strng{namehash}{3eb2c1a57a8160029f036e3dcbf84bf1}
+      \strng{fullhash}{3eb2c1a57a8160029f036e3dcbf84bf1}
+      \strng{fullhashraw}{3eb2c1a57a8160029f036e3dcbf84bf1}
+      \strng{bibnamehash}{3eb2c1a57a8160029f036e3dcbf84bf1}
+      \strng{authorbibnamehash}{3eb2c1a57a8160029f036e3dcbf84bf1}
+      \strng{authornamehash}{3eb2c1a57a8160029f036e3dcbf84bf1}
+      \strng{authorfullhash}{3eb2c1a57a8160029f036e3dcbf84bf1}
+      \strng{authorfullhashraw}{3eb2c1a57a8160029f036e3dcbf84bf1}
+      \field{extraname}{1}
+      \field{sortinit}{A}
+      \field{sortinithash}{2f401846e2029bad6b3ecc16d50031e2}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{State machine-based workflow orchestration with error handlers and human approval tasks}
+      \field{title}{{AWS} Step Functions Developer Guide}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://docs.aws.amazon.com/step-functions/
+      \endverb
+      \verb{url}
+      \verb https://docs.aws.amazon.com/step-functions/
+      \endverb
+    \endentry
+    \entry{aws-ssm-runbooks}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=3eb2c1a57a8160029f036e3dcbf84bf1}{%
+           family={{Amazon Web Services}},
+           familyi={A\bibinitperiod}}}%
+      }
+      \strng{namehash}{3eb2c1a57a8160029f036e3dcbf84bf1}
+      \strng{fullhash}{3eb2c1a57a8160029f036e3dcbf84bf1}
+      \strng{fullhashraw}{3eb2c1a57a8160029f036e3dcbf84bf1}
+      \strng{bibnamehash}{3eb2c1a57a8160029f036e3dcbf84bf1}
+      \strng{authorbibnamehash}{3eb2c1a57a8160029f036e3dcbf84bf1}
+      \strng{authornamehash}{3eb2c1a57a8160029f036e3dcbf84bf1}
+      \strng{authorfullhash}{3eb2c1a57a8160029f036e3dcbf84bf1}
+      \strng{authorfullhashraw}{3eb2c1a57a8160029f036e3dcbf84bf1}
+      \field{extraname}{2}
+      \field{sortinit}{A}
+      \field{sortinithash}{2f401846e2029bad6b3ecc16d50031e2}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{YAML/JSON automation documents with approval gates, cross-account execution, and rate controls}
+      \field{title}{{AWS} Systems Manager Automation Runbooks}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://docs.aws.amazon.com/systems-manager/latest/userguide/automation-documents.html
+      \endverb
+      \verb{url}
+      \verb https://docs.aws.amazon.com/systems-manager/latest/userguide/automation-documents.html
+      \endverb
+    \endentry
+    \entry{mcp-spec}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=f431db65cea024a5f19eab835afefee2}{%
+           family={{Anthropic}},
+           familyi={A\bibinitperiod}}}%
+      }
+      \strng{namehash}{f431db65cea024a5f19eab835afefee2}
+      \strng{fullhash}{f431db65cea024a5f19eab835afefee2}
+      \strng{fullhashraw}{f431db65cea024a5f19eab835afefee2}
+      \strng{bibnamehash}{f431db65cea024a5f19eab835afefee2}
+      \strng{authorbibnamehash}{f431db65cea024a5f19eab835afefee2}
+      \strng{authornamehash}{f431db65cea024a5f19eab835afefee2}
+      \strng{authorfullhash}{f431db65cea024a5f19eab835afefee2}
+      \strng{authorfullhashraw}{f431db65cea024a5f19eab835afefee2}
+      \field{sortinit}{A}
+      \field{sortinithash}{2f401846e2029bad6b3ecc16d50031e2}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{Protocol for connecting AI models with external data sources and tools}
+      \field{title}{Model Context Protocol ({MCP}) Specification}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://modelcontextprotocol.io/
+      \endverb
+      \verb{url}
+      \verb https://modelcontextprotocol.io/
+      \endverb
+    \endentry
+    \entry{argo-workflows}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=c0bbf01519426f15b77aca7d72faa073}{%
+           family={{Argo Project (CNCF)}},
+           familyi={A\bibinitperiod}}}%
+      }
+      \strng{namehash}{c0bbf01519426f15b77aca7d72faa073}
+      \strng{fullhash}{c0bbf01519426f15b77aca7d72faa073}
+      \strng{fullhashraw}{c0bbf01519426f15b77aca7d72faa073}
+      \strng{bibnamehash}{c0bbf01519426f15b77aca7d72faa073}
+      \strng{authorbibnamehash}{c0bbf01519426f15b77aca7d72faa073}
+      \strng{authornamehash}{c0bbf01519426f15b77aca7d72faa073}
+      \strng{authorfullhash}{c0bbf01519426f15b77aca7d72faa073}
+      \strng{authorfullhashraw}{c0bbf01519426f15b77aca7d72faa073}
+      \field{sortinit}{A}
+      \field{sortinithash}{2f401846e2029bad6b3ecc16d50031e2}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{Kubernetes-native containerized workflow engine with YAML/JSON CRD-based definitions}
+      \field{title}{Argo Workflows Documentation}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://argoproj.github.io/workflows/
+      \endverb
+      \verb{url}
+      \verb https://argoproj.github.io/workflows/
+      \endverb
+    \endentry
+    \entry{google-sre-book}{book}{}{}
+      \name{editor}{4}{}{%
+        {{hash=804009dd6ea3185359156e228afc3f35}{%
+           family={Beyer},
+           familyi={B\bibinitperiod},
+           given={Betsy},
+           giveni={B\bibinitperiod}}}%
+        {{hash=f5e3bc5ee6025ef3a58750c6498c5553}{%
+           family={Jones},
+           familyi={J\bibinitperiod},
+           given={Chris},
+           giveni={C\bibinitperiod}}}%
+        {{hash=1e5b9f6a7c8eeb221b19889433ae21a3}{%
+           family={Petoff},
+           familyi={P\bibinitperiod},
+           given={Jennifer},
+           giveni={J\bibinitperiod}}}%
+        {{hash=a07a7a3144d96f35e13fdc8d88a76f72}{%
+           family={Murphy},
+           familyi={M\bibinitperiod},
+           given={Niall\bibnamedelima Richard},
+           giveni={N\bibinitperiod\bibinitdelim R\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {O'Reilly Media}%
+      }
+      \strng{namehash}{1935d8b85de3cefa8cd9d7b767730ec7}
+      \strng{fullhash}{8b6ad8d483b2b55b622328efa5b8dca7}
+      \strng{fullhashraw}{8b6ad8d483b2b55b622328efa5b8dca7}
+      \strng{bibnamehash}{1935d8b85de3cefa8cd9d7b767730ec7}
+      \strng{editorbibnamehash}{1935d8b85de3cefa8cd9d7b767730ec7}
+      \strng{editornamehash}{1935d8b85de3cefa8cd9d7b767730ec7}
+      \strng{editorfullhash}{8b6ad8d483b2b55b622328efa5b8dca7}
+      \strng{editorfullhashraw}{8b6ad8d483b2b55b622328efa5b8dca7}
+      \field{sortinit}{B}
+      \field{sortinithash}{d7095fff47cda75ca2589920aae98399}
+      \field{labelnamesource}{editor}
+      \field{labeltitlesource}{title}
+      \field{note}{Foundational SRE principles including elimination of toil and runbook automation}
+      \field{title}{Site Reliability Engineering: How Google Runs Production Systems}
+      \field{year}{2016}
+    \endentry
+    \entry{bubbletea-framework}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=32ce041007058889bd9ccb8b22ade877}{%
+           family={{Charm}},
+           familyi={C\bibinitperiod}}}%
+      }
+      \strng{namehash}{32ce041007058889bd9ccb8b22ade877}
+      \strng{fullhash}{32ce041007058889bd9ccb8b22ade877}
+      \strng{fullhashraw}{32ce041007058889bd9ccb8b22ade877}
+      \strng{bibnamehash}{32ce041007058889bd9ccb8b22ade877}
+      \strng{authorbibnamehash}{32ce041007058889bd9ccb8b22ade877}
+      \strng{authornamehash}{32ce041007058889bd9ccb8b22ade877}
+      \strng{authorfullhash}{32ce041007058889bd9ccb8b22ade877}
+      \strng{authorfullhashraw}{32ce041007058889bd9ccb8b22ade877}
+      \field{sortinit}{C}
+      \field{sortinithash}{4d103a86280481745c9c897c925753c0}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{The Elm Architecture for building terminal user interfaces in Go}
+      \field{title}{Bubble Tea — A {Go} Framework for Building Terminal {UIs}}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://github.com/charmbracelet/bubbletea
+      \endverb
+      \verb{url}
+      \verb https://github.com/charmbracelet/bubbletea
+      \endverb
+    \endentry
+    \entry{jaeger-docs}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=0cb2a59444ef04aeca44654441071c35}{%
+           family={{Cloud Native Computing Foundation}},
+           familyi={C\bibinitperiod}}}%
+      }
+      \strng{namehash}{0cb2a59444ef04aeca44654441071c35}
+      \strng{fullhash}{0cb2a59444ef04aeca44654441071c35}
+      \strng{fullhashraw}{0cb2a59444ef04aeca44654441071c35}
+      \strng{bibnamehash}{0cb2a59444ef04aeca44654441071c35}
+      \strng{authorbibnamehash}{0cb2a59444ef04aeca44654441071c35}
+      \strng{authornamehash}{0cb2a59444ef04aeca44654441071c35}
+      \strng{authorfullhash}{0cb2a59444ef04aeca44654441071c35}
+      \strng{authorfullhashraw}{0cb2a59444ef04aeca44654441071c35}
+      \field{extraname}{1}
+      \field{sortinit}{C}
+      \field{sortinithash}{4d103a86280481745c9c897c925753c0}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{Distributed tracing platform compatible with OpenTelemetry}
+      \field{title}{Jaeger Documentation}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://www.jaegertracing.io/docs/
+      \endverb
+      \verb{url}
+      \verb https://www.jaegertracing.io/docs/
+      \endverb
+    \endentry
+    \entry{kubernetes-docs}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=0cb2a59444ef04aeca44654441071c35}{%
+           family={{Cloud Native Computing Foundation}},
+           familyi={C\bibinitperiod}}}%
+      }
+      \strng{namehash}{0cb2a59444ef04aeca44654441071c35}
+      \strng{fullhash}{0cb2a59444ef04aeca44654441071c35}
+      \strng{fullhashraw}{0cb2a59444ef04aeca44654441071c35}
+      \strng{bibnamehash}{0cb2a59444ef04aeca44654441071c35}
+      \strng{authorbibnamehash}{0cb2a59444ef04aeca44654441071c35}
+      \strng{authornamehash}{0cb2a59444ef04aeca44654441071c35}
+      \strng{authorfullhash}{0cb2a59444ef04aeca44654441071c35}
+      \strng{authorfullhashraw}{0cb2a59444ef04aeca44654441071c35}
+      \field{extraname}{2}
+      \field{sortinit}{C}
+      \field{sortinithash}{4d103a86280481745c9c897c925753c0}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{Container orchestration platform with admission controllers and RBAC}
+      \field{title}{Kubernetes Documentation}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://kubernetes.io/docs/
+      \endverb
+      \verb{url}
+      \verb https://kubernetes.io/docs/
+      \endverb
+    \endentry
+    \entry{ibm-redbook-runbooks}{book}{}{}
+      \name{author}{1}{}{%
+        {{hash=7bb018b160d19c13ef9838e91e53cccf}{%
+           family={{IBM Corporation}},
+           familyi={I\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {IBM Redbooks}%
+      }
+      \strng{namehash}{7bb018b160d19c13ef9838e91e53cccf}
+      \strng{fullhash}{7bb018b160d19c13ef9838e91e53cccf}
+      \strng{fullhashraw}{7bb018b160d19c13ef9838e91e53cccf}
+      \strng{bibnamehash}{7bb018b160d19c13ef9838e91e53cccf}
+      \strng{authorbibnamehash}{7bb018b160d19c13ef9838e91e53cccf}
+      \strng{authornamehash}{7bb018b160d19c13ef9838e91e53cccf}
+      \strng{authorfullhash}{7bb018b160d19c13ef9838e91e53cccf}
+      \strng{authorfullhashraw}{7bb018b160d19c13ef9838e91e53cccf}
+      \field{sortinit}{I}
+      \field{sortinithash}{8d291c51ee89b6cd86bf5379f0b151d8}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{Deep dive into IBM Runbook Automation service, blending analytics with automation for IT operations}
+      \field{title}{Delivering Consistency and Automation with Operational Runbooks}
+      \field{year}{2022}
+    \endentry
+    \entry{iso27001}{report}{}{}
+      \list{institution}{1}{%
+        {International Organization for Standardization}%
+      }
+      \field{sortinit}{I}
+      \field{sortinithash}{8d291c51ee89b6cd86bf5379f0b151d8}
+      \field{labeltitlesource}{title}
+      \field{note}{International standard for information security management, including audit requirements (A.12.4)}
+      \field{title}{{ISO/IEC} 27001:2022 — Information Security Management Systems}
+      \field{type}{techreport}
+      \field{year}{2022}
+    \endentry
+    \entry{jsonrpc-spec}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=51d40c3ba48b0cca212ff0d6bc064d82}{%
+           family={{JSON-RPC Working Group}},
+           familyi={J\bibinitperiod}}}%
+      }
+      \strng{namehash}{51d40c3ba48b0cca212ff0d6bc064d82}
+      \strng{fullhash}{51d40c3ba48b0cca212ff0d6bc064d82}
+      \strng{fullhashraw}{51d40c3ba48b0cca212ff0d6bc064d82}
+      \strng{bibnamehash}{51d40c3ba48b0cca212ff0d6bc064d82}
+      \strng{authorbibnamehash}{51d40c3ba48b0cca212ff0d6bc064d82}
+      \strng{authornamehash}{51d40c3ba48b0cca212ff0d6bc064d82}
+      \strng{authorfullhash}{51d40c3ba48b0cca212ff0d6bc064d82}
+      \strng{authorfullhashraw}{51d40c3ba48b0cca212ff0d6bc064d82}
+      \field{sortinit}{J}
+      \field{sortinithash}{b2f54a9081ace9966a7cb9413811edb4}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{Remote procedure call protocol encoded in JSON}
+      \field{title}{{JSON-RPC} 2.0 Specification}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2010}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://www.jsonrpc.org/specification
+      \endverb
+      \verb{url}
+      \verb https://www.jsonrpc.org/specification
+      \endverb
+    \endentry
+    \entry{rfc3339}{report}{}{}
+      \name{author}{2}{}{%
+        {{hash=3039129b75a0e680a4bf82e3315d1801}{%
+           family={Klyne},
+           familyi={K\bibinitperiod},
+           given={G.},
+           giveni={G\bibinitperiod}}}%
+        {{hash=9c0c35a1e6ba4ee7af40132664c83c3f}{%
+           family={Newman},
+           familyi={N\bibinitperiod},
+           given={C.},
+           giveni={C\bibinitperiod}}}%
+      }
+      \list{institution}{1}{%
+        {Internet Engineering Task Force (IETF)}%
+      }
+      \strng{namehash}{4d444a4d648731c7573f2b0e2a7e1f20}
+      \strng{fullhash}{4d444a4d648731c7573f2b0e2a7e1f20}
+      \strng{fullhashraw}{4d444a4d648731c7573f2b0e2a7e1f20}
+      \strng{bibnamehash}{4d444a4d648731c7573f2b0e2a7e1f20}
+      \strng{authorbibnamehash}{4d444a4d648731c7573f2b0e2a7e1f20}
+      \strng{authornamehash}{4d444a4d648731c7573f2b0e2a7e1f20}
+      \strng{authorfullhash}{4d444a4d648731c7573f2b0e2a7e1f20}
+      \strng{authorfullhashraw}{4d444a4d648731c7573f2b0e2a7e1f20}
+      \field{sortinit}{K}
+      \field{sortinithash}{c02bf6bff1c488450c352b40f5d853ab}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{number}{3339}
+      \field{title}{{RFC} 3339 — Date and Time on the Internet: Timestamps}
+      \field{type}{RFC}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2002}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://www.rfc-editor.org/rfc/rfc3339
+      \endverb
+      \verb{url}
+      \verb https://www.rfc-editor.org/rfc/rfc3339
+      \endverb
+    \endentry
+    \entry{vscode-extension-api}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=140864078aeca1c7c35b4beb33c53c34}{%
+           family={{Microsoft}},
+           familyi={M\bibinitperiod}}}%
+      }
+      \strng{namehash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{fullhash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{fullhashraw}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{bibnamehash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{authorbibnamehash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{authornamehash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{authorfullhash}{140864078aeca1c7c35b4beb33c53c34}
+      \strng{authorfullhashraw}{140864078aeca1c7c35b4beb33c53c34}
+      \field{sortinit}{M}
+      \field{sortinithash}{4625c616857f13d17ce56f7d4f97d451}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{API for building VS Code extensions with versioned contracts}
+      \field{title}{{Visual Studio Code} Extension {API}}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://code.visualstudio.com/api
+      \endverb
+      \verb{url}
+      \verb https://code.visualstudio.com/api
+      \endverb
+    \endentry
+    \entry{nist-sp800-53}{report}{}{}
+      \list{institution}{2}{%
+        {National Institute of Standards}%
+        {Technology}%
+      }
+      \field{sortinit}{N}
+      \field{sortinithash}{22369a73d5f88983a108b63f07f37084}
+      \field{labeltitlesource}{title}
+      \field{note}{Catalog of security and privacy controls with principle of least privilege guidance}
+      \field{title}{{NIST} Special Publication 800-53 — Security and Privacy Controls for Information Systems and Organizations}
+      \field{type}{techreport}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2020}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final
+      \endverb
+      \verb{url}
+      \verb https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final
+      \endverb
+    \endentry
+    \entry{opa-gatekeeper}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=2466eaa0c75c493717727772222c49a4}{%
+           family={{Open Policy Agent (CNCF)}},
+           familyi={O\bibinitperiod}}}%
+      }
+      \strng{namehash}{2466eaa0c75c493717727772222c49a4}
+      \strng{fullhash}{2466eaa0c75c493717727772222c49a4}
+      \strng{fullhashraw}{2466eaa0c75c493717727772222c49a4}
+      \strng{bibnamehash}{2466eaa0c75c493717727772222c49a4}
+      \strng{authorbibnamehash}{2466eaa0c75c493717727772222c49a4}
+      \strng{authornamehash}{2466eaa0c75c493717727772222c49a4}
+      \strng{authorfullhash}{2466eaa0c75c493717727772222c49a4}
+      \strng{authorfullhashraw}{2466eaa0c75c493717727772222c49a4}
+      \field{extraname}{1}
+      \field{sortinit}{O}
+      \field{sortinithash}{2cd7140a07aea5341f9e2771efe90aae}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{Policy controller for Kubernetes using OPA to enforce cluster-wide policies}
+      \field{title}{{OPA} Gatekeeper Documentation}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://open-policy-agent.github.io/gatekeeper/
+      \endverb
+      \verb{url}
+      \verb https://open-policy-agent.github.io/gatekeeper/
+      \endverb
+    \endentry
+    \entry{opa-docs}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=2466eaa0c75c493717727772222c49a4}{%
+           family={{Open Policy Agent (CNCF)}},
+           familyi={O\bibinitperiod}}}%
+      }
+      \strng{namehash}{2466eaa0c75c493717727772222c49a4}
+      \strng{fullhash}{2466eaa0c75c493717727772222c49a4}
+      \strng{fullhashraw}{2466eaa0c75c493717727772222c49a4}
+      \strng{bibnamehash}{2466eaa0c75c493717727772222c49a4}
+      \strng{authorbibnamehash}{2466eaa0c75c493717727772222c49a4}
+      \strng{authornamehash}{2466eaa0c75c493717727772222c49a4}
+      \strng{authorfullhash}{2466eaa0c75c493717727772222c49a4}
+      \strng{authorfullhashraw}{2466eaa0c75c493717727772222c49a4}
+      \field{extraname}{2}
+      \field{sortinit}{O}
+      \field{sortinithash}{2cd7140a07aea5341f9e2771efe90aae}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{General-purpose policy engine with Rego language for authorization and compliance}
+      \field{title}{Open Policy Agent ({OPA}) Documentation}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://www.openpolicyagent.org/docs/
+      \endverb
+      \verb{url}
+      \verb https://www.openpolicyagent.org/docs/
+      \endverb
+    \endentry
+    \entry{openapi-spec}{report}{}{}
+      \list{institution}{1}{%
+        {OpenAPI Initiative}%
+      }
+      \field{sortinit}{O}
+      \field{sortinithash}{2cd7140a07aea5341f9e2771efe90aae}
+      \field{labeltitlesource}{title}
+      \field{note}{Standard for HTTP API description and documentation}
+      \field{title}{{OpenAPI} Specification v3.1.0}
+      \field{type}{techreport}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2021}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://spec.openapis.org/oas/v3.1.0
+      \endverb
+      \verb{url}
+      \verb https://spec.openapis.org/oas/v3.1.0
+      \endverb
+    \endentry
+    \entry{otel-spec}{report}{}{}
+      \list{institution}{1}{%
+        {Cloud Native Computing Foundation (CNCF)}%
+      }
+      \field{sortinit}{O}
+      \field{sortinithash}{2cd7140a07aea5341f9e2771efe90aae}
+      \field{labeltitlesource}{title}
+      \field{note}{Specification for distributed tracing, metrics, and logs with W3C Trace Context propagation}
+      \field{title}{{OpenTelemetry} Specification}
+      \field{type}{techreport}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2023}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://opentelemetry.io/docs/specs/otel/
+      \endverb
+      \verb{url}
+      \verb https://opentelemetry.io/docs/specs/otel/
+      \endverb
+    \endentry
+    \entry{pagerduty-automation}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=85b6a0beaa88d4a1d4542cbcaa0b9e8f}{%
+           family={{PagerDuty}},
+           familyi={P\bibinitperiod}}}%
+      }
+      \strng{namehash}{85b6a0beaa88d4a1d4542cbcaa0b9e8f}
+      \strng{fullhash}{85b6a0beaa88d4a1d4542cbcaa0b9e8f}
+      \strng{fullhashraw}{85b6a0beaa88d4a1d4542cbcaa0b9e8f}
+      \strng{bibnamehash}{85b6a0beaa88d4a1d4542cbcaa0b9e8f}
+      \strng{authorbibnamehash}{85b6a0beaa88d4a1d4542cbcaa0b9e8f}
+      \strng{authornamehash}{85b6a0beaa88d4a1d4542cbcaa0b9e8f}
+      \strng{authorfullhash}{85b6a0beaa88d4a1d4542cbcaa0b9e8f}
+      \strng{authorfullhashraw}{85b6a0beaa88d4a1d4542cbcaa0b9e8f}
+      \field{sortinit}{P}
+      \field{sortinithash}{ff3bcf24f47321b42cb156c2cc8a8422}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{SaaS solution integrating runbook automation with incident response (formerly Rundeck)}
+      \field{title}{{PagerDuty} Runbook Automation}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://www.pagerduty.com/platform/automation/
+      \endverb
+      \verb{url}
+      \verb https://www.pagerduty.com/platform/automation/
+      \endverb
+    \endentry
+    \entry{rundeck-docs}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=a10630e6269baae5fccf2cfcadd546bb}{%
+           family={{PagerDuty (Rundeck)}},
+           familyi={P\bibinitperiod}}}%
+      }
+      \strng{namehash}{a10630e6269baae5fccf2cfcadd546bb}
+      \strng{fullhash}{a10630e6269baae5fccf2cfcadd546bb}
+      \strng{fullhashraw}{a10630e6269baae5fccf2cfcadd546bb}
+      \strng{bibnamehash}{a10630e6269baae5fccf2cfcadd546bb}
+      \strng{authorbibnamehash}{a10630e6269baae5fccf2cfcadd546bb}
+      \strng{authornamehash}{a10630e6269baae5fccf2cfcadd546bb}
+      \strng{authorfullhash}{a10630e6269baae5fccf2cfcadd546bb}
+      \strng{authorfullhashraw}{a10630e6269baae5fccf2cfcadd546bb}
+      \field{sortinit}{P}
+      \field{sortinithash}{ff3bcf24f47321b42cb156c2cc8a8422}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{Open source job scheduling and orchestration with RBAC and audit logging}
+      \field{title}{Rundeck Documentation}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://docs.rundeck.com/
+      \endverb
+      \verb{url}
+      \verb https://docs.rundeck.com/
+      \endverb
+    \endentry
+    \entry{prefect-docs}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=fb09846ccf9abfebe90611acaaac2687}{%
+           family={{Prefect Technologies}},
+           familyi={P\bibinitperiod}}}%
+      }
+      \strng{namehash}{fb09846ccf9abfebe90611acaaac2687}
+      \strng{fullhash}{fb09846ccf9abfebe90611acaaac2687}
+      \strng{fullhashraw}{fb09846ccf9abfebe90611acaaac2687}
+      \strng{bibnamehash}{fb09846ccf9abfebe90611acaaac2687}
+      \strng{authorbibnamehash}{fb09846ccf9abfebe90611acaaac2687}
+      \strng{authornamehash}{fb09846ccf9abfebe90611acaaac2687}
+      \strng{authorfullhash}{fb09846ccf9abfebe90611acaaac2687}
+      \strng{authorfullhashraw}{fb09846ccf9abfebe90611acaaac2687}
+      \field{sortinit}{P}
+      \field{sortinithash}{ff3bcf24f47321b42cb156c2cc8a8422}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{Python-native workflow orchestration with dynamic DAGs and hybrid deployment flexibility}
+      \field{title}{Prefect Documentation}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://docs.prefect.io/
+      \endverb
+      \verb{url}
+      \verb https://docs.prefect.io/
+      \endverb
+    \endentry
+    \entry{ijsret-runbook-engineering}{article}{}{}
+      \field{sortinit}{R}
+      \field{sortinithash}{5e1c39a9d46ffb6bebd8f801023a9486}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{International Journal of Scientific Research in Engineering and Technology (IJSRET)}
+      \field{note}{Explores principles of runbook engineering for SRE teams with focus on auditability, compliance, and MTTR reduction}
+      \field{number}{6}
+      \field{title}{Runbook Engineering and {SOP} Design in High Availability Environments}
+      \field{volume}{10}
+      \field{year}{2023}
+    \endentry
+    \entry{soc2-aicpa}{report}{}{}
+      \list{institution}{1}{%
+        {American Institute of Certified Public Accountants (AICPA)}%
+      }
+      \field{sortinit}{S}
+      \field{sortinithash}{b164b07b29984b41daf1e85279fbc5ab}
+      \field{labeltitlesource}{title}
+      \field{note}{Auditing standard for security, availability, processing integrity, confidentiality, and privacy}
+      \field{title}{{SOC} 2 — Trust Services Criteria}
+      \field{type}{techreport}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2023}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://www.aicpa.org/interestareas/frc/assuranceadvisoryservices/socforserviceorganizations.html
+      \endverb
+      \verb{url}
+      \verb https://www.aicpa.org/interestareas/frc/assuranceadvisoryservices/socforserviceorganizations.html
+      \endverb
+    \endentry
+    \entry{testify-library}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=33084714d1355bd46d58f64f45ea6b31}{%
+           family={{Stretchr}},
+           familyi={S\bibinitperiod}}}%
+      }
+      \strng{namehash}{33084714d1355bd46d58f64f45ea6b31}
+      \strng{fullhash}{33084714d1355bd46d58f64f45ea6b31}
+      \strng{fullhashraw}{33084714d1355bd46d58f64f45ea6b31}
+      \strng{bibnamehash}{33084714d1355bd46d58f64f45ea6b31}
+      \strng{authorbibnamehash}{33084714d1355bd46d58f64f45ea6b31}
+      \strng{authornamehash}{33084714d1355bd46d58f64f45ea6b31}
+      \strng{authorfullhash}{33084714d1355bd46d58f64f45ea6b31}
+      \strng{authorfullhashraw}{33084714d1355bd46d58f64f45ea6b31}
+      \field{sortinit}{S}
+      \field{sortinithash}{b164b07b29984b41daf1e85279fbc5ab}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{Go testing library with assertions, mocking, and test suites}
+      \field{title}{Testify — A Toolkit with Common Assertions and Mocks for {Go}}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://github.com/stretchr/testify
+      \endverb
+      \verb{url}
+      \verb https://github.com/stretchr/testify
+      \endverb
+    \endentry
+    \entry{temporal-docs}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=74a256926d20c3011d49ee5669dffdb6}{%
+           family={{Temporal Technologies}},
+           familyi={T\bibinitperiod}}}%
+      }
+      \strng{namehash}{74a256926d20c3011d49ee5669dffdb6}
+      \strng{fullhash}{74a256926d20c3011d49ee5669dffdb6}
+      \strng{fullhashraw}{74a256926d20c3011d49ee5669dffdb6}
+      \strng{bibnamehash}{74a256926d20c3011d49ee5669dffdb6}
+      \strng{authorbibnamehash}{74a256926d20c3011d49ee5669dffdb6}
+      \strng{authornamehash}{74a256926d20c3011d49ee5669dffdb6}
+      \strng{authorfullhash}{74a256926d20c3011d49ee5669dffdb6}
+      \strng{authorfullhashraw}{74a256926d20c3011d49ee5669dffdb6}
+      \field{sortinit}{T}
+      \field{sortinithash}{9af77f0292593c26bde9a56e688eaee9}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{Durable execution with saga pattern support, compensation activities, and deterministic replay}
+      \field{title}{Temporal Workflow Engine Documentation}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://docs.temporal.io/
+      \endverb
+      \verb{url}
+      \verb https://docs.temporal.io/
+      \endverb
+    \endentry
+    \entry{hipaa-security-rule}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=1555f444c4f219a9b0b2ea651a46588b}{%
+           family={{U.S. Department of Health and Human Services}},
+           familyi={U\bibinitperiod}}}%
+      }
+      \strng{namehash}{1555f444c4f219a9b0b2ea651a46588b}
+      \strng{fullhash}{1555f444c4f219a9b0b2ea651a46588b}
+      \strng{fullhashraw}{1555f444c4f219a9b0b2ea651a46588b}
+      \strng{bibnamehash}{1555f444c4f219a9b0b2ea651a46588b}
+      \strng{authorbibnamehash}{1555f444c4f219a9b0b2ea651a46588b}
+      \strng{authornamehash}{1555f444c4f219a9b0b2ea651a46588b}
+      \strng{authorfullhash}{1555f444c4f219a9b0b2ea651a46588b}
+      \strng{authorfullhashraw}{1555f444c4f219a9b0b2ea651a46588b}
+      \field{sortinit}{U}
+      \field{sortinithash}{6901a00e45705986ee5e7ca9fd39adca}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{Security standards for protected health information (ePHI) including audit controls}
+      \field{title}{{HIPAA} Security Rule — 45 {CFR} Part 164, Subpart C}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2013}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://www.hhs.gov/hipaa/for-professionals/security/index.html
+      \endverb
+      \verb{url}
+      \verb https://www.hhs.gov/hipaa/for-professionals/security/index.html
+      \endverb
+    \endentry
+    \entry{w3c-trace-context}{report}{}{}
+      \list{institution}{1}{%
+        {World Wide Web Consortium (W3C)}%
+      }
+      \field{sortinit}{W}
+      \field{sortinithash}{4315d78024d0cea9b57a0c6f0e35ed0d}
+      \field{labeltitlesource}{title}
+      \field{note}{Standard for distributed trace context propagation via traceparent and tracestate headers}
+      \field{title}{{W3C} Trace Context Specification}
+      \field{type}{techreport}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2020}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://www.w3.org/TR/trace-context/
+      \endverb
+      \verb{url}
+      \verb https://www.w3.org/TR/trace-context/
+      \endverb
+    \endentry
+    \entry{jsonschema-spec}{report}{}{}
+      \name{author}{4}{}{%
+        {{hash=d1f894cdb362d687b78c64d26eb290f9}{%
+           family={Wright},
+           familyi={W\bibinitperiod},
+           given={A.},
+           giveni={A\bibinitperiod}}}%
+        {{hash=2b58546e02c48a5dc1967352443042d2}{%
+           family={Andrews},
+           familyi={A\bibinitperiod},
+           given={H.},
+           giveni={H\bibinitperiod}}}%
+        {{hash=40a434f50200ff650fca0a2bd716ad02}{%
+           family={Hutton},
+           familyi={H\bibinitperiod},
+           given={B.},
+           giveni={B\bibinitperiod}}}%
+        {{hash=ae2a846c995ae6117be2dd4aff09732e}{%
+           family={Dennis},
+           familyi={D\bibinitperiod},
+           given={G.},
+           giveni={G\bibinitperiod}}}%
+      }
+      \list{institution}{1}{%
+        {JSON Schema}%
+      }
+      \strng{namehash}{08fcc539796ba506ca62c3af976b1e3f}
+      \strng{fullhash}{2f5893eb99a1e0d04a1e247843194be3}
+      \strng{fullhashraw}{2f5893eb99a1e0d04a1e247843194be3}
+      \strng{bibnamehash}{08fcc539796ba506ca62c3af976b1e3f}
+      \strng{authorbibnamehash}{08fcc539796ba506ca62c3af976b1e3f}
+      \strng{authornamehash}{08fcc539796ba506ca62c3af976b1e3f}
+      \strng{authorfullhash}{2f5893eb99a1e0d04a1e247843194be3}
+      \strng{authorfullhashraw}{2f5893eb99a1e0d04a1e247843194be3}
+      \field{sortinit}{W}
+      \field{sortinithash}{4315d78024d0cea9b57a0c6f0e35ed0d}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{Draft 2020-12}
+      \field{title}{{JSON} Schema: A Media Type for Describing {JSON} Documents}
+      \field{type}{Internet Draft}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2020}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://json-schema.org/specification.html
+      \endverb
+      \verb{url}
+      \verb https://json-schema.org/specification.html
+      \endverb
+    \endentry
+    \entry{zipkin-docs}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=1d2e8c5b8c0a18fff3dab948ce248b56}{%
+           family={{Zipkin}},
+           familyi={Z\bibinitperiod}}}%
+      }
+      \strng{namehash}{1d2e8c5b8c0a18fff3dab948ce248b56}
+      \strng{fullhash}{1d2e8c5b8c0a18fff3dab948ce248b56}
+      \strng{fullhashraw}{1d2e8c5b8c0a18fff3dab948ce248b56}
+      \strng{bibnamehash}{1d2e8c5b8c0a18fff3dab948ce248b56}
+      \strng{authorbibnamehash}{1d2e8c5b8c0a18fff3dab948ce248b56}
+      \strng{authornamehash}{1d2e8c5b8c0a18fff3dab948ce248b56}
+      \strng{authorfullhash}{1d2e8c5b8c0a18fff3dab948ce248b56}
+      \strng{authorfullhashraw}{1d2e8c5b8c0a18fff3dab948ce248b56}
+      \field{sortinit}{Z}
+      \field{sortinithash}{96892c0b0a36bb8557c40c49813d48b3}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{Distributed tracing system for gathering timing data and troubleshooting latency}
+      \field{title}{Zipkin Documentation}
+      \field{urlday}{18}
+      \field{urlmonth}{4}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://zipkin.io/
+      \endverb
+      \verb{url}
+      \verb https://zipkin.io/
+      \endverb
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+

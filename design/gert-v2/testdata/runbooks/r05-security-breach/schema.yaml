@@ -75,20 +75,23 @@ governance:
 flow:
   # Step 1: Receive Security Alert
   # INTENT: Pause execution until the SIEM fires a webhook for this incident.
-  # GAP-3: No wait_for_event step type exists yet in gert v2. This step should block
-  #        runbook execution until an inbound SIEM webhook payload is received and its
-  #        fields (alert_timestamp, incident_id) are bound to runbook state.
-  #        Placeholder: cli step echoes a stub; real inputs arrive via webhook trigger binding.
+  # Previously: type: extension (incorrect)
   - step:
       id: receive_alert
-      type: cli  # GAP: no wait_for_event step type yet — this step should pause execution
-                 # until an inbound webhook/event is received. Placeholder: cli polls instead.
+      type: wait_for_event
       title: Receive SIEM security alert
-      cli:
-        command: echo "STUB: waiting for event - siem-alert"
+      event:
+        source: webhook
+        id: siem.alert.security_breach
       capture:
-        alert_timestamp: stdout
-        incident_id: stdout
+        alert_timestamp: json.timestamp
+        incident_id: json.incidentId
+      timeout: 1h
+      on_timeout: fail
+      contract:
+        effects: []
+        reads: []
+        writes: [alert_timestamp, incident_id]
 
   # Step 2: Security Officer Triage
   - step:

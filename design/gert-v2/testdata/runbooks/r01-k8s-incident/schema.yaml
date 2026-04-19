@@ -58,20 +58,25 @@ governance:
 flow:
   # Step 1: Detect Alert
   # INTENT: Pause execution until Prometheus fires an alert webhook for pod {{ .pod_name }}.
-  # GAP-3: No wait_for_event step type exists yet in gert v2. This step should block runbook
-  #        execution until an inbound webhook/event payload is received from the monitoring
-  #        system and its fields (timestamp, alert_id) are bound to runbook state.
-  #        Placeholder: cli step echoes a stub; real inputs arrive via webhook trigger binding.
+  # Previously: type: extension (incorrect)
   - step:
       id: detect_alert
-      type: cli  # GAP: no wait_for_event step type yet — this step should pause execution
-                 # until an inbound webhook/event is received. Placeholder: cli polls instead.
-      title: "Receive Prometheus webhook for pod {{ .pod_name }}"
-      cli:
-        command: echo "STUB: waiting for event - prometheus-alert"
+      type: wait_for_event
+      title: "Wait for Prometheus alert webhook for pod {{ .pod_name }}"
+      event:
+        source: webhook
+        id: prometheus.alert.firing
+        filter:
+          alertname: "PodCrashLooping"
       capture:
-        timestamp: stdout
-        alert_id: stdout
+        timestamp: json.startsAt
+        alert_id: json.fingerprint
+      timeout: 30m
+      on_timeout: fail
+      contract:
+        effects: []
+        reads: []
+        writes: [timestamp, alert_id]
 
   # Step 2: Gather Diagnostics (parallel)
   - step:

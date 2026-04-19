@@ -589,6 +589,65 @@ v2 defines fourteen step types:
 \end{tabular}
 \end{center}
 
+% ── Step-type taxonomy diagram ────────────────────────────────────────────────
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[node distance=0.45cm and 0.35cm]
+
+    % ── Execution ─────────────────────────────────────────────────────────────
+    \node[catbox] (cat-exec) {Execution};
+    \node[stepbox, below=of cat-exec]               (cli)     {cli};
+    \node[stepbox, below=0.3cm of cli]              (tool)    {tool};
+    \node[stepbox, below=0.3cm of tool]             (include) {include};
+
+    \begin{scope}[on background layer]
+      \node[gertfit, fit=(cat-exec)(cli)(tool)(include)] (grp-exec) {};
+    \end{scope}
+
+    % ── User Input ────────────────────────────────────────────────────────────
+    \node[catbox, right=0.9cm of cat-exec]              (cat-input)  {User Input};
+    \node[stepbox, below=of cat-input]                  (choice)     {choice};
+    \node[stepbox, below=0.3cm of choice]               (decision)   {decision};
+    \node[stepbox, below=0.3cm of decision]             (collector)  {collector};
+
+    \begin{scope}[on background layer]
+      \node[gertfit, fit=(cat-input)(choice)(decision)(collector)] (grp-input) {};
+    \end{scope}
+
+    % ── Flow Control ──────────────────────────────────────────────────────────
+    \node[catbox, right=0.9cm of cat-input]             (cat-flow)   {Flow Control};
+    \node[stepbox, below=of cat-flow]                   (branch)     {branch};
+    \node[stepbox, below=0.3cm of branch]               (iterate)    {iterate};
+    \node[stepbox, below=0.3cm of iterate]              (parallel)   {parallel};
+
+    \begin{scope}[on background layer]
+      \node[gertfit, fit=(cat-flow)(branch)(iterate)(parallel)] (grp-flow) {};
+    \end{scope}
+
+    % ── Governance ────────────────────────────────────────────────────────────
+    \node[catbox, right=0.9cm of cat-flow]              (cat-gov)    {Governance};
+    \node[stepbox, below=of cat-gov]                    (assert)     {assert};
+    \node[stepbox, below=0.3cm of assert]               (compensate) {compensate};
+    \node[stepbox, below=0.3cm of compensate]           (approve)    {approve};
+    \node[stepbox, below=0.3cm of approve]              (wfe)        {wait\_for\_event};
+
+    \begin{scope}[on background layer]
+      \node[gertfit, fit=(cat-gov)(assert)(compensate)(approve)(wfe)] (grp-gov) {};
+    \end{scope}
+
+    % ── Terminal ──────────────────────────────────────────────────────────────
+    \node[catbox, right=0.9cm of cat-gov]               (cat-term)   {Terminal};
+    \node[stepbox, below=of cat-term]                   (end)        {end};
+
+    \begin{scope}[on background layer]
+      \node[gertfit, fit=(cat-term)(end)] (grp-term) {};
+    \end{scope}
+
+  \end{tikzpicture}
+  \caption{Step type taxonomy — 14 types organized by category.}
+  \label{fig:step-type-taxonomy}
+\end{figure}
+
 \subsection{Common Step Fields}
 \label{subsec:common-fields}
 

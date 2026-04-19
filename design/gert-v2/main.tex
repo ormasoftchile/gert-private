@@ -19,6 +19,40 @@
 \usepackage{listings}
 \usepackage{tcolorbox}
 \usepackage{newunicodechar}
+
+% ── Diagrams (TikZ) ──────────────────────────────────────────────────────────
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, automata, positioning, shapes.geometric,
+                fit, chains, calc, backgrounds}
+
+% Node styles
+\tikzset{
+  % Base step box
+  stepbox/.style={
+    rectangle, rounded corners=3pt,
+    draw=black!60, fill=white,
+    font=\small\ttfamily,
+    minimum width=2.2cm, minimum height=0.7cm,
+    text centered, inner sep=4pt
+  },
+  % Category header
+  catbox/.style={
+    rectangle, rounded corners=3pt,
+    draw=black!80, fill=black!8,
+    font=\small\bfseries,
+    minimum width=2.4cm, minimum height=0.75cm,
+    text centered, inner sep=4pt
+  },
+  % Arrow style
+  gertarrow/.style={
+    ->, >=Stealth, thick, draw=black!60
+  },
+  % Dashed containment
+  gertfit/.style={
+    draw=black!30, dashed, rounded corners=4pt,
+    inner sep=6pt
+  }
+}
 \usepackage[backend=biber,style=numeric,sorting=nyt]{biblatex}
 \addbibresource{references.bib}
 

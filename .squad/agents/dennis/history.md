@@ -423,3 +423,66 @@ Blocked: Finance (multi-level approval), Regulated (FDA workflows)
 
 ---
 
+### 2026-04-18: LaTeX Diagramming Research for Design Document
+
+**Task:** Research and recommend a single, maintainable diagramming approach for the gert v2 design document (322 pages, MastersThesis class, pdflatex + biber, TeX Live 2025).
+
+**Diagram Types Needed:**
+1. Simple flow diagrams (A→B→C, cycles)
+2. Workflow diagrams (runbook steps, branching, parallel, loops)
+3. Architecture diagrams (component relationships, executor contracts)
+4. Data flow / sequence diagrams (RPC call chains, event flows)
+
+**Research Conducted:**
+1. **Current state:** TikZ v3.1.10 already loaded in main.tex; verified TeX Live 2025 includes all major diagram libraries (automata, arrows.meta, positioning, shapes.geometric, fit, chains, calc, pgf-umlsd, forest)
+2. **Comparative analysis:** Evaluated 8 approaches (TikZ native, Forest, pgf-umlsd, Graphviz, Mermaid, PlantUML, draw.io, Inkscape) across dimensions: native/external, install requirements, learning curve, publication quality, compile time, version control
+3. **Academic/industry practice:** Confirmed TikZ is standard for academic papers (IEEE, ACM, Springer); draw.io for web; Graphviz for automation; Mermaid for rapid prototyping
+4. **Compile-time impact:** Verified TikZ adds ~0.2-0.5s per diagram; with 30+ diagrams, +6-15s total (negligible for 322-page document)
+5. **Library coverage:** Confirmed TikZ libraries cover all four diagram types without external dependencies
+
+**Recommendation: TikZ + selective libraries**
+
+**Rationale:**
+- Zero external dependencies (already in TeX Live)
+- Integrates seamlessly with LaTeX fonts, sizing, numbering, cross-references
+- Publication-quality output (professional for technical documents)
+- Covers all diagram types with one consistent approach
+- Reusable style library enables rapid authoring by Leslie & John
+- All code is plain text and version-controllable (meaningful git diffs)
+
+**Key Libraries to Preload:**
+- `arrows.meta` — Modern arrow styles (Stealth)
+- `automata` — Finite state machine styles
+- `positioning` — Relative node placement (`right=of`, `below=of`)
+- `shapes.geometric` — Basic flowchart shapes (rectangle, diamond, circle)
+- `fit` — Group components (subsystem boxes)
+- `chains` — Sequential layouts
+- `calc` — Coordinate math
+- `decorations.markings` — Advanced arrow styling
+
+**Recommended Style Library (for Leslie):**
+Create `sections/99-tikz-diagrams.tex` with predefined styles: `block`, `decision`, `process`, `state`, `component`, `arrow`. Provides copy-paste templates and ensures visual consistency across all sections.
+
+**Fallback:** For rare ultra-complex architecture (40+ components), use draw.io → export PDF → include with `\includegraphics`. Keep this exceptional; don't become the default.
+
+**Gotchas & Mitigations:**
+- Verbose code for complex diagrams (50+ lines) — use draw.io fallback
+- Compile time adds 6-15s for 30+ diagrams — not a blocker, but can optimize with TikZ `externalize` if needed
+- Node positioning requires care — use `node distance=2.5cm` consistently and `positioning` library
+
+**Deliverable:** Comprehensive research brief written to `.squad/tmp/dennis-diagrams-research.md` (14KB) with:
+- Executive summary + recommendation
+- 8-tool comparison table (tool, type, install, learning, best for, limitations)
+- Detailed TikZ coverage analysis (simple flows, workflows, architecture, sequences)
+- Style library code template for Leslie
+- Gotchas & compile-time considerations
+- Integration checklist for team
+
+**Next Steps:**
+1. Ken (architect) reviews and approves recommendation
+2. Leslie implements style library in main.tex
+3. John uses in schema sections; team adds diagrams as they write
+4. After 10-15 diagrams, review compile time and consider externalize if needed
+
+---
+

@@ -34,6 +34,29 @@ This is a LaTeX document using the MastersThesis class. Sections are in `design/
 
 ## Learnings
 
+### 2026-04-19 — Fix: minted syntax highlighting not appearing in PDF (325 pages, CLEAN)
+
+**Problem:** Build compiled clean in `-interaction=nonstopmode` but all code blocks rendered as plain monospace with no colour. The log showed:
+```
+! Package minted Error: minted v3+ executable is not installed or is not added to PATH
+! Package minted Error: Missing definition for highlighting style "friendly"
+```
+Root cause: `latexminted` (bundled in TeX Live 2025 at `/usr/local/texlive/2025/bin/universal-darwin/latexminted`) uses `#!/usr/bin/env python3`. The default `python3` on this machine is Python 3.14 (Homebrew), which removed the `color` keyword argument from `argparse.add_parser`, breaking `latexminted 0.5.0` on startup. TeX ran `latexminted` via shell-escape, it crashed immediately, and minted fell back to un-highlighted output. Build "succeeded" in nonstopmode because pdflatex doesn't abort on package errors.
+
+The `scripts/pypath/python3 → python3.13` wrapper existed but was **never injected into subprocesses**: `scripts/latex.py`'s `run()` function did not set the subprocess `env`, so pdflatex and all its children (including the latexminted shell call) inherited the system PATH with Python 3.14.
+
+**Fix:** Added `_env_with_pypath()` helper to `scripts/latex.py` that prepends `scripts/pypath` to `PATH` for every subprocess. This makes latexminted's shebang resolve to python3.13 via the wrapper, which is compatible.
+
+**Bonus fix:** Added `.latexmkrc` with `$pdf_mode = 1; $bibtex_use = 2;` so latexmk uses biber (for biblatex) instead of bibtex on a clean rebuild.
+
+**Build result:** CLEAN — 0 hard errors, 255/260 code blocks have `\PYG` Pygments colour tokens, 1 pre-existing duplicate-label warning.
+
+**Page count:** 325 pages (up from 321; the bibliography is now fully resolved with biber).
+
+**Commit:** (see below) — `fix: restore minted YAML syntax highlighting`
+
+**Key lesson:** `scripts/latex.py` must always pass `env=_env_with_pypath()` to `subprocess.run` so the pypath override propagates into pdflatex's shell-escape subprocess chain.
+
 ### 2026-04-19 — Mass minted Conversion + 3 New Diagrams (321 pages, CLEAN)
 
 **Task:** Convert all YAML/Go/JSON verbatim and lstlisting blocks to minted across all 16 sections; add 3 new TikZ diagrams.
@@ -440,3 +463,30 @@ All 43 Unicode errors eliminated. Final build: CLEAN.
 - minted requires `--shell-escape` at build time — already set in `scripts/latex.py` and `Makefile`.
 - Remaining `verbatim` blocks in 03-schema-vnext.tex can be converted on-demand; no mass conversion until team verifies output.
 - `\yinline{...}` available for inline YAML snippets (uses `\mintinline{yaml}{...}`).
+
+### 2026-04-19 — Complete Diagram Coverage (325 pages, CLEAN)
+
+**Task:** Draw all remaining diagrams from the audit + one priority diagram (dependency direction legend).
+
+**Build result:** CLEAN — zero hard errors. Pre-existing warnings unchanged.
+
+**Page count:** 325 pages (up from 321, +4 pages for 9 new diagrams).
+
+**Commit:** dc891eb — `docs: complete diagram coverage --- all sections illustrated`
+
+**New diagrams (9 total):**
+1. `fig:dependency-direction` (SS02) — Two-node legend + transitive example with dashed bent arrow. Placed right after `fig:architecture-overview`, before Primary Components section.
+2. `fig:cli-step-execution` (SS03) — 7-node horizontal chain: Parse→Governance→Shell→Build→Exec→Capture→Exit. Used `\resizebox{\linewidth}{!}` for width.
+3. `fig:tool-invocation-flow` (SS03) — 6-node horizontal: Resolve→Transport→Auth→Invoke→Stream→Capture. Two failure exits.
+4. `fig:include-inlining` (SS03) — Parent+include+dashed `gertfit` box around inlined child. Expand/continue arrows crossing boundary.
+5. `fig:branch-logic` (SS03) — Diamond decision node (`shape=diamond, aspect=2.5`) with first-match and no-match branches merging.
+6. `fig:iterate-loop` (SS03) — 4-node vertical chain with loop-back using `++(1.2,0) |-` routing. Exit and max-exceeded branches.
+7. `fig:parallel-fanout` (SS03) — Fork→3 branches→join (all/any/majority)→merge. Dashed failure bypass arrow.
+8. `fig:collector-triad` (SS03) — Three-column layout: choice/decision/collector side by side with vertical dashed dividers on background layer.
+9. `fig:compensation-flow` (SS03) — Forward steps, failure point, reverse compensation chain using `--` and `|-` routing.
+
+**TikZ learnings:**
+- `shape=diamond, aspect=2.5` works cleanly with `shapes.geometric` for decision nodes.
+- `\resizebox{\linewidth}{!}{...}` is the right solution for wide horizontal chains.
+- `gertfit` + `on background layer` for bounding boxes around grouped nodes.
+- Loop-back arrows: `(node.east) -- ++(offset,0) |- (target.east)` gives clean right-side routing.

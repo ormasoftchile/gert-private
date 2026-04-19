@@ -4,12 +4,27 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
 import zipfile
 from datetime import datetime
 from pathlib import Path
+
+# scripts/pypath/python3 wraps python3.13 to work around a Python 3.14 API
+# breakage in latexminted 0.5.0 (argparse.add_parser lost the `color` kwarg).
+# Prepend it so that latexminted's #!/usr/bin/env python3 shebang resolves to
+# python3.13 in every TeX subprocess this script spawns.
+_PYPATH = str(Path(__file__).resolve().parent / "pypath")
+
+
+def _env_with_pypath() -> dict[str, str]:
+    env = os.environ.copy()
+    path = env.get("PATH", "")
+    if _PYPATH not in path.split(os.pathsep):
+        env["PATH"] = f"{_PYPATH}{os.pathsep}{path}"
+    return env
 
 
 def find_executable(name: str) -> str | None:
@@ -18,7 +33,7 @@ def find_executable(name: str) -> str | None:
 
 def run(cmd: list[str], cwd: Path) -> int:
     print("Running:", " ".join(cmd))
-    proc = subprocess.run(cmd, cwd=str(cwd))
+    proc = subprocess.run(cmd, cwd=str(cwd), env=_env_with_pypath())
     return proc.returncode
 
 

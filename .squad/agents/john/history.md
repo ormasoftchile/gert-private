@@ -501,3 +501,14 @@ Both defects have been resolved. Phase 2 ready for re-review.
 - Tests: 14/14 pass
 - Vet: No warnings
 - Next gate: Ken's re-review
+## 2026-04-19: D2 Verification Complete
+
+**Status:** ✅ APPROVED
+
+Backtracking fix verified by Ken re-review. Lines 270-271 contain correct DFS backtracking:
+```go
+pc.seen[inclPath] = true
+defer delete(pc.seen, inclPath)
+```
+
+New diamond-dependency test passes. All 14 tests pass. True cycle detection unchanged. Ready for Phase 3.

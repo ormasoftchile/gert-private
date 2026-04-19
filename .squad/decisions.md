@@ -1,3 +1,218 @@
+# Ken — Phase 2 Architectural Review
+
+**Date:** 2026-04-19  
+**Reviewer:** Ken (Software Architect)  
+**Implementor:** Brian  
+**Integrations:** Barbara (testutil fakes)
+
+---
+
+## VERDICT: ⚠️ REJECTED
+
+Phase 2 has strong foundations but contains **2 critical defects** that must be fixed before approval.
+
+---
+
+## Critical Defects
+
+### 1. Missing Compile-Time Interface Guard (planner.go)
+
+**File:** `v2/internal/planner/planner.go`  
+**Issue:** No `var _ plannerPkg.Planner = (*impl)(nil)` guard exists.
+
+The concrete type `impl` claims to implement `planner.Planner`, but there's no compile-time verification. If the interface changes, compilation will silently succeed but the constructor will panic at runtime.
+
+**Required fix:**
+```go
+// After line 17 (after imports, before const)
+var _ plannerPkg.Planner = (*impl)(nil)
+```
+
+**Assigned to:** Barbara (standard infrastructure pattern, quick fix)
+
+---
+
+### 2. Cycle Detection Uses Permanent Marking — Blocks Valid Diamond Dependencies
+
+**File:** `v2/internal/planner/planner.go`, lines 260-268  
+**Issue:** The `seen` map uses permanent marking (`pc.seen[inclPath] = true`), which is never cleared.
+
+This incorrectly rejects valid diamond dependencies:
+
+```
+root.yaml
+├── branch A: include shared.yaml   ← marks shared.yaml
+└── branch B: include shared.yaml   ← REJECTED (but should be allowed!)
+```
+
+The spec allows the same runbook to be included in **different branches** (sibling references). Only **ancestor references** (A→B→A) should be forbidden.
+
+**Current behavior:** Uses permanent marking for all paths  
+**Required behavior:** Use temporary (ancestor-only) marking with backtracking, OR distinguish sibling vs. ancestor references
+
+**Fix approach:**
+```go
+// Before recursing into child:
+pc.seen[inclPath] = true
+defer delete(pc.seen, inclPath)  // Backtrack after recursion completes
+```
+
+This implements "gray" marking (temporary during recursion) instead of "black" marking (permanent).
+
+**Assigned to:** John (requires understanding of graph traversal semantics)
+
+---
+
+## Non-Critical Issues (Address in Phase 3)
+
+### 3. Tests Missing `testutil.Tag` Links
+
+**File:** `v2/internal/planner/planner_test.go`  
+**Issue:** None of the 13 tests use `testutil.Tag()` to link to spec rules. Parser tests demonstrate the pattern:
+```go
+_ = testutil.Tag("03-schema-vnext.md", "§4.2", "step MUST have a type field")
+```
+
+**Severity:** Non-blocking (documentation quality)
+
+### 4. No Test for Diamond Dependency (Different Branches)
+
+**File:** `v2/internal/planner/planner_test.go`  
+**Issue:** Missing test case for "same runbook included in sibling branches should succeed."
+
+Once defect #2 is fixed, add this test to prevent regression.
+
+### 5. `rawSpec` Fallback Indicates Schema Gap
+
+**File:** `v2/internal/planner/planner.go`, lines 296-354  
+**Issue:** The `rawSpec` fallback suggests malformed input could reach the planner. If the parser validates that every step has its typed spec populated, this fallback is dead code.
+
+**Recommendation:** Either remove the fallback (parser guarantees spec is populated) or add explicit panic with "unreachable: parser should reject steps without typed spec" comment.
+
+---
+
+## What's Working Well
+
+1. **Interface conformance** — `Plan()` signature matches `pkg/planner.Planner` and `pkg/engine.Planner` (both return `*engine.ExecutionPlan`)
+
+2. **Max depth enforcement** — Depth is passed by value (`depth int`), not by pointer. Each branch of recursion gets its own counter. ✅ Correct.
+
+3. **Tool lookup contract** — `resolveTool` calls `Lookup(ctx, name, action)` matching the interface signature. Brian's in-test fakes and Barbara's `FakeToolRegistry` both implement the same signature. ✅
+
+4. **Error wrapping** — `PlanError.Unwrap()` returns `Code`, enabling `errors.Is()` matching:
+   ```go
+   errors.Is(err, plannerPkg.ErrImportCycle)  // works ✅
+   ```
+
+5. **ExecutionPlan completeness** — All required fields populated:
+   - `RunbookPath` ✅
+   - `Steps` ([]ResolvedStep) ✅
+   - `Tools` map ✅
+   - `Providers` (empty map, acceptable) ✅
+   - `Metadata` (PlannedAt, RunbookID, RunbookName) ✅
+
+6. **Topo sort** — Uses declaration order, which is correct per §02: "ExecutionPlan is a flat ordered list, not a DAG." Linear flow processing is the intended design.
+
+7. **Build/vet clean** — `go test ./internal/planner/... -v` passes all 13 tests. `go vet ./...` reports no warnings.
+
+8. **Barbara's fakes** — Both `FakeRunbookLoader` and `FakeToolRegistry` include compile-time interface guards. Professional quality.
+
+---
+
+## Verification Commands Run
+
+```bash
+cd /Volumes/Projects/gert/v2 && go test ./internal/planner/... -v -count=1
+# Result: 13/13 PASS
+
+cd /Volumes/Projects/gert/v2 && go vet ./...
+# Result: No warnings
+```
+
+---
+
+## Required Actions
+
+| # | Defect | Assignee | Priority |
+|---|--------|----------|----------|
+| 1 | Add interface guard | Barbara | Critical |
+| 2 | Fix cycle detection (allow diamond) | John | Critical |
+
+Phase 2 remains **REJECTED** until both critical defects are resolved.
+
+---
+
+**Ken**  
+Software Architect
+# Phase 2 Re-Review Verdict
+
+**Reviewer:** Ken (Software Architect)
+**Date:** 2026-04-20
+**Status:** ✅ **APPROVED**
+
+## Context
+
+Phase 2 was initially REJECTED with 2 defects:
+- **D1:** Missing interface guard for `Planner` implementation
+- **D2:** Cycle detection blocked valid diamond dependencies
+
+Barbara fixed D1. John fixed D2. Brian (original author) did not touch these fixes.
+
+## Verification Results
+
+### Build & Test
+```bash
+cd /Volumes/Projects/gert/v2 && go build ./... && go vet ./... && go test ./internal/planner/... -v -count=1
+```
+**Result:** All 14 tests PASS (13 original + 1 new diamond test)
+
+### D1 Verified ✅
+**Interface guard present at line 19:**
+```go
+var _ plannerPkg.Planner = (*impl)(nil)
+```
+- Correctly placed at package level
+- Uses correct concrete type `impl` (unexported)
+- Uses correct interface `plannerPkg.Planner`
+- Compiles successfully (go build passes)
+
+### D2 Verified ✅
+**DFS backtracking implemented correctly at lines 270-271:**
+```go
+pc.seen[inclPath] = true
+defer delete(pc.seen, inclPath)
+```
+- `defer delete` appears immediately after `pc.seen[inclPath] = true`
+- No intervening code between the two statements
+- `defer` is inside `resolveInclude` function scope — correct behavior
+- Pattern matches standard DFS backtracking (mark on entry, unmark on return)
+
+### Diamond Test Verified ✅
+**`TestPlanner_DiamondDependency` (lines 364-442):**
+- Tests diamond: A→B→D and A→C→D (D included from two branches)
+- Verifies no cycle error returned (`if err != nil { t.Fatalf(...) }`)
+- Verifies plan correctness: expects 2 steps (d-step inlined twice)
+- Test PASSES — diamond dependencies now correctly allowed
+
+### Regression Check ✅
+- All 13 original tests still pass
+- `TestPlanner_ImportCycleDetected` and `TestPlan_ImportCycleDetection` both still detect true cycles (A→B→A)
+- Backtracking fix does not break real cycle detection
+
+## Verdict
+
+**APPROVED** — Phase 2 complete.
+
+Both defects correctly fixed. All 14 tests pass. Cycle detection now properly distinguishes true cycles from diamond dependencies.
+
+## Non-blocking Suggestions for Phase 3
+
+1. **Test traceability:** Add `testutil.Tag()` links in tests to trace back to spec sections
+2. **rawSpec cleanup:** Consider removing `rawSpec` fallback or documenting when it's expected (parser should guarantee typed specs)
+3. **Test coverage:** Consider adding more edge cases (triple-diamond, mixed diamond+cycle)
+
+---
+*Decision recorded by Ken, Software Architect*
 # Squad Decisions
 
 ## Active Decisions

@@ -79,6 +79,13 @@ body,
   font-size: 0.9rem;
 }
 
+.mode-summary {
+  border-top: 1px dashed var(--line);
+  padding-top: 0.45rem;
+  color: #32485b;
+  font-size: 0.84rem;
+}
+
 .legend {
   list-style: none;
   padding: 0;
@@ -184,6 +191,47 @@ body,
   height: 9px;
   border: 2px solid #fff;
   background: #203243;
+}
+
+.react-flow__node.gov-muted .rb-node {
+  opacity: 0.42;
+  filter: saturate(0.45);
+}
+
+.react-flow__node.gov-focus .rb-node {
+  opacity: 1;
+  box-shadow: 0 0 0 2px #d95f0233, 0 10px 22px #00000022;
+}
+
+.react-flow__node.cp-muted .rb-node,
+.react-flow__node.fail-muted .rb-node {
+  opacity: 0.33;
+  filter: saturate(0.55);
+}
+
+.react-flow__node.cp-focus .rb-node {
+  opacity: 1;
+  box-shadow: 0 0 0 2px #0b7a4d33, 0 10px 22px #00000022;
+}
+
+.react-flow__node.fail-focus .rb-node {
+  opacity: 1;
+  box-shadow: 0 0 0 2px #b4231833, 0 10px 22px #00000022;
+}
+
+.react-flow__node.sankey-node .rb-node {
+  border-width: 1px;
+  box-shadow: 0 4px 12px #00000014;
+}
+
+.react-flow__node.matrix-node .rb-node {
+  border-style: dashed;
+  border-color: #35536f55;
+}
+
+.react-flow__node.flow-sankey-node .rb-node {
+  border-width: 1px;
+  box-shadow: 0 5px 14px #00000018;
 }
 
 @media (max-width: 960px) {

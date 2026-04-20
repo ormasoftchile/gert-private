@@ -1173,3 +1173,132 @@ These decisions are now locked per project governance:
 4. **Fail-fast parallel:** Error in any branch cancels siblings
 5. **Consume semantics:** wait_for_event uses first-waiter-wins dispatch
 6. **Synchronous trace writes:** TraceWriter.Append() must complete before step completion
+
+
+---
+
+# Phase 3 Runtime Core — Architectural Review
+
+**Reviewer:** Ken (Software Architect)  
+**Date:** 2026-04-20  
+**Artifact:** `v2/internal/engine/engine.go`  
+**Requested by:** Cristian
+
+---
+
+## VERDICT: ✅ APPROVED
+
+Phase 3 implementation is **APPROVED**. The runtime core is well-designed, race-free, and production-ready.
+
+---
+
+## Review Criteria Analysis
+
+### 1. Interface Conformance ✅
+
+**Pass.** Compile-time guard present at line 20:
+```go
+var _ enginepkg.Engine = (*impl)(nil)
+```
+
+### 2. Trace Event Ordering ✅
+
+**Pass.** Events emitted correctly:
+- Linear: `run/started → step/started → step/completed → run/completed` (verified)
+- Failure: `step/failed → run/completed` (with error payload; no separate `run/failed` kind — documented at line 438)
+- Parallel: branch events buffered in `eventBuffer`, flushed in declaration order at lines 303-307 (deterministic by index `i`, not by completion order)
+- wait_for_event: `step/started → event/received → step/resumed → step/completed` (lines 349-405)
+
+### 3. Mutex Discipline ✅
+
+**Pass.** Mutex released during all blocking I/O:
+- `dispatcher.Wait()`: unlocked at line 358, relocked at line 360
+- `executor.Execute()`: unlocked at line 198, relocked at line 200
+- `traceWriter.Append()`: called while holding mutex (correct — trace writes are synchronous and brief)
+
+The mutex-held trace write is the right call: sequence numbers must be assigned atomically, and trace writes are append-only file ops (fast).
+
+### 4. Parallel Fail-Fast ✅
+
+**Pass.** `errgroup.WithContext()` at line 277 creates a derived context that cancels all branches when any branch returns an error. `eg.Wait()` at line 298 blocks until all goroutines complete — no leaks.
+
+### 5. Signal Race ✅
+
+**Pass.** Signal handler goroutine (lines 65-87) properly exits via two paths:
+- `case sig, ok := <-sigCh`: handles signal, then returns
+- `case <-runCtx.Done()`: run completed normally, goroutine exits
+
+No leak: when run completes, `runCancel()` is called (line 421 or 446), closing `runCtx`, which terminates the signal goroutine.
+
+### 6. safeClose Correctness ✅
+
+**Pass.** Uses `CompareAndSwap` (line 721):
+```go
+if closed.CompareAndSwap(false, true) {
+    close(ch)
+}
+```
+CAS is the correct idiom — two concurrent callers cannot both see `false`.
+
+### 7. errgroup Dependency ✅
+
+**Pass.** `golang.org/x/sync v0.20.0` present in both `go.mod` (line 8) and `go.sum` (lines 5-6).
+
+### 8. Test Quality ⚠️ (Minor)
+
+**Mostly pass, with caveats:**
+
+- `TestEngine_ParallelBranches`: Verifies trace event ordering (branch-a before branch-b). However, the test doesn't force a race — both branches complete near-instantly. The ordering check is valid because it tests the *flush order*, not the *completion order*.
+
+- `TestEngine_SignalCancellation`: **Good test.** Uses a blocking executor that waits on `ctx.Done()`, then injects a signal. This actually exercises the race: signal vs. normal completion.
+
+**Observation:** A stress test that adds random delays to parallel branches would increase confidence, but the current tests are sufficient for Phase 3 acceptance.
+
+### 9. Race Detector (`-race -count=5`) ✅
+
+**Pass.** All 5 repetitions clean:
+```
+go test ./internal/engine/... -race -count=5 -v
+PASS (16 tests × 5 = 80 executions, 0 races)
+```
+
+Also verified with `-count=10`: still clean.
+
+### 10. go vet ✅
+
+**Pass.** `go vet ./...` returns no warnings.
+
+---
+
+## Non-Blocking Suggestions for Phase 4
+
+1. **mergeContexts goroutine leak** — The helper at line 727-735 spawns a goroutine that only exits when *both* contexts cancel or the merged context cancels. If the caller's context (`a`) outlives the run context (`b`), the goroutine exits promptly. However, if `b` is cancelled but `a` is long-lived (e.g., `context.Background()`), the merged context's goroutine will linger until `cancel()` is called. **Current usage is safe** (merged context is scoped to a single `Next()` call), but consider documenting this or using a different approach in Phase 4.
+
+2. **Test coverage for parallel branch failure** — Add a test where one branch fails and verify that:
+   - Other branches receive context cancellation
+   - Events from the failing branch appear in trace before events from cancelled branches
+
+3. **Documentation consistency** — `doc.go` mentions `run/failed` (line 21) but no such event kind exists. The implementation correctly uses `run/completed` with an error payload (line 438-439). Update `doc.go` to match.
+
+---
+
+## Summary
+
+| Criterion | Result |
+|-----------|--------|
+| Interface guard | ✅ |
+| Trace ordering | ✅ |
+| Mutex discipline | ✅ |
+| Parallel fail-fast | ✅ |
+| Signal race | ✅ |
+| safeClose CAS | ✅ |
+| errgroup dependency | ✅ |
+| Test quality | ⚠️ (minor) |
+| Race detector | ✅ |
+| go vet | ✅ |
+
+**Phase 3 is complete.**
+
+---
+
+*Reviewed by Ken, Software Architect*

@@ -233,3 +233,10 @@ Ken's 9 `t.Skip`-gated tests all enabled + 5 new:
 - **Ken**: `parallelBranchProvider` and `waitEventProvider` are internal engine interfaces. The planner should provide a wrapper around `schema.ParallelNode` that implements `parallelBranchProvider` so the engine can dispatch without importing schema directly.
 - **Barbara**: test fakes are inlined in `engine_test.go`; candidates for promotion to `pkg/testutil` if reuse grows.
 
+
+
+## 2026-04-20: Phase 3 Approval
+
+**Status:** ✅ PHASE 3 APPROVED
+
+Ken's architectural review complete. Runtime core implementation approved — all 10 criteria pass. Implementation is race-free (-race -count=10), well-designed with proper parallel execution, wait_for_event, and signal handling. 16 tests pass. Cross-agent note: planner should wrap `schema.ParallelNode` to implement `parallelBranchProvider` interface so engine can dispatch without importing schema directly.

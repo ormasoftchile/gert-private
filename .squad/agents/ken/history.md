@@ -1102,3 +1102,48 @@ Designed complete Phase 3 Runtime Core architecture including:
 All 7 interface designs documented in decisions.md. Build/vet clean. 11 tests (9 skip, 2 pass).
 
 **Unblocks:** Phase 3 implementation, Brian's executor logic, step executor implementations
+
+---
+
+## 2026-04-20: Phase 3 Runtime Core — Architectural Review
+
+**Status:** APPROVED  
+**Requested by:** Cristian
+
+### Review Summary
+
+Reviewed Brian's Phase 3 implementation at `v2/internal/engine/engine.go`. All criteria passed:
+
+| Criterion | Result |
+|-----------|--------|
+| Interface guard (`var _ Engine = (*impl)(nil)`) | PASS |
+| Trace event ordering (linear, failure, parallel, wait_for_event) | PASS |
+| Mutex discipline (released during blocking I/O) | PASS |
+| Parallel fail-fast (errgroup.WithContext cancellation) | PASS |
+| Signal race (handler goroutine cleanup) | PASS |
+| safeClose (CompareAndSwap, not plain set) | PASS |
+| errgroup dependency (go.mod + go.sum) | PASS |
+| Test quality | Minor (tests valid but could stress more) |
+| Race detector (`-race -count=10`) | PASS (0 races) |
+| go vet | PASS |
+
+### Non-Blocking Suggestions for Phase 4
+
+1. **mergeContexts** — Document that the helper goroutine exits only when merged context is cancelled
+2. **Test coverage** — Add parallel branch failure test verifying context cancellation propagation
+3. **doc.go** — Remove reference to `run/failed` (no such event kind; use `run/completed` with error payload)
+
+### Verdict
+
+Phase 3 is complete. Implementation is race-free, well-designed, and production-ready.
+
+
+## 2026-04-20: Phase 3 Approval
+
+**Status:** ✅ PHASE 3 APPROVED
+
+Architectural review complete. All 10 criteria verified:
+- Interface conformance, trace ordering, mutex discipline, parallel fail-fast, signal race, safeClose, errgroup dependency, test quality, race detector (-count=10), go vet — all pass.
+- 16 tests pass. Parallel execution, wait_for_event, signal handling complete and race-free.
+- Minor suggestion: test coverage for parallel branch failure. Non-blocking.
+- Implementation locked: client-driven execution, deterministic branch order, buffered branch traces, fail-fast parallel, consume semantics, synchronous trace writes.

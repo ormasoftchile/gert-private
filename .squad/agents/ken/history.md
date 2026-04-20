@@ -1147,3 +1147,125 @@ Architectural review complete. All 10 criteria verified:
 - 16 tests pass. Parallel execution, wait_for_event, signal handling complete and race-free.
 - Minor suggestion: test coverage for parallel branch failure. Non-blocking.
 - Implementation locked: client-driven execution, deterministic branch order, buffered branch traces, fail-fast parallel, consume semantics, synchronous trace writes.
+
+### 2026-04-20 — Phase 4 Design: Governance Engine
+
+**What was done:**
+
+Produced a complete Phase 4 architecture design for the governance engine — the layer that enforces command allow/deny, env-var blocking, approval gates, and output redaction during step execution.
+
+**Key design decisions:**
+
+1. **StepInfo breaks the import cycle** — `pkg/governance.StepInfo` is a governance-local projection of `ResolvedStep`, avoiding `pkg/governance` to `pkg/engine` dependency
+2. **PolicyEvaluator wraps GovernancePolicy** — single `Evaluate()` method orchestrates all checks; engine calls one interface, evaluator calls the fine-grained `GovernancePolicy` methods internally
+3. **Deny-wins enforced by evaluation order** — deny patterns checked first, short-circuit on match; this is an invariant, not configurable
+4. **Redaction is post-execution only** — separate from pre-flight evaluation; applied to StepResult.Output/Vars BEFORE trace events are emitted
+5. **ApprovalGate is injectable** — interface in `pkg/governance`, injected via `EngineConfig`; `NoOpApprovalGate` (tests/CI) and `TerminalApprovalGate` (interactive)
+6. **Evidence is a value type** — no pointers to interfaces, all JSON tags, testable without mocks, embeddable in trace events
+7. **StepStatusDenied is new** — distinct from Failed (denied = never executed; failed = executed and errored)
+8. **Step-level governance deferred** — builder accepts variadic configs for future merge, but Phase 4 only uses runbook-level
+
+**Integration points in engine.go:**
+- Pre-flight: after step/started emission, before executor lookup (~line 168)
+- Post-execution: after executor returns, before result recording (~line 225)
+
+**Deliverables:**
+1. `.squad/tmp/ken-phase4-design.md` — Full design document with interface contracts, merge rules, engine integration pseudocode, redaction model, 28-test plan, open questions
+2. `.squad/decisions/inbox/ken-phase4-governance.md` — Decision record with 8 decisions (D1-D8)
+
+**Package structure:** 4 new files in `pkg/governance/` (public contracts), 4 in `internal/governance/` (implementations), 2 in `pkg/testutil/` (fakes). Total: 10 new files.
+
+**Status:** Ready for Brian's implementation.
+
+### 2026-04-20 — Phase 4 Governance Engine Review: APPROVED
+
+**Reviewed:** Brian's implementation + Barbara's fakes for Phase 4 governance engine.
+
+**Files reviewed:** 18 files total — 4 public contracts (pkg/governance/), 8 implementations + tests (internal/governance/), 3 engine integration files, 2 test fakes.
+
+**All 10 criteria passed:**
+- C1 Import discipline: no cycles, go build ./... clean
+- C2 Deny-wins: deny evaluated first in CheckCommand(), short-circuits
+- C3 EvaluationResult: Allowed/Denied/RequiresApproval mutually consistent
+- C4 Evidence: value type, all JSON tags, roundtrip test passes
+- C5 Engine nil-safety: nil evaluator = no governance; nil gate + approval = error (not panic)
+- C6 Mutex discipline: ApprovalGate.RequestApproval called outside mutex (same as executor)
+- C7 StepStatusDenied: added to run.go, executor never called, error_type governance emitted
+- C8 Redaction timing: after executor, before trace events
+- C9 Test coverage: 26 tests, all three named tests present, both fakes have compile-time guards
+- C10 Race safety: go test ./... -race -count=3 clean; FakeApprovalGate uses mutex
+
+**Quality notes (non-blocking):**
+1. internal/engine imports internal/governance for NewRedactor — design shows only pkg/governance. Not a cycle, but consider injecting Redactor interface.
+2. internal/governance/evaluator.go lacks compile-time interface guard (var _ governance.PolicyEvaluator = (*evaluator)(nil))
+3. FakeGovernancePolicy.CheckCommandCalls lacks mutex (unlike FakeApprovalGate.Calls) — safe for single-goroutine use only.
+
+**Verdict written to:** .squad/decisions/inbox/ken-phase4-approved.md
+
+
+### 2026-04-21 -- Phase 5 Step Type Executors Design
+
+**What was designed:**
+
+Phase 5 design doc produced at .squad/tmp/ken-phase5-design.md covering all 14 v2 step types.
+
+**Key architectural decisions:**
+- D1: Flat internal/executor/{kind}.go -- one file per executor, no sub-packages
+- D2: CLI executor uses new Platform.Exec(ctx, ExecRequest) (*ExecResult, error) for hermetic testability
+- D3: Expression evaluation via text/template wrapped in pkg/expr.Evaluator interface; fixtures already use Go template syntax
+- D4: Condition evaluation reuses same text/template engine, wrapping conditions in if/else template
+- D5: New pkg/input.InputProvider interface in leaf package (separate from Platform -- UI concern, not OS)
+- D6: include executor registered as no-op pass-through (safer than unregistered)
+- D7: parallel and wait_for_event NOT registered -- engine-native dispatch in executeStep() before registry lookup
+- D8: MapRegistry in internal/executor/registry.go -- colocated with executors, not engine
+
+**New interfaces introduced:**
+- pkg/expr.Evaluator -- template expression resolution
+- pkg/expr.ConditionEvaluator -- boolean condition evaluation
+- pkg/input.InputProvider -- user input collection (choice/decision/collector)
+- platform.Exec() -- subprocess execution added to Platform interface
+
+**Test plan:** 46 test cases across executor, expression, registry, and input provider layers.
+
+**Fixture analysis:** r01-r13 mapped to executor coverage. Identified 5 gaps requiring r14-r18.
+
+**Import safety:** Verified internal/executor -> pkg/* only (never internal/engine). SubStepRunner callback injected as function type to avoid import cycle.
+
+**Decision filed:** .squad/decisions/inbox/ken-phase5-design.md
+
+
+### 2026-04-21 - Phase 5 Step Type Executors Review
+
+**Verdict:** REJECTED (1 defect out of 10 criteria)
+
+**What passed (9/10):**
+- Import discipline: production code in internal/executor imports only pkg/* interfaces
+- Nil-safety: all three new optional EngineConfig fields degrade gracefully
+- Assert deny-wins: assertion failures produce StepStatusFailed + Output["failures"], no infra error
+- CLI subprocess: Platform.Exec abstraction, FakePlatform in tests, stdout/stderr/exit_code in output
+- Template evaluator: stateless struct, zero-field, race-safe
+- End step terminal: Output["terminal"]=true -> isTerminalOutput -> completeTerminalRun chain
+- parallel/wait_for_event NOT registered in MapRegistry
+- Include registered as no-op StepStatusCompleted
+- Race safety: all packages pass go test ./... -race -count=3
+
+**What failed:**
+- C9 (test coverage): TestAssertExecutor_OneFails verifies status but NOT Output["failures"] content. The criterion requires TestAssertExecutor_FailureDetails or equivalent that validates the failure details shape.
+
+**Fix assigned to:** Fix Agent (executor test file, not testutil/fake)
+
+**Key architectural observations:**
+- 12 executor files + registry + helpers in a flat internal/executor/ layout - clean and navigable
+- SubStepRunner callback pattern for branch/iterate/compensate avoids circular dependencies
+- RegistryConfig bundles all executor dependencies for NewDefaultRegistry factory
+- FakeInputProvider uses sync.Mutex for call recording - race-safe
+- SimpleConditionEvaluator wraps conditions in if-EXPR-true-else-false-end template
+- 25 tests total in internal/executor/, passing with -race -count=5
+
+### Phase 5 Re-review — C9 Fix (2026-04-21)
+
+**Verdict:** ✅ APPROVED — C9 defect resolved, 10/10 criteria pass.
+
+The Fix Agent extended `TestAssertExecutor_OneFails` (assert_test.go:42-54) to verify `Output["failures"]` shape: non-nil slice, plus `type`, `subject`, and `expected` fields with correct values. Full suite passes with `-race -count=3`, zero failures. Approval written to `.squad/decisions/inbox/ken-phase5-approved.md`.
+
+**Lesson:** Reject-and-fix cycle worked cleanly — a single low-severity test gap was identified, assigned to a third-party Fix Agent, and resolved in one round. Focused re-reviews on the specific defect keep turnaround fast without re-auditing passing criteria.

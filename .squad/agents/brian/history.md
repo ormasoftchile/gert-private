@@ -199,3 +199,37 @@ Implemented the full Phase 2 planner. All 13 tests pass; `go build ./... && go v
 
 Defects D1 (Barbara's interface guard) and D2 (John's backtracking fix) both verified correct. All 14 tests pass including new diamond-dependency test. Phase 2 implementation complete. Ready to transition to Phase 3.
 
+## 2026-04-19: Phase 3 — Runtime Core Implementation
+
+**Status:** ✅ COMPLETE — 16 tests pass, race-free (`-race`)
+
+### What was built
+
+`v2/internal/engine/engine.go` — concrete `pkg/engine.Engine` implementation.
+
+The core loop uses the existing `Start() + RunHandle.Next()` client-driven model. Key additions over Ken's stub:
+
+1. **Signal handling** — `Start()` creates `runCtx/runCancel`. A goroutine listens on `Platform.NotifySignals(runCtx)`. On signal: acquires mutex, emits `run/cancelled`, closes events channel, calls `runCancel()`. `mergeContexts()` helper propagates cancellation into step context so executors are interrupted.
+
+2. **Parallel branches** — Engine type-asserts `step.Spec` to `parallelBranchProvider` interface (`GetBranches() []engine.BranchSpec`). Branches run in `errgroup` goroutines with isolated `eventBuffer` per branch. On join, buffers flushed in declaration order (deterministic trace ordering). `golang.org/x/sync v0.20.0` added to go.mod.
+
+3. **wait_for_event** — Engine type-asserts to `waitEventProvider` interface (`EventFilter() (eventbus.EventFilter, time.Duration)`). Releases mutex while calling `dispatcher.Wait()`, emits `event/received` + `step/resumed`.
+
+4. **Mutex discipline** — `executeStep()` and `executeWaitForEvent()` release `h.mu` before calling external I/O. `safeClose()` with `eventsClosed atomic.Bool` prevents double-close panics.
+
+5. **No `run/failed` event kind** — `trace` package has none; infrastructure failures emit `run/completed` with error payload.
+
+### Test coverage (16 tests)
+
+Ken's 9 `t.Skip`-gated tests all enabled + 5 new:
+- `TestEngine_EmitsRunEvents` — sequence monotonicity + event order
+- `TestEngine_StepFailure` — step/failed present, step-2 not started
+- `TestEngine_ParallelBranches` — 2 concurrent branches, events flushed in declaration order
+- `TestEngine_WaitForEvent` — dispatcher unblocks step, event/received + step/resumed
+- `TestEngine_SignalCancellation` — SIGINT while executor running → run/cancelled
+
+### Cross-agent notes
+
+- **Ken**: `parallelBranchProvider` and `waitEventProvider` are internal engine interfaces. The planner should provide a wrapper around `schema.ParallelNode` that implements `parallelBranchProvider` so the engine can dispatch without importing schema directly.
+- **Barbara**: test fakes are inlined in `engine_test.go`; candidates for promotion to `pkg/testutil` if reuse grows.
+

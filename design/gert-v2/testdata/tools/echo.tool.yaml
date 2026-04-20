@@ -1,0 +1,18 @@
+name: echo
+source: tool://echo
+description: Simple echo tool for stdio transport testing
+transport:
+  type: stdio
+  command: "${GERT_TOOLS_DIR}/echo"
+actions:
+  - name: echo
+    description: Echoes the message argument to stdout
+    inputs:
+      message:
+        type: string
+        required: true
+        description: Message to echo
+    outputs:
+      result:
+        type: string
+        description: Echoed message on stdout

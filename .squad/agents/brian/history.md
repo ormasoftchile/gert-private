@@ -240,3 +240,49 @@ Ken's 9 `t.Skip`-gated tests all enabled + 5 new:
 **Status:** ✅ PHASE 3 APPROVED
 
 Ken's architectural review complete. Runtime core implementation approved — all 10 criteria pass. Implementation is race-free (-race -count=10), well-designed with proper parallel execution, wait_for_event, and signal handling. 16 tests pass. Cross-agent note: planner should wrap `schema.ParallelNode` to implement `parallelBranchProvider` interface so engine can dispatch without importing schema directly.
+
+## Learnings — Phase 4 Governance Engine (2026-04-20)
+
+### Phase 4 Implemented — Governance Engine Complete
+
+Implemented the full Phase 4 governance engine according to Ken's design. All 26 tests pass with race detection.
+
+**New files:**
+- pkg/governance/evaluator.go, evidence.go, approval.go — public contracts
+- internal/governance/builder.go, evaluator.go, approval.go, redaction.go, evidence.go — implementations
+- internal/governance/*_test.go — 26 tests
+
+**Modified files:**
+- pkg/engine/run.go — StepStatusDenied, StepOutcomeDenied
+- pkg/engine/engine.go — GovernanceEvaluator, ApprovalGate in EngineConfig
+- internal/engine/engine.go — pre-flight checks, post-execution redaction
+
+### Key Decisions
+
+D1: StepInfo projection breaks import cycle (pkg/governance must not import pkg/engine)
+D2: evaluator.requireApproval extracted via type assertion at construction
+D3: Deny-wins enforced by evaluation order (deny first, short-circuit)
+D4: Redaction is post-execution pass (before trace emission)
+D5: Mutex released during ApprovalGate.RequestApproval (blocking call)
+D6: path.Match for glob patterns (*, ?, [range])
+D7: Evidence is a value type (no pointers, fully JSON-serializable)
+D8: Step-level governance deferred to Phase 5
+
+### Tests (26 passing, -race -count=5 clean)
+
+Evaluator: 14 tests (allow, deny, deny-wins, permissive, glob, env-vars, approval)
+Builder: 6 tests (merge semantics, allow-replace, deny-union, approval-OR)
+Redaction: 4 tests (simple, multiple, recursive, no-match)
+Approval: 2 tests (NoOp success, context cancellation)
+
+Build & validation: go build ./... && go vet ./... && go test ./... -race -count=3 → all PASS
+
+Phase 4 complete. Ready for Phase 5.
+
+## Learnings — Phase 5 Executors (2026-04-22)
+
+Implemented Phase 5 step executors with new expr/input packages, platform Exec support, and executor registry wiring. Added compensation execution + end-step terminal handling in the engine, plus 25+ executor/expr tests with race coverage. Validation gate: go build/vet/test all pass with -race.
+
+## Learnings — Phase 6 Tool Runtime (2026-04-23)
+
+Implemented Phase 6 tool runtime: pkg/tool interfaces, internal transports (stdio/jsonrpc/mcp), process management, registry/runtime, and ToolExecutor wiring. Added reference tool binaries + tests, built tool binaries in tests under repo-local .testtools (no /tmp), and stub .tool.yaml definitions. Full build/vet/tests including -race -count=3 pass.

@@ -1,0 +1,14 @@
+name: splunk
+source: builtin://splunk
+transport:
+  type: stdio
+  command: gert-stub
+  args: ["--tool", "splunk"]
+actions:
+  - name: send-message
+    description: Send a Slack message
+    inputs:
+      channel: { type: string, required: true }
+      message: { type: string, required: true }
+    outputs:
+      result: { type: string }

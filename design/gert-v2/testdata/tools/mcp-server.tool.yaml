@@ -1,0 +1,32 @@
+name: mcp-server
+source: tool://mcp-server
+description: MCP test server for MCP transport testing
+transport:
+  type: mcp
+  command: "${GERT_TOOLS_DIR}/mcp-server"
+  args: ["--stdio"]
+actions:
+  - name: mcp-ping
+    description: Returns a pong response via MCP
+    inputs: {}
+    outputs:
+      content:
+        type: array
+        description: MCP content array with text response
+
+  - name: mcp-lookup
+    description: Looks up an entity by ID
+    inputs:
+      id:
+        type: string
+        required: true
+        description: ID to lookup
+    outputs:
+      content:
+        type: array
+        description: MCP content array with lookup result
+
+  - name: mcp-fail
+    description: Always fails with an error
+    inputs: {}
+    outputs: {}

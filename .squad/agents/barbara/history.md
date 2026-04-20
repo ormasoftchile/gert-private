@@ -581,3 +581,228 @@ Schema conventions documented:
 All 3 fixtures + schema decisions merged to decisions.md. Parser suite: 20/20 pass.
 
 Unblocks: Fixture-based testing, schema validation, Phase 3 implementation
+
+---
+
+## 2026-04-19: Phase 4 Governance Fakes Implemented
+
+**Requested by:** Cristian
+**Phase:** Phase 4 — Governance infrastructure
+
+### Task
+Implement Phase 4 governance fakes based on Ken's design at `.squad/tmp/ken-phase4-design.md`:
+- `v2/pkg/testutil/fake_governance_policy.go`
+- `v2/pkg/testutil/fake_approval_gate.go`
+
+### Interfaces Used
+Brian had already created the governance interface files:
+- `v2/pkg/governance/evaluator.go` — PolicyEvaluator, EvaluationResult, MatchedRule, StepInfo
+- `v2/pkg/governance/evidence.go` — Evidence, ApprovalRecord
+- `v2/pkg/governance/approval.go` — ApprovalGate interface
+
+### Implementation Details
+
+**FakeGovernancePolicy:**
+- Implements governance.GovernancePolicy (compile-time guard)
+- CheckCommand: records all calls, exact-match deny list, returns (false, "deny:{cmd}") on match
+- FilterEnvVars: uses filepath.Match for pattern matching (per Ken's note on using filepath.Match for Phase 4)
+- RedactionPatterns: returns configured slice directly
+- Fields: AllowAll, DenyCommands, DenyEnvPatterns, Redactions, CheckCommandCalls
+
+**FakeApprovalGate:**
+- Implements governance.ApprovalGate (compile-time guard)
+- Thread-safe: mutex protects Calls slice
+- Context-aware: checks ctx.Err() before processing
+- Token generation: fmt.Sprintf("fake-token-%d", time.Now().UnixNano()) — NO external UUID dependency (as requested)
+- Constructor: NewFakeApprovalGate(approve bool) sets defaults (test-approver, errors.New("approval rejected"))
+- Fields: Approve, Approver, Error, Calls, mu
+
+### Build Validation
+```
+cd /Volumes/Projects/gert/v2
+go build ./pkg/testutil/...     ✅
+go vet ./pkg/testutil/...       ✅
+go build ./pkg/governance/...   ✅
+```
+
+### Decisions Made
+
+1. **filepath.Match over path.Match**: Ken's spec mentioned using filepath.Match for v2.0 env var patterns. This is the simple glob matcher (no ** or {a,b}).
+
+2. **No UUID dependency**: Used fmt.Sprintf("fake-token-%d", time.Now().UnixNano()) for approval tokens instead of importing github.com/google/uuid (despite it being in go.mod). Keeps testutil lightweight.
+
+3. **Exact command matching**: CheckCommand uses exact string equality for deny list. No glob matching on commands in the fake (keeps it simple for tests).
+
+4. **Thread safety in FakeApprovalGate**: Added mutex to protect Calls slice since approval gates are called from engine concurrency (could be concurrent in Phase 7+).
+
+### Artifacts Created
+- `/Volumes/Projects/gert/v2/pkg/testutil/fake_governance_policy.go` (67 lines)
+- `/Volumes/Projects/gert/v2/pkg/testutil/fake_approval_gate.go` (76 lines)
+
+### Next Steps
+- Brian will implement internal/governance/evaluator.go (concrete PolicyEvaluator)
+- Brian will implement internal/governance/policy_builder.go (GovernancePolicy construction)
+- Engine integration will wire PolicyEvaluator into executeStep pre-flight
+
+---
+
+## 2026-04-19: Phase 5 Fixture Coverage Audit Complete
+
+**Requested by:** Cristian  
+**Phase:** Phase 5 — StepExecutor implementations  
+**Status:** ✅ COMPLETE
+
+### Task
+Audit existing fixtures (r01-r13) and create new fixtures to ensure comprehensive coverage for Phase 5 StepExecutor integration tests. All 14 step types must have at least one fixture.
+
+### Step Types in v2
+1. cli, tool, include, choice, decision, collector
+2. branch, iterate, parallel
+3. approve, assert, compensate
+4. wait_for_event, end
+
+### Audit Results
+
+**Coverage analysis:**
+- ✅ cli: 14 fixtures (excellent - used everywhere)
+- ✅ tool: r01, r03 (good - builtin tools)
+- ✅ include: r04, r09 (good - sub-runbook inclusion)
+- ⚠️ choice: r08 only (thin - single scenario)
+- ✅ decision: r13 (good - dedicated fixture)
+- ✅ collector: r02, r03, r04, r06, r07, r08, r10, r15 (excellent)
+- ✅ branch: r01, r02, r03, r06, r07, r08, r09, r10, r13, r15 (excellent)
+- ✅ iterate: r02, r06, r09, r10, r11 (excellent)
+- ✅ parallel: r01, r02, r03, r06, r10 (excellent)
+- ✅ approve: r12 (good - quorum)
+- ✅ assert: r02, r06, **r14 NEW** (good)
+- ✅ compensate: r02, r06, **r14 NEW** (good)
+- ⚠️ wait_for_event: r01 only (thin - single webhook)
+- ✅ end: r01-r10, **r16 NEW** (excellent)
+
+### New Fixtures Created
+
+**r14-assert-compensate:** Assert + compensate with multi-step rollback  
+**r15-branch-collector:** Collector with 4 field types + branch with 3 paths  
+**r16-end-step:** Explicit end step with structured outcome
+
+All parser tests pass. Full audit at `.squad/tmp/barbara-phase5-fixture-audit.md`.
+
+### Artifacts
+- `testdata/runbooks/r14-assert-compensate/schema.yaml`
+- `testdata/runbooks/r15-branch-collector/schema.yaml`
+- `testdata/runbooks/r16-end-step/schema.yaml`
+- Updated `v2/internal/parser/parser_test.go` with 3 new tests
+
+### Learnings
+
+**Fixture design principles:**
+1. Dedicated fixtures for thin coverage demonstrate single step type clearly
+2. Production fixtures exercise multiple step types in realistic workflows
+3. Parser tests validate structural properties
+
+**Coverage evaluation:**
+- "Excellent" = 5+ fixtures
+- "Good" = 1-4 fixtures
+- "Thin" = 1 fixture
+- Gap = 0 fixtures (requires new fixture)
+
+### Recommendations for Phase 5
+
+Each StepExecutor should load relevant fixture, execute specific step, validate result. Fixture usage guide in audit report maps each executor to appropriate test fixtures.
+
+### Unblocks
+
+Phase 5 executor implementation can now:
+1. Reference fixture audit to select test fixtures per executor
+2. Use r14/r15/r16 for dedicated step type testing
+3. Trust all 14 step types have fixture coverage
+
+### 2026-04-19 — Phase 6 Tool and Fixture Audit
+
+**What was done:**
+Conducted comprehensive audit of tool references and transport coverage across all 16 runbooks in preparation for Phase 6. Produced barbara-phase6-tool-audit.md.
+
+**Findings:**
+1. Tool inventory: 23 unique tools referenced (13 builtin, 6 custom, 4 CLI)
+2. Transport gap: Spec defines 4 transports but ZERO test fixtures exist
+3. Missing definitions: 11 builtin tool stubs have NO .tool.yaml files
+4. Test tools needed: 8 reference tools required for transport validation
+5. Parser status: All 16 runbooks parse successfully
+
+**Critical blockers:**
+- NO reference test tools (echo, fail, slow) for testing transports
+- NO builtin stub definitions for tools in r01-r05
+- NO transport fixture runbook (r17 recommended)
+- NO MCP reference server
+
+**Estimated work:** 9 days of tooling before Phase 6 can begin
+
+**Decision points flagged:**
+- Where do test tools live?
+- What is minimal builtin registry for v2.0?
+- Do all builtin stubs use stdio-jsonrpc?
+
+**Output:** .squad/tmp/barbara-phase6-tool-audit.md
+
+---
+
+## 2026-04-20: Created r17 Tool Transport Test Fixture
+
+**Requested by:** Cristian  
+**Status:** COMPLETE
+
+### What was done
+
+Created comprehensive test fixture for Phase 6 tool transport integration testing:
+
+**r17 runbook (design/gert-v2/testdata/runbooks/r17-tool-transport/schema.yaml):**
+- Tests all three transports (stdio, stdio-jsonrpc, mcp) using reference tool binaries
+- 6 tool invocations with corresponding assert steps to verify output
+- Transport coverage:
+  - stdio: echo tool with message echo test
+  - stdio-jsonrpc: jsonrpc-server with ping (returns pong) and add (5+7=12) tests
+  - mcp: mcp-server with mcp-ping and mcp-lookup tests
+  - builtin stub: slack-notify to exercise the stub registry path
+- All assertions verify JSON capture paths (json.result.message, json.content.0.text, etc.)
+- Follows existing runbook schema patterns from r01, r14, and other fixtures
+
+**Tool definition files (design/gert-v2/testdata/tools/):**
+- echo.tool.yaml — stdio transport, single echo action
+- jsonrpc-server.tool.yaml — stdio-jsonrpc transport, 4 actions (ping/add/error/slow)
+- mcp-server.tool.yaml — mcp transport, 3 actions (mcp-ping/mcp-lookup/mcp-fail)
+
+**Parser test results:**
+All 17 fixtures (r01–r17) parse successfully. The existing TestParser_Fixtures test automatically included r17.
+
+### Schema alignment
+
+**Transport type mapping (from Ken's Phase 6 design Section 5):**
+- stdio — spawn-per-invocation, stdout/stderr capture
+- stdio-jsonrpc — persistent process, newline-delimited JSON-RPC 2.0
+- mcp — MCP handshake over stdio, tools/call method
+
+**Tool step schema follows r01 pattern:**
+```
+type: tool
+tool:
+  name: tool-name
+  action: action-name
+  args: key-value pairs
+capture:
+  var: stdout or json.path
+```
+
+### Learnings
+
+**Schema gaps identified:** None. Existing runbook schema fully supports all three transport types.
+
+**Phase 6 integration readiness:**
+- r17 provides Ken with fixture runbook for Section 7.4 integration tests (T19–T26)
+- Reference tool definitions enable Brian to implement internal/tool/registry.go multi-source lookup
+- All three transports exercised in single runbook — validates transport selection logic
+
+**Files created:**
+1. design/gert-v2/testdata/runbooks/r17-tool-transport/schema.yaml (4111 bytes)
+2. design/gert-v2/testdata/tools/echo.tool.yaml (431 bytes)
+3. design/gert-v2/testdata/tools/jsonrpc-server.tool.yaml (1249 bytes)
+4. design/gert-v2/testdata/tools/mcp-server.tool.yaml (746 bytes)

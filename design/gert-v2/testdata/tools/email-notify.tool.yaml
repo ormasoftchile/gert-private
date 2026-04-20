@@ -1,0 +1,14 @@
+name: email-notify
+source: builtin://email-notify
+transport:
+  type: stdio
+  command: gert-stub
+  args: ["--tool", "email-notify"]
+actions:
+  - name: send-message
+    description: Send a Slack message
+    inputs:
+      channel: { type: string, required: true }
+      message: { type: string, required: true }
+    outputs:
+      result: { type: string }

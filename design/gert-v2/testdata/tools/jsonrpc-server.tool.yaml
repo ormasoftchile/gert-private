@@ -1,0 +1,52 @@
+name: jsonrpc-server
+source: tool://jsonrpc-server
+description: JSON-RPC 2.0 test server for stdio-jsonrpc transport testing
+transport:
+  type: stdio-jsonrpc
+  command: "${GERT_TOOLS_DIR}/jsonrpc-server"
+  args: ["--server-mode"]
+actions:
+  - name: ping
+    description: Returns a pong response
+    inputs: {}
+    outputs:
+      message:
+        type: string
+        description: The pong response message
+
+  - name: add
+    description: Adds two numbers and returns the sum
+    inputs:
+      a:
+        type: integer
+        required: true
+        description: First number
+      b:
+        type: integer
+        required: true
+        description: Second number
+    outputs:
+      sum:
+        type: integer
+        description: The sum of a and b
+
+  - name: error
+    description: Returns a JSON-RPC error with the given code
+    inputs:
+      code:
+        type: integer
+        required: true
+        description: Error code to return
+    outputs: {}
+
+  - name: slow
+    description: Delays for the specified number of seconds
+    inputs:
+      seconds:
+        type: integer
+        required: true
+        description: Number of seconds to delay
+    outputs:
+      delayed:
+        type: integer
+        description: Number of seconds delayed

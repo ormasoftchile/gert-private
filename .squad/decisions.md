@@ -789,3 +789,387 @@ $ go test ./internal/planner/... -v
 1. **Provider resolution** — deferred to runtime, not planner
 2. **Governance policy merging** — how to merge parent + child runbook policies (deferred)
 3. **Parallel planning** — should nested includes be resolved concurrently? (deferred to v2.1)
+# Schema Decisions: Fixtures r11–r13
+
+**Author:** Barbara (Integrations Specialist)
+**Date:** 2026-04-18
+**Status:** Proposed
+
+## Context
+
+While creating fixtures r11, r12, r13 as specified by Phase 5, several schema
+conventions were discovered that differ from the task brief's sketch YAML.
+Recording these so the team has a shared reference.
+
+---
+
+## Decision 1: `iterate` and `parallel` are FlowNode discriminators, not step types
+
+**Finding:** The task brief used `type: iterate` as a step type. This is wrong.
+In v2, `iterate` and `parallel` are **FlowNode keys** (`- iterate: {...}` /
+`- parallel: {...}`), not values of the `type` field on a `step:`.
+
+The valid step `type` values are the 14 in `StepType`:
+`cli`, `tool`, `include`, `choice`, `decision`, `collector`, `branch`,
+`approve`, `assert`, `compensate`, `wait_for_event`, `end`, `extension`.
+
+**Impact:** Any documentation or tooling that generates `type: iterate` or
+`type: parallel` on a step will be rejected by both structural (JSON Schema)
+and the parser's FlowNode dispatch.
+
+---
+
+## Decision 2: No `log` or `set` step types in v2
+
+**Finding:** The task brief referenced `type: log` and `type: set`. Neither
+exists in the v2 schema.
+
+- **Logging:** Use `type: cli` with `command: echo` (or any shell command).
+- **Variable setting:** Use `capture:` on a `cli` step to store stdout into a
+  named variable.
+
+The `collect:` map on `IterateNode` provides per-iteration variable accumulation.
+
+---
+
+## Decision 3: `approve` step uses `approvals:` (ApprovalGate), not `approve:`
+
+**Finding:** The `ApproveSpec` struct wraps an `ApprovalGate` under key
+`approvals:`. The quorum reviewer list is `pool: [...]` (not `reviewers:`),
+and the quorum count is `required:` (not `quorum:`).
+
+Correct form:
+```yaml
+- step:
+    id: gate
+    type: approve
+    approvals:
+      pool: [alice, bob, carol]
+      required: 2
+      timeout: 4h
+      on_timeout: fail
+```
+
+**Semantic rule:** At least one of `roles` or `pool` must be non-empty, or the
+parser rejects with `approve/no-reviewers`.
+
+---
+
+## Decision 4: `decision` routes with `goto:` are semantically validated
+
+**Finding:** The semantic validator (`validate_semantic.go`) checks that every
+`goto` value on a `DecisionRoute` references an existing step ID in the runbook
+flow. Floating `goto` values cause `decision/invalid-goto` errors.
+
+This means the decision step and its goto targets must all live in the same
+runbook (cross-runbook routing uses `runbook:` instead of `goto:`).
+
+---
+
+## Fixture naming convention
+
+All existing fixtures use `schema.yaml` as the filename (not `runbook.yaml`).
+The glob pattern in `parser_test.go` is `r*/schema.yaml`. New fixtures must
+follow this convention.
+
+# Phase 3: Runtime Core Architecture Design
+
+**Date:** 2026-04-20  
+**Author:** Ken (Software Architect)  
+**Status:** PROPOSED  
+**Priority:** CRITICAL (blocking Phase 3 implementation)
+
+---
+
+## Summary
+
+Phase 3 Runtime Core establishes the engine architecture for executing `*engine.ExecutionPlan` step by step. The design defines interfaces for the Engine, RunHandle, step execution dispatch, parallel branch coordination, wait_for_event semantics, and trace event protocol.
+
+---
+
+## Interface Design Decisions
+
+### 1. Engine Interface and EngineConfig
+
+**Location:** `pkg/engine/engine.go`
+
+```go
+type Engine interface {
+    Start(ctx context.Context, plan *ExecutionPlan, opts RunOptions) (RunHandle, error)
+    Resume(ctx context.Context, runID string, opts RunOptions) (RunHandle, error)
+}
+
+type EngineConfig struct {
+    Executors   ExecutorRegistry       // required: step dispatch
+    Dispatcher  eventbus.EventDispatcher // required: wait_for_event
+    TraceWriter trace.TraceWriter      // required: event persistence
+    Platform    platform.Platform      // required: signal handling
+    EventBus    eventbus.EventBus      // optional: in-process fan-out
+    Store       RunStore               // optional: checkpoint/resume
+    OnEvent     func(Event)            // optional: event callback
+}
+```
+
+**Rationale:**
+- Engine is stateless; all state lives in RunHandle
+- Four required dependencies: executors (dispatch), dispatcher (wait_for_event), trace writer (persistence), platform (signals)
+- Optional dependencies enable additional features (event fan-out, checkpointing)
+- `Validate()` method enforces required fields at construction
+
+### 2. Run State Machine
+
+**Location:** `pkg/engine/run.go`
+
+```
+[pending] → [running] → [completed]
+              ↓
+          [waiting] → [running]
+              ↓
+          [failed]
+              ↓
+          [cancelled]
+```
+
+**States:**
+- `RunStatusPending`: Initial state before first `Next()` call
+- `RunStatusRunning`: Actively executing steps
+- `RunStatusWaiting`: Paused at wait_for_event or approval gate
+- `RunStatusCompleted`: All steps executed successfully
+- `RunStatusFailed`: Step or infrastructure failure
+- `RunStatusCancelled`: User-requested cancellation
+
+**Run struct:**
+```go
+type Run struct {
+    ID               string
+    Status           RunStatus
+    Plan             *ExecutionPlan
+    Vars             map[string]any        // runtime variables
+    StepResults      map[string]*StepResult
+    CurrentStepIndex int                   // -1 = not started
+    StartedAt        time.Time
+    CompletedAt      time.Time
+    Error            error
+    Sequence         int64                 // monotonic event counter
+    Actor            string
+    Mode             RunMode
+}
+```
+
+**Rationale:**
+- Separate `Run` (internal mutable state) from `RunState` (external snapshot)
+- `Sequence` enables strict event ordering across parallel branches
+- `CurrentStepIndex` into flat `Plan.Steps` keeps execution deterministic
+
+### 3. Step Execution Interface
+
+**Location:** `pkg/engine/executor.go`
+
+```go
+type StepExecutor interface {
+    Execute(ctx context.Context, step ResolvedStep, vars map[string]any) (*StepResult, error)
+}
+
+type ExecutorRegistry interface {
+    Register(kind string, exec StepExecutor)
+    Lookup(kind string) StepExecutor
+}
+```
+
+**StepResult:**
+```go
+type StepResult struct {
+    StepID      string
+    Status      StepStatus    // pending/running/completed/failed/skipped/waiting
+    Outcome     StepOutcome   // deprecated alias
+    Output      map[string]any
+    Vars        map[string]any
+    StartedAt   time.Time
+    CompletedAt time.Time
+    DurationMs  int64
+    Error       error
+}
+```
+
+**Contract:**
+- Return non-nil `*StepResult` on success (even for skipped)
+- Return error only for infrastructure failures (not step logic failures)
+- Set `StepResult.Status = StepStatusFailed` for step logic failures
+- Executors MUST NOT modify `vars`; output goes in `StepResult.Vars`
+
+### 4. Parallel Execution Model
+
+**Location:** `pkg/engine/engine.go`
+
+```go
+type BranchExecutor interface {
+    ExecuteBranches(ctx context.Context, branches []BranchSpec, run *Run) ([]BranchResult, error)
+}
+```
+
+**Design decisions:**
+- Each branch runs in a dedicated goroutine
+- Results collected in **declaration order** (branches[0] → results[0])
+- Trace events **buffered per branch**, flushed in order at join
+- Error in any branch triggers **fail-fast**: cancel remaining branches via context
+- Branch cancellation uses shared context derived from parent
+
+**Rationale:**
+- Deterministic ordering enables reproducible replays
+- Buffered trace events avoid interleaved output across branches
+- Fail-fast prevents wasted work on doomed parallel executions
+- BranchExecutor interface allows test doubles for parallel logic
+
+### 5. wait_for_event Semantics
+
+**Location:** `pkg/eventbus/dispatcher.go` (existing)
+
+The `EventDispatcher` interface already implements consume semantics:
+
+```go
+type EventDispatcher interface {
+    Dispatch(ev InboundEvent) error
+    Wait(ctx context.Context, stepID string, filter EventFilter, timeout time.Duration) (*InboundEvent, error)
+    Cancel(stepID string, reason string)
+}
+```
+
+**Consume semantics:**
+- First waiter wins: `Dispatch` delivers to exactly one matching `Wait` call
+- `Wait` blocks until event arrives, timeout, or context cancellation
+- Engine emits `event/received` when event arrives, `step/resumed` when execution continues
+
+**Engine integration:**
+1. `wait_for_event` executor calls `dispatcher.Wait(ctx, stepID, filter, timeout)`
+2. On event arrival, executor returns `StepResult` with event payload
+3. Engine emits `event/received` trace event
+4. Engine emits `step/resumed` trace event
+5. Execution continues to next step
+
+### 6. Trace Event Protocol
+
+**Location:** `pkg/trace/writer.go` (existing)
+
+The `TraceWriter` interface:
+```go
+type TraceWriter interface {
+    Append(event TraceEvent) error
+    Close() error
+}
+```
+
+**Required event sequence:**
+```
+run/started         → on Run begin (first Next() call)
+  step/started      → before each step
+  step/completed    → on step success
+  step/failed       → on step failure
+  step/skipped      → on step skip (condition false)
+  event/received    → when wait_for_event receives event
+  step/resumed      → after event received
+run/completed       → on successful completion
+run/failed          → on unrecoverable failure
+run/cancelled       → on user cancellation
+```
+
+**Event emission guarantees:**
+- Events written to TraceWriter **synchronously** (at-least-once)
+- Events sent to EventBus **best-effort** (non-blocking, drop on full)
+- Events sent to RunHandle.Events() channel **best-effort**
+- `OnEvent` callback invoked **synchronously** after trace write
+
+### 7. Signal Handling
+
+**Location:** `pkg/platform/platform.go`
+
+Added `NotifySignals` method:
+```go
+type Platform interface {
+    // ... existing methods ...
+    NotifySignals(ctx context.Context) <-chan Signal
+}
+
+type Signal struct {
+    Name string  // "SIGTERM", "SIGINT"
+}
+```
+
+**Engine integration:**
+- Engine listens for signals via `platform.NotifySignals(ctx)`
+- On SIGTERM/SIGINT: call `runHandle.Cancel(ctx, "signal:SIGTERM")`
+- Grace period: allow current step to complete before forced termination
+
+---
+
+## Deliverables
+
+| File | Description |
+|------|-------------|
+| `v2/pkg/engine/engine.go` | Engine interface, EngineConfig, BranchExecutor |
+| `v2/pkg/engine/run.go` | Run struct, RunStatus, StepStatus, StepResult |
+| `v2/pkg/engine/executor.go` | StepExecutor, ExecutorRegistry, ExecutionContext |
+| `v2/pkg/platform/platform.go` | Added NotifySignals, Signal type |
+| `v2/pkg/platform/fake.go` | FakePlatform.NotifySignals |
+| `v2/pkg/platform/real.go` | realPlatform.NotifySignals |
+| `v2/internal/engine/doc.go` | Package documentation |
+| `v2/internal/engine/engine.go` | Concrete engine stub |
+| `v2/internal/engine/engine_test.go` | 11 test cases (9 skip, 2 pass) |
+
+---
+
+## Test Coverage
+
+| Test | Status | Description |
+|------|--------|-------------|
+| `TestEngine_Start_EmitsRunStarted` | SKIP | run/started on first Next() |
+| `TestEngine_Execute_SingleStep_Success` | SKIP | Single step execution |
+| `TestEngine_Execute_MultipleSteps_SequentialOrder` | SKIP | Step ordering |
+| `TestEngine_Execute_StepFailed_EmitsStepFailed` | SKIP | Failure event emission |
+| `TestEngine_Execute_UnknownStepKind_ReturnsError` | SKIP | Missing executor handling |
+| `TestEngine_Cancel_EmitsRunCancelled` | SKIP | Cancellation event |
+| `TestEngine_State_ReturnsCurrentRunState` | SKIP | State snapshot |
+| `TestEngine_Events_ReceivesEventsOnChannel` | SKIP | Event channel delivery |
+| `TestEngine_VarsPropagation_StepVarsMergedIntoRunVars` | SKIP | Variable propagation |
+| `TestEngineConfig_Validate_MissingRequired` | PASS | Config validation (missing) |
+| `TestEngineConfig_Validate_AllRequired` | PASS | Config validation (valid) |
+
+---
+
+## Build Status
+
+```
+$ cd /Volumes/Projects/gert/v2
+$ go build ./...   # PASS
+$ go vet ./...     # PASS
+$ go test ./internal/engine/... -v   # 11 tests (9 SKIP, 2 PASS)
+```
+
+---
+
+## Impact
+
+- **Unblocks Phase 3 implementation:** Brian can write concrete executor logic
+- **Unblocks step executor implementations:** CLI, tool, parallel, iterate, wait_for_event
+- **Unblocks adapter integration:** Serve, CLI, TUI can use RunHandle interface
+- **Event protocol locked:** Trace format compatible with §06 spec
+
+---
+
+## Open Questions (deferred)
+
+1. **Parallel branch trace buffering** — exact buffer size and backpressure strategy (defer to implementation)
+2. **Resume serialization format** — how Run struct is serialized for checkpoint (defer to Phase 4)
+3. **Concurrent executor access** — whether executors must be goroutine-safe (clarified: yes, for parallel branches)
+
+---
+
+## Locked Decisions
+
+These decisions are now locked per project governance:
+
+1. **Client-driven execution:** RunHandle.Next() drives advancement; engine never auto-advances
+2. **Deterministic branch order:** Parallel results collected in declaration order
+3. **Buffered branch traces:** Events buffered per branch, flushed at join
+4. **Fail-fast parallel:** Error in any branch cancels siblings
+5. **Consume semantics:** wait_for_event uses first-waiter-wins dispatch
+6. **Synchronous trace writes:** TraceWriter.Append() must complete before step completion

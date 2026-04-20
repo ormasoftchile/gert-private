@@ -1004,3 +1004,101 @@ go vet ./...                                 # No warnings
 
 Re-verification complete. All 14 tests pass. D1 (interface guard) and D2 (cycle detection backtracking) both verified fixed and working correctly. Diamond dependency test succeeds. True cycle detection unchanged. Ready for Phase 3.
 
+---
+
+## 2026-04-20: Phase 3 Runtime Core Architecture Design
+
+**Status:** ✅ DESIGN COMPLETE (pending review)
+
+### Summary
+
+Designed and implemented Phase 3 Runtime Core architecture — the engine that executes `*engine.ExecutionPlan` step by step, emitting trace events, managing run state, and dispatching to step executors.
+
+### Deliverables
+
+| File | Description |
+|------|-------------|
+| `v2/pkg/engine/engine.go` | Engine interface, EngineConfig, BranchExecutor, ConfigError |
+| `v2/pkg/engine/run.go` | Run struct, RunStatus, StepStatus, StepResult, NewRun() |
+| `v2/pkg/engine/executor.go` | StepExecutor, ExecutorRegistry, ExecutionContext |
+| `v2/pkg/platform/platform.go` | Added NotifySignals, Signal type |
+| `v2/pkg/platform/fake.go` | FakePlatform.NotifySignals |
+| `v2/pkg/platform/real.go` | realPlatform.NotifySignals |
+| `v2/internal/engine/doc.go` | Package documentation |
+| `v2/internal/engine/engine.go` | Concrete engine stub |
+| `v2/internal/engine/engine_test.go` | 11 test cases (9 skip, 2 pass) |
+| `.squad/decisions/inbox/ken-phase3-runtime-design.md` | Decision record |
+
+### Key Design Decisions
+
+1. **EngineConfig with required dependencies:**
+   - `Executors` (ExecutorRegistry) — step dispatch
+   - `Dispatcher` (EventDispatcher) — wait_for_event
+   - `TraceWriter` — event persistence
+   - `Platform` — signal handling
+   - Optional: EventBus, Store, OnEvent callback
+
+2. **Run state machine:**
+   - `pending` → `running` → `completed`
+   - `running` → `waiting` (at wait_for_event/approval)
+   - `running` → `failed` → terminal
+   - `running` → `cancelled` → terminal
+
+3. **Parallel execution model:**
+   - Branches run in goroutines
+   - Results collected in declaration order
+   - Trace events buffered per branch, flushed at join
+   - Fail-fast: error in any branch cancels siblings
+
+4. **Event protocol:**
+   - `run/started` → `step/started` → `step/completed|failed|skipped` → `run/completed`
+   - `event/received` + `step/resumed` for wait_for_event
+   - Synchronous writes to TraceWriter
+   - Best-effort fan-out to EventBus and Events() channel
+
+5. **Signal handling:**
+   - Added `Platform.NotifySignals(ctx)` for SIGTERM/SIGINT
+   - Engine calls `Cancel()` on signal receipt
+
+### Build Status
+
+```
+go build ./...   PASS
+go vet ./...     PASS
+go test ./internal/engine/... -v   11 tests (9 SKIP, 2 PASS)
+```
+
+### Impact
+
+- Unblocks Phase 3 implementation (Brian can write executor logic)
+- Unblocks step executor implementations (CLI, tool, parallel, iterate, wait_for_event)
+- Unblocks adapter integration (Serve, CLI, TUI)
+- Event protocol locked and compatible with §06 spec
+
+### Next Actions
+
+1. Brian: Implement concrete executor logic in `internal/engine/engine.go`
+2. Team: Implement step executors (cli, tool, parallel, iterate, wait_for_event, etc.)
+3. Ken: Review implementations when ready
+
+---
+
+## Phase 3: Runtime Core Architecture Design
+
+**Date:** 2026-04-20  
+**Status:** DESIGN COMPLETE  
+**Outcome:** SUCCESS
+
+Designed complete Phase 3 Runtime Core architecture including:
+
+- Engine interface with EngineConfig (4 required, 2 optional dependencies)
+- Run state machine: pending → running → (waiting|completed|failed|cancelled)
+- StepExecutor interface with deterministic contract
+- BranchExecutor for parallel execution with fail-fast semantics
+- EventDispatcher integration for wait_for_event with consume semantics
+- TraceWriter protocol with defined event sequence
+- Platform.NotifySignals for signal handling
+
+All 7 interface designs documented in decisions.md. Build/vet clean. 11 tests (9 skip, 2 pass).
+
+**Unblocks:** Phase 3 implementation, Brian's executor logic, step executor implementations

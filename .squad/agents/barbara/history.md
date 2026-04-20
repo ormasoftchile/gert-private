@@ -510,3 +510,74 @@ var _ plannerPkg.Planner = (*impl)(nil)
 ```
 
 All 14 tests pass including new diamond-dependency test. Ready for Phase 3.
+
+---
+
+## Session: 2026-04-18 — Fixtures r11, r12, r13
+
+**Requested by:** Cristian
+**Phase:** Phase 5 — fixture coverage expansion
+
+### What was done
+
+Created three new runbook fixtures to cover step types with zero existing test coverage:
+
+#### r11 — `r11-iterate-loop`
+- File: `design/gert-v2/testdata/runbooks/r11-iterate-loop/schema.yaml`
+- Demonstrates: `iterate` FlowNode (top-level flow discriminator, not a step type)
+- Inner steps: `cli` type (no `log` or `set` type exists in v2; `cli` + echo is canonical)
+- Uses `over`, `as`, `max`, `collect` fields on IterateNode
+- Test: `TestParser_FixtureR11_IterateLoop`
+
+#### r12 — `r12-approval-quorum`
+- File: `design/gert-v2/testdata/runbooks/r12-approval-quorum/schema.yaml`
+- Demonstrates: `approve` step type with `approvals.pool` and `approvals.required` quorum
+- Also uses `cli` steps for pre-check, deploy, notify
+- Test: `TestParser_FixtureR12_ApprovalQuorum`
+
+#### r13 — `r13-decision-routing`
+- File: `design/gert-v2/testdata/runbooks/r13-decision-routing/schema.yaml`
+- Demonstrates: `decision` step (human-driven routing via `routes[].goto`) + `branch` step (programmatic conditional)
+- `goto` targets (`deploy_branch`, `abort`) must be valid step IDs — enforced by semantic validator
+- Test: `TestParser_FixtureR13_DecisionRouting`
+
+### Schema discoveries (see decisions inbox)
+
+- `iterate` and `parallel` are FlowNode discriminators, not step `type` values.
+- There is no `type: log` or `type: set` in v2. Use `type: cli` with echo + capture.
+- `approve` step uses `approvals:` key; `ApprovalGate.pool` holds named reviewers; `required` sets quorum.
+- `decision` routes with `goto:` are semantically validated — targets must exist as step IDs in the flow.
+
+### Results
+
+```
+PASS: TestParser_FixtureR11_IterateLoop
+PASS: TestParser_FixtureR12_ApprovalQuorum
+PASS: TestParser_FixtureR13_DecisionRouting
+Full suite: ok github.com/ormasoftchile/gert/v2/internal/parser (20 tests)
+```
+
+---
+
+## Phase 3: Fixtures r11/r12/r13 & Schema Conventions
+
+**Date:** 2026-04-20  
+**Status:** FIXTURES COMPLETE  
+**Outcome:** SUCCESS
+
+Created production runbook fixtures and discovered schema conventions:
+
+- **r11:** iterate loop with per-iteration variable accumulation
+- **r12:** approve step with quorum gate (ApprovalGate + pool + required)
+- **r13:** decision routing with semantic goto validation
+
+Schema conventions documented:
+
+1. iterate/parallel are FlowNode discriminators, not step types
+2. No log/set step types; use cli + echo + capture
+3. approve step uses approvals: key with ApprovalGate
+4. decision goto targets must be valid step IDs
+
+All 3 fixtures + schema decisions merged to decisions.md. Parser suite: 20/20 pass.
+
+Unblocks: Fixture-based testing, schema validation, Phase 3 implementation

@@ -125,7 +125,7 @@ flow:
                   - "-h"
                   - "prod-db"
                   - "-c"
-                  - "SELECT id FROM users WHERE email=current_setting('"'"'app.search_email'"'"');"
+                  - "SELECT id FROM users WHERE email=current_setting('app.search_email');"
                 env:
                   PGPASSWORD: "{{ .db_password }}"
                 capture:
@@ -255,7 +255,7 @@ flow:
                   - "-h"
                   - "prod-db"
                   - "-c"
-                  - "DELETE FROM users WHERE email=current_setting('"'"'app.search_email'"'"');"
+                  - "DELETE FROM users WHERE email=current_setting('app.search_email');"
                 contract:
                   effects: ["data.delete"]
 
@@ -369,7 +369,7 @@ flow:
               - "-h"
               - "prod-db"
               - "-c"
-              - "SELECT count(*) FROM users WHERE email=current_setting('"'"'app.search_email'"'"');"
+              - "SELECT count(*) FROM users WHERE email=current_setting('app.search_email');"
             capture:
               db_count: stdout
 

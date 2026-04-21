@@ -4148,3 +4148,129 @@ constructing a ToolRef just to record what the caller passed as plain strings.
 
 Tests asserting on `LookupCalls` use `ToolLookupCall{Name: "...", Action: "..."}` instead of `schema.ToolRef`.
 This is clearer and matches the actual call-site semantics.
+
+---
+
+# Decision: Phase 14 End-to-End Integration Test Suite
+
+**Date:** 2026-07-21  
+**Author:** Ken (Software Architect)  
+**Phase:** 14  
+**Status:** APPROVED
+
+## Overview
+
+Phase 14 delivers the End-to-End Integration Test Suite as the highest-value quality investment before v2.0 GA, plus three NBI carry-forwards:
+
+- **Part A — NBI-13 Closure:** TLS support for OTLP adapter, gc edge case tests, ls JSON schema documentation
+- **Part B — E2E Suite:** Full-stack integration testing (Parser → Planner → Engine → CLI Executor → Trace)
+
+## Key Architectural Decisions
+
+### D-14-01: E2E Tests in `internal/e2e/` Package
+
+E2E tests live in a dedicated `internal/e2e/` package, separate from unit tests.
+
+**Rationale:**
+- Clear separation of test types (unit vs integration)
+- E2E tests have different characteristics (slower, file I/O, subprocess)
+- Can run unit tests quickly without e2e tests
+- Common pattern in mature Go projects (Kubernetes, Vitess, CockroachDB)
+
+**Impact:** New package `internal/e2e/` with doc.go, 10 test functions, 5 testdata runbooks
+
+### D-14-02: E2E Tests Use Real Executors
+
+E2E tests execute real CLI commands (echo, cat) via the real CLI executor, not fakes.
+
+**Rationale:**
+- E2E exists specifically to exercise real behavior
+- Commands are simple POSIX utilities available on all CI runners
+- Using fakes would reduce e2e to another unit test
+
+**Impact:** Tests may be slower (~100-500ms each) but provide higher confidence
+
+### D-14-03: Defer context.AfterFunc Optimization
+
+NBI-12-03 (context.AfterFunc optimization in mergeContexts) deferred to Phase 15+.
+
+**Rationale:**
+- Current goroutine pattern is bounded and stable
+- E2E test suite has higher value per Brian-day
+- Go 1.25.7 context.AfterFunc available; can be added anytime
+- E2E tests will validate optimization didn't break anything
+
+**Impact:** No code change. Carry forward to Phase 15+.
+
+### D-14-04: Sequential E2E Tests (No t.Parallel)
+
+E2E tests run sequentially; t.Parallel() not called initially.
+
+**Rationale:**
+- Simpler debugging when tests share temp directory roots
+- Subprocess execution may exhibit timing-dependent behaviors
+- Parallel tests can be enabled in Phase 15+ once suite proven stable
+
+**Impact:** E2E suite runs in ~3-5 seconds total (10 tests × 300ms average)
+
+## NBI Items Addressed
+
+| ID | Status | Notes |
+|----|--------|-------|
+| NBI-13-01 | IN SCOPE | WithTLS(*tls.Config) option for OTLP adapter |
+| NBI-13-02 | IN SCOPE | 4 new gc edge case unit tests |
+| NBI-13-03 | IN SCOPE | ls --output=json JSON schema documentation |
+| NBI-12-03 | DEFERRED | D-14-03 defers context.AfterFunc to Phase 15+ |
+
+## New NBI Items (Phase 15+)
+
+- **NBI-14-01:** E2E test parallelization (low priority)
+- **NBI-14-02:** E2E coverage for tool steps (medium priority)
+- **NBI-12-03:** context.AfterFunc optimization (third deferral)
+
+## Files to Create
+
+| File | Type | Purpose |
+|------|------|---------|
+| `internal/e2e/doc.go` | Package | Package documentation |
+| `internal/e2e/e2e_test.go` | Tests | 10 e2e test functions |
+| `internal/e2e/helpers_test.go` | Utilities | E2E harness and assertions |
+| `internal/e2e/testdata/echo-runbook.yaml` | Testdata | Simple CLI step |
+| `internal/e2e/testdata/vars-runbook.yaml` | Testdata | Variable interpolation |
+| `internal/e2e/testdata/branch-runbook.yaml` | Testdata | Conditional branching |
+| `internal/e2e/testdata/iterate-runbook.yaml` | Testdata | Loop with early exit |
+| `internal/e2e/testdata/manual-runbook.yaml` | Testdata | Manual step (skipped) |
+
+## Files to Modify
+
+| File | Change | Lines |
+|------|--------|-------|
+| `pkg/otel/adapter/otlp.go` | Add WithTLS option | ~15 |
+| `pkg/otel/adapter/otlp_test.go` | Add TLS tests | ~20 |
+| `cmd/gert/gc_test.go` | 4 edge case tests | ~40 |
+| `cmd/gert/ls.go` | JSON schema godoc | ~15 |
+
+## Test Coverage
+
+**E2E Test Suite (10 tests):**
+- Parser → Planner → Engine → CLI Executor → Trace (full stack)
+- All step types: cli, branch, iterate, manual
+- Variable interpolation and output capture
+- Trace persistence and parseability
+- Resume from checkpoint
+- Cancellation mid-run
+
+**Estimated Effort:** 3-4 Brian-days
+
+## Validation Gate
+
+```bash
+cd v2
+go build ./...                      # Must exit 0
+go vet ./...                        # Must exit 0
+go test ./... -race -count=3        # Must pass all packages including internal/e2e
+```
+
+---
+
+*Ken, Software Architect*

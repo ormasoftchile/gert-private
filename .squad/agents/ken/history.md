@@ -1846,3 +1846,129 @@ Double defense ensures running runs are never deleted even with `--status=runnin
 - NBI-13-03: ls --output=json schema documentation
 
 **Output:** .squad/tmp/ken-phase13-review.md, .squad/decisions/inbox/ken-phase13-review.md
+
+---
+
+## 2026-07-21 — Phase 14 Design: E2E Integration Tests & NBI Closure
+
+**Action:** Design Phase 14 scope and architecture
+**Requestor:** Cristian
+
+### Context
+- Phase 13 (CLI Polish & OTLP Adapter) sealed and approved (9/10)
+- Three NBI carry-forwards: NBI-13-01 (TLS), NBI-13-02 (gc tests), NBI-13-03 (ls docs)
+- v2 has 73 test files but zero end-to-end integration tests
+- Go 1.25.7 confirmed; context.AfterFunc available but deferred again
+
+### Part A — NBI Carry-Forwards
+
+| ID | Scope | Implementation |
+|----|-------|----------------|
+| NBI-13-01 | `pkg/otel/adapter` | Add `WithTLS(*tls.Config)` option, update dial options |
+| NBI-13-02 | `cmd/gert/gc_test.go` | 4 edge case tests (running invariant, mixed status, boundary) |
+| NBI-13-03 | `cmd/gert/ls.go` | JSON schema documented in godoc comment |
+
+### Part B — End-to-End Integration Test Suite
+
+**Selected over:**
+- `gert serve` hardening (auth, CORS, rate limiting) — not blocking internal use
+- Schema validation at parse time — parser already rejects malformed YAML
+- MCP tool transport — scope too large for one phase
+- `mergeContexts` optimization — pure performance, no correctness risk
+- `run.list` RPC wiring — already returns in-memory registry; disk persistence is Phase 15+
+
+**Rationale:**
+- v2 is feature-complete (Phases 0-13) — no more moving targets
+- E2E tests catch integration bugs unit tests cannot (wiring, event ordering, file format)
+- Locks in expected behavior before v2.0 GA
+- Highest quality value per Brian-day
+
+**Package layout:**
+```
+internal/e2e/
+├── doc.go
+├── e2e_test.go      # 10 test functions
+├── helpers_test.go  # E2EHarness, assertions
+└── testdata/
+    ├── echo-runbook.yaml
+    ├── vars-runbook.yaml
+    ├── branch-runbook.yaml
+    ├── iterate-runbook.yaml
+    └── manual-runbook.yaml
+```
+
+**Test coverage:**
+- Parser → Planner → Engine → CLI Executor → Trace (full stack)
+- All step types (cli, branch, iterate, manual)
+- Variable interpolation and output capture
+- Trace persistence and parseability
+- Resume from checkpoint
+- Cancellation mid-run
+
+### Key Decisions
+
+| ID | Decision |
+|----|----------|
+| D-14-01 | E2E tests in dedicated `internal/e2e/` package |
+| D-14-02 | E2E tests use real executors, not fakes |
+| D-14-03 | Defer context.AfterFunc optimization to Phase 15+ |
+| D-14-04 | Sequential e2e tests (no t.Parallel initially) |
+
+### Deliverables
+
+**New files:** 8 (e2e package + 5 testdata runbooks)  
+**Modified files:** 4 (otlp.go, otlp_test.go, gc_test.go, ls.go)  
+**Estimated effort:** 3-4 Brian-days
+
+### NBI Items for Phase 15+
+
+- NBI-14-01: E2E test parallelization
+- NBI-14-02: E2E coverage for tool steps
+- NBI-12-03: context.AfterFunc optimization (third deferral)
+
+**Output:** .squad/tmp/ken-phase14-design.md, .squad/decisions/inbox/ken-phase14-design.md
+
+---
+
+## 2026-07-21: Phase 14 Design — E2E Integration Tests & NBI Closure
+
+**Task:** Design Phase 14 architecture combining E2E integration test suite with NBI-13 carry-forwards.
+
+**Design Scope:**
+
+**Part A — NBI-13 Items (Required Closure):**
+1. NBI-13-01: `WithTLS(*tls.Config)` option for OTLP adapter
+2. NBI-13-02: Additional gc unit tests (4 edge cases)
+3. NBI-13-03: ls `--output=json` JSON schema documentation
+
+**Part B — E2E Integration Test Suite (Primary Scope):**
+- Package: `internal/e2e/`
+- Approach: Real CLI executor, no mocks/fakes
+- Coverage: Parser → Planner → Engine → CLI → Trace (full stack)
+- Tests: 10 scenarios covering all step types
+- Execution: Sequential (no t.Parallel initially)
+
+### Key Architectural Decisions
+
+| ID | Decision |
+|----|----------|
+| D-14-01 | E2E tests in dedicated `internal/e2e/` package |
+| D-14-02 | E2E tests use real executors, not fakes |
+| D-14-03 | Defer context.AfterFunc optimization to Phase 15+ |
+| D-14-04 | Sequential e2e tests (no t.Parallel initially) |
+
+### Deliverables
+
+**New files:** 8 (e2e package + 5 testdata runbooks)  
+**Modified files:** 4 (otlp.go, otlp_test.go, gc_test.go, ls.go)  
+**Estimated effort:** 3-4 Brian-days
+
+### NBI Items for Phase 15+
+
+- NBI-14-01: E2E test parallelization
+- NBI-14-02: E2E coverage for tool steps
+- NBI-12-03: context.AfterFunc optimization (third deferral)
+
+**Status:** ✅ COMPLETE — Phase 14 design approved, Brian ready to implement.
+
+**Output:** `.squad/orchestration-log/2026-07-21T06-06-10Z-ken.md`, `.squad/decisions/d-14-phase14-e2e-suite-design.md`

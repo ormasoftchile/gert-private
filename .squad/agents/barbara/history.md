@@ -1304,3 +1304,77 @@ Ken's review note said `FakeInputProvider` was missing `Name()` after Phase 8 ad
 - No regressions detected
 
 **Deliverable:** `.squad/decisions/inbox/barbara-phase16-preflight.md`
+
+---
+
+## Phase 17 Preflight — 2025-01-16 14:32 UTC
+
+**Run by:** Barbara (Preflight & Integrations Specialist)  
+**Trigger:** Phase 16 sealed at ab6f554, Cristian requested preflight for Phase 17 kickoff
+
+### Execution Summary
+All checks ran successfully in `/Users/cristianormazabal/Projects/gert/v2`:
+
+1. ✅ go build ./... — PASS (all modules compiled cleanly)
+2. ✅ go vet ./... — PASS (zero linting issues)
+3. ✅ go test ./... -race -count=1 — PASS (57 packages passed, race detector clean)
+4. ✅ git status — CLEAN (working tree clean)
+5. ✅ git log — Phase 16 commits present, baseline ab6f554 at position 2, HEAD 5f40eae (Phase 16 sealed approval)
+
+**Baseline Snapshot:**
+- Baseline commit: ab6f554 (feat(v2): Phase 16 — run.list/run.get RPC wiring, CORS, bearer auth)
+- HEAD commit: 5f40eae (chore: Phase 16 sealed — Ken approved 8/10)
+- Build time: <1s
+- Test time: ~60s total (all packages passing)
+- Known flake (TestSSE_ConnectReceivesEvents): Correctly skipped per NBI-15-01
+- All static analysis clean
+- No regressions detected
+
+**Status:** ✅ ALL GREEN — All checks passed. Phase 17 baseline approved. Brian ready to proceed.
+
+**Integration Surface Status:**
+- Build: Clean, no errors or warnings
+- Tests: All passing, race detector clean
+- Dependencies: Tidy
+- Git history: Verified, Phase 16 commits present
+- No regressions detected
+
+**Deliverable:** `.squad/decisions/inbox/barbara-phase17-preflight.md`
+
+---
+
+## 2026-04-21 — Phase 17 Preflight: All Green
+
+**Action:** Execute Phase 17 preflight checklist  
+**Requestor:** Cristian  
+**Baseline:** ab6f554 (Phase 16 final commit)
+
+### Preflight Execution (2026-04-21 14:32 UTC)
+
+1. ✅ `go build ./...` — PASS (all modules clean, <1s)
+2. ✅ `go vet ./...` — PASS (zero linting issues)
+3. ✅ `go test ./... -race -count=1` — PASS (57 packages, race detector clean)
+4. ✅ `git status` — CLEAN (working tree clean)
+5. ✅ `git log` — VERIFIED (Phase 16 commits present, ab6f554 at position 2, HEAD 5f40eae)
+
+### Known Flake Status
+- TestSSE_ConnectReceivesEvents: Correctly skipped per NBI-15-01 (to be fixed in Phase 17)
+- No flakiness observed this run
+
+### Integration Surface
+- Build: Clean, no errors or warnings
+- Tests: All passing, race detector clean
+- Dependencies: Tidy
+- Git history: Verified, Phase 16 commits present
+- No regressions detected
+
+### Verdict
+✅ **ALL GREEN** — Phase 17 ready to start  
+- No blockers identified
+- Brian ready to proceed with implementation
+- Security anchor (NBI-16-01) can proceed
+
+**Output:** `.squad/decisions/inbox/barbara-phase17-preflight.md`
+
+**Status:** Preflight sealed. Phase 17 kickoff approved.
+

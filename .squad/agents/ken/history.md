@@ -2276,3 +2276,83 @@ Reviewed Brian's Phase 15 implementation:
 **Blocking issues:** None.
 
 **Review document:** `.squad/decisions/inbox/ken-phase16-review.md`
+
+---
+
+## 2026-04-21 — Phase 17 Design: Security Hardening & SSE Stabilization
+
+**Action:** Design Phase 17 scope and architecture
+**Requestor:** Cristian
+
+### Context
+- Phase 16 sealed and approved (8/10)
+- Five NBI carry-forwards: NBI-16-01 (timing-safe auth), NBI-16-02 (auth hardening), NBI-16-03 (E2E parallelization), NBI-16-04 (run.list docs), NBI-15-01 (SSE flake)
+- NBI-16-01 is security-critical — must be Phase 17 anchor
+
+### Part A — NBI Carry-Forwards
+
+| ID | Disposition | Rationale |
+|----|-------------|-----------|
+| NBI-16-01 | IN SCOPE (ANCHOR) | Security-critical: `subtle.ConstantTimeCompare` |
+| NBI-16-04 | IN SCOPE | Trivial: godoc for run.list response schema |
+| NBI-16-02 | PARTIAL | Token expiry only; full OAuth2/OIDC deferred |
+| NBI-15-01 | IN SCOPE | Fix SSE flake properly (remove t.Skip) |
+| NBI-16-03 | DEFERRED | E2E parallelization low priority |
+
+### Part B — New Work
+
+1. **Token expiry support** — optional `--auth-token-expiry` flag for simple expiry validation
+2. **SSE flake fix** — `WaitForSubscriber` synchronization primitive to replace t.Skip
+
+### Key Decisions
+
+| ID | Decision |
+|----|----------|
+| D-17-01 | Constant-time token comparison is mandatory |
+| D-17-02 | Token expiry is opt-in (zero = opaque secret) |
+| D-17-03 | SSE synchronization via WaitForSubscriber (not sleep) |
+| D-17-04 | run.delete deferred to Phase 19 (post-auth) |
+
+### Deliverables
+
+**Modified files:** 7 (middleware.go, middleware_test.go, rpc.go, serve.go, serve.go, events.go, sse_test.go)
+**New files:** 0
+**New tests:** ~6
+**Estimated effort:** 1.5-2 Brian-days
+
+### NBI Items for Phase 18+
+
+- NBI-17-01: Full auth hardening (OAuth2/OIDC, API key rotation)
+- NBI-17-02: E2E test parallelization (carry-forward)
+- NBI-17-03: run.delete RPC (CRUD completion)
+- NBI-17-04: Rate limiting for gert serve
+
+**Output:** `.squad/tmp/ken-phase17-design.md`, `.squad/decisions/inbox/ken-phase17-design.md`
+
+---
+
+## 2026-04-21 — Phase 17 Preflight Coordination
+
+**Action:** Coordinate preflight review with Barbara for Phase 17 kickoff  
+**Requestor:** Cristian  
+**Trigger:** Phase 16 sealed (5f40eae)
+
+### Preflight Status
+✅ Barbara confirmed all green: go build, go vet, go test -race, git status, git log
+
+### Baseline Approved
+- Commit: ab6f554 (feat(v2): Phase 16 complete)
+- Build: Clean, <1s
+- Tests: 57 packages passing, race detector clean
+- Known flake (TestSSE_ConnectReceivesEvents): Correctly skipped per NBI-15-01
+
+### Phase 17 Ready to Launch
+- NBI-16-01 (timing-safe auth) is design anchor ✅
+- NBI-16-02 (token expiry) partial scope ✅
+- NBI-15-01 (SSE fix) scoped ✅
+- Design decisions locked in decision inbox
+
+**Output:** Design document approved and ready for Brian's implementation.
+
+**Status:** Phase 17 kickoff green light — Brian ready to proceed.
+

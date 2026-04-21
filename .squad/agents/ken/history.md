@@ -1640,3 +1640,40 @@ go test ./... -race   ✅ all packages pass
 6. ⏳ Git commit pending (Phase 12 design + build fixes)
 
 **Status:** ✅ ORCHESTRATION COMPLETE
+
+---
+
+## 2026-07-20 — Phase 12 Review: OpenTelemetry Integration
+
+**Action:** Five-axis architectural review of Brian's Phase 12 implementation
+**Verdict:** APPROVED WITH NON-BLOCKING ITEMS (8.5/10)
+
+**Scope reviewed:**
+- NEW: pkg/otel/{doc,tracer,attributes,tracer_test}.go — custom OTel interfaces, noop, RecordingTracerProvider
+- NEW: internal/runstore/dir_store_test.go — 9 RunStore unit tests
+- MOD: internal/engine/engine.go — span hierarchy, context propagation
+- MOD: pkg/engine/engine.go — TracerProvider field in EngineConfig
+- MOD: internal/evidence/attachment.go — atomic writes
+- MOD: internal/evidence/collector.go — warn logging
+- MOD: internal/adapter/{options,wire}.go — OTel CLI flag wiring
+- MOD: cmd/gert/run.go — --otel-endpoint, --otel-service, --otel-stdout flags
+
+**Key findings:**
+- All three Phase 11 non-blocking items addressed: RunStore tests ✅, atomic writes ✅, warn logging ✅
+- Custom OTel interfaces (no SDK) are API-compatible and accepted per D-12-01 rationale
+- Span hierarchy correct: gert.run → gert.step.{kind} → gert.branch.{label}
+- Context propagation working through engine → executors
+- RecordingTracerProvider provides clean test infrastructure
+- Attribute constants correctly prefixed with gert.*
+
+**Accepted deviations:**
+- BRD-12-01: No real OTel SDK (~30MB deps avoided; Phase 13 adds OTLP adapter)
+- BRD-12-02: --otel-endpoint accepted but no-op (Phase 13 NBI-12-01)
+- BRD-12-03: mergeContexts goroutine pattern (bounded, pre-existing)
+
+**Phase 13 Part A housekeeping:**
+- NBI-12-01: Add OTLP adapter package (4-6h, Brian)
+- NBI-12-02: Document --otel-endpoint as reserved in help (30min, Brian)
+- NBI-12-03: Consider context.AfterFunc for mergeContexts (future, low priority)
+
+**Output:** .squad/tmp/ken-phase12-review.md, .squad/decisions/inbox/ken-phase12-review.md

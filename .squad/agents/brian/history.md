@@ -305,3 +305,75 @@ Implemented Phase 6 tool runtime: pkg/tool interfaces, internal transports (stdi
 - Replaced condition evaluation in v2 with expr-lang/expr infix syntax while keeping TemplateEvaluator for string interpolation.
 - Updated condition tests and executor iterate condition test to infix expressions, including boolean enforcement.
 - Migrated runbook fixture condition/when clauses in design/gert-v2/testdata to infix syntax (plus assessment notes) and added expr dependency.
+
+## Learnings — Phase 12 OTel
+
+### Phase 12 Implemented — OTel Integration + Phase 11 Housekeeping Complete
+
+Implemented all Phase 12 deliverables per Ken's design. All tests pass: `go build ./... && go vet ./... && go test ./... -race -count=3`.
+
+**New files:**
+- `v2/pkg/otel/doc.go` — package documentation
+- `v2/pkg/otel/tracer.go` — TracerProvider/Tracer/Span interfaces + noop + RecordingTracerProvider (test support) + context propagation helpers
+- `v2/pkg/otel/attributes.go` — attribute key constants (`gert.*` prefix per OTel conventions)
+- `v2/pkg/otel/tracer_test.go` — 9 unit tests covering noop, recording, hierarchy, context propagation
+- `v2/internal/runstore/dir_store_test.go` — 9 tests covering SaveLoadState, LoadState_Latest, LoadState_SkipsTmpFiles, LoadState_Empty, WriteTrace, RegisterPlan, TracePath, Concurrent (race), WriteFileAtomic
+
+**Modified files:**
+- `v2/pkg/engine/engine.go` — added `TracerProvider otelPkg.TracerProvider` to `EngineConfig` (optional field)
+- `v2/internal/engine/engine.go` — integrated OTel spans: run span in Start/Resume, step spans in executeStep/executeParallel/executeWaitForEvent, proper parent-child wiring via context, span status set on completion/failure/cancellation
+- `v2/internal/evidence/attachment.go` — atomic write: temp file → Sync → Rename, cleanup on error
+- `v2/internal/evidence/collector.go` — added `log.Printf("[WARN]...")` on attachment storage failures
+- `v2/internal/adapter/options.go` — added `OTelEndpoint`, `OTelServiceName`, `OTelStdout` to `WireOptions`
+- `v2/internal/adapter/wire.go` — added `buildTracerProvider()`, `stdoutTracerProvider` (debug provider), wires `TracerProvider` into `EngineConfig`
+- `v2/cmd/gert/run.go` — added `--otel-endpoint`, `--otel-service`, `--otel-stdout` CLI flags
+- `v2/internal/engine/engine_test.go` — added 5 OTel integration tests (Noop, Hierarchy, Error, Parallel, branch parent-child)
+
+### Key Design Decisions
+
+**D-12-01 Deviation: No OTel SDK dependency added.** The `pkg/otel` package defines its own interfaces (TracerProvider, Tracer, Span) that are structurally compatible with the OTel SDK but don't import it. The `RecordingTracerProvider` in `pkg/otel` serves the in-memory recording purpose without the SDK. The `--otel-endpoint` flag is accepted but OTLP SDK wiring is deferred to Phase 13 (noted in code comment).
+
+**Context propagation:** Used a private `contextKeyType` + `ContextWithSpan`/`SpanFromContext` helpers to carry spans in context. The `RecordingTracerProvider` uses this to establish parent-child relationships between spans. Noop tracer returns context unchanged (zero allocation).
+
+**Run span lifetime:** Started in `Start()`/`Resume()` using the caller's `context.Context` (preserves upstream trace context). Ended in `completeRun()`, `failRun()`, `Cancel()`, and the signal handler.
+
+**traceCtx in Next():** `runHandle` now carries a `traceCtx context.Context` with the run span embedded. `Next()` uses `mergeContexts(traceCtx, runCtx)` so step spans correctly parent to the run span while still respecting cancellation.
+
+**stdoutTracerProvider:** Minimal debug provider in `internal/adapter` writes span summary JSON to stderr. Production OTLP wiring deferred.
+
+### Tests Added
+- `pkg/otel`: 9 tests (noop, recording, hierarchy, status, error recording, attributes, resolve, context propagation)
+- `internal/runstore`: 9 tests (CRUD, concurrent 10 goroutines × 100 events, atomic write validation)
+- `internal/engine`: 5 OTel integration tests (noop no-panic, hierarchy, failed step StatusError, parallel branches parent-child)
+
+---
+
+## 2026-07-20 — Phase 12: OpenTelemetry Integration
+
+**Action:** Implemented Phase 12 per Ken's design
+**Status:** APPROVED WITH NON-BLOCKING ITEMS (8.5/10 by Ken)
+
+**Deliverables:**
+
+Part A (housekeeping):
+- internal/runstore/dir_store_test.go: 9 unit tests including concurrent write safety
+- internal/evidence/attachment.go: atomic writes (temp→sync→rename with cleanup)
+- internal/evidence/collector.go: [WARN] logging on attachment storage failures
+
+Part B (OTel):
+- pkg/otel/tracer.go: TracerProvider/Tracer/Span interfaces + noop + RecordingTracerProvider
+- pkg/otel/attributes.go: gert.* attribute key constants
+- pkg/otel/tracer_test.go: interface and hierarchy tests
+- internal/engine/engine.go: gert.run → gert.step.{kind} → gert.branch.{label} span hierarchy
+- pkg/engine/engine.go: TracerProvider field in EngineConfig
+- internal/adapter/wire.go + options.go: TracerProvider wiring, OTelEndpoint/ServiceName options
+- cmd/gert/run.go: --otel-endpoint, --otel-service, --otel-stdout CLI flags
+
+**Deviations accepted by Ken:**
+- BRD-12-01: No OTel SDK (custom interfaces, SDK-free binary)
+- BRD-12-02: OTLP endpoint parsed but no-op (Phase 13 NBI-12-01)
+- BRD-12-03: mergeContexts goroutine pattern (pre-existing, bounded)
+
+**Phase 13 Part A items assigned to Brian:**
+- NBI-12-01: Add pkg/otel/adapter with real OTLP wiring (4-6h)
+- NBI-12-02: Document --otel-endpoint as reserved in --help output (30min)

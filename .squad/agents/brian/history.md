@@ -293,3 +293,9 @@ Implemented Phase 6 tool runtime: pkg/tool interfaces, internal transports (stdi
 - Added dynamic tool registry Register() support plus test coverage for MapRegistry.
 - Extended runbook schema to accept extensions entries (name, path, grants) so the r18 extension host fixture parses.
 - Test extension binaries now build under repo-local .testextensions to avoid /tmp writes.
+
+## Learnings — Phase 8 (2026-04-24)
+
+- Added the input provider framework (pkg/input value providers, internal/input providers + registry) with unit tests.
+- Renamed interactive prompt interface to PromptProvider and updated executors/test fakes to preserve choice/decision/collector flows.
+- Engine now passes extension manifests to ExtensionHost.Load, shuts down the host on run completion, and schema accepts inputs.fallback/outcome.summary.

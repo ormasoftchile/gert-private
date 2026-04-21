@@ -113,7 +113,7 @@ flow:
       id: clinical_validation
       type: collector
       title: Clinical validation attestation
-      when: '{{ eq .affects_clinical_functionality "yes" }}'
+      when: 'affects_clinical_functionality == "yes"'
       prompt: |
         Attest that clinical validation demonstrates safety and efficacy for v{{ .software_version }}.
       fields:
@@ -217,7 +217,7 @@ flow:
       title: Route by submission type
       branches:
         # Branch: No Submission (skip to manufacturing approval)
-        - condition: '{{ eq .submission_type "no_submission" }}'
+        - condition: 'submission_type == "no_submission"'
           label: No submission required
           steps:
             - step:
@@ -229,7 +229,7 @@ flow:
                   - "No FDA submission required for v{{ .software_version }}. Exempt per FDA guidance."
 
         # Branch: Letter to File
-        - condition: '{{ eq .submission_type "letter_to_file" }}'
+        - condition: 'submission_type == "letter_to_file"'
           label: Letter to File
           steps:
             - step:
@@ -277,7 +277,7 @@ flow:
                   roles: [quality-manager]
 
         # Branch: Special 510(k)
-        - condition: '{{ eq .submission_type "special_510k" }}'
+        - condition: 'submission_type == "special_510k"'
           label: Special 510(k) Submission
           steps:
             - step:

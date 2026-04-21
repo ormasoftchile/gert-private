@@ -934,3 +934,69 @@ Parse(r18-extension-host): unexpected error: [schema/structural] additional prop
 - Tool descriptor: 1 file (hello.tool.yaml)
 - Documentation: 1 decision file (schema gap)
 
+
+
+## 2026-04-20: Phase 8 Input Provider Framework — Spec Audit
+
+**Requested by:** Cristian  
+**Phase:** 8 (Input Provider Framework)  
+**Status:** AUDIT COMPLETE
+
+### Task
+
+Comprehensive audit of Phase 8 spec (§14 Input Provider Framework) to identify gaps between spec and current codebase, then create r19 fixture and recommendations for Brian.
+
+### What was done
+
+**1. Full spec audit (1003-line section 14)**
+- Read entire spec: provider definition schema, resolution protocol, built-in providers, interactive step contracts, dynamic options, autocomplete search, composition, lifecycle
+- Analyzed existing codebase for input-related code
+- Identified what exists vs. what is missing
+
+**2. Created r19 fixture runbook**
+- File: design/gert-v2/testdata/runbooks/r19-input-provider/schema.yaml
+- Tests: env provider, file provider, workspace provider, prompt provider
+- Demonstrates: Value flow from input resolution through shell commands
+- Includes: Assertions to validate resolution, governance metadata
+- Status: Valid YAML, parser accepts it but will not resolve until Phase 8 implements provider pipeline
+
+**3. Wrote comprehensive audit report**
+- File: .squad/tmp/barbara-phase8-audit.md (12.6 KB)
+- Covers: Spec summary, gap analysis, r19 description, recommendations for Brian
+- Includes: 26-item spec compliance checklist (3 already satisfied)
+
+**4. Design decisions document**
+- File: .squad/decisions/inbox/barbara-phase8-audit.md (13.1 KB)
+- 6 key design decisions requiring Ken input
+- 4 open questions for Ken (template expressions, auth, versioning, crash recovery)
+
+### Key Findings
+
+**What EXISTS:**
+- pkg/input/InputProvider interface with PromptChoice/PromptDecision/PromptForm  
+- internal/input/terminal.go implements prompt provider  
+- EngineConfig.InputProvider field wired into engine  
+- Input.From field in schema (line 48 of runbook.go)  
+- Executors (choice/decision/collector) wired to InputProvider  
+- Existing fixtures use from: bindings (r01, r02, r03, r07)
+
+**What is MISSING:**
+- Provider registry and resolution pipeline  
+- Built-in providers (env, file, workspace)  
+- External provider support (process lifecycle, JSON-RPC dispatcher)  
+- Dynamic options protocol (inputProvider/getOptions)  
+- Autocomplete search protocol (inputProvider/search)  
+- Provider composition (priority-ordered chains)  
+- Pre-flight resolution phase in run engine  
+- Trace events (input.resolved, input.provider_started, input.fallback)
+
+### Deliverables
+
+- Audit report: .squad/tmp/barbara-phase8-audit.md
+- r19 fixture: testdata/runbooks/r19-input-provider/schema.yaml
+- Design decisions: .squad/decisions/inbox/barbara-phase8-audit.md
+- History update: .squad/agents/barbara/history.md
+
+**Next:** Ken reviews design decisions, Brian implements Phase 8 per priority order.
+
+---

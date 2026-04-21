@@ -411,7 +411,7 @@ flow:
       id: delete_snapshot
       type: cli
       title: Delete pre-migration snapshot
-      when: '{{ eq .confirmed "yes" }}'
+      when: 'confirmed == "yes"'
       command: rm
       args:
         - "-f"

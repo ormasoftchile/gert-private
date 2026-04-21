@@ -98,7 +98,7 @@ flow:
   - step:
       id: restart_service
       type: cli
-      when: "{{ eq .decision \"yes\" }}"
+      when: "decision == \"yes\""
       with:
         argv: ["systemctl", "restart", "{{ .service_name }}"]
 \end{minted}
@@ -140,7 +140,7 @@ flow:
   - step:
       id: restart_service
       type: cli
-      when: "{{ eq .decision \"yes\" }}"
+      when: "decision == \"yes\""
       with:
         argv: ["systemctl", "restart", "{{ .service_name }}"]
 \end{minted}

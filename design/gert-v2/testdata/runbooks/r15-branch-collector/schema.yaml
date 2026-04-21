@@ -52,7 +52,7 @@ flow:
       type: branch
       title: Route by environment
       branches:
-        - condition: '{{ eq .environment "development" }}'
+        - condition: 'environment == "development"'
           label: Development path
           steps:
             - step:
@@ -71,7 +71,7 @@ flow:
                 command: echo
                 args: ["Running development smoke tests"]
 
-        - condition: '{{ eq .environment "staging" }}'
+        - condition: 'environment == "staging"'
           label: Staging path
           steps:
             - step:
@@ -103,7 +103,7 @@ flow:
                     label: Staging deployment verified?
                     required: true
 
-        - condition: '{{ eq .environment "production" }}'
+        - condition: 'environment == "production"'
           label: Production path
           steps:
             - step:
@@ -128,7 +128,7 @@ flow:
                 id: deploy_prod
                 type: cli
                 title: Deploy to production
-                when: '{{ eq .prod_approved "true" }}'
+                when: 'prod_approved'
                 command: echo
                 args: ["Deploying {{ .version }} to PRODUCTION"]
                 capture:
@@ -138,7 +138,7 @@ flow:
                 id: prod_monitoring
                 type: cli
                 title: Enable production monitoring
-                when: '{{ eq .enable_monitoring "true" }}'
+                when: 'enable_monitoring'
                 command: echo
                 args: ["Enabling enhanced monitoring for {{ .version }}"]
 
@@ -147,7 +147,7 @@ flow:
       id: notify
       type: cli
       title: Send deployment notifications
-      when: '{{ ne .notification_emails "" }}'
+      when: 'notification_emails != ""'
       command: echo
       args: ["Sending notifications to: {{ .notification_emails }}"]
 

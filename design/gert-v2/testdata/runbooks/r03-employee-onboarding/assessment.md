@@ -15,7 +15,7 @@
 | Gap ID | Class | Severity | Resolution |
 |--------|-------|----------|------------|
 | G2-003 | G2 | ~~LOW~~ | **FIXED** — `email` field in `collect_employee_info` now carries `validation.pattern` enforcing `@company.com` domain. `pattern_hint` gives the operator a clear error message. |
-| G2-004 | G2 | ~~LOW~~ | **FIXED** — `shipping_address` field in `order_laptop` step now carries `when: '{{ eq .office_location "Remote" }}'`. Remote employees see and must fill the field; in-office employees see neither the field nor the prompt. |
+| G2-004 | G2 | ~~LOW~~ | **FIXED** — `shipping_address` field in `order_laptop` step now carries `when: 'office_location == "Remote"'`. Remote employees see and must fill the field; in-office employees see neither the field nor the prompt. |
 
 ## Gaps Closed (field-types-p0)
 

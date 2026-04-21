@@ -149,7 +149,7 @@ flow:
       type: branch
       title: Analyze pod failure mode
       branches:
-        - condition: '{{ or (contains .pod_json "CrashLoopBackOff") (contains .pod_json "ImagePullBackOff") }}'
+        - condition: 'contains(pod_json, "CrashLoopBackOff") || contains(pod_json, "ImagePullBackOff")'
           label: Config Issue
           steps:
             # Branch: Fix Config (Steps 4a-4d)
@@ -193,7 +193,7 @@ flow:
                 id: rollback_config
                 type: cli
                 title: Apply previous config
-                when: '{{ eq .approved "yes" }}'
+                when: 'approved == "yes"'
                 command: kubectl
                 args:
                   - apply
@@ -219,7 +219,7 @@ flow:
                   interval: 10s
                   backoff: linear
 
-        - condition: '{{ contains .pod_json "OOMKilled" }}'
+        - condition: 'contains(pod_json, "OOMKilled")'
           label: Resource Limit Issue
           steps:
             # Branch: Scale Resources (Steps 5a-5c)
@@ -248,7 +248,7 @@ flow:
                 id: patch_deployment
                 type: cli
                 title: Patch deployment memory limits
-                when: '{{ eq .approved "yes" }}'
+                when: 'approved == "yes"'
                 command: kubectl
                 args:
                   - patch
@@ -280,7 +280,7 @@ flow:
                   interval: 10s
                   backoff: linear
 
-        - condition: '{{ contains .pod_json "NodeNotReady" }}'
+        - condition: 'contains(pod_json, "NodeNotReady")'
           label: Node Health Issue
           steps:
             # Branch: Check Node Health (Steps 6a-6c)

@@ -604,3 +604,33 @@ This is re-input every time a new style is needed (lazy, per-environment), so an
 - Safe: did not touch blocks that are legitimately plain text
 
 **Outcome:** Design document now has comprehensive, consistent syntax highlighting for all YAML schema examples, runbook definitions, and Go code snippets.
+
+
+## 2026-04-18 — Expression syntax migration: Polish to infix
+
+**Task:** Replace all Polish/prefix expression syntax (Go templates) with infix notation (expr-lang/expr)
+
+**Changes made:**
+1. Rewrote expression language subsection in sections/03-schema-vnext.tex (lines 483-558)
+   - Documented expr-lang/expr as the new expression engine
+   - Clarified split: expr for conditions/when/until, Go templates for interpolation
+   - Added syntax overview, operators, built-in functions, and examples
+   
+2. Converted 9 expression examples across 2 files:
+   - sections/03-schema-vnext.tex: 7 examples
+   - sections/10-migration-compatibility.tex: 2 examples
+
+3. Added expr-lang/expr citation to references.bib
+
+**Key syntax changes:**
+- Removed double-brace delimiters from conditions
+- Removed dot prefix from variable names (e.g., env instead of .env)
+- Replaced comparison functions with operators (eq to ==, ne to !=, gt to >)
+- Functions now use parentheses: contains(s, "sub")
+
+**Verification:**
+- Build succeeded: 326 pages, 1.44 MB PDF
+- All old-style expressions removed (grep confirmed)
+- Template interpolation syntax preserved for args, title, instructions
+
+**Requester:** Cristian

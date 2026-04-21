@@ -223,7 +223,7 @@ flow:
             type: branch
             title: Check if metrics within SLO
             branches:
-              - condition: '{{ or (gt .error_rate "0.05") (gt .p95_latency "0.5") }}'
+              - condition: 'error_rate > 0.05 || p95_latency > 0.5'
                 label: Metrics unhealthy
                 steps:
                   - step:
@@ -247,7 +247,7 @@ flow:
       type: branch
       title: Evaluate canary health
       branches:
-        - condition: '{{ and (lt .error_rate "0.01") (lt .p95_latency "0.2") }}'
+        - condition: 'error_rate < 0.01 && p95_latency < 0.2'
           label: Metrics healthy — promote
           steps:
             # Step 9: Promote Branch
@@ -276,7 +276,7 @@ flow:
                 id: scale_canary_100
                 type: cli
                 title: Scale canary to 100%
-                when: '{{ eq .approved "yes" }}'
+                when: 'approved == "yes"'
                 command: kubectl
                 args:
                   - patch

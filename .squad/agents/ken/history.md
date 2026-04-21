@@ -1356,3 +1356,93 @@ Designed the complete Extension Host architecture for Phase 7. Produced comprehe
 2. .squad/decisions/inbox/ken-phase7-design-decisions.md (8 decisions)
 
 **Status:** DESIGN COMPLETE. Ready for team review.
+
+### 2026-04-22 — Phase 8 Design: Input Provider Framework
+
+**What was designed:**
+
+Phase 8 introduces the Input Provider Framework — the system that resolves `from:` bindings at run time. The design extends the existing `InputProvider` interface (interactive prompting) with a new `InputResolver` interface (value resolution) and an `InputRegistry` that manages both.
+
+**Key architectural decisions:**
+
+1. **D1: Split interfaces** — `InputResolver` (from: bindings) separate from `InputProvider` (interactive prompts). ISP compliance, zero breaking changes to Phase 5.
+2. **D2: Registry + Provider coexistence** — `EngineConfig.InputRegistry` added alongside existing `InputProvider` field for backward compat.
+3. **D3: Per-run caching** — resolved values cached for run lifetime by default. Provider-override to `step`/`none`.
+4. **D4: Sensitive marking** — `ResolveResponse.Sensitive` drives trace redaction. Vault always sensitive; env heuristically detected.
+5. **D5: Two-pass validation** — plan-time (schema type check) + resolution-time (value validation). Fail-fast before steps execute.
+6. **D6: Resolution chain order** — CLI --var → workspace → env → prompt.
+7. **D7: Executors get InputProvider directly** — interactive steps don't route through registry. Different lifecycle (in-flight vs pre-flight).
+8. **D8: Replay metadata** — ResolveResponse carries Source, CacheKey, Timestamp, Metadata — enough for Phase 12 without coupling.
+
+**Built-in resolvers designed:**
+- EnvResolver (env. prefix)
+- StaticResolver (catch-all, for --var / tests / replay)
+- FileResolver (file. prefix, supports JSON Pointer)
+- WorkspaceResolver (workspace. prefix, dot-notation)
+- VaultResolver (vault. prefix, stub for Phase 15)
+- ChainResolver (tries resolvers in order)
+- PromptResolver (interactive fallback)
+
+**Phase 7 housekeeping items included:**
+- H1: Engine must call ExtensionHost.Shutdown() on run completion (process leak fix)
+- H2: Plumb runbook extensions to Load() via ProjectManifest
+
+**Key insight:** The existing InputProvider is for in-flight interaction (choice/decision/collector steps). The new InputResolver is for pre-flight resolution (from: bindings). These are related but distinct lifecycle moments. The InputRegistry bridges them by owning both the resolver chain and the interactive provider reference.
+
+**Deliverables:**
+1. .squad/tmp/ken-phase8-design.md (55KB design document)
+2. .squad/decisions/inbox/ken-phase8-design.md (8 decisions + 2 housekeeping items)
+
+**Status:** DESIGN COMPLETE. Ready for Brian to implement.
+
+### 2026-07-16 — Infix Expression Language Design (expr-lang/expr)
+
+**What was designed:**
+
+Replacement of Go `text/template` Polish/prefix notation for boolean conditions with `expr-lang/expr` infix syntax. Requested by Cristian.
+
+**Key decisions:**
+
+1. **D1: expr-lang/expr for boolean conditions** — `SimpleConditionEvaluator` reimplemented using `expr.Compile()` + `expr.Run()` instead of text/template wrapping.
+2. **D2: Bare variable names** — No `.` or `$` prefix. `vars["env"]` accessed as just `env` in expressions.
+3. **D3: Non-boolean = hard error** — Enforced via `expr.AsBool()` compile option. No silent false.
+4. **D4: String interpolation stays on text/template** — Only `ConditionEvaluator` moves to expr-lang. `Evaluator.Eval()` (for shell commands, args, instructions) stays on text/template. Minimizes blast radius.
+
+**Scope of change:**
+- `v2/internal/expr/condition.go` — reimplemented
+- `v2/internal/expr/condition_test.go` — all test strings to infix
+- `v2/pkg/expr/expr.go` — NO CHANGE (interfaces preserved)
+- `v2/internal/expr/template.go` — NO CHANGE (string interpolation untouched)
+- 4 testdata runbook YAML files (~17 expressions updated)
+- New dependency: `github.com/expr-lang/expr`
+
+**Deliverables:**
+1. `.squad/tmp/ken-infix-expr-design.md` (full design note with syntax reference, implementation guide, test plan)
+2. `.squad/decisions/inbox/ken-infix-expr.md` (4 decisions: D1–D4)
+
+**Status:** DESIGN COMPLETE. Ready for Brian to implement.
+
+
+---
+
+## 2026-04-22 — Phase 8 Review: Input Provider Framework
+
+**Action:** Architecture review of Brian Phase 8 implementation
+**Verdict:** APPROVED (8.5/10)
+**Key findings:**
+- Core framework delivered with pragmatically simplified architecture (single-method Provide() instead of multi-method InputResolver; priority-based registry instead of prefix-matching)
+- 26 tests pass with -race, covering happy path, miss, error, chain fallthrough, sensitive propagation
+- Phase 7 housekeeping verified: Shutdown deferred in all terminal paths, ProjectManifest constructed from plan extensions
+- Non-blocking gaps: pre-flight from: resolution not yet wired in engine, FileResolver/WorkspaceResolver deferred
+- 5 non-blocking recommendations issued (R1-R5)
+
+**Files reviewed:**
+- v2/pkg/input/input.go, v2/pkg/input/prompt.go
+- v2/internal/input/{chain,env,static,vault,prompt,registry,helpers,errors,doc}.go
+- v2/internal/input/*_test.go (26 tests)
+- v2/internal/executor/prompt.go
+- v2/internal/engine/engine.go
+- v2/pkg/engine/engine.go
+- v2/pkg/testutil/fake_input_provider.go, fake_prompt_provider.go
+
+**Output:** .squad/tmp/ken-phase8-review.md, .squad/decisions/inbox/ken-phase8-review.md

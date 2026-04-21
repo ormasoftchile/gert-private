@@ -21,7 +21,7 @@
 
 ## Translation Notes
 
-1. **Step 3 (Clinical Validation — Conditional):** Used `when: '{{ eq .affects_clinical_functionality "yes" }}'`
+1. **Step 3 (Clinical Validation — Conditional):** Used `when: 'affects_clinical_functionality == "yes"'`
    to conditionally skip clinical validation. This is correct per the v2 schema `when:` guard.
 
 2. **Step 5 (Regulatory Affairs Review):** Used `type: choice` correctly for human selection of

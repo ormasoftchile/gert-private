@@ -228,7 +228,7 @@ flow:
                     multiline: true
                     label: Shipping address
                     required: true
-                    when: '{{ eq .office_location "Remote" }}'
+                    when: 'office_location == "Remote"'
                   - name: estimated_delivery
                     type: date
                     label: Estimated delivery date
@@ -299,7 +299,7 @@ flow:
       type: branch
       title: Provision department-specific access
       branches:
-        - condition: '{{ eq .department "Engineering" }}'
+        - condition: 'department == "Engineering"'
           label: Engineering access
           steps:
             - step:
@@ -317,7 +317,7 @@ flow:
                   interval: 1m
                   backoff: linear
 
-        - condition: '{{ eq .department "Sales" }}'
+        - condition: 'department == "Sales"'
           label: Sales access
           steps:
             - step:
@@ -335,7 +335,7 @@ flow:
                   interval: 1m
                   backoff: linear
 
-        - condition: '{{ eq .department "Marketing" }}'
+        - condition: 'department == "Marketing"'
           label: Marketing access
           steps:
             - step:
@@ -353,7 +353,7 @@ flow:
                   interval: 1m
                   backoff: linear
 
-        - condition: '{{ eq .department "Finance" }}'
+        - condition: 'department == "Finance"'
           label: Finance access
           steps:
             - step:

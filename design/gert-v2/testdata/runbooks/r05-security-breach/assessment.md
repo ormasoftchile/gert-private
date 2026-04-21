@@ -9,7 +9,7 @@
 | Gap ID | Class | Severity | Resolution |
 |--------|-------|----------|------------|
 | G2-002 | G2 | ~~MEDIUM~~ | **PARTIALLY FIXED** — `responsible_team` field in `remediation_planning` now carries `validation.pattern` restricting input to `security\|infrastructure\|engineering\|compliance`, plus `pattern_hint` for operator guidance. Full fix (dropdown) still requires `type: select`; pattern validation is a P1 interim. |
-| G2-003 | G2 | ~~LOW~~ | **FIXED** — `legal_notes` field in `legal_assessment` step now carries `when: '{{ eq .notification_required "yes" }}'`. The field is hidden and its variable skipped when notification is not required, which matches the actual business logic. |
+| G2-003 | G2 | ~~LOW~~ | **FIXED** — `legal_notes` field in `legal_assessment` step now carries `when: 'notification_required == "yes"'`. The field is hidden and its variable skipped when notification is not required, which matches the actual business logic. |
 | G2-004 | G2 | ~~LOW~~ | **FIXED** — `target_completion_date` field in `remediation_planning` now carries `validation.pattern` enforcing `YYYY-MM-DD` format, with `pattern_hint` shown on validation failure. |
 
 ## Corrections Applied (2026-04-19)
@@ -113,4 +113,3 @@ The `toolRefs` section was expanded to include all tools referenced by corrected
 - Add cross-branch goto or `type: goto` step for mid-runbook routing
 - Add `on: step_id_failure` to `type: compensate` for targeted compensation triggers
 - Extend `type: choice` to support `default:` value when timeout occurs without explicit skip
-

@@ -383,7 +383,7 @@ flow:
       type: branch
       title: Evaluate health results
       branches:
-        - condition: '{{ contains .http_result "200" }}'
+        - condition: 'contains(http_result, "200")'
           label: Healthy
           steps:
             - step:
@@ -393,7 +393,7 @@ flow:
                 outcome:
                   category: resolved
                   code: http_ok
-        - condition: '{{ not (contains .http_result "200") }}'
+        - condition: '!contains(http_result, "200")'
           label: Unhealthy
           steps:
             - step:
@@ -483,60 +483,94 @@ semantic validator checks this.
 \subsection{Expression Language}
 \label{subsec:expressions}
 
-v2 retains \textbf{Go templates} (\texttt{text/template}) as the expression
-language for all interpolated fields (\texttt{title}, \texttt{args}, \texttt{when},
-\texttt{condition}, \texttt{instructions}, etc.).  The decision to retain Go
-templates is grounded in two facts:
+v2 adopts \textbf{expr-lang/expr}~\cite{expr-lang-docs} as the expression language for all
+conditional fields (\texttt{when}, \texttt{condition}, \texttt{until}).  This
+replaces the Go template-based Polish/prefix notation used in v1 with natural,
+Python-like infix expressions.  The decision to migrate from Go templates to
+\texttt{expr} is grounded in three facts:
 \begin{enumerate}
-  \item The v1 template engine is battle-tested and broadly used in v1 runbooks.
-  \item Go templates' pipelines and custom function maps provide sufficient
-        expressiveness for operational conditionals.
+  \item Infix notation (\texttt{a == "x" \&\& b > 1}) is significantly more
+        readable and familiar to operators than prefix notation (\texttt{\{\{\ and\ (eq\ .a\ "x")\ (gt\ .b\ 1)\ \}\}}).
+  \item \texttt{expr} provides a safe, sandboxed evaluation environment with no
+        access to Go internals, improving security posture.
+  \item The migration cost is low: expressions are localized to
+        \texttt{when}/\texttt{condition} fields; shell command interpolation
+        (\texttt{args}, \texttt{title}) continues to use Go templates.
 \end{enumerate}
 
-The template data context is the \emph{run variable map}: all \texttt{vars},
-resolved \texttt{inputs}, and accumulated \texttt{captures} merged into a single
-flat \texttt{map[string]string}.  Access by dot notation:
-\texttt{\{\{\ .hostname\ \}\}}.
+\paragraph{Syntax overview}
 
-\paragraph{Built-in template functions (v2 additions)}
+Expressions operate on the \emph{run variable map}: all \texttt{vars}, resolved
+\texttt{inputs}, and accumulated \texttt{captures} merged into a single flat
+map.  Variables are referenced directly by name (\texttt{hostname}), without
+prefix notation.
 
-v2 adds a standard function library accessible in all templates:
+\textbf{Operators:}
+\begin{itemize}
+  \item Comparison: \texttt{==}, \texttt{!=}, \texttt{<}, \texttt{>}, \texttt{<=}, \texttt{>=}
+  \item Logical: \texttt{\&\&}, \texttt{||}, \texttt{!}
+  \item Grouping: \texttt{(expr)}
+\end{itemize}
 
+\textbf{Built-in functions:}
 \begin{center}
 \begin{tabular}{ll}
 \hline
-\textbf{Function} & \textbf{Signature} \\
+\textbf{Function} & \textbf{Example} \\
 \hline
-\texttt{contains}     & \texttt{(s, substr string) bool} \\
-\texttt{hasPrefix}    & \texttt{(s, prefix string) bool} \\
-\texttt{hasSuffix}    & \texttt{(s, suffix string) bool} \\
-\texttt{trim}         & \texttt{(s string) string} \\
-\texttt{toLower}      & \texttt{(s string) string} \\
-\texttt{toUpper}      & \texttt{(s string) string} \\
-\texttt{split}        & \texttt{(s, sep string) []string} \\
-\texttt{join}         & \texttt{(elems []string, sep string) string} \\
-\texttt{env}          & \texttt{(name string) string} \\
-\texttt{now}          & \texttt{() string} (RFC3339) \\
-\texttt{runID}        & \texttt{() string} \\
-\texttt{not}          & \texttt{(v bool) bool} \\
-\texttt{eq, ne, lt, gt, le, ge} & Standard comparison \\
-\texttt{fromYAML}     & \texttt{(s string) interface\{\}} \\
-\texttt{fromJSON}     & \texttt{(s string) interface\{\}} \\
+\texttt{contains(s, substr)}     & \texttt{contains(status, "ok")} \\
+\texttt{startsWith(s, prefix)}   & \texttt{startsWith(hostname, "prod-")} \\
+\texttt{endsWith(s, suffix)}     & \texttt{endsWith(hostname, ".local")} \\
+\texttt{matches(s, pattern)}     & \texttt{matches(version, "\^{}v[0-9]+")} \\
+\texttt{len(s)}                  & \texttt{len(output) > 0} \\
+\texttt{trim(s)}                 & \texttt{trim(message) != ""} \\
+\texttt{lower(s)}                & \texttt{lower(env) == "prod"} \\
+\texttt{upper(s)}                & \texttt{upper(region) == "US-WEST"} \\
 \hline
 \end{tabular}
 \end{center}
 
-All functions from \texttt{text/template} (built-ins: \texttt{and}, \texttt{or},
-\texttt{index}, \texttt{len}, \texttt{printf}, etc.) remain available.
+\textbf{Examples:}
+\begin{verbatim}
+# Equality check
+when: severity == "critical"
 
-\paragraph{\texttt{fromYAML} and \texttt{fromJSON}}
+# Logical AND
+when: environment == "prod" && count > 1
+
+# Logical OR with grouping
+when: (severity == "medium" || severity == "critical") && customer_impact == true
+
+# Function call
+condition: contains(http_result, "200")
+
+# Negation
+condition: !contains(http_result, "200")
+
+# Numeric comparison
+until: deploy_status == "Running"
+\end{verbatim}
+
+\paragraph{String interpolation: still Go templates}
+
+Shell command arguments (\texttt{args}), \texttt{title}, \texttt{instructions},
+and other non-conditional fields \emph{still use Go templates} for variable
+interpolation.  This is intentional: the full power of Go template pipelines,
+custom function maps, and \texttt{fromJSON}/\texttt{fromYAML} parsing is
+necessary for constructing command lines and text output.
+
+Access variables by dot notation:
+\texttt{\{\{\ .hostname\ \}\}}.
+
+\paragraph{\texttt{fromYAML} and \texttt{fromJSON} (template-only)}
 \texttt{fromYAML} and \texttt{fromJSON} parse a raw string variable into a structured
-\texttt{interface\{\}} value.  They are the primary mechanism for traversing values
-collected from \texttt{text} fields that declare \texttt{format: yaml} or
-\texttt{format: json} (see §\ref{sec:collector_field_validation}).  The raw string is
-\emph{always} what is stored in the run variable; these functions perform the
-parse on each template evaluation.  A parse error in a template expression is a hard
-step failure.
+\texttt{interface\{\}} value.  They are available in Go template contexts
+(\texttt{args}, \texttt{title}, etc.) but \emph{not} in \texttt{expr} conditions.
+They are the primary mechanism for traversing values collected from \texttt{text}
+fields that declare \texttt{format: yaml} or \texttt{format: json} (see
+§\ref{sec:collector_field_validation}).  The raw string is \emph{always} what is
+stored in the run variable; these functions perform the parse on each template
+evaluation.  A parse error in a template expression is a hard step failure.
 
 \begin{verbatim}
 {{/* Access a key from a JSON-typed text field */}}
@@ -548,9 +582,9 @@ step failure.
 {{ $spec.replicas }}
 \end{verbatim}
 
-\paragraph{Template errors}
+\paragraph{Expression evaluation errors}
 
-In v2, a template evaluation error in a \texttt{condition} or \texttt{when}
+An evaluation error in a \texttt{condition}, \texttt{when}, or \texttt{until}
 field is a hard step failure (not a soft skip).  The step transitions to
 \texttt{failed} and execution halts unless \texttt{continue\_on\_fail: true} is
 set on the step.
@@ -1706,7 +1740,7 @@ Benefits of the questionnaire pattern:
         label: Escalation reason
         multiline: true
         required: true
-        when: "{{ eq .severity 'critical' }}"
+        when: "severity == 'critical'"
       - name: affected_systems
         type: text
         label: Affected systems
@@ -1715,7 +1749,7 @@ Benefits of the questionnaire pattern:
       - name: customer_impact
         type: boolean
         label: Customer-facing impact?
-        when: "{{ or (eq .severity 'medium') (eq .severity 'critical') }}"
+        when: "severity == 'medium' || severity == 'critical'"
 \end{minted}
 
 \paragraph{Validation rules for \texttt{collector}}
@@ -2282,7 +2316,7 @@ arm:
     type: branch
     title: Route by environment
     branches:
-      - condition: '{{ eq .environment "production" }}'
+      - condition: 'environment == "production"'
         label: Production path
         steps:
           - step:
@@ -2292,7 +2326,7 @@ arm:
               approvals:
                 min: 1
                 roles: [change-manager]
-      - condition: '{{ eq .environment "staging" }}'
+      - condition: 'environment == "staging"'
         label: Staging path
         steps:
           - step:
@@ -2401,7 +2435,7 @@ current element.
 - iterate:
     id: wait_for_deploy
     max: 10
-    until: '{{ eq .deploy_status "Running" }}'
+    until: 'deploy_status == "Running"'
     steps:
       - step:
           id: poll_deploy

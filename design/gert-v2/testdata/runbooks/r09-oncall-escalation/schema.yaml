@@ -111,7 +111,7 @@ flow:
             type: branch
             title: Exit escalation if acknowledged
             branches:
-              - condition: '{{ eq .acknowledged "true" }}'
+              - condition: 'acknowledged'
                 label: Acknowledged by primary
                 steps:
                   - step:
@@ -126,7 +126,7 @@ flow:
       id: try_secondary
       max: 3
       over: null
-      when: '{{ ne .acknowledged "true" }}'
+      when: '!acknowledged'
       steps:
         - step:
             id: page_secondary
@@ -165,7 +165,7 @@ flow:
             type: branch
             title: Exit if acknowledged
             branches:
-              - condition: '{{ eq .acknowledged "true" }}'
+              - condition: 'acknowledged'
                 label: Acknowledged
                 steps:
                   - step:
@@ -180,7 +180,7 @@ flow:
       id: try_manager
       max: 2
       over: null
-      when: '{{ ne .acknowledged "true" }}'
+      when: '!acknowledged'
       steps:
         - step:
             id: page_manager
@@ -219,7 +219,7 @@ flow:
             type: branch
             title: Exit if acknowledged
             branches:
-              - condition: '{{ eq .acknowledged "true" }}'
+              - condition: 'acknowledged'
                 label: Acknowledged
                 steps:
                   - step:
@@ -234,7 +234,7 @@ flow:
       id: try_director
       max: 2
       over: null
-      when: '{{ ne .acknowledged "true" }}'
+      when: '!acknowledged'
       steps:
         - step:
             id: page_director
@@ -273,7 +273,7 @@ flow:
             type: branch
             title: Exit if acknowledged
             branches:
-              - condition: '{{ eq .acknowledged "true" }}'
+              - condition: 'acknowledged'
                 label: Acknowledged
                 steps:
                   - step:
@@ -289,7 +289,7 @@ flow:
       id: emergency_broadcast
       type: extension
       title: Emergency broadcast to all on-call engineers
-      when: '{{ ne .acknowledged "true" }}'
+      when: '!acknowledged'
       extension:
         name: pagerduty
         action: broadcast-all
@@ -301,7 +301,7 @@ flow:
       id: create_war_room
       type: extension
       title: Create war room Zoom meeting
-      when: '{{ ne .acknowledged "true" }}'
+      when: '!acknowledged'
       extension:
         name: zoom
         action: create-meeting
@@ -314,7 +314,7 @@ flow:
       id: slack_critical_alert
       type: extension
       title: Alert critical-alerts Slack channel
-      when: '{{ ne .acknowledged "true" }}'
+      when: '!acknowledged'
       extension:
         name: slack
         action: send-message
@@ -327,7 +327,7 @@ flow:
       id: wait_any_ack
       max: 60
       over: null
-      when: '{{ ne .acknowledged "true" }}'
+      when: '!acknowledged'
       steps:
         - step:
             id: check_ack_broadcast
@@ -354,7 +354,7 @@ flow:
             type: branch
             title: Exit if acknowledged
             branches:
-              - condition: '{{ eq .acknowledged "true" }}'
+              - condition: 'acknowledged'
                 label: Acknowledged
                 steps:
                   - step:
@@ -370,7 +370,7 @@ flow:
       id: executive_escalation
       type: extension
       title: Escalate to CTO and CEO
-      when: '{{ ne .acknowledged "true" }}'
+      when: '!acknowledged'
       extension:
         name: pagerduty
         action: executive-escalation

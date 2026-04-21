@@ -390,7 +390,7 @@ flow:
             type: branch
             title: Check if all verifications pass
             branches:
-              - condition: '{{ and (eq .db_count "0") (ne .analytics_still_exists "true") }}'
+              - condition: 'db_count == "0" && !analytics_still_exists'
                 label: All deletions verified
                 steps:
                   - step:

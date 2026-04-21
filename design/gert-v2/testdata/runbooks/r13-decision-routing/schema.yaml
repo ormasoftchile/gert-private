@@ -44,7 +44,7 @@ flow:
       type: branch
       title: Dispatch by chosen environment
       branches:
-        - condition: '{{ eq .chosen_env "Production" }}'
+        - condition: 'chosen_env == "Production"'
           label: Production path
           steps:
             - step:
@@ -57,7 +57,7 @@ flow:
                   effects: ["deploy.production"]
                   idempotent: false
 
-        - condition: '{{ eq .chosen_env "Staging" }}'
+        - condition: 'chosen_env == "Staging"'
           label: Staging path
           steps:
             - step:

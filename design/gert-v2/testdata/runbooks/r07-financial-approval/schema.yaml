@@ -157,9 +157,8 @@ flow:
       type: branch
       title: Route to appropriate approval tier
       branches:
-        # GAP: Go template string comparison for numeric ranges is fragile.
-        #      Schema lacks native numeric comparison operators for conditions.
-        - condition: '{{ and (gt .amount "50000") (lt .amount "100000") }}'
+        # NOTE: Numeric comparison expects amount to be a number.
+        - condition: 'amount > 50000 && amount < 100000'
           label: Director Approval (50k-100k)
           steps:
             # Step 5: Director Approval
@@ -187,7 +186,7 @@ flow:
                   on_timeout: escalate
                   escalate_to: [vp]
 
-        - condition: '{{ and (ge .amount "100000") (lt .amount "500000") }}'
+        - condition: 'amount >= 100000 && amount < 500000'
           label: VP Approval (100k-500k)
           steps:
             # Step 6: VP Approval
@@ -214,7 +213,7 @@ flow:
                   on_timeout: escalate
                   escalate_to: [cfo]
 
-        - condition: '{{ ge .amount "500000" }}'
+        - condition: 'amount >= 500000'
           label: CFO Approval (500k+)
           steps:
             # Step 7a: CFO Approval
@@ -246,7 +245,7 @@ flow:
                 id: board_approval
                 type: collector
                 title: Board approval (required for $1M+)
-                when: '{{ ge .amount "1000000" }}'
+                when: 'amount >= 1000000'
                 prompt: |
                   Purchase requires board approval:
                   - Item: {{ .item_description }}

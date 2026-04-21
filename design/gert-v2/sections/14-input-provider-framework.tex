@@ -927,7 +927,7 @@ combination of these contracts.  A provider that implements
 \texttt{provider/choice} MUST declare this in its capability advertisement
 during the handshake phase:
 
-\begin{verbatim}
+\begin{minted}{go}
 # Example provider capability declaration
 {
   "jsonrpc": "2.0",
@@ -943,7 +943,7 @@ during the handshake phase:
     }
   }
 }
-\end{verbatim}
+\end{minted}
 
 If the run engine encounters a \texttt{choice}, \texttt{decision}, or
 \texttt{collector} step and the configured provider does not advertise the

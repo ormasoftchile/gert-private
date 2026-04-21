@@ -65,7 +65,7 @@ All other runbook semantics are preserved. Step execution behavior, governance p
 \subsection{Before and After Example}
 
 \textbf{v1 runbook (simple.runbook.yaml):}
-\begin{verbatim}
+\begin{minted}{yaml}
 apiVersion: runbook/v1
 
 meta:
@@ -101,10 +101,10 @@ flow:
       when: "{{ eq .decision \"yes\" }}"
       with:
         argv: ["systemctl", "restart", "{{ .service_name }}"]
-\end{verbatim}
+\end{minted}
 
 \textbf{v2 runbook (migrated):}
-\begin{verbatim}
+\begin{minted}{yaml}
 $schema: "https://schemas.gert.dev/runbook/v2.json"
 apiVersion: runbook/v2
 
@@ -143,7 +143,7 @@ flow:
       when: "{{ eq .decision \"yes\" }}"
       with:
         argv: ["systemctl", "restart", "{{ .service_name }}"]
-\end{verbatim}
+\end{minted}
 
 \subsection{Field Mapping Table}
 
@@ -277,15 +277,15 @@ The v1 \texttt{tool/v0} schema is replaced by \texttt{tool/v2}. Key changes:
 \end{enumerate}
 
 \textbf{v1 tool definition:}
-\begin{verbatim}
+\begin{minted}{yaml}
 apiVersion: tool/v0
 name: kubectl
 executable: /usr/local/bin/kubectl
 args_template: "{{ .args }}"
-\end{verbatim}
+\end{minted}
 
 \textbf{v2 tool definition:}
-\begin{verbatim}
+\begin{minted}{yaml}
 $schema: "https://schemas.gert.dev/tool/v2.json"
 apiVersion: tool/v2
 
@@ -297,7 +297,7 @@ args_template: "{{ .args }}"
 capabilities:
   - exec:command
   - net:egress
-\end{verbatim}
+\end{minted}
 
 \paragraph{Migration tool support.} The \texttt{gert migrate --to-v2} command rewrites tool definitions automatically, but \textbf{requires manual review} for the \texttt{capabilities} field (the tool cannot infer required capabilities statically).
 

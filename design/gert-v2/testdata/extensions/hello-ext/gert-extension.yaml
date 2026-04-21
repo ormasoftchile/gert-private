@@ -1,0 +1,20 @@
+apiVersion: extension/v2
+
+meta:
+  name: gert.hello-ext
+  version: "1.0.0"
+  description: "Reference extension for testing"
+  author: "gert team"
+
+compatibility:
+  api-version: ">=2.0.0 <3.0.0"
+  protocol-version: "2.0"
+
+entry-point:
+  executable: "./hello-ext"
+
+transport: stdio-jsonrpc
+
+capabilities:
+  - capability/tool-registration
+  - capability/policy-contribution

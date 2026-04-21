@@ -806,3 +806,131 @@ capture:
 2. design/gert-v2/testdata/tools/echo.tool.yaml (431 bytes)
 3. design/gert-v2/testdata/tools/jsonrpc-server.tool.yaml (1249 bytes)
 4. design/gert-v2/testdata/tools/mcp-server.tool.yaml (746 bytes)
+
+
+### 2026-04-20 — Phase 7 Spec Audit & Fixture Planning
+
+**Task:** Pre-implementation audit of Phase 7 Extension Host spec; identify test fixtures Brian will need.
+
+**What was audited:**
+1. **Extension spec**: Read `sections/04-extension-runtime.tex` (450 lines) + normative spec `specs/002-extension-runtime-v0/spec.md` (300+ lines) + markdown companion `spec/04-extension-runtime.md` (290 lines)
+2. **Runbook coverage**: Scanned all r01–r17 runbooks for extension usage
+3. **Schema gaps**: Checked `v2/pkg/schema/` for extension-related types
+4. **Registry integration**: Checked Phase 6 `ToolRegistry` interface for dynamic contribution support
+
+**Key findings:**
+
+**Spec summary:**
+- 8 lifecycle stages: discovered → verified → starting → initializing → ready → draining → stopped → crashed
+- 10 capabilities: tool/schema/event/policy/provider registration + file/network/env/run-state access
+- 4 contribution types: tools, providers, schema extensions, governance policies
+- JSON-RPC 2.0 protocol over stdio with 5 core methods: initialize, contributions/list, ping, shutdown, tools/invoke
+- Manifest format: `gert-extension.yaml` with semver compatibility ranges, capability requests, scoped permissions
+- Discovery: 3 sources (workspace `.gert/extensions.yaml`, runbook `extensions:` field, CLI `--extension`)
+
+**Runbook coverage: ZERO**
+- No runbook (r01–r17) declares or uses extensions
+- All runbooks use only builtin tools
+- r18 will be **first extension-enabled runbook**
+
+**Schema gaps identified:**
+1. ❌ No `ExtensionManifest` type — must be created
+2. ❌ No `Runbook.Extensions` field — must be added
+3. ❌ No `WorkspaceConfig` type (if Phase 7 includes workspace discovery)
+4. ❌ Ambiguity: do extension-contributed tools use `ToolDef` type or distinct contribution schema?
+
+**Registry gap (BLOCKER):**
+- Phase 6 `ToolRegistry` interface has `Lookup()` and `All()` but **NO `Register()` method**
+- Extensions call `contributions/list` → host receives array of tool definitions → **cannot dynamically register them**
+- Current `MapRegistry` implementation is read-only after construction
+- **Fix required:** Add `Register(def ToolDef) error` method to interface + implementation (~10 lines)
+- Severity: MEDIUM — trivial fix but Phase 7 blocked without it
+
+**Fixture recommendations:**
+1. **r18-extension-contrib runbook** — declares extension in `extensions:` field, invokes extension-contributed tool
+2. **acme-stub-extension** reference binary — minimal Go binary implementing JSON-RPC handshake + tool contribution
+3. **gert-extension.yaml** manifest fixture — example of correctly-formed extension manifest
+4. (Optional) `.gert/extensions.yaml` workspace config — tests workspace-level discovery
+
+**Design questions for Ken:**
+1. Does Phase 7 include workspace discovery (`.gert/extensions.yaml`) or only runbook-level `extensions:` field?
+2. Do extension-contributed tools use existing `ToolDef` schema or distinct contribution type?
+3. Do extension-contributed providers use existing `ProviderDef` or distinct type?
+4. Should `ToolRegistry.Register()` be added as Phase 6 patch or part of Phase 7?
+5. What transports does Phase 7 implement? (Spec mentions stdio-jsonrpc, grpc, mcp; recommend stdio-jsonrpc only for v2.0)
+
+**Output:** `.squad/tmp/barbara-phase7-audit.md` (22 KB, 5 sections + 4 appendices)
+
+**Cross-reference:** Cristian requested this audit before Brian begins Phase 7 implementation.
+
+---
+
+## 2026-04-20 — r18 Extension Host Fixture Created
+
+**Requested by:** Cristian
+
+### Task
+Create r18-extension-host fixture runbook demonstrating Phase 7 extension lifecycle: extension declared → loaded → tool contributed → tool invoked.
+
+### What Was Done
+
+**Files created:**
+1. `design/gert-v2/testdata/runbooks/r18-extension-host/schema.yaml` (1639 bytes)
+   - Declares `hello-ext` extension with `capability/tool-registration` grant
+   - Invokes `gert.hello` tool (contributed by extension) via tool step
+   - Asserts greeting output contains expected name
+
+2. `design/gert-v2/testdata/extensions/hello-ext/gert-extension.yaml` (370 bytes)
+   - Extension manifest per Ken's Phase 7 Section 8 specification
+   - Declares capabilities: `capability/tool-registration`, `capability/policy-contribution`
+   - Transport: `stdio-jsonrpc`
+
+3. `design/gert-v2/testdata/tools/hello.tool.yaml` (432 bytes)
+   - Tool descriptor for extension-contributed `gert.hello` tool
+   - Uses `extension` transport type (references `hello-ext`)
+   - Defines `greet` action with name input and result output
+
+**Decision file created:**
+- `.squad/decisions/inbox/barbara-r18-schema-gaps.md` — Documents expected schema gap
+
+### Schema Gap Identified
+
+**Parser test result:**
+```
+Parse(r18-extension-host): unexpected error: [schema/structural] additional properties 'extensions' not allowed
+```
+
+**Root cause:** `pkg/schema/runbook.go` lacks `Extensions []*ExtensionDecl` field.
+
+**Expected:** This is a known gap. Ken's D8 decision explicitly specifies runbook `extensions:` blocks. Brian will add the field during Phase 7 implementation.
+
+**Status:** Fixture is structurally correct per Phase 7 design. Parser test will pass once Brian adds schema support.
+
+### Learnings
+
+**Schema gap was expected:**
+- Ken's D8 decision in `.squad/decisions/inbox/ken-phase7-design-decisions.md` defines runbook `extensions:` block
+- Phase 7 design Section 8 shows extensions declared in runbooks
+- The fixture validates the INTENDED schema, not the current implementation
+
+**Fixture design principles applied:**
+- r18 is a "thin coverage" fixture focused on one Phase 7 capability (extension tool invocation)
+- Follows r17 patterns for tool step structure and assertions
+- Extension manifest format matches Ken's Section 8 specification exactly
+
+**Phase 7 integration readiness:**
+- r18 provides Brian with target fixture for `internal/extension/` package development
+- Demonstrates full lifecycle: discovery (from runbook) → contribution → invocation
+- Once schema updated, r18 joins r01–r17 as validated fixture (no test code changes needed)
+
+**Tool descriptor discovery:**
+- Phase 6 tool descriptors (`.tool.yaml`) need Phase 7 counterparts for extension-contributed tools
+- Created `hello.tool.yaml` to document extension tool transport type
+- Uses `source: extension://hello-ext` pattern (similar to Phase 6 `source: tool://echo`)
+
+**Files by component:**
+- Runbook fixture: 1 file (schema.yaml)
+- Extension manifest: 1 file (gert-extension.yaml)
+- Tool descriptor: 1 file (hello.tool.yaml)
+- Documentation: 1 decision file (schema gap)
+

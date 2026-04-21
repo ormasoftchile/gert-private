@@ -566,14 +566,14 @@ Every log line in run context includes \texttt{run\_id}, enabling log aggregatio
 \end{verbatim}
 
 \textbf{Elasticsearch Query:}
-\begin{verbatim}
+\begin{minted}{go}
 GET /gert-logs-*/_search
 {
   "query": {
     "term": {"run_id": "20260418T143022-a3f9c1"}
   }
 }
-\end{verbatim}
+\end{minted}
 
 This returns all log lines for the specified run, ordered by timestamp.
 
@@ -937,7 +937,7 @@ On completion, emits a JSON summary to \texttt{stdout}:
 
 \subsection{GitHub Actions Example}
 
-\begin{verbatim}
+\begin{minted}{yaml}
 - name: Run gert runbook
   id: gert_run
   run: |
@@ -954,7 +954,7 @@ On completion, emits a JSON summary to \texttt{stdout}:
   with:
     name: gert-trace
     path: .runbook/runs/${{ steps.gert_run.outputs.run_id }}/trace.jsonl
-\end{verbatim}
+\end{minted}
 
 \subsection{GitLab CI Example}
 

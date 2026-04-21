@@ -1327,3 +1327,32 @@ The Fix Agent extended `TestAssertExecutor_OneFails` (assert_test.go:42-54) to v
 3. **TestMain binary-build pattern is excellent.** Building all 7 reference binaries in `TestMain` means tests are self-contained and don't depend on pre-installed binaries. The `.testtools/` directory is ephemeral. This pattern should be adopted by any future test package that needs compiled helpers.
 
 4. **MCP notification naming matters for real servers.** The code sends `"initialized"` but the MCP spec uses `"notifications/initialized"`. This works against our test server but will fail against conformant MCP servers. Must be fixed before any real MCP tool integration.
+
+### 2026-04-20 — Phase 7 Extension Host Design
+
+**What was done:**
+
+Designed the complete Extension Host architecture for Phase 7. Produced comprehensive design document covering:
+
+1. Architecture Overview with lifecycle, data flow, EngineConfig integration
+2. 8 Architectural Decisions (D1-D8): JSON-RPC protocol, multi-source discovery, eager registration, one-process-per-extension, capability grant model, ping/crash with no auto-restart, load-before-run, workspace extensions.yaml schema
+3. Package Map: pkg/extension (6 files), internal/extension (16 files), testutil fake, hello-ext reference binary
+4. Interface Contracts: Extended ExtensionHost, ExtensionState, CapabilitySet, ExtensionManifest, Contribution types, MutableToolRegistry proposal
+5. Wire Protocol: Full JSON-RPC message specs for all 5 methods
+6. Test Plan: 28 tests in 5 groups (lifecycle, handshake, contributions, health, engine integration)
+7. Import Constraint Analysis with cycle prevention strategy
+8. Reference Extension (hello-ext): one tool + one policy rule
+9. 5 Open Questions for team discussion
+
+**Key insights:**
+
+- The spec (section 04) is comprehensive; this is an implementation design, not invention
+- Critical path: Phase 6 ToolRegistry needs Register() — proposed MutableToolRegistry avoids breaking change
+- Extension tool routing requires delegation back to extension process via ExtensionHost
+- ProjectManifest is an in-memory aggregation, not a file format
+
+**Deliverables:**
+1. .squad/tmp/ken-phase7-design.md (37KB design document)
+2. .squad/decisions/inbox/ken-phase7-design-decisions.md (8 decisions)
+
+**Status:** DESIGN COMPLETE. Ready for team review.

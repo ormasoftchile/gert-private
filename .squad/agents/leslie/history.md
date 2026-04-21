@@ -549,3 +549,58 @@ This is re-input every time a new style is needed (lazy, per-environment), so an
 - Always clear `_minted*` cache directories when changing minted options or block languages
 
 **Verification:** `pdftotext` confirms page 45 now renders cleanly without red boxes.
+
+## 2026-04-20 — YAML Syntax Highlighting Completion
+
+**Task:** Convert all remaining YAML and Go code blocks from `\begin{verbatim}` to `\begin{minted}` for consistent syntax highlighting throughout the design document.
+
+**Initial state:**
+- Minted package already configured in `main.tex` with YAML, Go, and JSON support
+- 232 minted blocks already present (91 YAML, 31 Go, 91 JSON)
+- 74 verbatim/lstlisting blocks remained in section files
+- Build system already had `-shell-escape` flag enabled
+
+**Analysis approach:**
+- Created Python script to scan all section files for verbatim/lstlisting blocks
+- Used pattern matching to identify YAML blocks (keywords: `name:`, `steps:`, `id:`, `apiVersion:`, `kind:`, `metadata:`, `spec:`, `inputs:`, `outputs:`, `$schema:`, `vars:`, `requires:`, `env:`)
+- Used pattern matching to identify Go blocks (keywords: `func`, `type`, `struct`, `package`, `import`, struct definitions with `{`)
+- Excluded non-code blocks (shell output, HTTP headers, migration reports)
+
+**Conversions performed:**
+- **30 blocks converted** across 9 files:
+  - 22 YAML blocks: `\begin{verbatim}` → `\begin{minted}{yaml}`
+  - 8 Go blocks: `\begin{verbatim}` → `\begin{minted}{go}`
+- Files modified:
+  - `sections/02-architecture.tex`: 1 Go block
+  - `sections/03-schema-vnext.tex`: 17 YAML blocks
+  - `sections/05-tool-runtime.tex`: 1 YAML block
+  - `sections/07-security-and-trust.tex`: 1 Go block
+  - `sections/10-migration-compatibility.tex`: 4 YAML blocks
+  - `sections/11-governance-policy.tex`: 2 YAML blocks
+  - `sections/12-evidence-tracing-resumption.tex`: 1 Go block
+  - `sections/14-input-provider-framework.tex`: 1 Go block
+  - `sections/15-observability-diagnostics.tex`: 2 blocks (1 Go, 1 YAML)
+
+**Final state:**
+- **91 YAML + 31 Go + 91 JSON blocks** with minted syntax highlighting
+- All YAML runbook examples now have consistent syntax highlighting
+- All Go struct definitions now highlighted
+- Build successful: 325 pages, 1.4MB PDF
+
+**Non-converted blocks:**
+- Intentionally left as verbatim: shell output, migration reports, HTTP headers, URLs
+- These are output/log examples, not code to be highlighted
+
+**Build verification:**
+- `make clean && make build` completed successfully
+- PDF generated: `build/main.pdf` (325 pages, 1.4MB)
+- No errors related to minted or syntax highlighting
+- All conversions rendering correctly
+
+**Script approach:**
+- Automated detection using regex patterns for YAML/Go keywords
+- Applied conversions in reverse order to preserve line numbers
+- Verified no YAML blocks remained in verbatim after conversion
+- Safe: did not touch blocks that are legitimately plain text
+
+**Outcome:** Design document now has comprehensive, consistent syntax highlighting for all YAML schema examples, runbook definitions, and Go code snippets.

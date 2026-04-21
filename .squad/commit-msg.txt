@@ -1,8 +1,0 @@
-Phase 3 approved: Runtime Core complete — parallel execution, wait_for_event, signal handling
-
-Ken's architectural review verified all 10 acceptance criteria. Implementation is race-free
-(-race -count=10) with proper mutex discipline, deterministic event ordering, and clean
-signal/parallel error handling. 16 tests pass. Phase 3 locked: client-driven execution,
-deterministic branch order, buffered branch traces, fail-fast parallel.
-
-Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>

@@ -286,3 +286,10 @@ Implemented Phase 5 step executors with new expr/input packages, platform Exec s
 ## Learnings — Phase 6 Tool Runtime (2026-04-23)
 
 Implemented Phase 6 tool runtime: pkg/tool interfaces, internal transports (stdio/jsonrpc/mcp), process management, registry/runtime, and ToolExecutor wiring. Added reference tool binaries + tests, built tool binaries in tests under repo-local .testtools (no /tmp), and stub .tool.yaml definitions. Full build/vet/tests including -race -count=3 pass.
+
+## Learnings — Phase 7 (2026-04-24)
+
+- Implemented extension host runtime with JSON-RPC handshake, health checks, discovery, and tool registry registration.
+- Added dynamic tool registry Register() support plus test coverage for MapRegistry.
+- Extended runbook schema to accept extensions entries (name, path, grants) so the r18 extension host fixture parses.
+- Test extension binaries now build under repo-local .testextensions to avoid /tmp writes.

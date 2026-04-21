@@ -24,11 +24,11 @@ the dependency graph.
 
   %% ── RPC Server and Audit Log (right side) ───────────────────────────────────
   \node[stepbox, right=2.5cm of arc-executor]      (arc-rpcserver) {RPC Server};
-  \node[stepbox, below=1.0cm of arc-rpcserver]     (arc-auditlog)  {Audit Log (JSONL)};
+  \node[stepbox, below=0.5cm of arc-rpcserver]     (arc-auditlog)  {Audit Log (JSONL)};
 
   %% ── Runtime Core sub-components ─────────────────────────────────────────────
-  \node[stepbox, below left=1.3cm  and 1.8cm of arc-executor]  (arc-handlers) {Step Handlers};
-  \node[stepbox, below right=1.3cm and 1.8cm of arc-executor]  (arc-varstore) {Variable Store};
+  \node[stepbox, below left=1.3cm  and 0.0cm of arc-executor]  (arc-handlers) {Step Handlers};
+  \node[stepbox, below right=1.3cm and 0.0cm of arc-executor]  (arc-varstore) {Variable Store};
 
   %% ── Services (driven by Step Handlers) ──────────────────────────────────────
   \node[stepbox] at ([xshift=-3.5cm, yshift=-3.7cm] arc-executor) (arc-toolreg)  {Tool Registry};
@@ -1227,7 +1227,7 @@ approver pool, making identity validation and audit reconstruction impossible.
 The runtime maintains an \texttt{ApprovalRecord} for each active \texttt{approve} step
 instance:
 
-\begin{verbatim}
+\begin{minted}{go}
 ApprovalRecord {
   step_id:     string
   run_id:      string
@@ -1244,7 +1244,7 @@ Approval {
   timestamp:   time.Time
   notes:       string      // optional free-text from the approver
 }
-\end{verbatim}
+\end{minted}
 
 The \texttt{ApprovalRecord} is persisted to the run store at each update (same durable
 store as run snapshots) so it survives a process restart.

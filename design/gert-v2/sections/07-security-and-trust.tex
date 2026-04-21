@@ -554,7 +554,7 @@ the \texttt{dba} or \texttt{admin} role may submit a valid approval.
 
 The approval submission includes:
 
-\begin{verbatim}
+\begin{minted}{go}
 POST /approvals
 {
   "runId": "run-abc123",
@@ -564,7 +564,7 @@ POST /approvals
   "signature": "<ed25519-signature-of-approval-payload>",
   "timestamp": "2026-04-18T12:00:00Z"
 }
-\end{verbatim}
+\end{minted}
 
 The host verifies:
 

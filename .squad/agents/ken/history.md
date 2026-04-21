@@ -1758,3 +1758,91 @@ go test ./... -race   ✅ all packages pass
 **Estimated Effort:** 3-4 days for Brian
 
 **Output:** .squad/tmp/ken-phase13-design.md, decisions merged
+
+---
+
+## 2026-07-20 — Phase 13 Review: CLI Polish & OTLP Adapter
+
+**Action:** Five-axis architectural review of Brian's Phase 13 implementation
+**Verdict:** APPROVED (9/10)
+
+**Scope reviewed:**
+- 7 new files: pkg/otel/adapter/{doc,otlp,otlp_test}.go, cmd/gert/{ls,gc,version}.go
+- 4 modified files: v2/go.mod, internal/adapter/wire.go, internal/runstore/dir_store.go, cmd/gert/main.go
+- 22 new tests across 3 packages (5 adapter tests, 5 new runstore tests)
+
+**Key findings:**
+
+Part A (OTel Adapter):
+- `pkg/otel/adapter/otlp.go` is clean, idiomatic SDK wrapper
+- Adapter pattern correctly implements gert's TracerProvider interface
+- Shutdown function has 5-second timeout — prevents hangs
+- Status code mapping correct (OK/Error/Unset)
+- SDK only initialized when `--otel-endpoint` provided — zero cost otherwise
+
+Part B (CLI Commands):
+- `gert ls` — clean filtering by status/since, text/JSON output
+- `gert gc` — D-13-03 invariant implemented with double defense-in-depth
+- `gert version` — correct ldflags pattern
+- Help text updated across all commands
+
+**D-13-03 Safety Invariant Verified:**
+```go
+// gcCandidates: Defense #1 — skip running runs in candidate selection
+if r.Status == engine.RunStatusRunning { continue }
+
+// parseStatusList: Defense #2 — exclude running from allowed statuses
+if status == engine.RunStatusRunning { continue }
+```
+Double defense ensures running runs are never deleted even with `--status=running`.
+
+**Deviations approved:**
+- DEV-13-01: Three-value BuildEngineConfig signature — correct for shutdown func ownership
+- DEV-13-02: Insecure-by-default for OTLP — appropriate for local dev
+- DEV-13-03: Injected deps for CLI testability — EXEMPLARY, should be project standard
+- DEV-13-04: Help text updated as spec'd
+
+**Non-blocking items for Phase 14+:**
+- NBI-13-01: Add `WithTLS(*tls.Config)` for production OTLP
+- NBI-13-02: Direct unit tests for gc.go
+- NBI-13-03: Direct unit tests for ls.go
+
+**Tests:** All pass with `-race -count=1`
+
+**Output:** .squad/tmp/ken-phase13-review.md, .squad/decisions/inbox/ken-phase13-review.md
+
+---
+
+## 2026-07-20 — Phase 13 Review: CLI Polish & OTLP Adapter
+
+**Action:** Five-axis architectural review of Brian's Phase 13 implementation
+**Verdict:** APPROVED (9/10)
+
+**Scope reviewed:**
+- NEW: pkg/otel/adapter/{doc,otlp,otlp_test}.go — OTel SDK OTLP adapter
+- NEW: cmd/gert/ls.go, gc.go, version.go — three new CLI commands
+- MOD: internal/runstore/dir_store.go — ListRuns, DeleteRun
+- MOD: internal/adapter/wire.go — OTLP provider wiring
+- MOD: cmd/gert/main.go — help polish, command routing
+- MOD: cmd/gert/run.go — shutdown func, help text update
+- MOD: v2/go.mod — OTel SDK dependencies
+
+**Key findings:**
+- OTLP adapter correctly isolated; shutdown func has proper lifecycle
+- D-13-03 invariant enforced with double defense in gc.go
+- Injected deps pattern (lsMain/gcMain) is exemplary — recommend as project standard
+- BuildEngineConfig three-return-value form is correct Go idiom
+- 22 new tests; all 42 packages pass with -race
+
+**Accepted deviations:**
+- DEV-13-01: (EngineConfig, func(), error) return — correct design
+- DEV-13-02: Insecure-by-default OTLP (local dev convention)
+- DEV-13-03: Injected deps for CLI testability (EXEMPLARY)
+- DEV-13-04: Help text updated as spec
+
+**Phase 14 NBI items:**
+- NBI-13-01: TLS support for OTLP (WithTLS option)
+- NBI-13-02: Additional gc unit tests
+- NBI-13-03: ls --output=json schema documentation
+
+**Output:** .squad/tmp/ken-phase13-review.md, .squad/decisions/inbox/ken-phase13-review.md

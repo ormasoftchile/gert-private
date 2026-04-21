@@ -1863,3 +1863,177 @@ The integration surface is clean. All build artifacts, tests, and dependencies a
 ---
 
 *Barbara, QA Engineer*
+# Ken — Phase 13 Review Decisions
+
+**Date:** 2026-07-20  
+**Phase:** 13  
+**Verdict:** APPROVED
+
+---
+
+## Approved Deviations
+
+### DEV-13-01: Three-Value BuildEngineConfig Signature
+
+**Decision:** APPROVED
+
+`BuildEngineConfig` returns `(EngineConfig, func(), error)` to expose the OTel shutdown function. This is the correct design:
+- Single ownership of cleanup responsibility
+- Always-safe shutdown func (returns `func(){}` on error)
+- No hidden resource lifecycle
+
+### DEV-13-02: Insecure-by-Default for OTLP
+
+**Decision:** APPROVED
+
+`NewOTLPTracerProvider` defaults to insecure (non-TLS) connections. This is appropriate for:
+- Local development with localhost collectors
+- Matching OTel SDK defaults and Go tracing library conventions
+- TLS support deferred to Phase 14 (`WithTLS` option)
+
+### DEV-13-03: Injected Dependencies for CLI Testability
+
+**Decision:** APPROVED (EXEMPLARY)
+
+`lsMain` and `gcMain` accept injected `runDir`, `io.Writer`, and `io.Reader` parameters. This pattern should be adopted as project standard:
+- Enables in-memory testing without file system side effects
+- Production wrapper is a thin one-liner
+- Used by kubectl, cobra, HashiCorp tools
+
+### DEV-13-04: Help Text Update
+
+**Decision:** VERIFIED
+
+`--otel-endpoint` help text updated as specified.
+
+---
+
+## Non-Blocking Items for Phase 14+
+
+### NBI-13-01: TLS Support for OTLP
+
+**Priority:** Medium  
+**Scope:** `pkg/otel/adapter`
+
+Add `WithTLS(*tls.Config)` option for production OTLP collectors that require TLS.
+
+### NBI-13-02: gc Direct Unit Tests
+
+**Priority:** Low  
+**Scope:** `cmd/gert/gc_test.go`
+
+Add tests for:
+- D-13-03 invariant (running runs never deleted)
+- `--older-than` filter
+- `--dry-run` output
+- Confirmation prompt
+
+### NBI-13-03: ls Direct Unit Tests
+
+**Priority:** Low  
+**Scope:** `cmd/gert/ls_test.go`
+
+Add tests for:
+- `--status` filter
+- `--since` filter
+- JSON output format
+
+---
+
+## Decision Summary
+
+| ID | Type | Status |
+|----|------|--------|
+| DEV-13-01 | Deviation | Approved |
+| DEV-13-02 | Deviation | Approved |
+| DEV-13-03 | Deviation | Approved (Exemplary) |
+| DEV-13-04 | Verification | Confirmed |
+| NBI-13-01 | Non-blocking | Phase 14+ |
+| NBI-13-02 | Non-blocking | Phase 14+ |
+| NBI-13-03 | Non-blocking | Phase 14+ |
+
+# Brian Phase 13 Implementation — Decisions & Deviations
+
+**Author:** Brian (Go Programmer)
+**Date:** 2026-07-20
+**Phase:** 13 (CLI Polish & OTLP Adapter)
+**Status:** Implementation complete — awaiting Ken review
+
+---
+
+## Summary
+
+All Phase 13 deliverables implemented. Validation gate passed:
+
+```
+go build ./...        ✅ exit 0
+go vet ./...          ✅ exit 0
+go test ./... -race -count=3  ✅ all packages pass
+```
+
+---
+
+## Deviations from Ken's Design
+
+### DEV-13-01: `BuildEngineConfig` Signature Change
+
+**Ken's design:** "Return shutdown func from `BuildEngineConfig` (propagate into `cmd/gert/run.go` defer)"
+
+**What was done:** Changed `BuildEngineConfig` from `(engine.EngineConfig, error)` to `(engine.EngineConfig, func(), error)`. Updated all three callers:
+- `cmd/gert/run.go` — captures `shutdown` and calls `defer shutdown()`
+- `cmd/serve/main.go` — discards with `_` (serve has no OTLP endpoint support)
+- `internal/adapter/wire_test.go` — 5 call sites updated to `cfg, _, err := BuildEngineConfig(...)`
+
+**Why:** The three-return-value form is the idiomatic Go pattern for returning a cleanup function alongside a result and error. The alternative (embedding the shutdown func in `EngineConfig`) would pollute the config struct with lifecycle concerns.
+
+### DEV-13-02: OTLP Uses Insecure by Default in `buildTracerProvider`
+
+**Ken's design:** Wire `WithServiceName` when calling the adapter.
+
+**What was done:** Also added `WithInsecure()` as a default option in `buildTracerProvider`. Ken's design showed the endpoint as `"http://localhost:4317"` in the old help text, indicating local dev usage. For production TLS, a future `--otel-tls` flag or detection of port 443 could be added.
+
+**Why:** The majority of gert users will point at a local Jaeger or OTEL collector (insecure). Requiring explicit `--otel-insecure` flag would be friction for the common case. This can be revisited in Phase 14 if TLS is needed.
+
+### DEV-13-03: `lsMain` and `gcMain` Accept Injected Dependencies
+
+**Ken's design:** `gert ls` / `gert gc` as top-level CLI commands.
+
+**What was done:** Public-facing `runLs(args []string) int` and `runGc(args []string) int` delegate to internal `lsMain(args, runDir, io.Writer)` and `gcMain(args, runDir, io.Writer, io.Reader)` helpers. Tests call the helpers directly with `t.TempDir()` and `bytes.Buffer`.
+
+**Why:** Standard Go CLI testability pattern. Avoids needing subprocess tests or os.Stdout redirection. Tests are faster, hermetic, and race-safe.
+
+### DEV-13-04: `--otel-endpoint` Help Text (NBI-12-02)
+
+**Ken's design (decisions.md):** "reserved for future use" to be removed; description updated.
+
+**Ken's design doc:** `"OTLP gRPC endpoint for span export (e.g. localhost:4317)"`
+
+**What was done:** Updated to `"OTLP gRPC endpoint for span export (e.g. localhost:4317)"` — exactly as specified.
+
+Note: The original `run.go` had `"OTLP gRPC endpoint for OTel spans (e.g. http://localhost:4317)"` (no "reserved" text). The decisions.md NBI-12-02 says to remove "reserved for future use" and the design doc gives the new text. Updated to match the design doc.
+
+---
+
+## Implemented As Designed
+
+- D-13-01: No build tags for OTel SDK ✓
+- D-13-02: NBI-12-03 (context.AfterFunc) deferred ✓  
+- D-13-03: `gert gc` never deletes "running" status (enforced in `gcCandidates` AND `parseStatusList`) ✓
+- D-13-04: Version via `-ldflags` (`var Version = "dev"` etc.) ✓
+- D-13-05: Part B CLI commands over integration tests ✓
+- NBI-12-01: OTLP adapter at `pkg/otel/adapter/` ✓
+- NBI-12-02: `--otel-endpoint` help text updated ✓
+
+---
+
+## Test Coverage Added
+
+| Package | Tests Added |
+|---------|-------------|
+| `pkg/otel/adapter` | 5 (TestNewOTLPTracerProvider_EmptyEndpoint, _Success, _ShutdownNoOp, _TracerLifecycle, _WithHeaders) |
+| `internal/runstore` | 5 (TestListRuns, TestListRuns_Empty, TestListRuns_MissingBaseDir, TestDeleteRun, TestDeleteRun_NotFound) |
+| `cmd/gert` | 12 (6 ls tests + 6 gc tests) |
+
+---
+
+*Brian, Go Programmer*

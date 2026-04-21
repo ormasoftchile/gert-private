@@ -377,3 +377,74 @@ Part B (OTel):
 **Phase 13 Part A items assigned to Brian:**
 - NBI-12-01: Add pkg/otel/adapter with real OTLP wiring (4-6h)
 - NBI-12-02: Document --otel-endpoint as reserved in --help output (30min)
+
+## Learnings — Phase 13 (2026-07-20)
+
+### Phase 13 Implementation Complete
+
+Implemented all Phase 13 deliverables. All tests pass: `go build ./... && go vet ./... && go test ./... -race -count=3`.
+
+**New files:**
+- `v2/pkg/otel/adapter/doc.go` — package docs
+- `v2/pkg/otel/adapter/otlp.go` — `NewOTLPTracerProvider` + adapter structs
+- `v2/pkg/otel/adapter/otlp_test.go` — 5 unit tests (mock TCP listener pattern)
+- `v2/cmd/gert/ls.go` — `gert ls` command with text/JSON output
+- `v2/cmd/gert/ls_test.go` — 6 CLI tests
+- `v2/cmd/gert/gc.go` — `gert gc` command with dry-run/force/confirmation
+- `v2/cmd/gert/gc_test.go` — 6 CLI tests including D-13-03 safety invariant
+- `v2/cmd/gert/version.go` — `gert version` / `gert --version`
+
+**Modified files:**
+- `v2/go.mod` — added OTel SDK + gRPC deps (otlptracegrpc v1.28.0)
+- `v2/internal/adapter/wire.go` — `BuildEngineConfig` now returns `(engine.EngineConfig, func(), error)`; OTLP provider wired
+- `v2/internal/adapter/wire_test.go` — updated for new 3-return signature
+- `v2/internal/runstore/dir_store.go` — added `ListRuns`, `DeleteRun`
+- `v2/internal/runstore/dir_store_test.go` — 5 new tests
+- `v2/cmd/gert/main.go` — added ls/gc/version/--version; polished `printUsage()`
+- `v2/cmd/gert/run.go` — defer shutdown(); updated `--otel-endpoint` help text
+- `v2/cmd/serve/main.go` — updated for 3-return `BuildEngineConfig`
+
+### Key Technical Decisions
+
+**BuildEngineConfig signature change:** Changed from `(EngineConfig, error)` to `(EngineConfig, func(), error)` to propagate OTLP shutdown func. All callers updated.
+
+**OTLP Adapter pattern:** SDK `sdktrace.TracerProvider` + `oteltrace.Tracer` + `oteltrace.Span` wrapped in adapter structs that implement gert's `otelPkg.TracerProvider/Tracer/Span` interfaces. `codes.Ok/Error/Unset` from `go.opentelemetry.io/otel/codes` for `SetStatus`.
+
+**OTLP test pattern:** Use a `net.Listen("tcp", "127.0.0.1:0")` local listener with background Accept loop. This lets the gRPC dial succeed immediately without requiring a real OTLP collector. Shutdown is always called at test end.
+
+**D-13-03 Safety Invariant:** `gcCandidates()` explicitly skips `RunStatusRunning` regardless of `--status` flag. `parseStatusList()` also rejects "running" even if passed explicitly.
+
+**gc/ls testability:** Both `lsMain` and `gcMain` accept `(args, runDir, io.Writer, io.Reader)` so tests can inject temp dirs and buffers without invoking real commands.
+
+**`contains` helper:** Defined in `ls_test.go` (package main test file) and reused by `gc_test.go` — both are in `package main` so no import needed.
+
+---
+
+## 2026-07-20 — Phase 13: CLI Polish & OTLP Adapter
+
+**Action:** Implemented Phase 13 per Ken's design
+**Status:** APPROVED (9/10 by Ken)
+
+**Deliverables:**
+
+Part A:
+- pkg/otel/adapter/: OTLP TracerProvider wrapping real OTel SDK
+- BuildEngineConfig now returns (EngineConfig, func(), error) — shutdown flushes spans
+- --otel-endpoint help text updated
+
+Part B:
+- cmd/gert/ls.go: gert ls with status/since/json filters; lsMain(injected deps)
+- cmd/gert/gc.go: gert gc with dry-run/force/older-than; never deletes running
+- cmd/gert/version.go: gert version / --version via ldflags vars
+- cmd/gert/main.go: full help text overhaul
+- internal/runstore/dir_store.go: ListRuns, DeleteRun methods
+
+**Deviations accepted by Ken:**
+- DEV-13-01: Three-value BuildEngineConfig (correct design)
+- DEV-13-02: Insecure OTLP by default (dev convention)
+- DEV-13-03: Injected deps pattern (Ken called it exemplary)
+- DEV-13-04: Help text matched spec exactly
+
+**Phase 14 NBI items assigned to Brian:**
+- NBI-13-01: TLS support for OTLP adapter
+- NBI-13-02: Additional gc unit tests

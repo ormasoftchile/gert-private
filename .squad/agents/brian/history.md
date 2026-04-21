@@ -749,3 +749,37 @@ Ken approved Brian's Phase 17 deliverables with 9/10 score:
 **Commit:** `933cb57` (feat(v2): Phase 17 — timing-safe auth, JWT expiry, SSE flake fixed)
 
 **Status:** Phase 17 sealed, Phase 18 ready
+
+## Phase 18 — 2026-04-21
+
+**Security anchor: JWT signature verification (NBI-17-01 closed)**
+
+### Part A — JWT Signature Verification
+
+- Added `JWTSecret []byte` to `ServerConfig` (pkg/serve/serve.go)
+- Rewrote `newBearerAuthMiddleware` to support three modes: open / plain bearer / JWT signature verification
+- Added `verifyJWT` (HMAC-SHA256, constant-time compare, HS256-only)
+- **Fail-secure invariant**: plain bearer mode rejects JWT-lookalike tokens (401 not 403)
+- Updated `looksLikeJWT` to require non-empty segments (prevents alg:none tokens from triggering fail-secure)
+- Added `--auth-jwt-secret` flag to `cmd/gert/serve.go` with mutual exclusivity check and 32-byte minimum
+- Updated all existing JWT tests to use new signature-verification mode (`makeSignedJWT`)
+
+### Part B — run.delete RPC
+
+- Added `rpcRunDeleteRunning = -32020` constant (deviation: design used -32001/-32002, conflicted with existing codes)
+- Added `handleRunDelete` handler with registry + store running-state guards
+- Uses type assertion for `DeleteRun` (consistent with `ListRuns` pattern)
+- 4 new tests: success, running guard, not found, missing runID
+
+### Part C — WebSocket Timing Flake Fix
+
+- Applied `WaitForSubscriber` pattern to `TestWS_RunCompleted_ReceivesTerminal` (matches SSE fix from Phase 17)
+
+**Test Results:** All 47+ serve tests pass, `go test ./... -race -count=1` green
+
+**Deviations:**
+1. `rpcRunDeleteRunning = -32020` (not -32001 per design; conflict avoidance)
+2. `validateJWTExpiry` not renamed (kept working name, called from verifyJWT)
+3. alg:none tokens no longer trigger fail-secure (empty sig → looksLikeJWT=false; intentional)
+
+**Commit:** pending (Scribe handles)

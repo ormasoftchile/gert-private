@@ -2479,3 +2479,40 @@ Phase 17 added JWT expiry validation (`exp` and `iat` claims) but **does not ver
 **Output:** `.squad/tmp/ken-phase18-design.md`, `.squad/decisions/inbox/ken-phase18-design.md`
 
 **Status:** Phase 18 design complete, ready for preflight and implementation
+
+---
+
+### 2026-04-21 — Phase 18 Review (Ken as Reviewer)
+
+**Task:** Review Brian's Phase 18 implementation covering:
+- Part A: JWT signature verification (security fix for NBI-17-01)
+- Part B: run.delete RPC
+- Part C: WebSocket timing flake fix
+
+**Review findings:**
+
+**Part A (Security):**
+- ✅ Signature verification occurs BEFORE claims validation
+- ✅ `hmac.Equal` used for constant-time comparison
+- ✅ Fail-secure: JWT-lookalikes rejected in plain bearer mode
+- ✅ Mutual exclusivity enforced at startup
+- ✅ 32-byte minimum for HMAC-SHA256 secret
+- ✅ HS256-only algorithm enforcement
+- ✅ alg:none attack blocked
+
+**Part B:**
+- ✅ Safety invariant: checks both in-memory and persisted state
+- ✅ 4 tests covering success, running guard, not found, missing param
+
+**Part C:**
+- ✅ WaitForSubscriber applied correctly
+
+**Deviations accepted:**
+1. Error code -32020 instead of -32001 (conflict avoidance)
+2. `validateJWTExpiry` not renamed (trivial)
+
+**Verdict:** APPROVED
+
+**Output:** `.squad/decisions/inbox/ken-phase18-review.md`
+
+**Status:** Phase 18 approved, ready for Scribe commit

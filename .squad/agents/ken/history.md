@@ -2163,3 +2163,58 @@ Reviewed Brian's Phase 15 implementation:
 **NBI items for Phase 16:** NBI-15-01 through NBI-15-05
 
 *Decisions entry: Phase 15 review appended to decisions.md*
+
+---
+
+## 2026-04-21 — Phase 16 Design: run.list RPC Wiring & Server Hardening
+
+**Action:** Design Phase 16 scope and architecture
+**Requestor:** Cristian
+
+### Context
+- Phase 15 (Iterate/Branch Scoping Fix & Tool E2E) sealed and approved (9/10)
+- Five NBI carry-forwards: NBI-15-01 (SSE flake), NBI-15-02 (run.list wiring), NBI-15-03 (serve hardening), NBI-15-04 (E2E parallelization), NBI-15-05 (schema docs)
+- NBI-15-02 is highest value — connects CLI/serve layers, unblocks real client usage
+
+### Part A — NBI Carry-Forwards
+
+| ID | Disposition | Rationale |
+|----|-------------|-----------|
+| NBI-15-02 | IN SCOPE (ANCHOR) | Highest value — wires run.list RPC to DirRunStore |
+| NBI-15-01 | ANNOTATED | t.Skip added to stop CI noise; proper fix tracked as NBI-16-01 |
+| NBI-15-03 | PARTIAL | CORS + bearer token only; full auth deferred |
+| NBI-15-04 | DEFERRED | E2E parallelization low priority |
+| NBI-15-05 | DEFERRED | Schema docs follow implementation |
+
+### Part B — New Work
+
+1. **run.get RPC** — fetch single run state by ID (natural companion to run.list)
+2. **CORS middleware** — allow cross-origin requests from configured origins
+3. **Bearer token middleware** — simple shared secret for dev/internal use
+
+### Key Decisions
+
+| ID | Decision |
+|----|----------|
+| D-16-01 | Registry authoritative for active runs (live Handle > stale snapshot) |
+| D-16-02 | Silent store fallback on error (graceful degradation) |
+| D-16-03 | Skip SSE flake test with t.Skip (temporary; NBI-16-01 tracks proper fix) |
+| D-16-04 | Bearer token is development-only auth (not production security) |
+| D-16-05 | Add run.get RPC alongside run.list wiring |
+
+### Deliverables
+
+**Modified files:** 6 (rpc.go, rpc_test.go, sse_test.go, middleware.go, server.go, config.go)
+**New files:** 0
+**New tests:** ~14
+**Estimated effort:** 2-3 Brian-days
+
+### NBI Items for Phase 17+
+
+- NBI-16-01: Proper SSE test synchronization (fix t.Skip'd test)
+- NBI-16-02: E2E test parallelization (carry-forward)
+- NBI-16-03: Full auth layer (OAuth2/OIDC/API keys)
+- NBI-16-04: Rate limiting for gert serve
+- NBI-16-05: run.list RPC schema documentation
+
+**Output:** `.squad/tmp/ken-phase16-design.md`, `.squad/decisions/inbox/ken-phase16-design.md`

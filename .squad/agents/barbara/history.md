@@ -1267,3 +1267,40 @@ Ken's review note said `FakeInputProvider` was missing `Name()` after Phase 8 ad
 - Design: Testable, achievable in one phase
 
 **Deliverable:** `.squad/orchestration-log/2026-04-21T12-34-26Z-barbara-phase15.md`
+
+---
+
+## Phase 16: Preflight
+
+**Date:** 2026-04-21  
+**Phase:** 16  
+**Baseline Commit:** e4c4aee
+
+**Task:** Preflight check for Phase 16. Verify Phase 15 sealed state and environment readiness.
+
+**Checks Performed:**
+
+1. ✅ go build ./... — All packages compile cleanly
+2. ✅ go vet ./... — No static analysis violations
+3. ✅ go test ./... -race -count=1 — 32 packages tested, all passed (no race detector alerts)
+4. ✅ git status — Working tree clean
+5. ✅ git log — Phase 15 commits present, HEAD at 24689df (Phase 15 sealed approval)
+
+**Baseline Snapshot:**
+- Baseline commit: e4c4aee (Phase 15 iterate scoping fix)
+- HEAD commit: 24689df (Phase 15 sealed — Ken approved 9/10)
+- Build time: ~2.5s
+- Test time: ~60s total (all packages passing)
+- Binary size: Compiled cleanly
+- All static analysis clean
+- Known flake (TestSSE_ConnectReceivesEvents): Did not occur in this run
+
+**Status:** ✅ ALL GREEN — All checks passed. Phase 16 baseline approved. Brian ready to proceed.
+
+**Integration Surface Status:**
+- Build: Clean
+- Tests: All passing, race detector clean
+- Dependencies: Tidy
+- No regressions detected
+
+**Deliverable:** `.squad/decisions/inbox/barbara-phase16-preflight.md`

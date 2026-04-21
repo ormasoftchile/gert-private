@@ -299,3 +299,9 @@ Implemented Phase 6 tool runtime: pkg/tool interfaces, internal transports (stdi
 - Added the input provider framework (pkg/input value providers, internal/input providers + registry) with unit tests.
 - Renamed interactive prompt interface to PromptProvider and updated executors/test fakes to preserve choice/decision/collector flows.
 - Engine now passes extension manifests to ExtensionHost.Load, shuts down the host on run completion, and schema accepts inputs.fallback/outcome.summary.
+
+## Learnings — 2026-04-20
+
+- Replaced condition evaluation in v2 with expr-lang/expr infix syntax while keeping TemplateEvaluator for string interpolation.
+- Updated condition tests and executor iterate condition test to infix expressions, including boolean enforcement.
+- Migrated runbook fixture condition/when clauses in design/gert-v2/testdata to infix syntax (plus assessment notes) and added expr dependency.

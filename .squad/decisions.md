@@ -1660,3 +1660,206 @@ The existing code already had `dst.Sync()` but wrote directly to the final path.
 ### RunStore Tests (internal/runstore/dir_store_test.go)
 
 9 tests covering all Ken-specified cases plus the concurrent writer test (10 goroutines × 100 events = 1000 total lines verified). The `TestWriteFileAtomic_PartialWrite` test verifies no `.tmp` files remain after successful SaveState and that the final JSON is valid.
+
+---
+
+# Phase 13 — CLI Polish & OTLP Adapter — Decisions
+
+**Author:** Ken (Software Architect)  
+**Date:** 2026-07-20  
+**Phase:** 13 — CLI Polish & OTLP Adapter  
+**Status:** PROPOSED
+
+---
+
+## Summary
+
+Phase 13 completes the NBI carry-forwards from Phase 12 (OTLP adapter wiring) and adds essential CLI commands for production use (`gert ls`, `gert gc`, `gert version`).
+
+---
+
+## Decision D-13-01: OTel SDK as Direct Dependency (No Build Tags)
+
+**Decision:** Add `go.opentelemetry.io/otel` SDK packages directly to `v2/go.mod` without using build tags to isolate them.
+
+**Rationale:**
+- Go's dead code elimination removes unused OTel code from binaries that don't call `--otel-endpoint`
+- Build tags add complexity (multiple build configurations, CI matrix expansion)
+- The OTel SDK is well-maintained and adds ~10MB which is acceptable for a CLI tool
+- Phase 12 already established the interface boundary in `pkg/otel`; the adapter is a thin wrapper
+
+**Trade-off:** All binaries include OTel SDK code in `go.mod`, but DCE keeps actual binary size minimal.
+
+---
+
+## Decision D-13-02: Defer context.AfterFunc Optimization (NBI-12-03)
+
+**Decision:** NBI-12-03 (replacing `mergeContexts` goroutine pattern with `context.AfterFunc`) is deferred to Phase 14+.
+
+**Rationale:**
+- Go 1.25.7 supports `context.AfterFunc` (added in Go 1.21)
+- The current `mergeContexts` pattern is bounded: max 3 goroutines per step
+- No evidence of goroutine leaks or performance issues in Phase 11/12 testing
+- Phase 13 scope should prioritize user-facing features over internal optimization
+- Future profiling may reveal this is a non-issue
+
+**Action:** Ken will re-evaluate in Phase 14 based on production telemetry.
+
+---
+
+## Decision D-13-03: gert gc Safety Invariant
+
+**Decision:** `gert gc` MUST NOT delete runs with status "running".
+
+**Rationale:**
+- A running run may be paused or awaiting input
+- Deleting its state would corrupt the run and lose evidence
+- This is a hard invariant, not configurable via flags
+- Implementation: filter `running` status from deletion candidates before any prompts
+
+**Enforcement:** Unit test `TestGc_PreservesRunning` verifies this invariant.
+
+---
+
+## Decision D-13-04: Version Information via ldflags
+
+**Decision:** Embed version, commit hash, and build date using Go's `-ldflags -X` mechanism.
+
+**Rationale:**
+- Standard Go pattern used by most CLI tools (kubectl, docker, gh)
+- Works with any CI/CD system
+- Defaults to "dev/unknown/unknown" for local `go build` without flags
+- No runtime file reads or external dependencies
+
+**Implementation:**
+```go
+var (
+    Version   = "dev"
+    Commit    = "unknown"
+    BuildDate = "unknown"
+)
+```
+
+Build command:
+```bash
+go build -ldflags "-X main.Version=v2.0.0 -X main.Commit=$(git rev-parse --short HEAD) -X main.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+```
+
+---
+
+## Decision D-13-05: Part B Scope — CLI Polish over Integration Tests
+
+**Decision:** Phase 13 Part B implements CLI commands (`gert ls`, `gert gc`, `gert version`) rather than comprehensive integration tests.
+
+**Rationale:**
+- Phases 0-12 have extensive unit tests (all packages pass with `-race`)
+- Golden file tests in `internal/parser`, `internal/replay`, etc. provide integration-level coverage
+- User-facing gaps are more impactful for v2.0 GA readiness:
+  - No way to list past runs
+  - No way to clean up disk space
+  - No version command
+- Integration tests (end-to-end runbook execution) can be added in Phase 14+ as a hardening measure
+
+**Trade-off:** Delays comprehensive integration test suite, but delivers user-facing features sooner.
+
+---
+
+## Scope Confirmation
+
+### Part A (NBI Carry-Forward)
+
+| ID | Status | Notes |
+|----|--------|-------|
+| NBI-12-01 | IN SCOPE | OTLP adapter package, wire integration |
+| NBI-12-02 | IN SCOPE | --otel-endpoint help text update |
+| NBI-12-03 | DEFERRED | context.AfterFunc optimization (D-13-02) |
+
+### Part B (New Features)
+
+| Command | Scope |
+|---------|-------|
+| `gert ls` | List runs with status/date filters |
+| `gert gc` | Delete old runs with safety checks |
+| `gert version` | Print version info |
+| Help polish | Consistent command descriptions |
+
+### Explicitly Out of Scope
+
+- `gert serve` enhancements (auth, rate limiting)
+- MCP tool transport improvements
+- Integration test suite
+- Schema validation enhancements
+- Documentation/README updates (deferred to docs sprint)
+
+---
+
+## Dependencies
+
+- Depends on: Phase 12 (sealed, OTel interfaces established)
+- Blocks: Phase 14 (serve hardening, integration tests)
+
+---
+
+## Acceptance Criteria
+
+Phase 13 is accepted when:
+
+1. `go build ./...` exits 0
+2. `go vet ./...` exits 0
+3. `go test ./... -race -count=3` all pass
+4. `gert --help` shows all commands with descriptions
+5. `gert version` outputs version string
+6. `gert ls` lists runs (or shows empty message)
+7. `gert gc --dry-run` shows candidates for deletion
+8. `gert run ... --otel-endpoint=localhost:4317` exports spans to OTLP collector
+
+---
+
+*Ken, Software Architect*
+
+---
+
+# Phase 13 Preflight — Barbara's Report
+
+**Date:** 2026-07-20  
+**Baseline:** Commit 6ab513e (Phase 12 sealed)  
+**Status:** ✅ CLEAN — Ready for Phase 13
+
+## Checks Performed
+
+### 1. Build (`go build ./...`)
+**Status:** ✅ PASS  
+All v2 packages build successfully with no errors or warnings.
+
+### 2. Vet (`go vet ./...`)
+**Status:** ✅ PASS  
+No static analysis issues detected.
+
+### 3. Tests with Race Detector (`go test ./... -race -count=1 -timeout=120s`)
+**Status:** ✅ PASS  
+- 14 packages with passing tests
+- 24 packages with no test files (expected for cmd/pkg structure)
+- No race conditions detected
+- All tests completed within timeout
+
+### 4. Temporary Files (`find . -name "*.tmp" -not -path "*/vendor/*"`)
+**Status:** ✅ PASS  
+No leftover .tmp files from atomic writes.
+
+### 5. Module Tidiness (`go mod tidy && git diff go.mod go.sum`)
+**Status:** ✅ PASS  
+- `go.mod` and `go.sum` are tidy
+- One dependency downloaded during tidy check (gopkg.in/check.v1) — normal behavior
+- No diffs after tidying
+
+## Baseline Health
+
+The integration surface is clean. All build artifacts, tests, and dependencies are in good order. No blockers for Phase 13.
+
+## Recommendation
+
+✅ **APPROVED** — Phase 13 can proceed.
+
+---
+
+*Barbara, QA Engineer*

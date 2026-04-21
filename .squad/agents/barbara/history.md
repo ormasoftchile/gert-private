@@ -1156,3 +1156,45 @@ Ken's review note said `FakeInputProvider` was missing `Name()` after Phase 8 ad
 - Build green, no warnings
 
 **Deliverable:** `.squad/decisions/inbox/barbara-phase12-preflight.md` (merged to decisions.md)
+
+## 2026-04-22: Phase 13 Preflight — Integration Surface Verification
+
+**Task:** Verify baseline is clean at phase 12 seal (commit 6ab513e) before Brian starts Phase 13.
+
+**Preflight Checks:**
+1. ✅ Build (`go build ./...`) — exit 0, no warnings
+2. ✅ Vet (`go vet ./...`) — exit 0, no static issues
+3. ✅ Tests with race detector (`go test ./... -race -count=1 -timeout=120s`) — 14 packages pass, 24 packages no tests
+4. ✅ Temporary files (`find . -name "*.tmp"`) — 0 files found
+5. ✅ Module tidiness (`go mod tidy && git diff`) — clean, no diffs
+
+**Status:** ✅ COMPLETE — All checks passed. Phase 13 approved to proceed.
+
+**Integration Surface Status:**
+- Build: Clean
+- Tests: All passing, no race conditions
+- Dependencies: Tidy
+- No temporary artifacts left behind
+
+**Deliverable:** `.squad/decisions/inbox/barbara-phase13-preflight.md`
+
+## 2026-07-20: Phase 13 Preflight — Integration Surface Verification
+
+**Task:** Verify Phase 12 baseline (commit 6ab513e) is clean before Brian starts Phase 13.
+
+**Preflight Checks:**
+1. ✅ Build (`go build ./...`) — exit 0, no warnings
+2. ✅ Vet (`go vet ./...`) — exit 0, no static issues
+3. ✅ Tests with race detector (`go test ./... -race -count=1 -timeout=120s`) — 14 packages pass, 24 packages no tests
+4. ✅ Temporary files (`find . -name "*.tmp"`) — 0 files found
+5. ✅ Module tidiness (`go mod tidy && git diff`) — clean, no diffs
+
+**Status:** ✅ COMPLETE — All checks passed. Phase 13 approved to proceed.
+
+**Integration Surface Status:**
+- Build: Clean
+- Tests: All passing, no race conditions
+- Dependencies: Tidy
+- No temporary artifacts left behind
+
+**Deliverable:** Preflight report merged into decisions.md

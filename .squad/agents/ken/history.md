@@ -1677,3 +1677,84 @@ go test ./... -race   ✅ all packages pass
 - NBI-12-03: Consider context.AfterFunc for mergeContexts (future, low priority)
 
 **Output:** .squad/tmp/ken-phase12-review.md, .squad/decisions/inbox/ken-phase12-review.md
+
+---
+
+## 2026-07-20 — Phase 13 Design: CLI Polish & OTLP Adapter
+
+**Action:** Design Phase 13 architecture and scope
+
+**Context:**
+- Phase 12 (OTel spans) sealed and approved with score 8.5/10
+- Three NBI items carried forward: NBI-12-01 (OTLP adapter), NBI-12-02 (help text), NBI-12-03 (context.AfterFunc)
+- v2 engine is feature-complete through Phase 12 but has CLI UX gaps
+
+**Part A — NBI Carry-Forwards:**
+- NBI-12-01: `pkg/otel/adapter` package wrapping real OTel SDK for OTLP export
+- NBI-12-02: Update `--otel-endpoint` help text (now functional, not reserved)
+- NBI-12-03: DEFERRED to Phase 14+ — `mergeContexts` goroutine pattern is bounded and stable
+
+**Part B — CLI Polish (selected over integration tests):**
+- `gert ls` — List past runs with status/date filtering
+- `gert gc` — Clean up old runs with retention policy (default 7 days)
+- `gert version` — Print version, commit, build date (via -ldflags)
+- Help text polish — Consistent command descriptions
+
+**Key Decisions:**
+- D-13-01: OTel SDK as direct dependency (no build tags; DCE handles binary size)
+- D-13-02: Defer NBI-12-03 (context.AfterFunc) to Phase 14+
+- D-13-03: `gert gc` MUST NOT delete runs with status "running"
+- D-13-04: Version info via `-ldflags -X` pattern
+- D-13-05: Part B prioritizes CLI polish over integration test suite
+
+**Rationale for Part B:**
+- No way to list past runs (must manually browse `.runbook/runs/`)
+- No way to clean up disk space (traces/attachments accumulate)
+- No `gert version` command
+- These are user-facing gaps more impactful for v2.0 GA than additional test coverage
+
+**New Files:**
+- `pkg/otel/adapter/{doc,otlp,otlp_test}.go`
+- `cmd/gert/{ls,gc,version}.go`
+
+**Modified Files:**
+- `v2/go.mod` (OTel SDK deps)
+- `internal/adapter/wire.go` (OTLP wiring)
+- `internal/runstore/dir_store.go` (ListRuns, DeleteRun)
+- `cmd/gert/main.go` (new commands, help polish)
+- `cmd/gert/run.go` (help text update)
+
+**Estimated Effort:** 3-4 days for Brian
+
+**Output:** .squad/tmp/ken-phase13-design.md, .squad/decisions/inbox/ken-phase13-design.md
+
+## 2026-07-20: Phase 13 Design — CLI Polish & OTLP Adapter
+
+**Task:** Design Phase 13 architecture and scope
+
+**Context:**
+- Phase 12 (OTel spans) sealed and approved
+- Three NBI items carried forward: NBI-12-01 (OTLP adapter), NBI-12-02 (help text), NBI-12-03 (context.AfterFunc)
+- v2 engine is feature-complete but has CLI UX gaps
+
+**Part A — NBI Carry-Forwards:**
+- NBI-12-01: `pkg/otel/adapter` package wrapping real OTel SDK for OTLP export
+- NBI-12-02: Update `--otel-endpoint` help text (now functional)
+- NBI-12-03: DEFERRED to Phase 14+ — bounded goroutine pattern is stable
+
+**Part B — CLI Polish (selected over integration tests):**
+- `gert ls` — List past runs with status/date filtering
+- `gert gc` — Clean up old runs with retention policy (default 7 days)
+- `gert version` — Print version, commit, build date (via -ldflags)
+- Help text polish — Consistent command descriptions
+
+**Key Decisions:**
+- D-13-01: OTel SDK as direct dependency (no build tags; DCE handles binary size)
+- D-13-02: Defer NBI-12-03 to Phase 14+
+- D-13-03: `gert gc` MUST NOT delete "running" status
+- D-13-04: Version info via `-ldflags -X` pattern
+- D-13-05: Part B prioritizes CLI polish over integration tests
+
+**Estimated Effort:** 3-4 days for Brian
+
+**Output:** .squad/tmp/ken-phase13-design.md, decisions merged

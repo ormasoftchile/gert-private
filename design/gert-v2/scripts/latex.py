@@ -48,7 +48,7 @@ def select_engine(requested: str) -> str | None:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
-    project_dir = Path(__file__).resolve().parent.parent
+    project_dir = Path.cwd()
     main_file = project_dir / args.main
 
     if not main_file.exists():
@@ -69,8 +69,17 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 def build_with_engine(engine: str, args: argparse.Namespace, project_dir: Path, build_dir: Path) -> int:
     if engine == "tectonic":
-        cmd = ["tectonic", "--keep-logs", "--outdir", str(build_dir), args.main]
-        return run(cmd, cwd=project_dir)
+        # Run from build_dir so biber control files (.bcf, .bbl) are written
+        # there — tectonic's --outdir places logs/pdf in build_dir but writes
+        # biber files to CWD, causing "No such file" on the second pass.
+        main_abs = str((project_dir / args.main).resolve())
+        cmd = [
+            "tectonic",
+            "--keep-logs",
+            "-Z", f"shell-escape-cwd={project_dir}",
+            main_abs,
+        ]
+        return run(cmd, cwd=build_dir)
 
     if engine == "latexmk":
         cmd = [
@@ -102,7 +111,7 @@ def build_with_engine(engine: str, args: argparse.Namespace, project_dir: Path, 
 
 
 def cmd_build(args: argparse.Namespace) -> int:
-    project_dir = Path(__file__).resolve().parent.parent
+    project_dir = Path.cwd()
     build_dir = project_dir / args.build_dir
     build_dir.mkdir(parents=True, exist_ok=True)
 
@@ -131,7 +140,7 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 
 def cmd_clean(args: argparse.Namespace) -> int:
-    project_dir = Path(__file__).resolve().parent.parent
+    project_dir = Path.cwd()
     build_dir = project_dir / args.build_dir
 
     if not build_dir.exists():
@@ -149,7 +158,7 @@ def cmd_clean(args: argparse.Namespace) -> int:
 
 
 def cmd_release(args: argparse.Namespace) -> int:
-    project_dir = Path(__file__).resolve().parent.parent
+    project_dir = Path.cwd()
     build_dir = project_dir / args.build_dir
     pdf_file = build_dir / f"{Path(args.main).stem}.pdf"
 

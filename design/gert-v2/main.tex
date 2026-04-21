@@ -60,7 +60,7 @@
   breaklines=true,
   breakanywhere=false,
   autogobble=true,
-  ignorelexererrors=true   % suppress red error-token boxes (<string>, <int>, etc.)
+  % ignorelexererrors=true   % requires minted >= 2.9
 }
 \setminted[yaml]{
   style=friendly,       % clean, readable colour scheme
@@ -86,8 +86,8 @@
 % Convenience command for inline code
 \newcommand{\yinline}[1]{\mintinline{yaml}{#1}}
 
-\usepackage[backend=biber,style=numeric,sorting=nyt]{biblatex}
-\addbibresource{references.bib}
+\usepackage[numbers,sort&compress]{natbib}
+% bibliography file loaded at \bibliography below
 
 % Define Unicode characters for checkmarks and tree symbols
 \newunicodechar{✓}{\checkmark}
@@ -145,6 +145,7 @@
 \input{sections/16-observability-diagnostics}
 
 \backmatter
-\printbibliography[heading=bibintoc,title={References}]
+{\bibliographystyle{plainnat}
+  \bibliography{references}}
 
 \end{document}

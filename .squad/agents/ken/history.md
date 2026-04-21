@@ -1972,3 +1972,72 @@ internal/e2e/
 **Status:** ✅ COMPLETE — Phase 14 design approved, Brian ready to implement.
 
 **Output:** `.squad/orchestration-log/2026-07-21T06-06-10Z-ken.md`, `.squad/decisions/d-14-phase14-e2e-suite-design.md`
+
+---
+
+## 2026-07-21 — Phase 14 Review: E2E Integration Tests & NBI Closure
+
+**Action:** Architectural review of Brian's Phase 14 implementation
+**Verdict:** APPROVED (9/10)
+
+**Scope reviewed:**
+- Part A: TLS option for OTLP adapter, gc edge-case tests, ls JSON schema doc
+- Part B: E2E integration test suite (10 tests, 5 testdata runbooks, E2EHarness)
+
+**Key findings:**
+
+1. **Correctness:** `credentials.NewTLS(nil)` is safe (uses system root CA). GC boundary fix (`!ref.Before(cutoff)`) correctly implements exclusive semantics. E2E assertions are non-vacuous — tests fail on wrong status, missing trace events, or malformed envelopes.
+
+2. **Architecture:** E2EHarness follows injected-deps pattern. Tests are independent (fresh temp dirs). Sequential execution maintained. All testdata runbooks use valid v2 schema.
+
+3. **Test quality:** All 10 E2E tests exercise meaningful behavior. Resume test drives two steps with checkpoint. Cancel test verifies non-completed terminal state. Trace test validates envelope fields.
+
+4. **Security:** `credentials.NewTLS(nil)` uses OS trust store, TLS 1.2+, no client cert. Test-only `InsecureSkipVerify` is correctly annotated.
+
+**Deviation assessments:**
+
+| ID | Decision | Rationale |
+|----|----------|-----------|
+| DEV-14-01 | ✅ ACCEPTED (EXEMPLARY) | Boundary test redesign avoids wall-clock flakiness |
+| DEV-14-02 | ✅ ACCEPTED | `type: approve` is correct; `type: manual` doesn't exist in schema |
+| DEV-14-03 | ✅ ACCEPTED (DOCUMENTED) | Iterate variable scoping is architecture limitation; NBI-14-03 opened |
+| DEV-14-04 | ✅ ACCEPTED (PREFERABLE) | `RunOptions.Vars` is cleaner than FakeInputProvider |
+
+**Phase 15 NBI items:**
+- NBI-14-01: E2E test parallelization
+- NBI-14-02: E2E coverage for tool steps
+- NBI-14-03: Fix planner iterate/branch sub-step variable scoping
+- NBI-12-03: context.AfterFunc optimization (fourth deferral)
+
+**Tests:** All 16 new tests pass (10 E2E + 2 TLS + 4 gc edge cases)
+
+**Output:** .squad/decisions/inbox/ken-phase14-review.md
+
+## 2026-04-21 — Phase 14 Review: E2E Integration Tests & NBI Closure
+
+**Action:** Architectural review of Brian's Phase 14 implementation  
+**Verdict:** APPROVED (9/10)
+
+**Scope reviewed:**
+- Part A: TLS option for OTLP adapter, gc edge-case tests, ls JSON schema doc
+- Part B: E2E integration test suite (10 tests, 5 testdata runbooks, E2EHarness)
+
+**Key findings:**
+1. **Correctness:** `credentials.NewTLS(nil)` safe (uses system root CA). GC boundary fix (`!ref.Before(cutoff)`) correctly implements exclusive semantics. E2E assertions non-vacuous.
+2. **Architecture:** E2EHarness injected-deps pattern. Tests independent (fresh temp dirs). Sequential execution maintained.
+3. **Test Quality:** All 10 E2E tests exercise meaningful behavior. Resume/cancel proven. Trace validation robust.
+4. **Security:** TLS 1.2+ minimum, OS trust store, no client cert. Test-only InsecureSkipVerify correctly annotated.
+
+**Deviation assessments (all accepted):**
+- DEV-14-01: EXEMPLARY — Boundary test redesign avoids wall-clock flakiness
+- DEV-14-02: CORRECT — `type: approve` only valid form; `type: manual` doesn't exist
+- DEV-14-03: DOCUMENTED — Iterate variable scoping is architecture limitation; NBI-14-03 opened
+- DEV-14-04: PREFERABLE — `RunOptions.Vars` cleaner than FakeInputProvider
+
+**Phase 15 NBI items queued:**
+- NBI-14-01: E2E test parallelization
+- NBI-14-02: E2E coverage for tool steps
+- NBI-14-03: Fix planner iterate/branch sub-step variable scoping
+- NBI-12-03: context.AfterFunc optimization (fourth deferral)
+
+**Output:** `.squad/decisions/inbox/ken-phase14-review.md`

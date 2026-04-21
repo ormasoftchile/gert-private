@@ -448,3 +448,90 @@ Part B:
 **Phase 14 NBI items assigned to Brian:**
 - NBI-13-01: TLS support for OTLP adapter
 - NBI-13-02: Additional gc unit tests
+
+---
+
+## Phase 14 — NBI Carry-Forwards + E2E Integration Tests
+
+**Sealed commit:** (pending Ken review)
+
+### Part A — NBI Carry-Forwards
+
+**NBI-13-01: `WithTLS` for OTLP adapter**
+- Added `tlsConfig *tls.Config` to `config` struct in `v2/pkg/otel/adapter/otlp.go`
+- Added `WithTLS(tlsCfg *tls.Config) Option` — nil uses system default via `credentials.NewTLS(nil)`
+- Fixed transport selection: when `insecure=false`, uses TLS credentials instead of no transport
+- Added tests: `TestNewOTLPTracerProvider_WithTLS_NilConfig`, `TestNewOTLPTracerProvider_WithTLS_CustomConfig`
+- Required new imports: `crypto/tls`, `google.golang.org/grpc/credentials`
+
+**NBI-13-02: Additional `gert gc` unit tests**
+- Added `TestGc_RunningStatus_NeverDeleted` — running runs never deleted even with --force --older-than=0s
+- Added `TestGc_MixedStatuses` — only terminal statuses deleted from mixed set
+- Added `TestGc_StatusFilter_Running_Rejected` — --status=running returns exitValidation (safety invariant)
+- Added `TestGc_OlderThan_EdgeCase` — tests both sides of boundary (DEV-14-01)
+- **Bug fix**: Changed gc boundary from `ref.After(cutoff)` to `!ref.Before(cutoff)` (exclusive boundary)
+
+**NBI-13-03: `gert ls --output=json` schema doc**
+- Added 14-line godoc comment to `lsMain` documenting all JSON array fields with types
+
+### Part B — End-to-End Integration Test Suite
+
+**New package:** `v2/internal/e2e/`
+
+Files created:
+- `doc.go` — package documentation
+- `helpers_test.go` — `E2EHarness` type with `Prepare()`, `Run()`, `AssertCompleted()`, `AssertTrace()` methods; `e2ePlannerToolRegistry` adapter; uses `internaltrace.JSONLReader` for correct wire-format parsing
+- `e2e_test.go` — 10 test functions covering: SimpleEcho, VarInterpolation, BranchTrue, BranchFalse, IterateAll, IterateEarlyExit, ManualSkip, TracePersistence, ResumeFromCheckpoint, CancelMidRun
+
+Testdata runbooks in `v2/internal/e2e/testdata/`:
+- `echo-runbook.yaml` — single CLI step
+- `vars-runbook.yaml` — two-step capture chain
+- `branch-runbook.yaml` — conditional arms with expr-lang condition `flag == "true"`
+- `iterate-runbook.yaml` — iterate over "a,b,c" with early-exit condition `stop_early == "true"`
+- `manual-runbook.yaml` — approve step (NoOpApprovalGate auto-approves in non-TTY mode)
+
+**Key learnings:**
+- JSONL trace file uses `ts`/`seq` wire-format keys, not `timestamp`/`sequence` from `TraceEvent` struct — must use `internaltrace.JSONLReader` not raw `json.Unmarshal`
+- Planner flattens iterate/branch sub-steps into outer plan (with Depth>0) — sub-step args must NOT reference loop vars or they fail when outer engine re-executes them
+- `approve` step requires `approvals.roles` or `approvals.pool` (semantic validator enforces this)
+- `BuildEngineConfig.TraceFile` defaults to `filepath.Join(opts.TraceDir, "trace.jsonl")` when TraceFile is empty
+- For resume tests: `DirRunStore.Plan(runID)` is in-memory — must use same store instance across Start/Resume calls
+
+**Deviations:** See `.squad/decisions/inbox/brian-phase14-impl.md`
+
+**Validation gate passed:** go build ./... + go vet ./... + go test ./... -race -count=3 all green
+
+## 2026-04-21 — Phase 14 Implementation Complete — Ken APPROVED (9/10)
+
+**Phase:** 14 (Witness entry)  
+**Implementor:** Brian  
+**Reviewer:** Ken  
+**Outcome:** APPROVED (9/10)
+
+**What Brian delivered:**
+
+**Part A — NBI Carry-Forwards:**
+- `pkg/otel/adapter/otlp.go`: Added `WithTLS(*tls.Config)` option; `nil` uses system root CA
+- `cmd/gert/gc_test.go`: 4 new edge-case tests (RunningStatus, MixedStatuses, StatusFilter, EdgeCase)
+- **Critical fix:** GC boundary changed from `ref.After(cutoff)` to `!ref.Before(cutoff)` (exclusive)
+- `cmd/gert/ls.go`: Added 14-line godoc documenting JSON output schema
+
+**Part B — E2E Integration Suite:**
+- `internal/e2e/doc.go`: Package documentation
+- `internal/e2e/helpers_test.go`: E2EHarness with Prepare/Run/AssertCompleted/AssertTrace
+- `internal/e2e/e2e_test.go`: 10 tests (SimpleEcho, VarInterpolation, BranchTrue/False, IterateAll, IterateEarlyExit, ManualSkip, TracePersistence, ResumeFromCheckpoint, CancelMidRun)
+- 5 testdata runbooks: echo, vars, branch, iterate, manual
+
+**Test Results:** All 16 tests pass (10 E2E + 2 TLS + 4 gc edge)
+
+**Deviations (all accepted):**
+- DEV-14-01: Boundary test redesign (exemplary approach to flakiness)
+- DEV-14-02: Used `type: approve` (correct; `type: manual` doesn't exist)
+- DEV-14-03: Iterate args cannot reference loop vars (architecture limitation; NBI-14-03)
+- DEV-14-04: Input injection via `RunOptions.Vars` (cleaner than FakeInputProvider)
+
+**Ken's verdict:** APPROVED (9/10) — All deviations technically justified. Two (DEV-14-01, DEV-14-04) demonstrate architectural maturity.
+
+**Point deduction:** -1 for iterate variable scoping gap (correctly documented and tracked).
+
+**Output:** `.squad/decisions/inbox/brian-phase14-impl.md`, 10+8=18 files changed

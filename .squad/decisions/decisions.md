@@ -4274,3 +4274,207 @@ go test ./... -race -count=3        # Must pass all packages including internal/
 ---
 
 *Ken, Software Architect*
+
+## Phase 14
+
+# Ken — Phase 14 Review: E2E Integration Tests & NBI Closure
+
+**Date:** 2026-07-21  
+**Author:** Ken (Staff Architect)  
+**Phase:** 14  
+**Brian's Deviation Report:** `.squad/decisions/inbox/brian-phase14-impl.md`
+
+---
+
+## **APPROVED** — Score: 9/10
+
+---
+
+## Summary
+
+Brian has delivered a complete, production-quality E2E test suite that exercises the full Parser → Planner → Engine → Executor → Trace → RunStore stack. All NBI-13 items (TLS option, gc tests, ls docs) are closed correctly. The four deviations are all technically justified and two (DEV-14-01, DEV-14-04) demonstrate Brian's architectural maturity — identifying spec gaps before they became test flakiness or runtime bugs.
+
+---
+
+## Review Dimensions
+
+### 1. Correctness ✅
+
+**TLS Credentials (NBI-13-01):**
+```go
+creds := credentials.NewTLS(cfg.tlsConfig) // nil → system default
+```
+- `credentials.NewTLS(nil)` is **safe and correct** — the gRPC credentials package documents that `nil` uses `&tls.Config{}` which triggers Go's default behavior: system root CA trust store, TLS 1.2+, no client cert.
+- The `WithTLS(nil)` option correctly sets `c.insecure = false` ensuring the TLS path is taken.
+- Both TLS tests verify the dial path executes without panic.
+
+**GC Boundary Fix:**
+```go
+// Line 113: gc.go
+if !ref.Before(cutoff) {
+    continue
+}
+```
+- Correctly implements **exclusive boundary** semantics: runs at exactly the cutoff (`ref == cutoff`) are NOT deleted because `ref.Before(cutoff)` returns `false`, so `!ref.Before(cutoff)` is `true`, and we `continue` (skip deletion).
+- This matches the spec: "UpdatedAt == cutoff → NOT deleted"
+- The test in `TestGc_OlderThan_EdgeCase` verifies both sides of the boundary reliably.
+
+**E2E Test Assertions:**
+- `AssertCompleted()` is not vacuous — it checks `state.Status != engine.RunStatusCompleted` and fails explicitly.
+- `AssertTrace()` parses the actual JSONL file via `JSONLReader.ReadAll()` and verifies event kinds are present — cannot pass vacuously with empty traces.
+- `TestE2E_TracePersistence` explicitly checks envelope fields (EventID, RunID, Timestamp, Kind) for every event.
+- `TestE2E_ResumeFromCheckpoint` drives step1, captures runID, calls `eng.Resume()`, drives step2, and asserts completion — proves checkpoint/resume works.
+- `TestE2E_CancelMidRun` cancels context and verifies the run ends in a non-completed state.
+
+### 2. Architecture ✅
+
+**E2EHarness (helpers_test.go):**
+- Follows injected-deps pattern: `E2EHarness` receives `t *testing.T`, creates temp dirs, and exposes `Store`, `RunDir`, `TraceDir` for fine-grained test control.
+- `Prepare()` builds the full stack but returns `(plan, ecfg, eng)` for tests that need direct engine control (resume, cancel).
+- `Run()` provides the simple "execute to completion" path for most tests.
+- The harness is reusable — all 10 tests use it; no test builds its own stack.
+
+**Test Independence:**
+- Each test calls `NewHarness(t, "...")` which creates a fresh `t.TempDir()` — tests cannot interfere with each other's state.
+- No shared mutable state between tests.
+- D-14-04 (sequential execution) is respected — no `t.Parallel()` calls.
+
+**Testdata Runbooks:**
+- All 5 runbooks use `apiVersion: runbook/v2` and follow the correct schema structure.
+- `branch-runbook.yaml` uses the `branches:` array form with `condition:` and `else: true` — correct schema.
+- `iterate-runbook.yaml` uses `iterate:` with `over:`, `as:`, `until:` — correct structure.
+- `manual-runbook.yaml` uses `type: approve` with `approvals: { roles: [operator] }` — correct per DEV-14-02.
+
+### 3. Test Quality ✅
+
+**Non-Vacuous Assertions:**
+- Every test calls `h.AssertCompleted(state)` which explicitly fails on non-completed status.
+- `TestE2E_SimpleEcho` additionally asserts 4 specific trace event kinds.
+- `TestE2E_TracePersistence` validates every event has required envelope fields.
+- `TestE2E_CancelMidRun` explicitly checks `state.Status != RunStatusCompleted`.
+
+**JSONL Trace Parsing:**
+- Uses `internaltrace.NewJSONLReader(h.traceFile).ReadAll()` — the production trace reader.
+- Returns `[]tracepkg.TraceEvent` with strongly-typed fields.
+- If parsing fails, tests fail immediately with the parse error.
+
+**Edge Cases Covered:**
+- `TestGc_RunningStatus_NeverDeleted` — D-13-03 invariant under extreme conditions (`--older-than=0s --force`)
+- `TestGc_MixedStatuses` — 3 terminal + 1 running; verifies exactly 3 deleted
+- `TestGc_StatusFilter_Running_Rejected` — `--status=running` fails validation
+- `TestGc_OlderThan_EdgeCase` — boundary from both sides
+
+### 4. Deviation Assessments
+
+**DEV-14-01: Boundary test redesign** ✅ ACCEPTED (EXEMPLARY)
+> Setting `UpdatedAt = time.Now().Add(-olderThan)` and then calling `gcMain` (which recomputes `time.Now()` independently) makes `UpdatedAt` slightly older than the cutoff by the time `gcMain` runs.
+
+Brian correctly identified that testing "exactly at cutoff" is inherently flaky in wall-clock tests. The redesigned test verifies both sides of the boundary with clear margins (1h vs 3h with 2h cutoff). This is more robust and still validates the exclusive boundary semantic. The boundary fix itself (`!ref.Before(cutoff)`) was correctly applied as specified.
+
+**DEV-14-02: `type: approve` instead of `type: manual`** ✅ ACCEPTED
+> The schema has no `manual` step type.
+
+Brian is correct — the schema validator would reject `type: manual`. Using `type: approve` with `approvals: { roles: [operator] }` achieves the same test goal (auto-approved in non-interactive mode via `NoOpApprovalGate`). This deviation corrects a spec error.
+
+**DEV-14-03: No loop variable reference in iterate sub-step** ✅ ACCEPTED (DOCUMENTED)
+> The planner flattens iterate sub-steps into the outer execution plan (with Depth=1). When the outer engine reaches the `process-item` step directly (outside the iterate context), `item` is not in the outer run's vars.
+
+This is a legitimate architecture limitation. The iterate behavior is still exercised — the test verifies the run completes with correct semantics (loop count, early-exit). Brian correctly notes this should be tracked as a follow-up issue. **NBI-14-03: Fix planner iterate/branch sub-step variable scoping.**
+
+**DEV-14-04: `RunOptions.Vars` instead of `FakeInputProvider`** ✅ ACCEPTED (PREFERABLE)
+> `BuildEngineConfig` does not accept a custom `InputProvider` override via `WireOptions`.
+
+`RunOptions.Vars` is the intended mechanism for passing run variables programmatically. This is cleaner than env var pollution and doesn't require internal API changes. The test behavior is equivalent.
+
+### 5. Security ✅
+
+**`credentials.NewTLS(nil)`:**
+- Safe per gRPC documentation: nil config uses system default settings
+- Uses OS trust store for server certificate verification
+- Enables TLS 1.2+ minimum
+- No client certificate presented (which is correct for typical OTLP collectors)
+
+**InsecureSkipVerify in test:**
+```go
+customCfg := &tls.Config{InsecureSkipVerify: true} //nolint:gosec // test-only
+```
+- Appropriate for test — the TCP listener doesn't speak TLS, so the test only verifies the option is wired through.
+- `//nolint:gosec` annotation is correct for test-only code.
+
+---
+
+## Non-Blocking Items for Phase 15
+
+| ID | Description | Priority |
+|----|-------------|----------|
+| NBI-14-01 | E2E test parallelization (enable `t.Parallel()` once suite is stable) | Low |
+| NBI-14-02 | E2E coverage for tool steps (requires tool registry setup in harness) | Medium |
+| NBI-14-03 | Fix planner iterate/branch sub-step variable scoping (DEV-14-03 root cause) | Medium |
+| NBI-12-03 | `context.AfterFunc` optimization for `mergeContexts` (fourth deferral) | Low |
+
+---
+
+## Files Reviewed
+
+**Part A:**
+| File | Lines | Verdict |
+|------|-------|---------|
+| `pkg/otel/adapter/otlp.go` | 178 | ✅ WithTLS correctly wired |
+| `pkg/otel/adapter/otlp_test.go` | 238 | ✅ 2 new TLS tests |
+| `cmd/gert/gc_test.go` | 350 | ✅ 4 new edge-case tests, boundary fix verified |
+| `cmd/gert/ls.go` | 112 | ✅ JSON schema documented in godoc |
+
+**Part B:**
+| File | Lines | Verdict |
+|------|-------|---------|
+| `internal/e2e/doc.go` | 6 | ✅ Clear package doc |
+| `internal/e2e/helpers_test.go` | 283 | ✅ Harness follows injected-deps pattern |
+| `internal/e2e/e2e_test.go` | 271 | ✅ 10 tests, non-vacuous assertions |
+| `internal/e2e/testdata/echo-runbook.yaml` | 10 | ✅ Valid schema |
+| `internal/e2e/testdata/vars-runbook.yaml` | 20 | ✅ Valid schema |
+| `internal/e2e/testdata/branch-runbook.yaml` | 28 | ✅ Valid schema |
+| `internal/e2e/testdata/iterate-runbook.yaml` | 19 | ✅ Valid schema |
+| `internal/e2e/testdata/manual-runbook.yaml` | 15 | ✅ Valid schema |
+
+---
+
+## Test Results
+
+```
+=== RUN   TestE2E_SimpleEcho               --- PASS
+=== RUN   TestE2E_VarInterpolation         --- PASS
+=== RUN   TestE2E_BranchTrue               --- PASS
+=== RUN   TestE2E_BranchFalse              --- PASS
+=== RUN   TestE2E_IterateAll               --- PASS
+=== RUN   TestE2E_IterateEarlyExit         --- PASS
+=== RUN   TestE2E_ManualSkip               --- PASS
+=== RUN   TestE2E_TracePersistence         --- PASS
+=== RUN   TestE2E_ResumeFromCheckpoint     --- PASS
+=== RUN   TestE2E_CancelMidRun             --- PASS
+ok  	github.com/ormasoftchile/gert/v2/internal/e2e	0.459s
+
+=== RUN   TestNewOTLPTracerProvider_WithTLS_NilConfig    --- PASS
+=== RUN   TestNewOTLPTracerProvider_WithTLS_CustomConfig --- PASS
+ok  	github.com/ormasoftchile/gert/v2/pkg/otel/adapter	5.503s
+
+=== RUN   TestGc_RunningStatus_NeverDeleted    --- PASS
+=== RUN   TestGc_MixedStatuses                 --- PASS
+=== RUN   TestGc_StatusFilter_Running_Rejected --- PASS
+=== RUN   TestGc_OlderThan_EdgeCase            --- PASS
+ok  	github.com/ormasoftchile/gert/v2/cmd/gert	0.915s
+```
+
+All Phase 14 tests pass.
+
+---
+
+## Verdict
+
+**APPROVED (9/10)** — Phase 14 is complete. Scribe may commit.
+
+*Point deduction:* -1 for the iterate variable scoping limitation (DEV-14-03) which, while correctly documented, reveals an architecture gap that should have been caught in my design. The fix is tracked as NBI-14-03.
+
+---
+
+*Ken, Staff Architect*  
+*2026-07-21*

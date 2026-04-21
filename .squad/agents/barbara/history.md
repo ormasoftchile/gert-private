@@ -1109,3 +1109,50 @@ Comprehensive audit of Phase 11 spec (§12 Evidence, Tracing, and Resumption) to
 **Next:** Ken reviews open questions (D1, D3), Brian implements Phase 11 per audit recommendations.
 
 ---
+
+## Learnings — Phase 12 Preflight
+
+**Date:** 2026-07-14
+**Task:** Resolve pre-existing build failure before Phase 12 begins.
+
+### Finding 1: Name() was already present
+
+Ken's review note said `FakeInputProvider` was missing `Name()` after Phase 8 added it to the `InputProvider` interface. On inspection, the method was already committed in Phase 11 (`3961cf6`). The compile-time guard `var _ input.InputProvider = (*FakeInputProvider)(nil)` in `pkg/testutil/fake_input_provider.go` enforces this at build time — if it were missing, `go build` would fail immediately. No fix was needed here.
+
+### Finding 2: Machine-specific absolute path in run_test.go
+
+`cmd/gert/run_test.go` (from Phase 10, commit `c570a9c`) hardcoded `/Volumes/Projects/gert/...` — the absolute path of the machine where Phase 10 was developed. This caused `TestRun_SuccessExitCode` to fail on any other machine with exit code 2.
+
+**Fix:** Replaced the constant with a relative `filepath.Join` expression (`../../..` from the package directory to the repo root). Go test runner sets the working directory to the package directory, so this is portable across machines.
+
+**Lesson:** Never hardcode absolute machine paths in test files. Always use relative paths from the package directory, `testdata/` subdirectories co-located with the test, or a repo-root resolver function.
+
+### Outcome
+
+- `go build ./...` — ✅ clean
+- `go test ./... -race` — ✅ all packages pass
+- Preflight note filed: `.squad/decisions/inbox/barbara-phase12-preflight.md`
+- Commit: `7cafb25`
+
+---
+
+## 2026-04-21: Phase 12 Preflight — Build Verification Complete
+
+**Task:** Confirm Phase 12 readiness by verifying build status and fixing any integration issues.
+
+**Preflight Actions:**
+1. ✅ Verified `FakeInputProvider.Name()` already present (Phase 11 commit 3961cf6)
+2. ✅ Fixed hardcoded machine path in `cmd/gert/run_test.go` → portable relative path
+   - Commit: `7cafb25` — fix: portable test fixture path
+3. ✅ Ran full build: `go build ./...` — exit 0
+4. ✅ Ran full test suite: `go test ./... -race` — all packages pass
+
+**Status:** ✅ COMPLETE — Phase 12 may begin
+
+**Integration Surface Status:**
+- `InputProvider` interface fully satisfied by all implementations
+- Test infrastructure (`FakeInputProvider`) correct
+- Full test suite passes under race detector
+- Build green, no warnings
+
+**Deliverable:** `.squad/decisions/inbox/barbara-phase12-preflight.md` (merged to decisions.md)

@@ -1522,3 +1522,121 @@ Full architecture for `gert serve` as an HTTP-based adapter to the gert v2 runti
 - D5: No PID lock protocol (deferred to v2.1)
 
 **Output:** .squad/tmp/ken-phase11-review.md (comprehensive review report)
+
+---
+
+## 2026-07-18: Phase 12 Design — OpenTelemetry Integration
+
+**Requested by:** Cristian  
+**Task:** Design Phase 12 — OpenTelemetry span integration for gert v2
+
+**Context:**
+- Phase 11 (Evidence & Replay) was APPROVED with 8/10 score
+- OTel span integration was explicitly deferred from Phase 11 to Phase 12
+- Three non-blocking items from Phase 11 review need addressing
+
+**Deliverables:**
+
+1. **Design Document:** `.squad/tmp/ken-phase12-design.md`
+   - Comprehensive architecture for optional OTel integration
+   - Pluggable TracerProvider interface with noop default
+   - Span hierarchy: run → step → tool/input
+   - Context propagation through entire call chain
+   - Attribute conventions aligned with OTel semantic conventions
+   - Test plan with in-memory SpanExporter
+
+2. **Decisions Inbox:** `.squad/decisions/inbox/ken-phase12-design.md`
+   - D-12-01: OTel Dependency Model (pluggable interface with noop default)
+   - D-12-02: Span Structure (hierarchical mapping to gert concepts)
+   - D-12-03: Context Propagation (span in context through engine → executors → tools)
+   - D-12-04: Attribute Conventions (gert.* prefix, semconv alignment)
+   - D-12-05: Export Target (pluggable via TracerProvider, CLI convenience flags)
+   - D-12-06: Integration Points (precise span open/close locations)
+   - D-12-07: Relationship to Evidence/Trace (complementary, not replacing)
+
+**Key Design Decisions:**
+
+| Decision | Summary |
+|----------|---------|
+| D-12-01 | OTel optional; interface abstracts SDK; noop default keeps binaries small |
+| D-12-02 | Spans form tree: `gert.run` → `gert.step.{kind}` → `gert.tool.*` / `gert.input.*` |
+| D-12-03 | context.Context carries span; executors receive step span as parent |
+| D-12-04 | Attributes: `gert.run.id`, `gert.step.id`, `gert.step.kind`, `gert.tool.name` |
+| D-12-05 | User provides configured TracerProvider; CLI offers `--otel-endpoint`, `--otel-stdout` |
+| D-12-06 | Spans open at lifecycle events: run start, step execute, tool invoke, input prompt |
+| D-12-07 | OTel spans complement NDJSON trace; correlation via `gert.run.id` attribute |
+
+**Phase 11 Housekeeping Included:**
+1. RunStore unit tests (9 test cases for 225 lines of code)
+2. Atomic attachment writes (temp→sync→rename pattern)
+3. Warn logging on attachment storage failures
+
+**Scope Boundaries:**
+- **Ships:** OTel spans, pluggable interface, context propagation, attributes, housekeeping
+- **Deferred:** OTel metrics, baggage propagation, trace context injection to subprocesses
+
+**Estimated Effort:** 3-4 days for Brian
+
+**Files to Create/Modify:**
+- NEW: `pkg/otel/{doc,tracer,attributes,tracer_test}.go`
+- NEW: `internal/runstore/dir_store_test.go`
+- MOD: `pkg/engine/engine.go` (add TracerProvider to EngineConfig)
+- MOD: `internal/engine/engine.go` (start/end spans)
+- MOD: `internal/evidence/attachment.go` (atomic writes)
+- MOD: `internal/evidence/collector.go` (warn logging)
+- MOD: `internal/adapter/{wire,options}.go` (wire TracerProvider)
+- MOD: `cmd/gert/main.go` (--otel-endpoint, --otel-stdout flags)
+
+---
+
+## 2026-04-21: Phase 12 Orchestration — Ken & Barbara Execution
+
+**Task:** Parallel orchestration of Phase 12 OTel architecture design + preflight build verification.
+
+### Ken — Phase 12 OTel Integration Architecture
+
+**Deliverable:** Complete design with 7 key decisions (D-12-01 through D-12-07).
+
+**Design Summary:**
+- OTel as optional, pluggable dependency (noop default)
+- Span hierarchy: `run → step → tool/input`
+- Context propagation through entire call chain
+- Attribute naming with gert.* prefix
+- Pluggable export target via TracerProvider
+- Precise lifecycle integration points
+- Complementary relationship with NDJSON trace (correlation via run_id)
+
+**Files Generated:**
+- `.squad/tmp/ken-phase12-design.md` (comprehensive design doc)
+- `.squad/decisions/inbox/ken-phase12-design.md` (merged to decisions.md)
+
+**Status:** ✅ COMPLETE
+
+### Barbara — Phase 12 Preflight (Build Verification)
+
+**Task:** Verify Phase 12 is ready by fixing any integration issues and running full test suite.
+
+**Findings & Fixes:**
+1. **FakeInputProvider.Name()** — Already present (Phase 11 commit 3961cf6)
+2. **Hardcoded machine path in cmd/gert/run_test.go** — Fixed to portable relative path
+   - Commit: `7cafb25` — fix: portable test fixture path
+
+**Test Results:**
+```
+go build ./...        ✅ exit 0
+go test ./... -race   ✅ all packages pass
+```
+
+**Status:** ✅ COMPLETE — Phase 12 may begin
+
+### Scribe Orchestration
+
+**Tasks executed:**
+1. ✅ Orchestration logs created: `2026-04-21T04-41-11Z-ken.md`, `2026-04-21T04-41-11Z-barbara.md`
+2. ✅ Session log created: `2026-04-21T04-41-11Z-phase12-kickoff.md`
+3. ✅ Decision inbox merged: Phase 12 decisions appended to `.squad/decisions.md`
+4. ✅ Inbox files deleted after merge
+5. ✅ Cross-agent histories updated (Ken, Barbara)
+6. ⏳ Git commit pending (Phase 12 design + build fixes)
+
+**Status:** ✅ ORCHESTRATION COMPLETE

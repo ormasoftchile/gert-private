@@ -1352,3 +1352,141 @@ Also verified with `-count=10`: still clean.
 Non-blocking recommendations: R1 (preserve stdout/stderr on failed exit), R2 (MCP notifications/initialized method name), R3 (stale Phase 5 doc comment), R4 (aws.tool.yaml copy-paste).
 
 *Reviewed by Ken, Software Architect*
+
+---
+
+# Phase 12 — OpenTelemetry Integration Architecture
+
+**Date:** 2026-04-21  
+**Author:** Ken (Software Architect)  
+**Status:** PROPOSED  
+**Phase:** 12 — OpenTelemetry Integration
+
+---
+
+## Summary
+
+Phase 12 integrates OpenTelemetry (OTel) distributed tracing into the gert engine. The design establishes OTel as an optional, pluggable dependency with noop default, enabling observability without bloat for users who don't need it.
+
+---
+
+## Decision D-12-01: OTel Dependency Model — Pluggable Interface with Noop Default
+
+**Decision:** OTel is optional and pluggable. The engine depends on a `TracerProvider` interface, not the OTel SDK directly. When no provider is configured, a noop tracer is used.
+
+**Rationale:**
+- gert binaries remain small (~10MB) without OTel SDK bloat
+- Users opt-in by wiring a real provider
+- Interface is forward-compatible with OTel Go SDK
+
+**Trade-off:** Users must wire OTel themselves; no auto-discovery.
+
+---
+
+## Decision D-12-02: Span Structure — Hierarchical Mapping
+
+**Decision:** Spans form a tree: `run → step → tool/input`. Span names use `gert.{concept}.{subtype}` format.
+
+| gert Concept | Span Name Format |
+|--------------|------------------|
+| Run | `gert.run` |
+| Step | `gert.step.{kind}` |
+| Tool call | `gert.tool.{transport}` |
+| Input prompt | `gert.input.{type}` |
+| Parallel branch | `gert.branch.{label}` |
+
+---
+
+## Decision D-12-03: Context Propagation
+
+**Decision:** The `context.Context` carries the current span through engine → executors → tools. Executors receive a context with the step span as parent.
+
+---
+
+## Decision D-12-04: Attribute Conventions
+
+**Decision:** Span attributes use `gert.*` prefix for gert-specific attributes, OTel semantic conventions (`process.*`) where applicable.
+
+Key attributes: `gert.run.id`, `gert.step.id`, `gert.step.kind`, `gert.tool.name`, `gert.tool.transport`.
+
+---
+
+## Decision D-12-05: Export Target — Pluggable via TracerProvider
+
+**Decision:** gert does not configure export targets. The user provides a pre-configured `TracerProvider`. CLI offers convenience flags (`--otel-endpoint`, `--otel-stdout`) for common cases.
+
+---
+
+## Decision D-12-06: Integration Points
+
+**Decision:** Spans open/close at precise lifecycle points:
+- `gert.run` span: constructor to `finishRun()`
+- `gert.step.*` span: `executeStep()` entry to exit
+- `gert.tool.*` span: around transport call
+- `gert.input.*` span: around blocking input wait
+
+---
+
+## Decision D-12-07: Relationship to Evidence/Trace
+
+**Decision:** OTel spans and gert's NDJSON trace are complementary:
+- NDJSON: Audit log, replay source, evidence (required)
+- OTel: Distributed tracing, performance analysis (optional)
+
+Correlation via `gert.run.id` attribute matching `run_id` in NDJSON.
+
+---
+
+## Scope
+
+**Ships in Phase 12:**
+1. OTel span integration
+2. Pluggable TracerProvider
+3. Context propagation
+4. Attribute conventions
+5. RunStore unit tests (Phase 11 housekeeping)
+6. Atomic attachment writes (Phase 11 housekeeping)
+7. Attachment error logging (Phase 11 housekeeping)
+
+**Deferred:**
+- OTel metrics API
+- Baggage propagation to tools
+- Automatic trace context injection to subprocesses
+
+---
+
+## Dependencies
+
+- Depends on: Phase 11 (Evidence & Replay)
+- Blocks: Phase 13+ (OTel metrics, baggage propagation)
+
+---
+
+## Phase 12 Preflight — Build Verification
+
+**Date:** 2026-04-21  
+**Author:** Barbara (Integrations Specialist)  
+**Status:** ✅ Build green — Phase 12 may proceed
+
+### Findings
+
+1. **FakeInputProvider.Name()** — Already present
+   - Ken's Phase 11 review flagged missing method
+   - Method already present, committed as part of Phase 11 (`3961cf6`)
+   - Compile-time guard (`var _ input.InputProvider = (*FakeInputProvider)(nil)`) confirms correctness
+
+2. **Hardcoded Machine Path in `cmd/gert/run_test.go`** — Fixed
+   - `TestRun_SuccessExitCode` used hardcoded absolute path
+   - Fixed to portable relative path: `filepath.Join("..", "..", "..", "design", "gert-v2", "testdata", "runbooks", "r21-gert-run", "schema.yaml")`
+   - Commit: `7cafb25`
+
+### Build & Test Status
+
+```
+go build ./...        ✅ exit 0
+go test ./... -race   ✅ all packages pass, 0 failures
+```
+
+### Recommendation
+
+✅ **Phase 12 may begin.** Integration surface is clean.

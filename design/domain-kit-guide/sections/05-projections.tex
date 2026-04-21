@@ -1,0 +1,336 @@
+% Chapter 05: Projections
+% Building read models over run traces
+
+\chapter{Projections}
+\label{ch:projections}
+
+% ============================================================
+\section{What Projections Are}
+\label{sec:what-projections}
+% ============================================================
+
+A \textbf{projection} is a read-only transformation over a gert run trace. It
+consumes the trace event stream (NDJSON format) produced during runbook
+execution and produces a domain-specific view: audit logs, timeline summaries,
+evidence bundles, compliance reports, etc.
+
+Projections are:
+
+\begin{itemize}
+  \item \textbf{Read-only} --- They never modify the trace. They only derive
+    views from it.
+  \item \textbf{Post-hoc} --- They run \emph{after} execution completes (or
+    during execution as a streaming consumer).
+  \item \textbf{Domain-specific} --- Different Kits produce different
+    projections. A compliance Kit might project an audit log; a workflow Kit
+    might project a timeline view.
+  \item \textbf{Pure transformations} --- Like the compiler, projections have no
+    side effects (no network, no filesystem writes except stdout).
+\end{itemize}
+
+% ============================================================
+\section{The Trace Event Stream}
+\label{sec:trace-events}
+% ============================================================
+
+Gert emits a sequence of trace events during execution. Each event is a JSON
+object representing a state transition:
+
+\begin{description}
+  \item[\texttt{run.started}] --- Execution began.
+  \item[\texttt{step.started}] --- A step began executing.
+  \item[\texttt{step.completed}] --- A step finished successfully.
+  \item[\texttt{step.failed}] --- A step failed.
+  \item[\texttt{evidence.captured}] --- Evidence was collected.
+  \item[\texttt{approval.requested}] --- Approval gate was reached.
+  \item[\texttt{approval.granted}] --- Approval was granted.
+  \item[\texttt{approval.rejected}] --- Approval was denied.
+  \item[\texttt{variable.set}] --- A variable was bound.
+  \item[\texttt{run.completed}] --- Execution finished.
+\end{description}
+
+\paragraph{Event format:}
+
+Each event is a JSON object with:
+
+\begin{description}
+  \item[\texttt{event}] --- Event type (e.g., \texttt{"step.started"}).
+  \item[\texttt{timestamp}] --- ISO 8601 timestamp (UTC).
+  \item[\texttt{run\_id}] --- Unique run identifier.
+  \item[\texttt{step\_id}] --- Step ID (for step-level events).
+  \item[\texttt{payload}] --- Event-specific data (varies by event type).
+\end{description}
+
+\paragraph{Example events:}
+
+\begin{minted}{json}
+{"event":"run.started","timestamp":"2025-01-15T10:30:00Z","run_id":"r-abc123","payload":{}}
+{"event":"step.started","timestamp":"2025-01-15T10:30:01Z","run_id":"r-abc123","step_id":"approve-deploy","payload":{}}
+{"event":"evidence.captured","timestamp":"2025-01-15T10:32:00Z","run_id":"r-abc123","step_id":"approve-deploy","payload":{"type":"text","value":"Reviewed deployment checklist. All items OK.","sha256":"e3b0c..."}}
+{"event":"approval.granted","timestamp":"2025-01-15T10:32:05Z","run_id":"r-abc123","step_id":"approve-deploy","payload":{"approver":"alice@acme.example"}}
+{"event":"step.completed","timestamp":"2025-01-15T10:32:06Z","run_id":"r-abc123","step_id":"approve-deploy","payload":{"exit_code":0}}
+{"event":"run.completed","timestamp":"2025-01-15T10:35:00Z","run_id":"r-abc123","payload":{"status":"success"}}
+\end{minted}
+
+% ============================================================
+\section{Writing a Projection}
+\label{sec:writing-projection}
+% ============================================================
+
+A projection is a standalone executable that reads NDJSON events on stdin and
+writes the projection output to stdout.
+
+\paragraph{Input:} NDJSON stream of trace events (one JSON object per line).
+
+\paragraph{Output:} Projection-specific format (JSON, YAML, Markdown, CSV, etc.).
+
+\paragraph{Exit code:}
+\begin{description}
+  \item[\texttt{0}] --- Projection succeeded.
+  \item[\texttt{1+}] --- Projection failed (malformed input, internal error).
+\end{description}
+
+% ============================================================
+\section{Use Cases}
+\label{sec:projection-use-cases}
+% ============================================================
+
+\paragraph{Audit logs:}
+Extract all approval events, evidence captures, and governance checks into a
+chronological audit log.
+
+\paragraph{Summary reports:}
+Produce a high-level summary: which steps ran, how long they took, which
+approvers were involved, what evidence was captured.
+
+\paragraph{Compliance evidence bundles:}
+Extract all evidence items (text, attachments) and group them by governance
+primitive (approval, attestation, redaction). Output as a structured JSON
+document for compliance archival.
+
+\paragraph{Timeline views:}
+Render a visual timeline of execution (Markdown, HTML, or JSON for frontend
+rendering).
+
+\paragraph{Metrics:}
+Extract duration metrics, step counts, approval latencies for dashboards.
+
+% ============================================================
+\section{The Projection Binary Interface}
+\label{sec:projection-interface}
+% ============================================================
+
+\paragraph{Invocation:}
+
+\begin{verbatim}
+cat trace.ndjson | ./bin/project-audit-log > audit.json
+\end{verbatim}
+
+\paragraph{Stdin:} NDJSON trace events (one event per line).
+
+\paragraph{Stdout:} Projection output (format specified by the projection).
+
+\paragraph{Stderr:} Diagnostic messages (optional, not parsed).
+
+% ============================================================
+\section{Example: Audit Log Projection}
+\label{sec:example-audit-log}
+% ============================================================
+
+Let's build a projection that extracts all approval and evidence events into an
+audit log.
+
+\paragraph{Input (trace excerpt):}
+
+\begin{verbatim}
+{"event":"step.started","timestamp":"2025-01-15T10:30:01Z","run_id":"r-abc123","step_id":"approve-deploy","payload":{}}
+{"event":"approval.requested","timestamp":"2025-01-15T10:30:02Z","run_id":"r-abc123","step_id":"approve-deploy","payload":{"approvers":["alice@acme.example","bob@acme.example"]}}
+{"event":"evidence.captured","timestamp":"2025-01-15T10:32:00Z","run_id":"r-abc123","step_id":"approve-deploy","payload":{"type":"text","value":"Deployment checklist complete."}}
+{"event":"approval.granted","timestamp":"2025-01-15T10:32:05Z","run_id":"r-abc123","step_id":"approve-deploy","payload":{"approver":"alice@acme.example"}}
+{"event":"step.completed","timestamp":"2025-01-15T10:32:06Z","run_id":"r-abc123","step_id":"approve-deploy","payload":{}}
+\end{verbatim}
+
+\paragraph{Output (audit log JSON):}
+
+\begin{minted}{json}
+{
+  "run_id": "r-abc123",
+  "audit_entries": [
+    {
+      "timestamp": "2025-01-15T10:30:02Z",
+      "step_id": "approve-deploy",
+      "event_type": "approval.requested",
+      "details": {
+        "approvers": ["alice@acme.example", "bob@acme.example"]
+      }
+    },
+    {
+      "timestamp": "2025-01-15T10:32:00Z",
+      "step_id": "approve-deploy",
+      "event_type": "evidence.captured",
+      "details": {
+        "type": "text",
+        "value": "Deployment checklist complete."
+      }
+    },
+    {
+      "timestamp": "2025-01-15T10:32:05Z",
+      "step_id": "approve-deploy",
+      "event_type": "approval.granted",
+      "details": {
+        "approver": "alice@acme.example"
+      }
+    }
+  ]
+}
+\end{minted}
+
+% ============================================================
+\section{Example: Projection Pseudocode}
+\label{sec:projection-pseudocode}
+% ============================================================
+
+Here is pseudocode for the audit log projection (Go):
+
+\begin{minted}{go}
+package main
+
+import (
+  "bufio"
+  "encoding/json"
+  "os"
+)
+
+type TraceEvent struct {
+  Event     string                 `json:"event"`
+  Timestamp string                 `json:"timestamp"`
+  RunID     string                 `json:"run_id"`
+  StepID    string                 `json:"step_id,omitempty"`
+  Payload   map[string]interface{} `json:"payload"`
+}
+
+type AuditEntry struct {
+  Timestamp string                 `json:"timestamp"`
+  StepID    string                 `json:"step_id"`
+  EventType string                 `json:"event_type"`
+  Details   map[string]interface{} `json:"details"`
+}
+
+type AuditLog struct {
+  RunID   string       `json:"run_id"`
+  Entries []AuditEntry `json:"audit_entries"`
+}
+
+func main() {
+  scanner := bufio.NewScanner(os.Stdin)
+  var log AuditLog
+  var runID string
+
+  for scanner.Scan() {
+    var evt TraceEvent
+    json.Unmarshal(scanner.Bytes(), &evt)
+
+    if runID == "" {
+      runID = evt.RunID
+      log.RunID = runID
+    }
+
+    // Filter: only audit-relevant events
+    if isAuditEvent(evt.Event) {
+      log.Entries = append(log.Entries, AuditEntry{
+        Timestamp: evt.Timestamp,
+        StepID:    evt.StepID,
+        EventType: evt.Event,
+        Details:   evt.Payload,
+      })
+    }
+  }
+
+  json.NewEncoder(os.Stdout).Encode(log)
+}
+
+func isAuditEvent(eventType string) bool {
+  auditEvents := []string{
+    "approval.requested",
+    "approval.granted",
+    "approval.rejected",
+    "evidence.captured",
+  }
+  for _, e := range auditEvents {
+    if eventType == e {
+      return true
+    }
+  }
+  return false
+}
+\end{minted}
+
+% ============================================================
+\section{Projection Declaration in Manifest}
+\label{sec:projection-manifest}
+% ============================================================
+
+Projections are declared in the Kit manifest:
+
+\begin{minted}{yaml}
+projections:
+  - name: compliance/audit-log
+    description: "Audit log with approvals and evidence"
+    output-format: json
+  - name: compliance/evidence-bundle
+    description: "Evidence bundle for compliance archival"
+    output-format: json
+  - name: compliance/timeline
+    description: "Execution timeline in Markdown"
+    output-format: markdown
+\end{minted}
+
+\paragraph{Invocation by gert:}
+
+Gert can invoke projections automatically after a run completes:
+
+\begin{verbatim}
+gert run runbook.yaml --project compliance/audit-log > audit.json
+\end{verbatim}
+
+Or manually:
+
+\begin{verbatim}
+cat .gert/traces/r-abc123.ndjson | ./bin/project-audit-log > audit.json
+\end{verbatim}
+
+% ============================================================
+\section{Streaming Projections}
+\label{sec:streaming-projections}
+% ============================================================
+
+Projections can run in \textbf{streaming mode}: they consume events as they are
+emitted during execution, rather than waiting for the run to complete.
+
+Use cases:
+
+\begin{itemize}
+  \item Real-time dashboards (stream events to a web UI).
+  \item Incremental compliance logging (write audit entries as they occur).
+  \item Alerting (emit alerts when specific events occur).
+\end{itemize}
+
+\paragraph{Streaming contract:}
+
+The projection binary should:
+
+\begin{enumerate}
+  \item Read events from stdin line by line (NDJSON).
+  \item Process each event and emit incremental output to stdout (optional).
+  \item Flush stdout after each output (for real-time consumption).
+  \item Handle incomplete runs gracefully (if stdin closes before
+    \texttt{run.completed}, emit partial output).
+\end{enumerate}
+
+Gert can invoke streaming projections with:
+
+\begin{verbatim}
+gert run runbook.yaml --stream-to "./bin/project-audit-log" &
+\end{verbatim}
+
+The projection runs as a child process, consuming events as they are emitted.

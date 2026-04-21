@@ -1,0 +1,285 @@
+\chapter{DRI Concepts}
+\label{ch:dri-concepts}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{The DRI Model}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The \textbf{Directly Responsible Individual} (DRI) model is a single-owner accountability pattern. At any moment during a runbook execution, exactly one person is the DRI: they have authority to make decisions, approve gates, and sign off on evidence. The DRI is accountable for the outcome---if a change fails, the DRI answers for it. If an incident escalates, the DRI owns the response.
+
+\paragraph{Single Owner Invariant.}
+A runbook execution has exactly one DRI at any given time. The DRI may change during the run (e.g., when an incident-commander takes over), but at no point are there zero DRIs or multiple conflicting DRIs.
+
+\paragraph{DRI vs. Executor.}
+The DRI is not always the person executing the steps. For example:
+\begin{itemize}
+  \item A database engineer may run the migration steps, but the DRI is the lead engineer who approved the plan.
+  \item During an incident, multiple responders may be troubleshooting, but the incident-commander is the DRI.
+\end{itemize}
+
+The DRI is accountable, not necessarily hands-on-keyboard.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Role Taxonomy}
+\label{sec:role-taxonomy}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The \texttt{gert.ops} Kit defines six role types. Each role has specific permissions and responsibilities.
+
+\subsection{dri — Directly Responsible Individual}
+
+\textbf{Permissions:}
+\begin{itemize}
+  \item Execute all steps (unless a step requires a more specific role)
+  \item Submit evidence
+  \item Approve gates if listed as an approver
+  \item Cancel the run
+\end{itemize}
+
+\textbf{Responsibilities:}
+\begin{itemize}
+  \item Own the outcome of the runbook execution
+  \item Make decisions when the runbook requires judgment calls
+  \item Sign off on the final evidence bundle
+\end{itemize}
+
+\textbf{Assignment:} The DRI is declared in \texttt{meta.roles.dri}. If no DRI is declared, the person starting the run becomes the implicit DRI.
+
+\subsection{approver}
+
+\textbf{Permissions:}
+\begin{itemize}
+  \item Sign off on \texttt{ops.approval} gates
+  \item View the run status and evidence
+\end{itemize}
+
+\textbf{Responsibilities:}
+\begin{itemize}
+  \item Review the evidence before signing off
+  \item Reject approval if conditions are not met
+\end{itemize}
+
+\textbf{Assignment:} Approvers are listed in \texttt{meta.roles.approver} (may be a person, team, or on-call alias). Specific approval gates may override this with a gate-specific approver list.
+
+\subsection{change-manager}
+
+\textbf{Permissions:}
+\begin{itemize}
+  \item Approve or reject the run before it starts
+  \item View the final evidence bundle
+\end{itemize}
+
+\textbf{Responsibilities:}
+\begin{itemize}
+  \item Ensure the change request is properly authorized
+  \item Verify that the run is scheduled during an approved change window
+  \item Sign off on the change record after completion
+\end{itemize}
+
+\textbf{Assignment:} Declared in \texttt{meta.roles.change-manager}. If a \texttt{ops.change-request} step exists, the change-manager must approve before execution begins.
+
+\subsection{incident-commander}
+
+\textbf{Permissions:}
+\begin{itemize}
+  \item Take over as DRI when an incident is declared
+  \item Assign tasks to responders
+  \item Escalate or de-escalate the incident severity
+\end{itemize}
+
+\textbf{Responsibilities:}
+\begin{itemize}
+  \item Coordinate the incident response
+  \item Decide when to execute rollback steps
+  \item Declare the incident resolved
+\end{itemize}
+
+\textbf{Assignment:} Declared in \texttt{meta.roles.incident-commander}. When an \texttt{ops.incident} step is executed, the incident-commander becomes the active DRI for the duration of the incident.
+
+\subsection{responder}
+
+\textbf{Permissions:}
+\begin{itemize}
+  \item Execute steps that require the \texttt{responder} role
+  \item Submit evidence
+  \item Communicate with the incident-commander
+\end{itemize}
+
+\textbf{Responsibilities:}
+\begin{itemize}
+  \item Execute assigned triage or mitigation tasks
+  \item Report status to the incident-commander
+\end{itemize}
+
+\textbf{Assignment:} Declared in \texttt{meta.roles.responder} (may be a team or on-call alias).
+
+\subsection{observer}
+
+\textbf{Permissions:}
+\begin{itemize}
+  \item View the run status and evidence in real-time
+  \item Receive notifications when specific events occur
+\end{itemize}
+
+\textbf{Responsibilities:}
+\begin{itemize}
+  \item None. Observers are read-only participants.
+\end{itemize}
+
+\textbf{Assignment:} Declared in \texttt{meta.roles.observer}. Observers are typically stakeholders, managers, or compliance auditors who need visibility but not control.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Role Assignment in Runbooks}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Roles are assigned in two places:
+
+\paragraph{Runbook-level role declarations.}
+The \texttt{meta.roles} block declares the default mapping of role names to identities:
+
+\begin{minted}{yaml}
+meta:
+  roles:
+    dri: alice@example.com
+    approver: ops-team
+    change-manager: change-board
+    incident-commander: @on-call/sre
+    responder: sre-team
+    observer: [manager@example.com, compliance@example.com]
+\end{minted}
+
+\paragraph{Step-level role requirements.}
+Individual steps may require a specific role to execute:
+
+\begin{minted}{yaml}
+steps:
+  - id: migrate-database
+    type: ops.cli
+    requires_role: dri
+    command: ./migrate.sh
+
+  - id: verify-replication
+    type: ops.manual
+    requires_role: responder
+    prompt: Check that all replicas are caught up
+\end{minted}
+
+If a step has \texttt{requires\_role}, only the person assigned to that role may execute the step. The runtime will block execution and emit an error if the current actor does not have the required role.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{The Escalation Chain}
+% ─────────────────────────────────────────────────────────────────────────────
+
+If the primary DRI is unavailable (e.g., they go offline during an incident), responsibility must transfer to a backup. The \texttt{gert.ops} Kit supports escalation chains:
+
+\begin{minted}{yaml}
+meta:
+  roles:
+    dri: alice@example.com
+  escalation:
+    - primary: alice@example.com
+      backup: bob@example.com
+      timeout: 10m
+    - primary: bob@example.com
+      backup: @on-call/sre
+      timeout: 5m
+\end{minted}
+
+\paragraph{How escalation works.}
+\begin{enumerate}
+  \item The runtime starts with the primary DRI (alice).
+  \item If alice does not respond to an approval gate or manual step within 10 minutes, the runtime escalates to bob.
+  \item If bob does not respond within 5 minutes, the runtime escalates to the on-call SRE.
+  \item If the final backup does not respond, the run fails with a timeout error.
+\end{enumerate}
+
+\paragraph{Escalation triggers.}
+Escalation is triggered by:
+\begin{itemize}
+  \item \texttt{ops.approval} timeout: the approval gate specifies a timeout, and no approver signs off before the deadline.
+  \item \texttt{ops.manual} timeout: a manual step specifies a timeout, and the DRI does not mark it complete.
+  \item SLA violation: the \texttt{meta.sla.max\_duration} is exceeded, and the run is still in progress.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{SLA Concepts}
+\label{sec:sla}
+% ─────────────────────────────────────────────────────────────────────────────
+
+SLA (Service Level Agreement) policies define the execution window and timeout behavior for a runbook.
+
+\subsection{Execution Window}
+
+The execution window is the time period during which the runbook is allowed to run. If the run is started outside the window, it is rejected:
+
+\begin{minted}{yaml}
+meta:
+  sla:
+    execution_window:
+      start: "2025-01-15T02:00:00Z"
+      end: "2025-01-15T06:00:00Z"
+\end{minted}
+
+This is useful for change management: a deployment runbook may only be executed during a scheduled maintenance window.
+
+\subsection{Maximum Duration}
+
+The maximum duration is the longest time the runbook is allowed to take:
+
+\begin{minted}{yaml}
+meta:
+  sla:
+    max_duration: 2h
+\end{minted}
+
+If the run exceeds this duration, the runtime triggers the escalation policy (either fail the run or escalate to a backup DRI).
+
+\subsection{Escalation Policy}
+
+The escalation policy defines what happens when an SLA timeout is reached:
+
+\begin{minted}{yaml}
+meta:
+  sla:
+    on_timeout: escalate  # or: fail
+\end{minted}
+
+\begin{description}
+  \item[\texttt{fail}] — Terminate the run and emit a \texttt{run/failed} event.
+  \item[\texttt{escalate}] — Transfer DRI responsibility to the next person in the escalation chain.
+\end{description}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{DRI Transfer}
+% ─────────────────────────────────────────────────────────────────────────────
+
+DRI transfer occurs when the primary DRI hands off responsibility to another person. This is common during incident response when shifts change or when an escalation timeout fires.
+
+\paragraph{Explicit transfer.}
+The DRI may explicitly transfer ownership:
+
+\begin{verbatim}
+$ gert exec transfer --run-id abc123 --to bob@example.com
+\end{verbatim}
+
+The runtime records the transfer in the trace:
+
+\begin{minted}{json}
+{
+  "type": "governance/driTransfer",
+  "timestamp": "2025-01-15T03:45:00Z",
+  "from": "alice@example.com",
+  "to": "bob@example.com",
+  "reason": "shift change"
+}
+\end{minted}
+
+\paragraph{Automatic transfer.}
+Automatic transfer occurs when:
+\begin{itemize}
+  \item An \texttt{ops.incident} step is executed and the incident-commander takes over as DRI.
+  \item An escalation timeout fires and the backup DRI is activated.
+\end{itemize}
+
+\paragraph{Same-actor-cannot-approve invariant.}
+When the DRI transfers, the new DRI cannot approve their own gates. If alice was the DRI and bob takes over, bob cannot approve a gate that requires the \texttt{approver} role if bob is both the DRI and the approver. This separation-of-duties rule prevents self-approval.

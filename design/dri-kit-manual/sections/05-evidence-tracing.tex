@@ -1,0 +1,258 @@
+\chapter{Evidence Tracing}
+\label{ch:evidence-tracing}
+
+This chapter describes the evidence capture model used by \texttt{gert.ops}: what is captured,
+when, how it is stored, and how to verify and read the evidence bundle from a completed run.
+The underlying trace format is defined by the gert v2 core (\emph{gert v2 Design Document}, §12);
+this chapter focuses on the \texttt{ops.*}-layer semantics layered on top of it.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{The Evidence Model}
+\label{sec:evidence-model}
+% ─────────────────────────────────────────────────────────────────────────────
+
+In \texttt{gert.ops}, evidence is the durable proof that a step was executed correctly by
+the right person, at the right time, with the right outcome. Evidence is not an audit log
+entry (those are written by the core); evidence is an artifact explicitly submitted or
+captured to prove a specific claim.
+
+\paragraph{What gets captured.}
+\begin{itemize}
+  \item \textbf{Command output} (from \texttt{ops.cli} steps with \texttt{evidence.auto: true}):
+    The redacted stdout/stderr of the command, the exit code, and the command invocation.
+  \item \textbf{Screenshots} (from \texttt{ops.evidence.screenshot}): Binary files uploaded
+    by the executor, stored as content-addressed attachments.
+  \item \textbf{Attestations} (from \texttt{ops.evidence.attestation}): A structured record
+    containing the prompt text, the submitter's identity and role, and a timestamp.
+  \item \textbf{Approval records} (from \texttt{ops.approval}): Attestations submitted by
+    approvers at gate steps.
+\end{itemize}
+
+\paragraph{What is \emph{not} evidence.}
+Governance events (\texttt{governance/commandBlocked}, \texttt{governance/envVarBlocked}) are
+written to the trace but are not evidence records. They are part of the audit log. Similarly,
+\texttt{step/started} and \texttt{step/completed} events are structural trace events, not
+evidence. Evidence records are things explicitly submitted by a human or captured from
+meaningful command output.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Evidence Record Structure}
+\label{sec:evidence-record-structure}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Every evidence submission writes an \texttt{evidence/submitted} trace event. The event
+payload has the following structure:
+
+\begin{minted}{yaml}
+# Trace event: evidence/submitted
+event_id: "4a7b2c91-f3e8-4d2a-9c10-b5e1234567ab"
+sequence: 14
+kind: evidence/submitted
+timestamp: "2026-05-14T03:22:11.842Z"
+run_id: "20260514T032155-b1c3f9"
+path: ["execute_deployment", "wait_rollout"]
+payload:
+  step_id: "wait_rollout"
+  evidence_label: "rollout status output"
+  evidence_type: "ops.evidence.command-output"
+  submitted_by: "@alice"
+  role: "dri"
+  content_inline: "deployment.apps/api-service successfully rolled out\n"
+  sha256: "a3f9c14b2e8d7f0612345678abcdef9012345678abcdef9012345678abcdef90"
+  redacted: true
+  command: "kubectl rollout status deployment/api-service -n production --timeout=5m"
+  exit_code: 0
+\end{minted}
+
+\begin{description}
+  \item[\texttt{step\_id}] The stable ID of the step that produced this evidence.
+  \item[\texttt{evidence\_label}] The human-readable label declared in the runbook.
+  \item[\texttt{evidence\_type}] One of \texttt{ops.evidence.command-output},
+    \texttt{ops.evidence.screenshot}, or \texttt{ops.evidence.attestation}.
+  \item[\texttt{submitted\_by}] The identity of the person who submitted or triggered
+    this evidence record.
+  \item[\texttt{role}] The role held by \texttt{submitted\_by} at submission time.
+  \item[\texttt{content\_inline}] Present for small text payloads (command output,
+    attestation text). Absent for binary attachments; use \texttt{sha256} to retrieve.
+  \item[\texttt{sha256}] SHA-256 hash of the evidence payload. For binary attachments,
+    this is the hash of the file stored in \texttt{.runbook/runs/<run-id>/attachments/}.
+    For text evidence, this is the hash of the UTF-8 content.
+  \item[\texttt{redacted}] \texttt{true} if the content passed through the redaction
+    pipeline before storage.
+  \item[\texttt{command}] Present for \texttt{command-output} evidence. The exact command
+    invocation (redacted).
+  \item[\texttt{exit\_code}] Present for \texttt{command-output} evidence.
+\end{description}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Run Directory Structure}
+\label{sec:evidence-run-directory}
+% ─────────────────────────────────────────────────────────────────────────────
+
+All run artifacts, including evidence, are stored under the run directory:
+
+\begin{verbatim}
+.runbook/runs/<run-id>/
+  trace.jsonl           # Append-only event log (all events including evidence)
+  snapshots/            # Per-step state checkpoints
+  attachments/          # Binary evidence files (content-addressed by SHA-256)
+    a3f9c14b2e8d7f06...bin   # Screenshot, binary output, etc.
+  run.yaml              # Completion manifest
+  evidence-bundle.json  # Projected evidence summary (written on completion)
+  annotations.jsonl     # Operator notes
+\end{verbatim}
+
+The \texttt{evidence-bundle.json} is a projected view over \texttt{trace.jsonl} containing
+only \texttt{evidence/submitted} events, sorted chronologically, with attachment references
+resolved. It is computed by \texttt{gert kit evidence-bundle <run-id>}.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Reading the Timeline Projection}
+\label{sec:evidence-timeline}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The timeline projection shows all significant events in a run in chronological order. Generate
+it with:
+
+\begin{verbatim}
+$ gert kit timeline <run-id>
+\end{verbatim}
+
+Example output for the deployment runbook from Chapter 3:
+
+\begin{verbatim}
+03:21:55Z  run/started          @alice (dri)
+03:21:55Z  step/started         change_board_approval
+03:22:00Z  governance/approvalGranted  @bob (approver)
+03:22:00Z  evidence/submitted   change_board_approval / "Change board sign-off"
+03:22:01Z  step/completed       change_board_approval  [approved]
+03:22:02Z  step/started         execute_deployment
+03:22:02Z  step/started         set_image
+03:22:04Z  evidence/submitted   set_image / "kubectl set image"
+03:22:04Z  step/completed       set_image  [exit:0]
+03:22:05Z  step/started         wait_rollout
+03:22:11Z  evidence/submitted   wait_rollout / "rollout status output"
+03:22:11Z  step/completed       wait_rollout  [exit:0]
+03:22:12Z  step/completed       execute_deployment  [change-closed:CHG0042817]
+03:22:13Z  step/started         health_check
+03:22:45Z  evidence/submitted   health_check / "Grafana health dashboard"
+03:22:52Z  evidence/submitted   health_check / "DRI health sign-off"
+03:22:52Z  step/completed       health_check
+03:22:52Z  run/completed        @alice (dri)  [outcome:resolved]
+\end{verbatim}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Evidence Bundles for Compliance}
+\label{sec:evidence-bundles}
+% ─────────────────────────────────────────────────────────────────────────────
+
+For compliance review, generate the evidence bundle:
+
+\begin{verbatim}
+$ gert kit evidence-bundle <run-id>
+\end{verbatim}
+
+The bundle is a JSON document containing:
+
+\begin{minted}{yaml}
+{
+  "run_id": "20260514T032155-b1c3f9",
+  "runbook": "deploy-api-service",
+  "started_at": "2026-05-14T03:21:55Z",
+  "completed_at": "2026-05-14T03:22:52Z",
+  "dri": "@alice",
+  "change_id": "CHG0042817",
+  "outcome": "resolved",
+  "evidence": [
+    {
+      "step_id": "change_board_approval",
+      "label": "Change board sign-off",
+      "type": "ops.evidence.attestation",
+      "submitted_by": "@bob",
+      "role": "approver",
+      "timestamp": "2026-05-14T03:22:00Z",
+      "sha256": "e3b0c44298fc1c...",
+      "prompt": "I approve deployment of v2.4.1..."
+    },
+    {
+      "step_id": "wait_rollout",
+      "label": "rollout status output",
+      "type": "ops.evidence.command-output",
+      "submitted_by": "@alice",
+      "role": "dri",
+      "timestamp": "2026-05-14T03:22:11Z",
+      "sha256": "a3f9c14b2e8d7f06...",
+      "command": "kubectl rollout status ...",
+      "exit_code": 0
+    }
+  ],
+  "bundle_sha256": "9f86d081884c7d659a2feaa0c55ad015..."
+}
+\end{minted}
+
+The \texttt{bundle\_sha256} field is the SHA-256 of the entire JSON document (excluding the
+field itself), enabling tamper detection.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{SHA-256 Verification Workflow}
+\label{sec:evidence-sha256}
+% ─────────────────────────────────────────────────────────────────────────────
+
+To verify an evidence bundle has not been tampered with:
+
+\begin{verbatim}
+# 1. Regenerate the bundle from the raw trace
+$ gert kit evidence-bundle <run-id> --output=bundle.json
+
+# 2. Verify individual attachment hashes
+$ gert kit verify-attachments <run-id>
+Verifying attachments for run 20260514T032155-b1c3f9:
+  [OK] a3f9c14b2e8d7f06...bin  (rollout status output)
+  [OK] 7f83b1657279c1f7...bin  (Grafana health dashboard)
+All 2 attachments verified.
+
+# 3. Verify the bundle SHA-256
+$ gert kit verify-bundle <run-id>
+Bundle SHA-256: 9f86d081884c7d659a2feaa0c55ad015...
+Status: VERIFIED
+\end{verbatim}
+
+Verification will fail with a non-zero exit code and a \texttt{TAMPERED} status if any trace
+event has been modified or any attachment file has changed since the run completed.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Reading Evidence from a Completed Run}
+\label{sec:evidence-reading}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{verbatim}
+# List all evidence records in a run
+$ gert kit evidence list <run-id>
+STEP                    LABEL                      TYPE          SUBMITTED-BY
+change_board_approval   Change board sign-off      attestation   @bob
+set_image               kubectl set image          cmd-output    @alice
+wait_rollout            rollout status output      cmd-output    @alice
+health_check            Grafana health dashboard   screenshot    @alice
+health_check            DRI health sign-off        attestation   @alice
+
+# Show a specific evidence record
+$ gert kit evidence show <run-id> --step=wait_rollout --label="rollout status output"
+Type:         ops.evidence.command-output
+Step:         wait_rollout
+Label:        rollout status output
+Submitted by: @alice (dri)
+Timestamp:    2026-05-14T03:22:11.842Z
+SHA-256:      a3f9c14b2e8d7f0612345678abcdef90...
+Command:      kubectl rollout status deployment/api-service -n production --timeout=5m
+Exit code:    0
+Redacted:     true
+Content:
+  deployment.apps/api-service successfully rolled out
+
+# Export a screenshot attachment
+$ gert kit evidence export <run-id> \
+    --step=health_check \
+    --label="Grafana health dashboard" \
+    --output=grafana-screenshot.png
+Exported: grafana-screenshot.png (SHA-256: 7f83b165...)
+\end{verbatim}

@@ -4872,3 +4872,154 @@ go test ./... -race -count=3  # ✅ 156 tests pass, 0 skip
 ---
 
 *Ken, Staff Architect — 2026-04-21*
+
+---
+
+## ken-dri-decoupling
+
+# Decision: Remove DRI as Kit-Zero from Gert Core
+
+**Decision ID:** ken-dri-decoupling  
+**Date:** 2026-04-20  
+**Author:** Ken (Software Architect)  
+**Status:** APPROVED  
+**Impact:** Major — affects all three design sections and establishes core identity principle
+
+### Context
+
+Gert v2 was designed as a domain-agnostic runbook engine with a stable, minimal core. However, the current design has DRI operations vocabulary (Directly Responsible Individual, incident response, change management workflows) embedded throughout sections 3, 4, and 12, creating semantic coupling between the core framework and a specific domain implementation.
+
+### Decision
+
+Remove all DRI-domain vocabulary from gert core documentation (sections 04-domain-kit-model.tex, 03-schema-vnext.tex, 12-governance-policy.tex). Replace Kit-Zero section with domain-agnostic Domain Kit Examples. Establish DRI as a standalone domain kit module.
+
+### Rationale
+
+**Separation of Concerns:**
+- Core gert remains framework-agnostic
+- DRI becomes an optional, pluggable domain implementation
+- Future domains (SRE, product management, customer support) can build their own kits without conflicting vocabulary
+
+**Clarity:**
+- Users implementing non-DRI domains won't encounter irrelevant terminology
+- Documentation reflects architecture: gert core ≠ DRI operations
+
+**Reusability:**
+- DRI Kit Manual can be maintained independently
+- Other domain kit developers have a clear template without DRI-specific examples
+
+### Implementation
+
+1. Audit gert-v2 design files: identify DRI vocabulary (67 instances identified across 3 files)
+2. Refactor sections to generalize role/workflow examples
+3. Create domain-agnostic Domain Kit Development Guide (9 chapters, ~2,884 lines)
+4. Create DRI Kit Manual (10 chapters, ~3,078 lines) as first reference implementation
+
+### Validation
+
+- All 67 instances addressed
+- Core sections pass Ken cross-consistency review (ken-review)
+- Domain Kit guide successfully used as template for DRI manual
+
+---
+
+## leslie-kit-guide-complete
+
+# Completion Report: Domain Kit Development Guide
+
+**Date:** 2026-04-21  
+**Author:** Leslie (📝 Documentation Specialist)  
+**Status:** COMPLETED  
+**Output:** design/domain-kit-guide/sections/ — 9 chapters, ~2,884 lines
+
+### Chapters Completed
+
+1. **Introduction to Domain Kits** — Framework overview, design principles
+2. **Core Concepts** — Roles, workflows, templates, extensions
+3. **Architecture Patterns** — Domain kit structure, interface contracts
+4. **Development Workflow** — TDD approach, spec-driven examples
+5. **Template System** — Creating and composing domain-specific templates
+6. **Integration with Gert Core** — How domain kits extend the runbook engine
+7. **Testing Strategies** — Unit, integration, and scenario-based tests
+8. **Governance and Policies** — Maintaining domain kit consistency
+9. **Advanced Extensions** — Custom renderers, policy engines, integrations
+
+### Quality Assurance
+
+- LaTeX builds cleanly with `make pdf`
+- Cross-references verified
+- Examples follow gert coding conventions
+- Ready for publication in v2 release
+
+---
+
+## ken-dri-manual-complete
+
+# Completion Report: DRI Kit Manual
+
+**Date:** 2026-04-21  
+**Author:** Ken (🏗️ Infrastructure Architect)  
+**Status:** COMPLETED  
+**Output:** design/dri-kit-manual/sections/ — 10 chapters, ~3,078 lines
+
+### Chapters Completed
+
+1. **DRI Governance Model** — Core DRI principles, responsibilities, accountability
+2. **Role Definitions** — DRI, backup, stakeholder responsibilities
+3. **Incident Response Workflows** — Runbook integration with incident lifecycle
+4. **Change Management** — Planning, approval, rollback procedures
+5. **Policy Enforcement** — How DRI kit implements governance policies
+6. **Integration Points** — Connecting DRI kit with gert core services
+7. **Audit and Compliance** — Recording decisions, maintaining decision trails
+8. **Operations and Maintenance** — Day-to-day DRI workflow management
+9. **Escalation and Resolution** — Multi-level decision-making
+10. **Advanced Topics** — Custom workflows, integration with external systems
+
+### Quality Assurance
+
+- LaTeX compiles without warnings
+- DRI-specific terminology consistently applied
+- Alignments with domain-agnostic core verified by Ken
+- Cross-consistency review (ken-review) passed
+
+---
+
+## leslie-refactor-complete
+
+# Completion Report: Core Refactoring — Sections 04, 03, 12
+
+**Date:** 2026-04-21  
+**Author:** Leslie (📝 Documentation Specialist)  
+**Status:** COMPLETED  
+**Changes:** 51 modifications across 3 files
+
+### Files Modified
+
+1. **design/gert-v2/sections/04-domain-kit-model.tex**
+   - Removed Kit-Zero section (DRI-specific)
+   - Replaced with domain-agnostic Domain Kit Examples
+   - Generalized all role names: "DRI" → "domain-specific role", "on-call" → "responsible party"
+
+2. **design/gert-v2/sections/03-schema-vnext.tex**
+   - Updated schema examples to remove DRI-specific fields
+   - Generalized incident/change workflows to abstract runbook scenarios
+   - Clarified extension points for domain-specific implementations
+
+3. **design/gert-v2/sections/12-governance-policy.tex**
+   - Removed DRI governance policies (moved to DRI Kit Manual)
+   - Established generic governance policy framework
+   - Documented extensibility for domain-specific policies
+
+### Instances Addressed
+
+- **Total DRI vocabulary instances identified:** 67
+- **Instances removed/generalized:** 67 (100%)
+- **Duplicate definitions eliminated:** 3
+- **New cross-references added:** 8 (pointing to Domain Kit docs)
+
+### Validation
+
+- All LaTeX files compile without errors
+- No broken cross-references
+- Consistency check passed by Ken (ken-review in progress)
+

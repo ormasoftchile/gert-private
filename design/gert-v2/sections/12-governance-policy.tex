@@ -179,7 +179,7 @@ steps:
     command: "kubectl delete namespace {{ .targetNamespace }}"
     approvals:
       min: 2
-      roles: ["DRI", "change-manager"]
+      roles: ["approver", "reviewer"]
       timeout: 24h
       on_timeout: fail   # or: escalate
       escalate_to: ["senior-sre", "director-of-eng"]
@@ -241,7 +241,7 @@ Every approval decision is written to the trace as an immutable record:
   "event": "governance/approvalRequired",
   "stepId": "delete_database",
   "message": "Deleting prod-ns is irreversible. Confirm change window.",
-  "roles": ["DRI", "change-manager"],
+  "roles": ["approver", "reviewer"],
   "min": 2,
   "timeout": "24h",
   "at": "2026-04-18T10:00:00Z"
@@ -253,7 +253,7 @@ Every approval decision is written to the trace as an immutable record:
   "event": "governance/approvalDecision",
   "stepId": "delete_database",
   "actor": "alice@corp.com",
-  "role": "DRI",
+  "role": "approver",
   "approved": true,
   "comment": "Change window confirmed with customer.",
   "at": "2026-04-18T10:05:00Z"
@@ -385,9 +385,9 @@ Runbooks may declare a \texttt{requires\_role} field to restrict who may execute
 \begin{minted}{yaml}
 meta:
   governance:
-    requires_role: "incident-responder"
-    # or: requires_any_role: ["DRI", "incident-responder"]
-    # or: requires_all_roles: ["DRI", "change-manager"]
+    requires_role: "responder"
+    # or: requires_any_role: ["approver", "responder"]
+    # or: requires_all_roles: ["approver", "reviewer"]
 \end{minted}
 
 The Runtime Core evaluates this constraint during run initialization (pre-flight, before
@@ -412,7 +412,7 @@ steps:
 
 The approval gate model supports separation of duties: the \texttt{same-actor-cannot-approve}
 invariant (defined in §\ref{sec:approval-gate}) ensures that a step author cannot self-approve
-their own gate. In environments requiring formal change management, the actor who initiates
+their own gate. In environments requiring formal approval processes, the actor who initiates
 the run and the actor(s) who approve high-risk steps must be different.
 
 % ─────────────────────────────────────────────────────────────────────────────
@@ -491,11 +491,11 @@ The trace file is protected by:
 
 These audit trail guarantees are designed to satisfy the requirements of:
 \begin{itemize}
-  \item \textbf{SOC 2 Type II} — Change management controls: every command execution and
+  \item \textbf{SOC 2 Type II} --- Approval and authorization controls: every command execution and
         approval is logged with actor identity and timestamp.
   \item \textbf{HIPAA} — Access controls and audit logging: env var blocking and redaction
         prevent PHI from appearing in traces; approval gates enforce separation of duties.
-  \item \textbf{ITIL Change Management} — Normal/standard/emergency change paths can be
+  \item \textbf{ITIL Process Management} --- Normal/standard/emergency workflow paths can be
         modeled via \texttt{requires\_role} and multi-approver gates.
 \end{itemize}
 

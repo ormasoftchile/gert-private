@@ -1,0 +1,426 @@
+\chapter{Schema Reference}
+\label{ch:schema-reference}
+
+This chapter is the authoritative reference for every schema construct in the \texttt{gert.ops}
+Domain Kit. It covers the Kit declaration, all five \texttt{gert.ops} step types, runbook
+metadata fields, and the three evidence types. For the core gert v2 schema (step types
+\texttt{cli}, \texttt{manual}, \texttt{tool}, \texttt{branch}, \texttt{iterate}), refer to the
+\emph{gert v2 Design Document}, §3.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Kit Declaration and \texttt{apiVersion}}
+\label{sec:schema-apiversion}
+% ─────────────────────────────────────────────────────────────────────────────
+
+A \texttt{gert.ops} runbook declares both the core schema version and the Kit in the
+\texttt{apiVersion} and \texttt{kit} fields at the top of the file.
+
+\begin{minted}{yaml}
+apiVersion: runbook/v2
+kit: ops/v1
+
+meta:
+  name: my-ops-runbook
+  kind: change
+  description: "Short description of what this runbook does."
+\end{minted}
+
+\begin{description}
+  \item[\texttt{apiVersion: runbook/v2}] Required. Selects the gert v2 core schema. The
+    \texttt{gert.ops} Kit is not compatible with \texttt{runbook/v1} runbooks.
+  \item[\texttt{kit: ops/v1}] Required for \texttt{gert.ops} runbooks. Activates the Kit
+    compiler, making \texttt{ops.*} step types and metadata fields available. Omitting this
+    field produces a validation error when any \texttt{ops.*} type is used.
+\end{description}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Runbook Metadata Fields}
+\label{sec:schema-metadata}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The \texttt{meta} block in a \texttt{gert.ops} runbook extends the core metadata with
+Kit-specific fields. Core fields (\texttt{name}, \texttt{kind}, \texttt{description},
+\texttt{inputs}, \texttt{governance}) continue to work as described in the core documentation.
+
+\subsection{\texttt{meta.roles}}
+
+Declares the named participants for this runbook execution. Each field accepts a string (a
+specific username or on-call alias) or a list of strings.
+
+\begin{minted}{yaml}
+meta:
+  roles:
+    dri: "@alice"
+    approver:
+      - "@bob"
+      - "@change-board"
+    change-manager: "@change-board"
+    responder:
+      - "@oncall-sre"
+    incident-commander: "@ic-oncall"
+    observer:
+      - "@audit-team"
+\end{minted}
+
+\begin{description}
+  \item[\texttt{dri}] The Directly Responsible Individual for this run. Exactly one value.
+    If omitted, the person starting the run becomes the implicit DRI.
+  \item[\texttt{approver}] One or more identities that may approve \texttt{ops.approval}
+    gates. Gate-level \texttt{approvers} fields override this list.
+  \item[\texttt{change-manager}] The identity responsible for change authorization.
+    Required when the runbook contains an \texttt{ops.change-request} step.
+  \item[\texttt{responder}] Identities that may execute \texttt{ops.manual} steps during
+    an incident. Required when the runbook contains an \texttt{ops.incident} wrapper.
+  \item[\texttt{incident-commander}] The identity that assumes DRI during incident
+    declaration. Defaults to \texttt{dri} if unset.
+  \item[\texttt{observer}] Read-only participants who receive run notifications and can view
+    the evidence bundle but cannot take action.
+\end{description}
+
+\subsection{\texttt{meta.change-id}}
+
+A reference to an external change ticket (e.g., ServiceNow, Jira) that authorized this
+runbook execution. Used for audit trail cross-referencing.
+
+\begin{minted}{yaml}
+meta:
+  change-id: "CHG0042817"
+\end{minted}
+
+If the runbook contains an \texttt{ops.change-request} step, \texttt{meta.change-id} is
+populated automatically from the change request record after pre-execution approval is granted.
+
+\subsection{\texttt{meta.sla}}
+
+Defines SLA timeouts that apply at the runbook level. These are defaults; individual steps
+may override them.
+
+\begin{minted}{yaml}
+meta:
+  sla:
+    approval-timeout: 30m
+    execution-timeout: 4h
+    escalation-target: "@sre-lead"
+\end{minted}
+
+\begin{description}
+  \item[\texttt{approval-timeout}] Maximum time to wait for a gate approval before the run
+    is automatically escalated. Duration string (e.g., \texttt{15m}, \texttt{1h}).
+  \item[\texttt{execution-timeout}] Maximum total wall-clock time for the entire runbook run.
+    If this duration elapses, the run is suspended and the DRI is notified.
+  \item[\texttt{escalation-target}] Identity notified when a timeout fires.
+\end{description}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Step Types}
+\label{sec:schema-step-types}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The \texttt{gert.ops} Kit defines five step types. All five are lowered to core primitives at
+compile time. The runtime never executes \texttt{ops.*} nodes directly.
+
+\subsection{\texttt{ops.cli}}
+
+An audited command-line step. Extends the core \texttt{cli} type with an explicit command
+allowlist, argument-level redaction, and an automatic evidence capture option.
+
+\begin{minted}{yaml}
+- step:
+    id: deploy_image
+    type: ops.cli
+    title: "Deploy container image"
+    command: kubectl
+    args:
+      - rollout
+      - restart
+      - "deployment/{{ .service_name }}"
+      - "-n"
+      - "{{ .namespace }}"
+    allowed_commands: [kubectl]
+    redact:
+      - pattern: "--token=[^ ]+"
+        replace: "--token=[REDACTED]"
+    capture:
+      rollout_output: stdout
+    evidence:
+      auto: true
+      label: "kubectl rollout output"
+\end{minted}
+
+\begin{description}
+  \item[\texttt{command}] The executable to run. Subject to the governance allowlist.
+  \item[\texttt{args}] Argument list. Template expressions are evaluated before execution.
+  \item[\texttt{allowed\_commands}] Step-level allowlist override. Merges with the runbook-level
+    \texttt{meta.governance.allowed\_commands}.
+  \item[\texttt{redact}] List of RE2 pattern/replace pairs applied to stdout and stderr before
+    capture and evidence writing.
+  \item[\texttt{capture}] Maps run variables to captured output streams.
+  \item[\texttt{evidence.auto}] When \texttt{true}, the step output is automatically captured
+    as an \texttt{ops.evidence.command-output} record.
+  \item[\texttt{evidence.label}] Human-readable label for the auto-captured evidence record.
+\end{description}
+
+\subsection{\texttt{ops.manual}}
+
+A manual procedure step requiring human action and evidence submission. Extends the core
+\texttt{manual} type with a role requirement and structured evidence specification.
+
+\begin{minted}{yaml}
+- step:
+    id: verify_deployment
+    type: ops.manual
+    title: "Verify deployment is healthy"
+    requires_role: dri
+    instructions: |
+      1. Open the Grafana dashboard for {{ .service_name }}.
+      2. Confirm error rate < 0.1% over the last 5 minutes.
+      3. Confirm p99 latency < 200ms.
+      4. Take a screenshot of the dashboard.
+    evidence:
+      - type: ops.evidence.screenshot
+        label: "Grafana dashboard post-deploy"
+        required: true
+      - type: ops.evidence.attestation
+        label: "DRI sign-off"
+        required: true
+        prompt: "I confirm the service is healthy and the deployment is successful."
+\end{minted}
+
+\begin{description}
+  \item[\texttt{requires\_role}] The role that must execute this step. One of: \texttt{dri},
+    \texttt{approver}, \texttt{change-manager}, \texttt{responder}, \texttt{incident-commander}.
+  \item[\texttt{instructions}] Free-form instructions shown to the executor. Template expressions
+    are supported.
+  \item[\texttt{evidence}] List of evidence specifications. Each entry has \texttt{type},
+    \texttt{label}, \texttt{required}, and type-specific fields (see
+    §\ref{sec:schema-evidence}).
+\end{description}
+
+\subsection{\texttt{ops.approval}}
+
+A blocking gate that requires explicit approval from one or more designated approvers before
+execution may continue. Lowers to a \texttt{manual} step with an approval-specific evidence
+record and an SLA timeout.
+
+\begin{minted}{yaml}
+- step:
+    id: change_board_approval
+    type: ops.approval
+    title: "Change board sign-off"
+    description: |
+      Review the deployment plan and approve to proceed.
+      Runbook: {{ .runbook_name }}
+      Target environment: {{ .env }}
+      Scheduled window: {{ .change_window }}
+    approvers:
+      - "@change-board"
+      - "@sre-lead"
+    requires_any: true
+    timeout: 24h
+    on_timeout: escalate
+    escalation_target: "@vp-engineering"
+    evidence:
+      - type: ops.evidence.attestation
+        label: "Change board approval"
+        required: true
+        prompt: "I approve this change for the scheduled window."
+\end{minted}
+
+\begin{description}
+  \item[\texttt{description}] Context shown to approvers in the approval request. Templates
+    are evaluated when the gate is reached.
+  \item[\texttt{approvers}] List of identities that may sign this gate. Overrides
+    \texttt{meta.roles.approver} for this specific gate.
+  \item[\texttt{requires\_any}] When \texttt{true} (default), any single approver may sign.
+    When \texttt{false}, \emph{all} listed approvers must sign.
+  \item[\texttt{timeout}] Duration to wait for approval. Defaults to
+    \texttt{meta.sla.approval-timeout} if not set.
+  \item[\texttt{on\_timeout}] Action when timeout fires. \texttt{escalate} notifies the
+    \texttt{escalation\_target} and suspends the run; \texttt{abort} cancels the run.
+  \item[\texttt{escalation\_target}] Identity notified on timeout. Overrides
+    \texttt{meta.sla.escalation-target}.
+\end{description}
+
+\subsection{\texttt{ops.change-request}}
+
+A wrapper step that groups a deployment or rollback sequence under a formal change request
+lifecycle. Provides pre-execution approval, rollback injection on failure, and automatic
+change record closure.
+
+\begin{minted}{yaml}
+- step:
+    id: deploy_change
+    type: ops.change-request
+    title: "Deploy v2.4.1 to production"
+    change-id: "{{ .change_ticket }}"
+    risk: low
+    rollback:
+      runbook: rollback-service.runbook.yaml
+      inputs:
+        service_name: "{{ .service_name }}"
+        target_version: "{{ .previous_version }}"
+    steps:
+      - step:
+          id: pull_image
+          type: ops.cli
+          title: "Pull container image"
+          command: docker
+          args: [pull, "{{ .image_ref }}"]
+          evidence:
+            auto: true
+      - step:
+          id: apply_manifests
+          type: ops.cli
+          title: "Apply Kubernetes manifests"
+          command: kubectl
+          args: [apply, -f, "{{ .manifest_path }}"]
+          evidence:
+            auto: true
+\end{minted}
+
+\begin{description}
+  \item[\texttt{change-id}] Reference to the external change ticket. Populates
+    \texttt{meta.change-id} if not already set.
+  \item[\texttt{risk}] Risk classification: \texttt{low}, \texttt{medium}, \texttt{high},
+    \texttt{emergency}. Used by the change-manager gate to determine required approvals.
+  \item[\texttt{rollback}] Rollback specification. If any step within \texttt{steps} fails,
+    gert automatically initiates the specified rollback runbook.
+  \item[\texttt{rollback.runbook}] Path to the rollback runbook (relative to the current
+    runbook file).
+  \item[\texttt{rollback.inputs}] Input bindings passed to the rollback runbook. Template
+    expressions reference the current run's variables.
+  \item[\texttt{steps}] The change execution steps, executed in order.
+\end{description}
+
+\subsection{\texttt{ops.incident}}
+
+A wrapper step that declares an operational incident and activates incident-response mode.
+All steps within the wrapper are executed under incident-commander authority, with mandatory
+evidence capture and automatic SLA escalation.
+
+\begin{minted}{yaml}
+- step:
+    id: declare_incident
+    type: ops.incident
+    title: "Service degradation — payment processing"
+    severity: sev2
+    incident-id: "INC-{{ .incident_ticket }}"
+    commander: "@ic-oncall"
+    sla:
+      mitigation-timeout: 30m
+      resolution-timeout: 4h
+      escalation-target: "@vp-engineering"
+    steps:
+      - step:
+          id: initial_triage
+          type: ops.manual
+          title: "Initial triage"
+          requires_role: responder
+          instructions: |
+            Check error rates, latency, and recent deployments.
+          evidence:
+            - type: ops.evidence.attestation
+              label: "Triage findings"
+              required: true
+              prompt: "Describe the symptoms and initial findings."
+\end{minted}
+
+\begin{description}
+  \item[\texttt{severity}] Incident severity: \texttt{sev1}, \texttt{sev2}, \texttt{sev3},
+    \texttt{sev4}. Severity \texttt{sev1} requires immediate IC takeover.
+  \item[\texttt{incident-id}] External incident ticket reference (e.g., PagerDuty, Opsgenie).
+  \item[\texttt{commander}] Identity that assumes DRI for the duration of the incident wrapper.
+    Defaults to \texttt{meta.roles.incident-commander}.
+  \item[\texttt{sla.mitigation-timeout}] Time allowed to achieve initial mitigation.
+  \item[\texttt{sla.resolution-timeout}] Total time allowed for full resolution.
+  \item[\texttt{steps}] Incident response steps executed under incident-commander authority.
+\end{description}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Evidence Types}
+\label{sec:schema-evidence}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\texttt{gert.ops} defines three evidence types. Evidence records are written to the run trace
+and included in the evidence bundle. All evidence records include a timestamp, the submitting
+user's identity, and their role at time of submission.
+
+\subsection{\texttt{ops.evidence.screenshot}}
+
+Captures a screenshot or image file submitted by the executor.
+
+\begin{minted}{yaml}
+evidence:
+  - type: ops.evidence.screenshot
+    label: "Grafana dashboard — post-deploy"
+    required: true
+    description: "Screenshot showing error rate and latency for 5 minutes post-deploy."
+\end{minted}
+
+\begin{description}
+  \item[\texttt{label}] Short identifier for this evidence record in the bundle.
+  \item[\texttt{required}] When \texttt{true}, the step cannot complete without this evidence.
+  \item[\texttt{description}] Instructions shown to the submitter explaining what to capture.
+\end{description}
+
+At submission time, gert hashes the uploaded file (SHA-256), stores the binary under
+\texttt{.runbook/runs/<run-id>/attachments/<sha256>.bin}, and writes an
+\texttt{evidence/submitted} trace event with the hash and label.
+
+\subsection{\texttt{ops.evidence.command-output}}
+
+Captures the stdout/stderr of a CLI command as an evidence record. Produced automatically
+by \texttt{ops.cli} steps with \texttt{evidence.auto: true}, or explicitly declared.
+
+\begin{minted}{yaml}
+evidence:
+  - type: ops.evidence.command-output
+    label: "kubectl rollout status"
+    required: true
+    capture_from: rollout_output
+\end{minted}
+
+\begin{description}
+  \item[\texttt{capture\_from}] Run variable containing the output to capture. Must be
+    populated by a preceding \texttt{capture} block.
+\end{description}
+
+Command output is passed through the runbook's \texttt{redact} rules before storage.
+
+\subsection{\texttt{ops.evidence.attestation}}
+
+A structured sign-off where the executor explicitly affirms a statement. Used for DRI
+sign-offs, approvals, and change-manager authorizations.
+
+\begin{minted}{yaml}
+evidence:
+  - type: ops.evidence.attestation
+    label: "DRI deployment sign-off"
+    required: true
+    prompt: "I confirm this deployment is complete and the service is healthy."
+\end{minted}
+
+\begin{description}
+  \item[\texttt{prompt}] The exact statement the executor affirms. Displayed verbatim to
+    the submitter before they confirm.
+\end{description}
+
+The attestation record stores the submitter's identity, their role, the prompt text, and the
+timestamp. It cannot be submitted by a user who does not hold the step's \texttt{requires\_role}.
+\newline
+
+\noindent\textbf{Evidence Record Written to Trace:}
+\begin{minted}{yaml}
+# Trace event: evidence/submitted
+event_id: "4a7b2c91-..."
+kind: evidence/submitted
+timestamp: "2026-05-14T03:22:11Z"
+payload:
+  step_id: "verify_deployment"
+  evidence_label: "DRI deployment sign-off"
+  evidence_type: "ops.evidence.attestation"
+  submitted_by: "@alice"
+  role: "dri"
+  prompt: "I confirm this deployment is complete and the service is healthy."
+  sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+\end{minted}

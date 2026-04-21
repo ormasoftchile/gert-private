@@ -27,15 +27,15 @@ semantic layer built atop core runtime primitives.  It provides five things:
   \item \textbf{Authoring schemas.}  A Kit defines a domain-specific YAML
     vocabulary---specialised step types, field structures, validation
     constraints---that is natural for authors working in that domain.  An
-    incident-response Kit might offer a \texttt{triage} step type with severity
-    and escalation fields; an operations Kit might offer a
-    \texttt{change-request} type with approval-matrix fields.
+    workflow Kit might offer a \texttt{select-priority} step type with severity
+    and escalation fields; a compliance Kit might offer a
+    \texttt{approval-request} type with approver-matrix fields.
 
   \item \textbf{Validation rules.}  A Kit contributes domain-specific semantic
     validators that run at parse time or plan time.  These validators enforce
-    invariants that the core schema cannot express: ``a rollback step must
-    follow every deploy step,'' ``every incident runbook must declare a DRI,''
-    ``escalation timeout must not exceed SLA.''
+    invariants that the core schema cannot express: ``a cleanup step must
+    follow every provision step,'' ``every runbook must declare an owner,''
+    ``escalation timeout must not exceed configured limit.''
 
   \item \textbf{Lowering (compilation into core primitives).}  Kit-specific
     step types do not reach the runtime.  A Kit compiler transforms (lowers)
@@ -46,8 +46,8 @@ semantic layer built atop core runtime primitives.  It provides five things:
     involved.
 
   \item \textbf{Projections and read models.}  A Kit may define read-only
-    projections over run traces.  An operations Kit might project a ``change
-    log'' view from the raw trace events; an incident Kit might project a
+    projections over run traces.  A compliance Kit might project an ``audit
+    log'' view from the raw trace events; a workflow Kit might project a
     ``timeline'' view.  Projections are computed after execution; they do not
     affect runtime behaviour.
 
@@ -76,7 +76,7 @@ third has been implicit until now.
 
 Without Domain Kits, domain semantics have two bad places to live.  They can
 leak into the core schema, which makes the kernel unstable---every new domain
-(incident response, change management, compliance audits, database operations)
+(compliance audits, workflow automation, data migration, system provisioning)
 adds fields and step types to the core, bloating it into an ever-expanding
 union type.  Or they can be pushed into extensions, which conflates authoring
 concerns with runtime concerns---an extension that contributes domain-specific
@@ -94,8 +94,8 @@ semantics.  The design principle is:
 
   \item[Kits own vocabulary.] Authoring schemas, domain validation rules,
     lowering/compilation, projections, and testing contracts belong to Kits.  A
-    Kit is the right place to encode ``what does a well-formed incident runbook
-    look like?'' or ``what fields does a change-request step require?''
+    Kit is the right place to encode ``what does a well-formed workflow runbook
+    look like?'' or ``what fields does an approval-request step require?''
 
   \item[Extensions own capabilities.] Tool registration, event subscription,
     schema extension (namespaced \texttt{x-*} fields), policy contribution, and
@@ -206,8 +206,8 @@ Key distinctions:
     state.
 
   \item[Extensions may accompany a Kit but are distinct.] A Kit distribution
-    (e.g., an ``incident response pack'') may ship both a Domain Kit (authoring
-    schemas, lowering rules) and an extension (incident-specific tools,
+    (e.g., a ``compliance workflow pack'') may ship both a Domain Kit (authoring
+    schemas, lowering rules) and an extension (workflow-specific tools,
     PagerDuty providers).  These are bundled for convenience but are
     architecturally separate: the Kit operates at compile time, the extension
     operates at run time.
@@ -227,45 +227,45 @@ contributions.
 apiVersion: kit/v1
 
 meta:
-  name: gert.ops                     # Reverse-DNS namespaced identifier
+  name: gert.workflow                # Reverse-DNS namespaced identifier
   version: "1.0.0"                   # Semver
-  description: "Operations runbook authoring kit"
+  description: "Workflow automation authoring kit"
   author: "Gert Project <gert@ormasoft.dev>"
 
 compatibility:
   gert-core: ">=2.0.0 <3.0.0"       # Minimum gert core version (semver range)
 
 schema:
-  apiVersion-suffix: "ops/v1"        # Runbooks authored with this Kit use
-                                     # apiVersion: runbook/v2+ops/v1
-  json-schema: "./schemas/ops-v1.json"  # Kit-specific JSON Schema overlay
+  apiVersion-suffix: "workflow/v1"   # Runbooks authored with this Kit use
+                                     # apiVersion: runbook/v2+workflow/v1
+  json-schema: "./schemas/workflow-v1.json"  # Kit-specific JSON Schema overlay
 
 compiler:
-  executable: "./bin/gert-kit-ops"   # Kit compiler binary
+  executable: "./bin/gert-kit-workflow"   # Kit compiler binary
   args: ["compile"]
   input-format: yaml                 # Kit YAML in, core YAML out
   output-format: yaml
 
 step-types:                          # Domain-specific step types this Kit defines
-  - name: change-request
+  - name: approval-request
     lowers-to: [manual, tool]        # Core types this compiles into
-  - name: rollback
+  - name: cleanup
     lowers-to: [cli, branch]
-  - name: triage
+  - name: select-priority
     lowers-to: [manual, branch]
 
 validators:                          # Domain-specific validation rules
-  - name: ops/rollback-follows-deploy
+  - name: workflow/cleanup-follows-provision
     phase: plan                      # parse | plan
-    description: "Every deploy step must be followed by a rollback step"
-  - name: ops/dri-required
+    description: "Every provision step must be followed by a cleanup step"
+  - name: workflow/owner-required
     phase: parse
-    description: "Every ops runbook must declare a DRI in meta.roles"
+    description: "Every workflow runbook must declare an owner in meta.roles"
 
 projections:                         # Read models over trace data
-  - name: ops/change-log
-    description: "Change management timeline derived from trace events"
-  - name: ops/evidence-summary
+  - name: workflow/audit-log
+    description: "Workflow timeline derived from trace events"
+  - name: workflow/evidence-summary
     description: "Audit-ready evidence summary grouped by governance primitive"
 \end{minted}
 
@@ -278,7 +278,7 @@ projections:                         # Read models over trace data
 
   \item Breaking changes to a Kit's authoring schema require a Kit major
     version bump.  The \texttt{apiVersion-suffix} encodes the Kit's major
-    version (e.g., \texttt{ops/v1} $\to$ \texttt{ops/v2}).  This is
+    version (e.g., \texttt{workflow/v1} $\to$ \texttt{workflow/v2}).  This is
     independent of the gert core version.
 
   \item Additive changes (new optional fields, new step types) within a Kit
@@ -332,8 +332,8 @@ an extension concern, a Domain Kit concern, or shared.
 Domain-specific validators &
   Implicit in \texttt{capability/\allowbreak schema-extension} &
   \textbf{Move to Kit.} &
-  Validation rules that enforce domain invariants (e.g., ``rollback must follow
-  deploy'') are authoring-time concerns.  They belong in the Kit's validation
+  Validation rules that enforce domain invariants (e.g., ``cleanup must follow
+  provision'') are authoring-time concerns.  They belong in the Kit's validation
   phase, not in a runtime extension.  The extension
   \texttt{capability/\allowbreak schema-extension} should be reserved for namespaced
   field contributions (\texttt{x-*}), not for semantic validation of domain
@@ -412,36 +412,43 @@ Event subscription &
 \end{enumerate}
 
 % ============================================================
-\section{Kit-Zero: The DRI Operations Model}
-\label{sec:kit-zero}
+\section{Domain Kit Examples}
+\label{sec:kit-examples}
 % ============================================================
 
-The current DRI\,/\,operations runbook model---the step types, governance
-primitives, evidence capture patterns, and approval workflows defined in the
-core schema (\S\ref{ch:schema}) and governance chapter
-(\S\ref{ch:governance})---is gert's first Domain Kit.  It is Kit-0: the
-operations domain that motivated gert's existence.
+The Domain Kit model enables multiple domain-specific vocabularies to coexist
+without contaminating the gert core. Below are representative examples of how
+different domains might structure their kits.
 
-In the current design, Kit-0 is implicit.  Its step types (\texttt{cli},
-\texttt{manual}, \texttt{tool}, \texttt{branch}, \texttt{iterate}), governance
-primitives (command allowlists, env blocking, redaction, approval gates), and
-evidence types (text, choice, attachment with SHA256) are baked into the core
-schema.  This is acceptable for v2.0 because the operations domain is gert's
-primary use case and the Kit model is being introduced as a roadmap item, not a
-v2.0 deliverable.
+\paragraph{Reference implementations.}
+The gert project maintains several reference Domain Kits to demonstrate the
+model in practice. These are NOT part of gert core, but are distributed
+separately as example implementations:
 
-The architectural intent is clear: as the Kit model matures (v2.1+), the
-operations-specific authoring vocabulary should be extractable into a
-standalone Kit (\texttt{gert.ops}) that compiles into core primitives.  The
-core schema would then contain only the minimal execution primitives (step
-sequencing, variable binding, governance hooks, evidence slots), and the
-operations vocabulary (DRI roles, change-request workflows, incident triage
-patterns) would live in the Kit.  This extraction is not required for v2.0 but
-should be planned for.
+\begin{description}
+  \item[\texttt{gert.workflow}] --- General workflow automation kit with
+    approval-request, cleanup, and select-priority step types. Demonstrates
+    basic Kit compiler structure.
+  
+  \item[\texttt{gert.compliance}] --- Compliance and audit-focused kit with
+    evidence collection, audit-log projections, and policy enforcement patterns.
+    
+  \item[\texttt{gert.migration}] --- Data migration kit with rollback semantics,
+    checkpoint/restart, and validation step types.
+    
+  \item[\texttt{gert.ops}] --- Operations runbook kit implementing the DRI
+    (Directly Responsible Individual) model for incident response and change
+    management. See the \emph{DRI Domain Kit Manual} for details.
+\end{description}
 
-Kit-0 grounds the Domain Kit concept in something concrete.  When explaining
-Kits to implementors or users, the answer to ``what does a Kit look like?'' is:
-``look at the operations runbook model you already use---that is a Kit.''
+The architectural principle remains firm: \textbf{gert core contains zero
+domain-specific vocabulary}. All step types in the core schema (\texttt{cli},
+\texttt{manual}, \texttt{tool}, \texttt{branch}, \texttt{iterate}) are
+domain-agnostic execution primitives. Domain semantics live exclusively in
+separately-distributed Kits.
+
+For detailed Kit implementation guides, see the \emph{Domain Kit Development
+Guide} (separate document).
 
 % ============================================================
 \section{Non-Goals}

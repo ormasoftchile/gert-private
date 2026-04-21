@@ -1,0 +1,309 @@
+\chapter{Change Request Workflow}
+\label{ch:change-request-workflow}
+
+This chapter walks through the complete lifecycle of an \texttt{ops.change-request} execution,
+from the moment the runbook is started to change record closure. It includes a detailed example
+of a database schema migration with a rollback path.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Lifecycle Overview}
+\label{sec:cr-lifecycle}
+% ─────────────────────────────────────────────────────────────────────────────
+
+A change request execution has three phases:
+
+\begin{description}
+  \item[Pre-execution] The change-manager reviews and approves the request. Freeze window
+    checks are performed. The change record is opened in the external system.
+  \item[Execution] The DRI-guided steps run inside the \texttt{ops.change-request} wrapper.
+    Evidence is captured at each step. Approval gates may pause execution.
+  \item[Post-execution] The DRI signs off. The change record is closed. The evidence bundle
+    is written and available for compliance review.
+\end{description}
+
+If any step in the execution phase fails, the rollback sequence is automatically initiated
+before the run terminates.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Pre-Execution Phase}
+\label{sec:cr-pre-execution}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Change-Manager Approval Gate}
+
+When a runbook starts that contains an \texttt{ops.change-request} step, gert evaluates the
+pre-execution requirements before running any steps. The change-manager from
+\texttt{meta.roles.change-manager} must approve before execution begins.
+
+The approval request is presented to the change-manager with:
+\begin{itemize}
+  \item The runbook name, kind, and description.
+  \item All declared inputs (with sensitive values redacted per governance rules).
+  \item The \texttt{change-id} and \texttt{risk} level.
+  \item The names of steps within the wrapper and any rollback specification.
+\end{itemize}
+
+\subsection{Freeze Window Check}
+
+If the gert server is configured with a change freeze calendar, gert checks whether the
+current time falls within a freeze window before presenting the approval request. If a freeze
+window is active:
+\begin{itemize}
+  \item Changes with \texttt{risk: low} or \texttt{risk: medium} are blocked.
+  \item Changes with \texttt{risk: high} require an additional \texttt{ops.approval} gate
+    explicitly authorizing emergency execution.
+  \item Changes with \texttt{risk: emergency} bypass the freeze check.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Execution Phase}
+\label{sec:cr-execution}
+% ─────────────────────────────────────────────────────────────────────────────
+
+After pre-execution approval is granted, the steps inside the \texttt{ops.change-request}
+wrapper execute in declared order. The following rules apply during execution:
+
+\begin{itemize}
+  \item Steps execute sequentially. Parallel execution is not supported within a change
+    request wrapper.
+  \item The change request is considered \emph{open} from the moment the first inner step
+    starts until either the wrapper completes successfully or the rollback completes.
+  \item If a step fails (non-zero exit code, timeout, or explicit failure), gert pauses
+    execution and presents the DRI with two options: \textbf{retry} (re-execute the failed
+    step) or \textbf{rollback} (abandon the change and execute the rollback runbook).
+  \item Evidence from steps within the wrapper is captured and tagged with the change request
+    ID.
+\end{itemize}
+
+\subsection{Automatic Rollback Injection}
+
+If the DRI chooses rollback (or if an unrecoverable error occurs), gert:
+\begin{enumerate}
+  \item Writes a \texttt{change/rollbackInitiated} trace event with the failing step ID and
+    reason.
+  \item Invokes the runbook specified in \texttt{rollback.runbook} with the inputs from
+    \texttt{rollback.inputs}.
+  \item Waits for the rollback runbook to complete.
+  \item Writes a \texttt{change/rollbackCompleted} or \texttt{change/rollbackFailed} event.
+  \item Closes the current run with outcome \texttt{rolled-back}.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Post-Execution Phase}
+\label{sec:cr-post-execution}
+% ─────────────────────────────────────────────────────────────────────────────
+
+After all inner steps complete successfully, the change request wrapper:
+\begin{enumerate}
+  \item Writes a \texttt{change/closed} trace event with the change ID, outcome, and DRI.
+  \item If the gert server is configured with an external change management integration,
+    it updates the ticket (e.g., ServiceNow, Jira) with the run ID, outcome, and evidence
+    bundle URL.
+  \item Returns control to the outer runbook. Steps after the \texttt{ops.change-request}
+    wrapper execute normally (e.g., post-deploy health checks).
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Complete Example: Database Schema Migration}
+\label{sec:cr-db-migration-example}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The following is an annotated runbook for a database schema migration. It demonstrates the
+full change request lifecycle, including pre-execution approval, DRI-guided execution,
+evidence capture, and rollback specification.
+
+\begin{minted}{yaml}
+apiVersion: runbook/v2
+kit: ops/v1
+
+meta:
+  name: migrate-user-schema
+  kind: change
+  description: >
+    Apply Flyway migration V42__add_user_preferences.sql to the production
+    PostgreSQL database. Requires change-board approval and DRI sign-off.
+  inputs:
+    change_ticket:
+      from: prompt
+      description: "Change ticket (e.g., CHG0042819)"
+    db_host:
+      from: prompt
+      description: "Database host (e.g., postgres.prod.internal)"
+    db_name:
+      from: prompt
+      description: "Database name (e.g., users_db)"
+    migration_version:
+      from: prompt
+      description: "Flyway migration version (e.g., V42)"
+  roles:
+    dri: "@db-lead"
+    approver: ["@change-board"]
+    change-manager: "@change-board"
+    observer: ["@audit-team"]
+  sla:
+    approval-timeout: 24h
+    escalation-target: "@vp-engineering"
+  governance:
+    allowed_commands: [flyway, psql, pg_dump, kubectl]
+    deny_env_vars: ["*_SECRET*", "*_PASSWORD", "PGPASSWORD"]
+    redact:
+      - pattern: "(password=)[^\\s]+"
+        replace: "$1[REDACTED]"
+
+flow:
+  # ── Step 1: Back up the schema before migration ───────────────────────────
+  - step:
+      id: pre_migration_backup
+      type: ops.cli
+      title: "Take pre-migration schema backup"
+      command: pg_dump
+      args:
+        - "--schema-only"
+        - "-h"
+        - "{{ .db_host }}"
+        - "-d"
+        - "{{ .db_name }}"
+        - "-f"
+        - "pre-migration-schema.sql"
+      capture:
+        dump_output: stderr
+      evidence:
+        auto: true
+        label: "pre-migration schema dump"
+
+  # ── Step 2: DRI reviews the migration script ──────────────────────────────
+  - step:
+      id: review_migration
+      type: ops.manual
+      title: "DRI reviews migration script"
+      requires_role: dri
+      instructions: |
+        Review the migration script before proceeding:
+          cat migrations/{{ .migration_version }}__add_user_preferences.sql
+
+        Confirm:
+        1. The migration is non-destructive (no DROP TABLE, no column removal).
+        2. The migration is backward compatible with the current application.
+        3. An undo migration script exists at:
+           migrations/undo/{{ .migration_version }}__rollback_user_preferences.sql
+      evidence:
+        - type: ops.evidence.attestation
+          label: "DRI migration review"
+          required: true
+          prompt: >
+            I have reviewed migration {{ .migration_version }} and confirm it is
+            non-destructive and backward compatible.
+
+  # ── Step 3: Change board approval ────────────────────────────────────────
+  - step:
+      id: change_board_approval
+      type: ops.approval
+      title: "Change board approval for schema migration"
+      description: |
+        Database schema migration request:
+          Database: {{ .db_name }} on {{ .db_host }}
+          Migration: {{ .migration_version }}__add_user_preferences.sql
+          Ticket: {{ .change_ticket }}
+          Risk: medium (additive schema change, backward compatible)
+          Rollback: Flyway undo migration available
+      approvers: ["@change-board"]
+      requires_any: true
+      timeout: 24h
+      on_timeout: escalate
+      evidence:
+        - type: ops.evidence.attestation
+          label: "Change board migration approval"
+          required: true
+          prompt: >
+            I approve migration {{ .migration_version }} for {{ .db_name }}
+            under change ticket {{ .change_ticket }}.
+
+  # ── Step 4: Execute migration with rollback protection ────────────────────
+  - step:
+      id: execute_migration
+      type: ops.change-request
+      title: "Apply Flyway migration {{ .migration_version }}"
+      change-id: "{{ .change_ticket }}"
+      risk: medium
+      rollback:
+        runbook: ./rollback-db-migration.runbook.yaml
+        inputs:
+          db_host: "{{ .db_host }}"
+          db_name: "{{ .db_name }}"
+          migration_version: "{{ .migration_version }}"
+      steps:
+        # 4a. Validate migration checksums
+        - step:
+            id: flyway_validate
+            type: ops.cli
+            title: "Validate Flyway migration checksums"
+            command: flyway
+            args:
+              - validate
+              - "-url=jdbc:postgresql://{{ .db_host }}/{{ .db_name }}"
+              - "-locations=filesystem:migrations"
+            capture:
+              validate_output: stdout
+            evidence:
+              auto: true
+              label: "Flyway validate output"
+
+        # 4b. Run the migration
+        - step:
+            id: flyway_migrate
+            type: ops.cli
+            title: "Apply migration"
+            command: flyway
+            args:
+              - migrate
+              - "-url=jdbc:postgresql://{{ .db_host }}/{{ .db_name }}"
+              - "-locations=filesystem:migrations"
+              - "-target={{ .migration_version }}"
+            capture:
+              migrate_output: stdout
+            evidence:
+              auto: true
+              label: "Flyway migrate output"
+
+        # 4c. Verify migration status
+        - step:
+            id: flyway_info
+            type: ops.cli
+            title: "Verify applied migrations"
+            command: flyway
+            args:
+              - info
+              - "-url=jdbc:postgresql://{{ .db_host }}/{{ .db_name }}"
+            capture:
+              info_output: stdout
+            evidence:
+              auto: true
+              label: "Flyway info post-migration"
+
+  # ── Step 5: Post-migration verification ──────────────────────────────────
+  - step:
+      id: post_migration_check
+      type: ops.manual
+      title: "Verify application health after migration"
+      requires_role: dri
+      instructions: |
+        1. Check application error logs: no DB-related errors in the last 5 minutes.
+        2. Run the application's health endpoint:
+           curl https://api.prod.internal/healthz/db
+        3. Confirm the new columns exist:
+           psql -h {{ .db_host }} -d {{ .db_name }} \
+             -c "SELECT column_name FROM information_schema.columns \
+                 WHERE table_name = 'users' AND column_name LIKE '%preferences%';"
+        4. Take a screenshot of the health check output.
+      evidence:
+        - type: ops.evidence.screenshot
+          label: "Application health post-migration"
+          required: true
+          description: "Screenshot of health endpoint and schema verification."
+        - type: ops.evidence.attestation
+          label: "DRI post-migration sign-off"
+          required: true
+          prompt: >
+            I confirm migration {{ .migration_version }} was applied successfully.
+            The application is healthy and the new columns are present.
+\end{minted}

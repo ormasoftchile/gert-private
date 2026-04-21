@@ -2701,3 +2701,161 @@ only with `--trust-proxy-headers`) is the correct fix.
 be closed by implementation without the design being updated.
 
 **Output:** `.squad/tmp/ken-phase20-design.md` (overwritten), `.squad/decisions/inbox/ken-phase20-design.md` (overwritten)
+
+---
+
+## Learnings
+
+### 2026-04-20 — DRI Reference Audit and Decoupling Decision
+
+**Context:** User requested a full audit of DRI-domain references across the three main design files
+to decouple gert from domain-specific assumptions. DRI (Directly Responsible Individual) is an
+SRE/ops pattern with roles like incident-commander, change-manager, etc. Gert must be domain-agnostic.
+
+**Audit scope:** Three design files totaling 4,153 lines:
+- `04-domain-kit-model.tex` (492 lines) — Domain Kit architecture
+- `03-schema-vnext.tex` (3,117 lines) — Schema specification and examples
+- `12-governance-policy.tex` (544 lines) — Governance primitives and approval gates
+
+**Key findings:**
+
+1. **67 DRI-domain references** identified across all three files
+2. **Kit-Zero section (lines 415-444 of 04-domain-kit-model.tex)** explicitly frames the DRI/ops
+   model as "gert's first Domain Kit" and uses it to ground the abstract Kit concept
+3. **All governance examples** use DRI-specific role names: DRI, change-manager, incident-commander,
+   incident-responder
+4. **All schema examples** use DRI-domain workflows: incident response, deployment, rollback, triage,
+   change management
+5. **Domain Kit manifest example** (`gert.ops`) is DRI-specific with step types: change-request,
+   rollback, triage
+
+**Architectural issue:** This violates gert's stated design principle: "gert core is domain-agnostic."
+The coupling creates confusion: is gert a DRI/ops tool or a general-purpose engine?
+
+**Decision made:** Remove ALL DRI-domain vocabulary from gert v2 core design.
+
+**Solution approach:**
+
+1. **Extract Kit-Zero section** → new PDF `dri-kit-manual.pdf` (DRI operations domain kit)
+2. **Replace with generic forward reference** to multiple domain kit examples (workflow, compliance, migration)
+3. **Establish generic role vocabulary** for all examples:
+   - `approver` (replaces: DRI, change-manager)
+   - `reviewer` (replaces: change-manager in multi-party scenarios)
+   - `responder` (replaces: incident-commander, incident-responder)
+   - `owner` (replaces: DRI as owner)
+   - `operator` (replaces: SRE, ops, admin)
+4. **Establish generic workflow vocabulary**:
+   - incident → request, workflow event
+   - deploy/deployment → operation, provision
+   - rollback → cleanup, compensate
+   - triage → select-priority, classify
+   - change-request → approval-request
+   - mitigation → procedure
+5. **Generalize manifest example** from `gert.ops` to `gert.workflow`
+
+**Deliverables produced:**
+
+1. **`.squad/tmp/ken-dri-audit.md`** — Comprehensive audit with:
+   - Section A: 51 specific line-by-line changes with exact current/proposed text
+   - Section B: Content inventory for new PDFs (what moves to dri-kit-manual vs domain-kit-guide)
+   - Section C: Five architectural notes on narrative changes, forward references, and structural impact
+   - Statistics: 67 instances, 51 edits + 1 section extraction
+
+2. **`.squad/decisions/inbox/ken-dri-decoupling.md`** — Architectural decision record:
+   - Decision: Remove DRI as Kit-Zero from gert core
+   - Principle: Gert core contains zero domain-specific vocabulary in examples or framing
+   - Generic role names table (5 roles defined)
+   - Generic workflow vocabulary table (8 terms mapped)
+   - Implementation plan (5 phases)
+   - Alternatives considered (4 rejected options with rationale)
+
+**Key principle established:**
+
+> "Gert core contains zero domain-specific vocabulary in examples, framing, or implementation.
+> Domain semantics live exclusively in separately-distributed Domain Kits."
+
+**Architectural insight:** The governance MODEL (allowlists, approval gates, redaction, RBAC) is
+already domain-agnostic by design. The coupling exists ONLY in the EXAMPLES. This means the fix is
+primarily documentation/presentation, not a structural change to the architecture.
+
+**Implementation strategy:** 6-phase rollout coordinated with team:
+1. Extract Kit-Zero to dri-kit-manual.pdf (Leslie)
+2. Update 04-domain-kit-model.tex (Ken → Leslie)
+3. Update 12-governance-policy.tex (Ken → Leslie)
+4. Update 03-schema-vnext.tex (John + Ken → Leslie)
+5. Final audit (Ken)
+6. Review and sign-off (Barbara, John, Leslie, Brian)
+
+**Lesson:** When establishing architectural principles, audit for violations across ALL design
+artifacts, not just implementation code. Documentation examples can contradict stated principles
+and create user confusion about the system's identity.
+
+
+### 2026-04-21 — DRI Domain Kit Manual Complete
+
+**What was written:**
+
+All 10 chapters of the **DRI Domain Kit Manual** (`design/dri-kit-manual/`) are now complete with substantive, authoritative content. This manual documents the `gert.ops` Domain Kit, which implements the DRI (Directly Responsible Individual) accountability model for operations runbooks.
+
+**Chapter breakdown:**
+- **00-introduction.tex** (144 lines) — Manual scope, audience, prerequisites, DRI definition, how gert.ops implements DRI, document structure
+- **01-dri-concepts.tex** (285 lines) — DRI model, role taxonomy (6 roles: dri, approver, change-manager, incident-commander, responder, observer), role assignment, escalation chains, SLA concepts, DRI transfer mechanics
+- **02-schema-reference.tex** (426 lines) — gert.ops Kit schema, apiVersion suffix, 5 step types (ops.cli, ops.manual, ops.approval, ops.change-request, ops.incident), metadata fields (meta.roles, meta.change-id, meta.sla), 3 evidence types with complete field definitions and YAML examples
+- **03-authoring-guide.tex** (413 lines) — Step-by-step guide to writing a gert.ops runbook, declaring roles, using approval gates, change-request wrappers, evidence capture, best practices, complete deploy runbook example
+- **04-governance.tex** (322 lines) — How gert.ops wires into core governance hooks, role-based gating (requires_role/any/all), allowlist enforcement, env-var blocking, redaction, audit trail events, complete governance configuration example
+- **05-evidence-tracing.tex** (258 lines) — Evidence model, record structure, run directory layout, timeline projection, SHA256 verification, compliance bundles, CLI commands for reading evidence
+- **06-change-request-workflow.tex** (309 lines) — End-to-end change request walkthrough, pre-execution approval, execution with evidence capture, post-execution closure, rollback scenario, complete database migration example
+- **07-incident-response-workflow.tex** (342 lines) — Incident lifecycle (detect→declare→triage→mitigate→resolve→review), incident declaration, IC takeover, triage steps, escalation, complete service degradation incident runbook
+- **08-migration.tex** (300 lines) — Migrating v1 DRI runbooks to v2 + gert.ops, core migration reference, gert.ops-specific patterns, 4 migration recipes (manual, approval, deploy, incident), migration validator, 15-item checklist
+- **09-reference.tex** (279 lines) — Complete field reference tables for all gert.ops types, role semantics table, environment variables, error codes
+
+**Total:** 3,078 lines of authoritative LaTeX content across 10 chapters.
+
+**Content sources:**
+- `.squad/tmp/ken-dri-audit.md` section B "MOVE TO dri-kit-manual" — extracted DRI-specific content from gert-v2 design
+- `design/gert-v2/sections/12-governance-policy.tex` — governance primitives and policy evaluation model
+- `design/gert-v2/sections/04-domain-kit-model.tex` — Kit model context and lowering/compilation patterns
+
+**Writing approach:**
+- Each chapter is self-contained and practical (ops engineers can jump to any chapter)
+- Extensive YAML examples using LaTeX minted environments
+- Complete end-to-end workflows with annotated examples
+- Field reference tables using LaTeX tabular environments
+- Authoritative tone appropriate for production runbook authors
+
+**Build system:**
+- Uses same MastersThesis.cls and Makefile pattern as gert-v2 design doc
+- Scaffold was pre-created by Leslie; Ken filled in all content
+- PDF build requires LaTeX (tectonic/latexmk/pdflatex) - not run in this session but structure is correct
+
+**Next steps:**
+- Leslie can now build the PDF when needed
+- The manual can be distributed separately from gert-v2 design doc
+- DRI-specific examples can be removed from gert-v2 core chapters (per decoupling plan in ken-dri-audit.md)
+
+---
+
+## Docs Refactor Session Completion (2026-04-21)
+
+**Scribe Orchestration:** Final session wrap-up by Scribe (2026-04-21T16:09:18Z)
+
+**Team Accomplishments:**
+- ken-docs-audit: Identified 67 DRI vocabulary instances in gert-v2 sections
+- leslie-scaffold: Bootstrapped LaTeX project structures for both kit guides
+- leslie-refactor-core: Applied 51 refactoring changes to generalize core sections
+- leslie-kit-guide: Wrote Domain Kit Development Guide (9 chapters, ~2,884 lines)
+- ken-dri-manual: Wrote DRI Kit Manual (10 chapters, ~3,078 lines)
+
+**Ken + Leslie Collaboration:**
+1. Ken's DRI audit informed Leslie's refactoring scope
+2. Leslie's scaffold template was reused by Ken for DRI manual
+3. Leslie's domain-agnostic examples influenced Ken's DRI-specific chapter examples
+4. Ken reviewed Leslie's refactored sections for consistency with decoupling decision
+
+**Decisions Merged:**
+- ken-dri-decoupling: Approved (major) — remove DRI from gert core
+- leslie-kit-guide-complete: Approved — guide complete
+- ken-dri-manual-complete: Approved — manual complete
+- leslie-refactor-complete: Approved — all 67 instances addressed
+
+**Pending:** Ken's cross-consistency review (ken-review) to validate all three gert-v2 sections against new domain kit frameworks.

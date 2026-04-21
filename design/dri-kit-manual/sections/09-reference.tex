@@ -1,0 +1,279 @@
+\chapter{Reference}
+\label{ch:reference}
+
+This chapter provides complete field reference tables for all \texttt{gert.ops} types,
+role semantics, environment variables, and error codes. Use this chapter as a quick-lookup
+companion when authoring runbooks.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Runbook Metadata Fields}
+\label{sec:ref-metadata}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{center}
+\small
+\begin{tabular}{lllp{5.5cm}}
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{apiVersion} & string & YES & Must be \texttt{runbook/v2} \\
+\texttt{kit} & string & YES & Must be \texttt{ops/v1} \\
+\texttt{meta.name} & string & YES & Unique runbook identifier \\
+\texttt{meta.kind} & enum & YES & \texttt{change}, \texttt{incident}, \texttt{operational} \\
+\texttt{meta.description} & string & YES & Human-readable description \\
+\texttt{meta.roles.dri} & string & NO & DRI identity; defaults to run initiator \\
+\texttt{meta.roles.approver} & string/list & NO & Approval gate signatories \\
+\texttt{meta.roles.change-manager} & string & COND & Required if \texttt{ops.change-request} present \\
+\texttt{meta.roles.responder} & string/list & COND & Required if \texttt{ops.incident} present \\
+\texttt{meta.roles.incident-commander} & string & NO & Defaults to \texttt{meta.roles.dri} \\
+\texttt{meta.roles.observer} & string/list & NO & Read-only run participants \\
+\texttt{meta.change-id} & string & NO & External change ticket reference \\
+\texttt{meta.sla.approval-timeout} & duration & NO & Gate approval timeout (e.g., \texttt{24h}) \\
+\texttt{meta.sla.execution-timeout} & duration & NO & Total run time limit \\
+\texttt{meta.sla.escalation-target} & string & NO & Identity notified on timeout \\
+\texttt{meta.governance.allowed\_commands} & list & NO & Step command allowlist \\
+\texttt{meta.governance.denied\_commands} & list & NO & Step command denylist \\
+\texttt{meta.governance.deny\_env\_vars} & list & NO & Env var glob patterns to strip \\
+\texttt{meta.governance.redact} & list & NO & Output redaction rules \\
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{\texttt{ops.cli} Field Reference}
+\label{sec:ref-ops-cli}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{center}
+\small
+\begin{tabular}{lllp{5cm}}
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{id} & string & YES & Unique step identifier \\
+\texttt{type} & string & YES & Must be \texttt{ops.cli} \\
+\texttt{title} & string & YES & Human-readable step title \\
+\texttt{command} & string & YES & Executable name (argv[0]) \\
+\texttt{args} & list & NO & Command arguments; templates supported \\
+\texttt{allowed\_commands} & list & NO & Step-level allowlist (intersects with runbook-level) \\
+\texttt{redact} & list & NO & Step-level redaction rules \\
+\texttt{capture} & map & NO & Maps variable names to output streams \\
+\texttt{evidence.auto} & bool & NO & Auto-capture output as evidence \\
+\texttt{evidence.label} & string & COND & Required when \texttt{evidence.auto: true} \\
+\texttt{requires\_role} & enum & NO & Role required to execute this step \\
+\texttt{requires\_any\_role} & list & NO & Any of these roles required \\
+\texttt{requires\_all\_roles} & list & NO & All of these roles required \\
+\texttt{timeout} & duration & NO & Step execution timeout \\
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{\texttt{ops.manual} Field Reference}
+\label{sec:ref-ops-manual}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{center}
+\small
+\begin{tabular}{lllp{5cm}}
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{id} & string & YES & Unique step identifier \\
+\texttt{type} & string & YES & Must be \texttt{ops.manual} \\
+\texttt{title} & string & YES & Human-readable step title \\
+\texttt{requires\_role} & enum & YES & Role required to execute \\
+\texttt{instructions} & string & YES & Instructions shown to executor; templates supported \\
+\texttt{evidence} & list & NO & Evidence specifications (see §\ref{sec:ref-evidence}) \\
+\texttt{requires\_any\_role} & list & NO & Any of these roles required \\
+\texttt{requires\_all\_roles} & list & NO & All of these roles required \\
+\texttt{timeout} & duration & NO & Step completion timeout \\
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{\texttt{ops.approval} Field Reference}
+\label{sec:ref-ops-approval}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{center}
+\small
+\begin{tabular}{lllp{5cm}}
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{id} & string & YES & Unique step identifier \\
+\texttt{type} & string & YES & Must be \texttt{ops.approval} \\
+\texttt{title} & string & YES & Gate title shown to approvers \\
+\texttt{description} & string & NO & Context provided to approvers; templates supported \\
+\texttt{approvers} & list & NO & Overrides \texttt{meta.roles.approver} \\
+\texttt{requires\_any} & bool & NO & Any one approver sufficient (default: true) \\
+\texttt{timeout} & duration & NO & Defaults to \texttt{meta.sla.approval-timeout} \\
+\texttt{on\_timeout} & enum & NO & \texttt{escalate} (default) or \texttt{abort} \\
+\texttt{escalation\_target} & string & NO & Overrides \texttt{meta.sla.escalation-target} \\
+\texttt{evidence} & list & NO & Evidence required from approver \\
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{\texttt{ops.change-request} Field Reference}
+\label{sec:ref-ops-cr}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{center}
+\small
+\begin{tabular}{lllp{5cm}}
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{id} & string & YES & Unique step identifier \\
+\texttt{type} & string & YES & Must be \texttt{ops.change-request} \\
+\texttt{title} & string & YES & Human-readable wrapper title \\
+\texttt{change-id} & string & NO & External ticket reference; templates supported \\
+\texttt{risk} & enum & NO & \texttt{low}, \texttt{medium}, \texttt{high}, \texttt{emergency} \\
+\texttt{rollback} & object & NO & Rollback specification (strongly recommended) \\
+\texttt{rollback.runbook} & string & COND & Relative path to rollback runbook \\
+\texttt{rollback.inputs} & map & NO & Input bindings for rollback runbook \\
+\texttt{steps} & list & YES & Change execution steps \\
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{\texttt{ops.incident} Field Reference}
+\label{sec:ref-ops-incident}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{center}
+\small
+\begin{tabular}{lllp{5cm}}
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{id} & string & YES & Unique step identifier \\
+\texttt{type} & string & YES & Must be \texttt{ops.incident} \\
+\texttt{title} & string & YES & Incident title \\
+\texttt{severity} & enum & YES & \texttt{sev1}, \texttt{sev2}, \texttt{sev3}, \texttt{sev4} \\
+\texttt{incident-id} & string & NO & External ticket reference \\
+\texttt{commander} & string & NO & Defaults to \texttt{meta.roles.incident-commander} \\
+\texttt{sla.mitigation-timeout} & duration & NO & Time to first mitigation \\
+\texttt{sla.resolution-timeout} & duration & NO & Total resolution time limit \\
+\texttt{sla.escalation-target} & string & NO & Notified on SLA breach \\
+\texttt{steps} & list & YES & Incident response steps \\
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Evidence Type Field Reference}
+\label{sec:ref-evidence}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Common Fields (all evidence types)}
+
+\begin{center}
+\small
+\begin{tabular}{lllp{5cm}}
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{type} & enum & YES & Evidence type identifier \\
+\texttt{label} & string & YES & Short identifier in evidence bundle \\
+\texttt{required} & bool & NO & Step cannot complete without this (default: false) \\
+\texttt{description} & string & NO & Instructions shown to submitter \\
+\end{tabular}
+\end{center}
+
+\subsection{\texttt{ops.evidence.screenshot}}
+
+No additional fields beyond the common set. The submitter uploads a binary file (PNG, JPEG,
+or PDF). Stored in \texttt{attachments/} under the run directory.
+
+\subsection{\texttt{ops.evidence.command-output}}
+
+\begin{center}
+\small
+\begin{tabular}{lllp{5cm}}
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{capture\_from} & string & COND & Run variable to capture; required when not auto-captured \\
+\end{tabular}
+\end{center}
+
+\subsection{\texttt{ops.evidence.attestation}}
+
+\begin{center}
+\small
+\begin{tabular}{lllp{5cm}}
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{prompt} & string & YES & Statement the executor affirms verbatim \\
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Role Semantics Reference}
+\label{sec:ref-roles}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{center}
+\small
+\begin{tabular}{lp{3.5cm}p{5cm}}
+\textbf{Role} & \textbf{Inherits From} & \textbf{Permissions} \\
+\hline
+\texttt{dri} & — & Execute steps, submit evidence, approve gates, cancel run \\
+\texttt{approver} & — & Sign \texttt{ops.approval} gates, view run status and evidence \\
+\texttt{change-manager} & — & Approve/reject pre-execution gate, sign change record \\
+\texttt{responder} & — & Execute \texttt{ops.manual} steps during \texttt{ops.incident} wrapper \\
+\texttt{incident-commander} & \texttt{dri} & All DRI permissions plus IC-specific attestations and takeover \\
+\texttt{observer} & — & View run status and evidence; no action permissions \\
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Environment Variables}
+\label{sec:ref-env-vars}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The following environment variables are recognized by \texttt{gert.ops} and affect runtime
+behavior:
+
+\begin{center}
+\small
+\begin{tabular}{lp{8cm}}
+\textbf{Variable} & \textbf{Description} \\
+\hline
+\texttt{GERT\_OPS\_ROLE} & Declares the current user's role for this run. Overrides
+  \texttt{meta.roles.*} assignment. Useful in CI environments. \\
+\texttt{GERT\_OPS\_CHANGE\_ID} & Injects a change ticket ID without prompting. Used in
+  automated pre-production pipelines. \\
+\texttt{GERT\_OPS\_APPROVER\_TIMEOUT} & Overrides \texttt{meta.sla.approval-timeout} for
+  this run. Duration string. \\
+\texttt{GERT\_OPS\_EVIDENCE\_DIR} & Override the evidence output directory.
+  Default: \texttt{.runbook/runs/<run-id>/attachments/}. \\
+\texttt{GERT\_OPS\_FREEZE\_CHECK\_DISABLE} & Set to \texttt{1} to disable freeze window
+  checks. Requires \texttt{risk: emergency} or superuser authority. \\
+\texttt{GERT\_OPS\_BUNDLE\_ON\_COMPLETE} & Set to \texttt{1} to automatically write the
+  evidence bundle JSON on run completion. \\
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Error Codes}
+\label{sec:ref-error-codes}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The following error codes are specific to \texttt{gert.ops}. Core gert error codes are
+documented in the \emph{gert v2 Design Document}.
+
+\begin{center}
+\small
+\begin{tabular}{llp{7.5cm}}
+\textbf{Code} & \textbf{Exit} & \textbf{Description} \\
+\hline
+\texttt{OPS001} & 1 & Kit declaration missing: \texttt{kit: ops/v1} required for \texttt{ops.*} step types \\
+\texttt{OPS002} & 1 & \texttt{ops.change-request} present but no \texttt{meta.roles.change-manager} declared \\
+\texttt{OPS003} & 1 & \texttt{ops.incident} present but no \texttt{meta.roles.responder} declared \\
+\texttt{OPS004} & 1 & \texttt{ops.manual} step has no \texttt{requires\_role} declaration \\
+\texttt{OPS010} & 2 & Role check failed: executing user does not hold required role \\
+\texttt{OPS011} & 2 & Approval gate rejected by approver \\
+\texttt{OPS012} & 2 & Approval gate timed out with \texttt{on\_timeout: abort} \\
+\texttt{OPS013} & 2 & Change-manager pre-execution approval rejected \\
+\texttt{OPS014} & 2 & Freeze window active: change risk level \texttt{low}/\texttt{medium} blocked \\
+\texttt{OPS020} & 3 & Required evidence not submitted before step completion \\
+\texttt{OPS021} & 3 & Evidence submission by user without required role \\
+\texttt{OPS030} & 4 & Rollback runbook not found at declared path \\
+\texttt{OPS031} & 4 & Rollback runbook failed during automatic rollback injection \\
+\texttt{OPS040} & 5 & Incident SLA resolution timeout: run suspended, IC acknowledgement required \\
+\texttt{OPS041} & 5 & Incident commander takeover failed: declared commander not in \texttt{meta.roles} \\
+\end{tabular}
+\end{center}

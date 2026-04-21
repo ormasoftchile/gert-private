@@ -1,0 +1,342 @@
+\chapter{Incident Response Workflow}
+\label{ch:incident-response-workflow}
+
+This chapter covers the incident response lifecycle as implemented by the \texttt{ops.incident}
+wrapper. It walks through declaring an incident, commander takeover, triage, escalation,
+and resolution, concluding with a complete annotated example.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Incident Lifecycle}
+\label{sec:ir-lifecycle}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\texttt{gert.ops} models the incident lifecycle as six stages:
+
+\begin{description}
+  \item[Detect] An alert fires or a human observes symptoms. The on-call engineer is paged.
+  \item[Declare] The on-call engineer starts the incident runbook. The \texttt{ops.incident}
+    wrapper activates, declaring the incident and assigning an Incident Commander.
+  \item[Triage] Responders gather data, run diagnostics, and determine root cause or impact
+    scope. Each triage step requires evidence submission.
+  \item[Mitigate] Immediate steps to reduce customer impact (e.g., restart a service, roll
+    back a deploy, apply a hotfix). Mitigation is tracked against the SLA timeout.
+  \item[Resolve] The root cause is addressed and the service is fully restored.
+    The Incident Commander signs off on resolution.
+  \item[Review] Post-incident review (PIR). The evidence bundle from the run is the
+    primary artifact for the PIR meeting. This stage is outside the runbook scope.
+\end{description}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Declaring an Incident}
+\label{sec:ir-declare}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Starting a runbook that contains an \texttt{ops.incident} wrapper immediately writes an
+\texttt{incident/declared} trace event and transitions the run into incident mode. In
+incident mode:
+
+\begin{itemize}
+  \item All \texttt{ops.manual} steps with \texttt{requires\_role: responder} are unlocked
+    for any user listed in \texttt{meta.roles.responder}.
+  \item SLA timers start immediately. The \texttt{mitigation-timeout} timer tracks time to
+    first mitigation. The \texttt{resolution-timeout} timer tracks total incident duration.
+  \item The declared \texttt{commander} assumes DRI authority for all steps within the
+    \texttt{ops.incident} wrapper, even if a different DRI is declared at the runbook level.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Incident Commander Takeover}
+\label{sec:ir-commander-takeover}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The Incident Commander (IC) may take over at any point during the run. Takeover is
+supported in two ways:
+
+\paragraph{Declared takeover.} The IC is declared in \texttt{ops.incident.commander}. When
+the wrapper starts, the IC immediately holds DRI authority.
+
+\paragraph{Runtime takeover.} During a live run, the IC can execute:
+
+\begin{verbatim}
+$ gert incident take-command <run-id> --as=@ic-oncall
+\end{verbatim}
+
+This writes an \texttt{incident/commanderTakeover} trace event and reassigns DRI authority.
+The previous DRI is notified and transitions to \texttt{observer} status for subsequent steps.
+
+\paragraph{DRI transfer back.} After the incident is resolved, the IC can transfer DRI back
+to the original owner:
+
+\begin{verbatim}
+$ gert incident transfer-command <run-id> --to=@alice
+\end{verbatim}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Triage Steps}
+\label{sec:ir-triage}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Triage steps use \texttt{ops.manual} with \texttt{requires\_role: responder}. Each triage step
+should:
+\begin{itemize}
+  \item Provide specific, actionable instructions (dashboards, runbook links, check commands).
+  \item Require an attestation evidence record summarizing the findings.
+  \item Use \texttt{ops.cli} sub-steps (or direct \texttt{ops.cli} steps) for diagnostic
+    commands, capturing output as evidence.
+\end{itemize}
+
+\paragraph{Branch on triage outcome.} Use the core \texttt{branch} step type within the
+incident wrapper to route to different mitigation steps based on triage findings.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Escalation When SLA Timeout Fires}
+\label{sec:ir-escalation}
+% ─────────────────────────────────────────────────────────────────────────────
+
+When the \texttt{mitigation-timeout} fires, gert:
+\begin{enumerate}
+  \item Writes an \texttt{incident/slaBreached} trace event with the timeout type and elapsed
+    duration.
+  \item Notifies the \texttt{escalation-target} with the run ID, current step, and elapsed time.
+  \item The run continues. The escalation is informational; it does not pause or abort the run.
+\end{enumerate}
+
+When the \texttt{resolution-timeout} fires, gert:
+\begin{enumerate}
+  \item Writes an \texttt{incident/slaBreached} trace event.
+  \item Notifies the \texttt{escalation-target}.
+  \item Suspends the run and requires IC acknowledgement to continue.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Complete Example: Service Degradation Incident}
+\label{sec:ir-complete-example}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The following runbook covers a service degradation incident from initial page to resolution.
+
+\begin{minted}{yaml}
+apiVersion: runbook/v2
+kit: ops/v1
+
+meta:
+  name: service-degradation-response
+  kind: incident
+  description: >
+    Incident response playbook for service degradation alerts.
+    Covers triage, mitigation (rollback or restart), and resolution.
+  inputs:
+    service_name:
+      from: prompt
+      description: "Affected service (e.g., payment-processor)"
+    incident_ticket:
+      from: prompt
+      description: "Incident ticket ID (e.g., INC-20240514-001)"
+    alert_description:
+      from: prompt
+      description: "Brief description of the alert that triggered this runbook"
+  roles:
+    dri: "@oncall-sre"
+    responder:
+      - "@oncall-sre"
+      - "@oncall-backend"
+    incident-commander: "@ic-oncall"
+    observer:
+      - "@sre-team"
+      - "@management-alerts"
+  sla:
+    mitigation-timeout: 30m
+    resolution-timeout: 4h
+    escalation-target: "@vp-engineering"
+  governance:
+    allowed_commands: [kubectl, curl, jq, pg_isready, redis-cli, stern]
+    deny_env_vars: ["*_SECRET*", "*_TOKEN", "*_KEY"]
+
+flow:
+  # ── Incident declaration and lifecycle wrapper ─────────────────────────────
+  - step:
+      id: incident_response
+      type: ops.incident
+      title: "Service degradation: {{ .service_name }}"
+      severity: sev2
+      incident-id: "{{ .incident_ticket }}"
+      commander: "@ic-oncall"
+      sla:
+        mitigation-timeout: 30m
+        resolution-timeout: 4h
+        escalation-target: "@vp-engineering"
+      steps:
+        # ── Stage 1: Initial triage ──────────────────────────────────────────
+        - step:
+            id: initial_triage
+            type: ops.manual
+            title: "Initial triage"
+            requires_role: responder
+            instructions: |
+              Alert: {{ .alert_description }}
+              Service: {{ .service_name }}
+
+              Check the following:
+              1. Error rate: https://grafana.internal/d/{{ .service_name }}/errors
+              2. Latency: https://grafana.internal/d/{{ .service_name }}/latency
+              3. Recent deployments in the last 2 hours:
+                 kubectl rollout history deployment/{{ .service_name }} -n production
+              4. Pod health:
+                 kubectl get pods -n production -l app={{ .service_name }}
+              5. Recent logs (last 100 lines):
+                 stern {{ .service_name }} -n production --tail=100
+            evidence:
+              - type: ops.evidence.attestation
+                label: "Initial triage findings"
+                required: true
+                prompt: >
+                  Describe the symptoms: error rate, latency, pod status, and
+                  whether a recent deployment is likely the cause.
+
+        # ── Stage 2: Diagnostic commands ─────────────────────────────────────
+        - step:
+            id: check_pod_status
+            type: ops.cli
+            title: "Check pod status"
+            command: kubectl
+            args:
+              - get
+              - pods
+              - "-n"
+              - production
+              - "-l"
+              - "app={{ .service_name }}"
+              - "-o"
+              - wide
+            capture:
+              pod_status: stdout
+            evidence:
+              auto: true
+              label: "Pod status"
+
+        - step:
+            id: check_recent_events
+            type: ops.cli
+            title: "Check recent Kubernetes events"
+            command: kubectl
+            args:
+              - get
+              - events
+              - "-n"
+              - production
+              - "--sort-by=.lastTimestamp"
+              - "--field-selector"
+              - "involvedObject.name={{ .service_name }}"
+            capture:
+              k8s_events: stdout
+            evidence:
+              auto: true
+              label: "Recent Kubernetes events"
+
+        # ── Stage 3: Mitigation decision ─────────────────────────────────────
+        - step:
+            id: mitigation_decision
+            type: ops.manual
+            title: "Select mitigation strategy"
+            requires_role: incident-commander
+            instructions: |
+              Pod status: {{ .pod_status }}
+              Events: {{ .k8s_events }}
+
+              Based on the triage findings, choose the mitigation strategy:
+              - If a recent deployment is the cause: select ROLLBACK
+              - If pods are crash-looping with no recent deploy: select RESTART
+              - If the issue is external (DB, upstream): select ESCALATE
+
+              Document your reasoning before selecting.
+            evidence:
+              - type: ops.evidence.attestation
+                label: "IC mitigation decision"
+                required: true
+                prompt: >
+                  State the root cause hypothesis and chosen mitigation strategy.
+                  Justify why this strategy was selected.
+
+        # ── Stage 4a: Rollback mitigation ────────────────────────────────────
+        # (This branch is executed when the IC determines rollback is needed.
+        #  In practice, wrap in a branch step on the mitigation_decision choice.)
+        - step:
+            id: rollback_deployment
+            type: ops.cli
+            title: "Rollback to previous deployment"
+            command: kubectl
+            args:
+              - rollout
+              - undo
+              - "deployment/{{ .service_name }}"
+              - "-n"
+              - production
+            capture:
+              rollback_output: stdout
+            evidence:
+              auto: true
+              label: "kubectl rollout undo output"
+
+        - step:
+            id: wait_rollback
+            type: ops.cli
+            title: "Wait for rollback to complete"
+            command: kubectl
+            args:
+              - rollout
+              - status
+              - "deployment/{{ .service_name }}"
+              - "-n"
+              - production
+              - "--timeout=5m"
+            evidence:
+              auto: true
+              label: "rollback rollout status"
+
+        # ── Stage 5: Post-mitigation health check ────────────────────────────
+        - step:
+            id: mitigation_health_check
+            type: ops.cli
+            title: "Check service health endpoint"
+            command: curl
+            args:
+              - "-sf"
+              - "https://{{ .service_name }}.prod.internal/healthz"
+              - "-o"
+              - /dev/null
+              - "-w"
+              - "%{http_code}"
+            capture:
+              health_code: stdout
+            evidence:
+              auto: true
+              label: "health endpoint response code"
+
+        # ── Stage 6: Resolution sign-off ──────────────────────────────────────
+        - step:
+            id: resolution_sign_off
+            type: ops.manual
+            title: "IC resolution sign-off"
+            requires_role: incident-commander
+            instructions: |
+              Confirm all of the following before signing off:
+              1. Error rate has returned to normal (< 0.1%).
+              2. Latency is within SLO (p99 < 200ms).
+              3. No crash-looping pods.
+              4. Health endpoint returns HTTP 200.
+
+              Dashboard: https://grafana.internal/d/{{ .service_name }}
+            evidence:
+              - type: ops.evidence.screenshot
+                label: "Post-mitigation Grafana dashboard"
+                required: true
+                description: "Dashboard showing error rate and latency, 10 min post-mitigation."
+              - type: ops.evidence.attestation
+                label: "IC resolution declaration"
+                required: true
+                prompt: >
+                  I declare incident {{ .incident_ticket }} resolved.
+                  {{ .service_name }} is healthy. Mitigation was successful.
+                  Root cause: [state root cause].
+                  Action items for PIR: [list items or 'none'].
+\end{minted}

@@ -229,7 +229,7 @@ includes it by id.
 
 \paragraph{kind values}
 \begin{itemize}
-  \item \texttt{mitigation} — Incident response procedure; governance defaults
+  \item \texttt{procedure} --- Workflow procedure; governance defaults
         to \texttt{require-approval} for destructive effects.
   \item \texttt{reference} — Documentation-first runbook; dry-run by default.
   \item \texttt{composable} — Sub-runbook intended for include from other
@@ -307,11 +307,11 @@ inputs:
     required: true
     description: "Hostname to check"
     from: prompt
-  incident_id:
+  request_id:
     type: string
     required: false
-    description: "Incident tracking ID"
-    from: incident.id       # provider-resolved
+    description: "Request tracking ID"
+    from: tracking.id       # provider-resolved
 
 outputs:
   health_status:
@@ -339,7 +339,7 @@ defaults:
 
 prose:
   safety: |
-    Run this runbook only during an active incident. Do not
+    Run this runbook only when a request is active. Do not
     loop — each execution creates a trace record.
   prerequisites: "Requires curl >= 7.80 and nslookup on PATH."
 
@@ -451,7 +451,7 @@ forms:
 \texttt{prompt}          & Ask the operator interactively at runtime \\
 \texttt{env.<NAME>}      & Read from environment variable \texttt{NAME} \\
 \texttt{file.<path>}     & Read first line from a local file \\
-\texttt{<provider>.<field>} & Delegate to a registered input provider (e.g.\ \texttt{incident.id}) \\
+\texttt{<provider>.<field>} & Delegate to a registered input provider (e.g.\ \texttt{tracking.id}) \\
 \texttt{var.<name>}      & Copy from another variable or capture \\
 \hline
 \end{tabular}
@@ -548,7 +548,7 @@ condition: contains(http_result, "200")
 condition: !contains(http_result, "200")
 
 # Numeric comparison
-until: deploy_status == "Running"
+until: operation_status == "Running"
 \end{verbatim}
 
 \paragraph{String interpolation: still Go templates}
@@ -578,7 +578,7 @@ evaluation.  A parse error in a template expression is a hard step failure.
 {{ $cfg.region }}
 
 {{/* Access a nested key from a YAML-typed text field */}}
-{{ $spec := fromYAML .deploy_spec }}
+{{ $spec := fromYAML .operation_spec }}
 {{ $spec.replicas }}
 \end{verbatim}
 
@@ -993,8 +993,8 @@ Each option is an object with:
 - step:
     id: select_environment
     type: choice
-    title: Select deployment target
-    prompt: Which environment are you deploying to?
+    title: Select operation target
+    prompt: Which environment are you provisioning to?
     options:
       - label: Staging
         value: staging
@@ -1005,12 +1005,12 @@ Each option is an object with:
       - label: Canary (10%)
         value: canary
         hint: Gradual rollout to 10% of production traffic
-    variable: deploy_env
+    variable: operation_env
     default: staging
 \end{minted}
 
 The value \texttt{staging}, \texttt{production}, or \texttt{canary} is stored in
-\texttt{\{\{ .deploy\_env \}\}} and can be referenced by subsequent steps.
+\texttt{\{\{ .operation\_env \}\}} and can be referenced by subsequent steps.
 
 \subsection{Step Type: decision}
 \label{subsec:step-decision}
@@ -1062,33 +1062,33 @@ Each route is an object with:
         for audit trails.
 \end{itemize}
 
-\paragraph{Example: Incident response fork}
+\paragraph{Example: Workflow priority fork}
 
 \begin{minted}{yaml}
 - step:
-    id: triage_decision
+    id: priority_decision
     type: decision
-    title: Choose incident response path
+    title: Choose workflow path
     prompt: |
-      Based on the error rate and customer impact, which response
+      Based on the impact level and stakeholder requirements, which
       path should we take?
     routes:
-      - label: Standard mitigation
-        runbook: incident-standard-mitigation
-        hint: Error rate < 5%, no customer escalations
-      - label: Emergency rollback
-        runbook: incident-emergency-rollback
-        hint: Error rate > 10% or critical customer impact
-      - label: Escalate to on-call
-        goto: escalate_to_oncall
-        hint: Unclear root cause; needs senior diagnosis
+      - label: Standard procedure
+        runbook: workflow-standard-procedure
+        hint: Impact < 5%, no stakeholder escalations
+      - label: Emergency cleanup
+        runbook: workflow-emergency-cleanup
+        hint: Impact > 10% or critical stakeholder concern
+      - label: Escalate for review
+        goto: escalate_for_review
+        hint: Unclear priority; needs senior review
     variable: chosen_path
 \end{minted}
 
 After the user selects a route, execution continues at the target runbook or
 step.  The \texttt{chosen\_path} variable contains the selected label
-(\texttt{"Standard mitigation"}, \texttt{"Emergency rollback"}, or
-\texttt{"Escalate to on-call"}) for audit purposes.
+(\texttt{"Standard procedure"}, \texttt{"Emergency cleanup"}, or
+\texttt{"Escalate for review"}) for audit purposes.
 
 \subsection{Step Type: collector}
 \label{subsec:step-collector}
@@ -1180,11 +1180,11 @@ passed to secure execution contexts.
   type: collector
   label: "Deploy credentials"
   fields:
-    - id: deploy_user
+    - id: operation_user
       type: text
       label: "Service account username"
       required: true
-    - id: deploy_token
+    - id: operation_token
       type: text
       label: "Deploy token"
       required: true
@@ -1466,9 +1466,9 @@ RFC 3339 datetime input with explicit timezone offset or \texttt{Z} for UTC
 \end{center}
 
 \begin{minted}{yaml}
-- name: incident_detected_at
+- name: event_detected_at
   type: datetime
-  label: When was the incident first detected?
+  label: When was the event first detected?
   required: true
 \end{minted}
 
@@ -1658,14 +1658,14 @@ the SLA enforcement gap identified in the research brief.
 - step:
     id: collect_evidence
     type: collector
-    title: Collect incident evidence
+    title: Collect workflow evidence
     prompt: |
-      Gather all relevant evidence for the incident investigation.
-      Include screenshots, error logs, and a summary of impact.
+      Gather all relevant evidence for the workflow record.
+      Include screenshots, logs, and a summary of impact.
     fields:
-      - name: incident_summary
+      - name: event_summary
         type: text
-        label: Incident summary
+        label: Event summary
         multiline: true
         required: true
         hint: Describe what happened, when, and what services were affected
@@ -1678,20 +1678,20 @@ the SLA enforcement gap identified in the research brief.
         type: image
         label: Monitoring dashboard screenshot
         required: false
-        hint: Screenshot showing metrics during the incident
+        hint: Screenshot showing metrics during the event
       - name: related_ticket
         type: url
         label: Related ticket or alert URL
         required: false
     approvals:
       min: 1
-      roles: [DRI, incident-commander]
+      roles: [approver, responder]
       timeout: 30m
       on_timeout: fail
 \end{minted}
 
 After the user provides the requested evidence and approval is granted, the
-collected values are available as \texttt{\{\{ .incident\_summary \}\}},
+collected values are available as \texttt{\{\{ .event\_summary \}\}},
 \texttt{\{\{ .error\_log \}\}}, etc.  File and image attachments are stored as
 artifacts in the execution trace with SHA256 hashes for tamper-evidence.
 
@@ -1713,15 +1713,15 @@ Benefits of the questionnaire pattern:
   \item Better UX: operator sees the full context before filling in any field.
 \end{itemize}
 
-\textbf{Example: Incident triage form} (4-field form with conditional logic using \texttt{when})
+\textbf{Example: Request details form} (4-field form with conditional logic using \texttt{when})
 
 \begin{minted}{yaml}
 - step:
-    id: collect_incident_details
+    id: collect_request_details
     type: collector
-    title: Incident Triage
+    title: Request Details
     prompt: |
-      Complete the incident triage form.
+      Complete the request details form.
     fields:
       - name: severity
         type: select
@@ -2322,10 +2322,10 @@ arm:
           - step:
               id: require_approval
               type: manual
-              title: Require change-manager approval
+              title: Require approver confirmation
               approvals:
                 min: 1
-                roles: [change-manager]
+                roles: [approver]
       - condition: 'environment == "staging"'
         label: Staging path
         steps:
@@ -2435,19 +2435,19 @@ current element.
 - iterate:
     id: wait_for_deploy
     max: 10
-    until: 'deploy_status == "Running"'
+    until: 'operation_status == "Running"'
     steps:
       - step:
           id: poll_deploy
           type: tool
-          title: "Poll deployment (pass {{ .iteration }})"
+          title: "Poll operation (pass {{ .iteration }})"
           tool:
             name: kubectl
             action: get-deploy-status
             args:
-              name: "{{ .deployment }}"
+              name: "{{ .operation }}"
           capture:
-            deploy_status: json.status.phase
+            operation_status: json.status.phase
       - step:
           id: wait
           type: cli
@@ -2594,7 +2594,7 @@ any assertion does not pass.
 - step:
     id: verify_deployment
     type: assert
-    title: Verify deployment succeeded
+    title: Verify operation succeeded
     assert:
       - type: contains
         subject: "{{ .deploy_output }}"
@@ -2644,7 +2644,7 @@ Compensation steps share the same variable context as the point at which the
       name: kubectl
       action: scale
       args:
-        deployment: "{{ .deployment }}"
+        operation: "{{ .operation }}"
         replicas: "0"
 
 - step:
@@ -2662,7 +2662,7 @@ Compensation steps share the same variable context as the point at which the
               name: kubectl
               action: scale
               args:
-                deployment: "{{ .deployment }}"
+                operation: "{{ .operation }}"
                 replicas: "{{ .original_replicas }}"
 \end{minted}
 
@@ -2709,7 +2709,7 @@ in v1.
 - step:
     id: resolved
     type: end
-    title: Incident resolved
+    title: Workflow complete
     outcome:
       category: resolved       # resolved | escalated | no_action | needs_rca
       code: dns_healthy
@@ -2795,22 +2795,22 @@ $schema: "https://schemas.gert.dev/provider/v2.json"
 apiVersion: provider/v2
 
 meta:
-  name: incident
+  name: tracking
   version: "1.0"
-  description: PagerDuty incident context provider
+  description: Issue tracking context provider
   kind: input-provider    # input-provider | enrichment-provider
 
 transport:
   mode: jsonrpc
-  start: ["./providers/pagerduty-provider"]
+  start: ["./providers/issue-tracker-provider"]
 
 fields:
   id:
     type: string
-    description: Active incident ID
+    description: Active request ID
   title:
     type: string
-    description: Incident title
+    description: Request title
   severity:
     type: string
     enum: [P1, P2, P3, P4]
@@ -2857,8 +2857,8 @@ and GitHub Actions.  Extension fields must:
 \begin{minted}{yaml}
 $schema: "https://schemas.gert.dev/runbook/v2.json"
 apiVersion: runbook/v2
-id: deploy-service
-name: Deploy Service
+id: provision-service
+name: Provision Service
 
 x-myorg-cost-center: "engineering-ops"
 x-myorg-change-id: "CHG-20260418-001"
@@ -2869,11 +2869,11 @@ x-otel-service-name: "payment-service"
 
 \begin{minted}{yaml}
 - step:
-    id: deploy
+    id: provision
     type: tool
-    title: Deploy to production
+    title: Provision to environment
     x-myorg-risk-level: high
-    x-myorg-rollback-id: "{{ .deploy_id }}"
+    x-myorg-cleanup-id: "{{ .provision_id }}"
 \end{minted}
 
 \subsection{Extension Validation}
@@ -2912,7 +2912,7 @@ fields:
   change-id:
     type: string
     pattern: "^CHG-[0-9]{8}-[0-9]{3}$"
-  rollback-id:
+  cleanup-id:
     type: string
 
 applies-to: [runbook, step]

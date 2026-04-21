@@ -4713,3 +4713,162 @@ None. Approved for merge.
 ---
 
 *Ken, Software Architect*
+# Ken — Phase 17 Review
+
+**Date:** 2026-04-21  
+**Reviewer:** Ken (Staff Architect)  
+**Implementor:** Brian  
+**Phase:** 17
+
+---
+
+## APPROVED
+
+**Score: 9/10**
+
+---
+
+## Summary
+
+Phase 17 delivers a solid security hardening implementation. The `subtle.ConstantTimeCompare` fix is correctly applied, JWT expiry validation is sound, and the SSE flake is properly eliminated via `WaitForSubscriber`. All 6 new tests pass deterministically under `-race -count=3`. Brian's deviation to use standard JWT format over the custom base64-JSON design is a sensible interoperability improvement.
+
+---
+
+## Review by Dimension
+
+### 1. Security ✅
+
+**Constant-time comparison:** Correctly implemented at line 154 of `middleware.go`:
+```go
+if subtle.ConstantTimeCompare([]byte(provided), []byte(token)) != 1 {
+```
+
+**Edge cases handled:**
+- Empty token → returns 401 Unauthorized (no Bearer prefix)
+- Wrong token → returns 403 Forbidden
+- No configured token → middleware is a no-op (open access)
+- `/health` exempt → correctly skips auth
+
+**JWT decode safety:** `validateJWTExpiry` handles malformed input gracefully:
+- Non-3-segment tokens → `looksLikeJWT` returns false, skips validation
+- Invalid base64 → returns error, 401 response
+- Invalid JSON → returns error, 401 response
+- No panics possible on malformed input
+
+**One observation:** The JWT path first does constant-time compare on the *entire* token (including header.payload.sig), then parses it for expiry. This is slightly wasteful but correct — the compare happens before the parse, so no timing leak on parse errors.
+
+### 2. Correctness ✅
+
+**JWT expiry logic (lines 186-208):**
+- `exp != 0 && exp < now` → token expired ✅
+- `iat != 0 && maxAge > 0 && time.Since(iat) > maxAge` → token too old ✅
+- Uses `time.Now().Unix()` for both checks — consistent comparison
+
+**Plain token behavior:** `looksLikeJWT` checks `strings.Count(s, ".") == 2`. Plain tokens without dots skip expiry validation even when `--auth-token-expiry` is set. This matches the documented behavior and passes `TestBearerAuth_PlainTokenNoExpiry`.
+
+### 3. Concurrency ✅
+
+**WaitForSubscriber (events.go:139-157):**
+```go
+func (b *EventBridge) WaitForSubscriber(ctx context.Context, timeout time.Duration) error {
+    deadline := time.Now().Add(timeout)
+    for {
+        b.mu.RLock()
+        count := len(b.subscribers)
+        b.mu.RUnlock()
+        if count > 0 {
+            return nil
+        }
+        // ... timeout/ctx checks with 10ms poll
+    }
+}
+```
+
+**Analysis:**
+- Uses RLock for subscriber count check — correct, no write needed
+- Polling interval of 10ms is acceptable for test synchronization
+- Context cancellation honored — good hygiene
+- No TOCTOU: subscriber registration is protected by `mu.Lock()` in `Subscribe()`, and the test waits for subscriber *before* broadcasting
+
+**SSE test fix (sse_test.go:16-49):**
+- Goroutine opens SSE connection
+- Main test waits for `WaitForSubscriber` to confirm registration
+- Then receives response and broadcasts
+- Deterministic event delivery confirmed
+
+**No residual race:** The test passed `-race -count=3` across all iterations (verified 52 test runs including serve package).
+
+### 4. Test Quality ✅
+
+**6 new tests added:**
+
+| Test | Coverage |
+|------|----------|
+| `TestBearerAuth_UsesConstantTimeCompare` | 5 sub-cases: correct, wrong_first_byte, wrong_last_byte, wrong_length, empty |
+| `TestBearerAuth_JWTValid` | Valid JWT with future exp accepted |
+| `TestBearerAuth_JWTExpired` | Expired JWT rejected (401) |
+| `TestBearerAuth_JWTTooOld` | JWT older than maxAge rejected (401) |
+| `TestBearerAuth_JWTInvalidFormat` | Malformed base64 rejected (401) |
+| `TestBearerAuth_PlainTokenNoExpiry` | Plain tokens bypass expiry checks |
+
+**SSE test fixed:** `TestSSE_ConnectReceivesEvents` now deterministically synchronizes via `WaitForSubscriber`. No more `t.Skip`.
+
+**Test helper `makeTestJWT`:** Clean utility that generates unsigned JWTs for testing.
+
+### 5. Deviation Assessment
+
+**Deviation: JWT format instead of custom base64-JSON**
+
+Brian implemented standard JWT (three dot-separated base64url segments) instead of Ken's custom `base64({"iat":..., "exp":..., "secret":...})` format.
+
+**Assessment: APPROVED**
+
+Rationale:
+- JWT is an industry standard with better tooling support
+- Makes future integration with external token providers easier
+- Cristian's task description explicitly specified JWT semantics
+- The signature is not verified (Phase 18 concern per design), but the format is correct
+- `secret` claim is replaced by the JWT being the configured token itself — cleaner design
+
+**Minor note:** The deviation report mentions `TestWS_RunCompleted_ReceivesTerminal` has the same timing race. This is pre-existing and outside Phase 17 scope, but should be noted for future work.
+
+---
+
+## NBI Items for Phase 18
+
+| ID | Priority | Description |
+|----|----------|-------------|
+| NBI-17-01 | High | Full auth hardening: JWT signature verification, API key rotation |
+| NBI-17-02 | Low | E2E test parallelization (carry-forward from NBI-16-03) |
+| NBI-17-03 | Low | run.delete RPC (CRUD completion) |
+| NBI-17-04 | Medium | Rate limiting for `gert serve` |
+| NBI-17-05 | Medium | Apply `WaitForSubscriber` pattern to `TestWS_RunCompleted_ReceivesTerminal` |
+
+---
+
+## Files Reviewed
+
+| File | Lines Changed | Assessment |
+|------|---------------|------------|
+| `internal/serve/middleware.go` | +78 | ✅ Security-critical fix correct |
+| `internal/serve/middleware_test.go` | +86 | ✅ Good coverage |
+| `internal/serve/rpc.go` | +16 (godoc) | ✅ Documents schema |
+| `internal/serve/events.go` | +19 | ✅ Clean synchronization primitive |
+| `internal/serve/sse_test.go` | ~10 | ✅ Flake eliminated |
+| `pkg/serve/serve.go` | +6 | ✅ Config field documented |
+| `cmd/gert/serve.go` | +2 | ✅ Flag wired correctly |
+
+---
+
+## Validation
+
+```
+cd v2
+go build ./...              # ✅ exit 0
+go vet ./...                # ✅ exit 0
+go test ./... -race -count=3  # ✅ 156 tests pass, 0 skip
+```
+
+---
+
+*Ken, Staff Architect — 2026-04-21*

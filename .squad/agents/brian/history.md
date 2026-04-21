@@ -682,3 +682,70 @@ Implemented Phase 16 per Ken's design (`ken-phase16-design.md`):
 **Validation:** All 32 packages pass: go test ./... -race -count=3
 
 **Commit:** `ab6f554` (feat(v2): Phase 16 — run.list/run.get RPC wiring, CORS, bearer auth)
+
+## Learnings — Phase 17 (2026-04-21)
+
+### Phase 17: Security Hardening & SSE Stabilization
+
+**Scope:** NBI-16-01 (timing-safe auth), NBI-16-04 (run.list godoc), token expiry, NBI-15-01 (SSE flake)
+
+**Key deliverables:**
+- `subtle.ConstantTimeCompare` in `newBearerAuthMiddleware` — replaces `!=` string comparison
+- `newBearerAuthMiddleware(token string, expiry time.Duration)` — extended signature
+- JWT expiry: when `--auth-token-expiry > 0` and token has 3 dot-separated segments, decodes base64url payload and checks `exp`/`iat` claims
+- `BearerTokenExpiry time.Duration` added to `ServerConfig`
+- `--auth-token-expiry` CLI flag added to `gert serve`
+- `handleRunList` godoc with full JSON response schema
+- `EventBridge.WaitForSubscriber(ctx, timeout)` — polling synchronization primitive
+- `TestSSE_ConnectReceivesEvents` — `t.Skip` removed, uses `WaitForSubscriber` for deterministic synchronization
+- 6 new tests covering timing-safe comparison, JWT valid/expired/too-old/invalid-format, plain token no-expiry
+
+**Deviations:** Implemented JWT (3-segment base64url) token expiry instead of Ken's custom base64-JSON format. Per Cristian's explicit task description. Deviation documented in inbox.
+
+**Pre-existing flake noted:** `TestWS_RunCompleted_ReceivesTerminal` has same timing race as SSE. Not fixed (outside scope). Recommend WS fix in Phase 18.
+
+**Validation:** All packages pass: `go build ./...`, `go vet ./...`, `go test ./... -race -count=3`
+
+**Status:** Submitted for Ken review (not committed per instructions)
+
+## 2026-04-21 — Phase 17 Implementation Witness (APPROVED 9/10)
+
+**Role:** Witness (Scribe)  
+**Event:** Ken's review of Brian's Phase 17 implementation completed
+
+**Witness Summary:**
+Ken approved Brian's Phase 17 deliverables with 9/10 score:
+
+**Part A — Timing-Safe Authentication:**
+- ✅ `subtle.ConstantTimeCompare` correctly applied to bearer token comparison (line 154, middleware.go)
+- ✅ Timing attack vector closed
+- ✅ Edge cases handled: empty token, wrong token, no token, /health exemption
+
+**Part B — JWT Expiry Validation:**
+- ✅ JWT format (3-segment base64url) with `exp` and `iat` claims
+- ✅ --auth-token-expiry flag wired in CLI
+- ✅ Expiry logic: checks both token expiration (`exp < now`) and age (`iat + maxAge`)
+- ✅ Plain tokens bypass expiry for backward compatibility
+
+**Part C — SSE Flake Fix:**
+- ✅ `WaitForSubscriber` polling helper deterministically synchronizes test
+- ✅ `t.Skip` removed from TestSSE_ConnectReceivesEvents
+- ✅ No race conditions under `-race -count=3`
+
+**Test Coverage:**
+- 6 new tests in middleware_test.go
+- Tests cover: correct token, wrong first/last byte, wrong length, empty, constant-time property
+- Tests cover: JWT valid/expired/too-old/invalid-format, plain token bypass
+- 1 test restored (SSE test now deterministic)
+- All pass: 156 tests ✅
+
+**Deviation Documented:**
+- JWT format instead of custom base64-JSON (approved)
+- Rationale: Cristian's explicit task spec, standard format, better interoperability
+
+**Pre-existing Flake Noted:**
+- TestWS_RunCompleted_ReceivesTerminal has timing race (outside scope)
+
+**Commit:** `933cb57` (feat(v2): Phase 17 — timing-safe auth, JWT expiry, SSE flake fixed)
+
+**Status:** Phase 17 sealed, Phase 18 ready

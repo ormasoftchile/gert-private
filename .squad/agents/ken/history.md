@@ -2356,3 +2356,62 @@ Reviewed Brian's Phase 15 implementation:
 
 **Status:** Phase 17 kickoff green light — Brian ready to proceed.
 
+
+---
+
+## 2026-04-21 — Phase 17 Review
+
+**Task:** Review Brian's Phase 17 implementation (Security Hardening & SSE Stabilization)
+
+**Verdict:** APPROVED (9/10)
+
+**Key findings:**
+- `subtle.ConstantTimeCompare` correctly applied — timing attack vector closed
+- JWT expiry validation sound: checks `exp` and `iat` claims correctly
+- `WaitForSubscriber` eliminates SSE timing flake deterministically
+- Brian's deviation to use standard JWT format is a sensible interoperability improvement over the custom base64-JSON design
+
+**Tests:** 6 new tests added, all pass under `-race -count=3`. No `t.Skip` remaining.
+
+**NBI items generated:**
+- NBI-17-01: Full auth hardening (JWT signatures, key rotation)
+- NBI-17-05: Apply WaitForSubscriber to WS timing flake
+
+**Review written to:** `.squad/decisions/inbox/ken-phase17-review.md`
+
+## 2026-04-21 — Phase 17 Review (APPROVED 9/10)
+
+**Deliverable:** Brian's Phase 17 implementation (Security Hardening & SSE Stabilization)
+
+**Review Focus:**
+- `subtle.ConstantTimeCompare` application for timing-safe bearer token validation
+- JWT expiry validation (`exp` and `iat` claims) via --auth-token-expiry flag
+- SSE timing flake elimination via `WaitForSubscriber` synchronization
+- Test coverage (6 new tests, deterministic under `-race -count=3`)
+
+**Key Findings:**
+- ✅ Timing attack vector closed (ConstantTimeCompare line 154 of middleware.go)
+- ✅ JWT expiry logic sound (handles expired, too-old, malformed tokens correctly)
+- ✅ Plain tokens bypass expiry for backward compatibility
+- ✅ WaitForSubscriber deterministically eliminates SSE race
+- ✅ All 156 tests pass, no `t.Skip` remaining
+
+**Deviation Decision: APPROVED**
+- JWT format (3-segment base64url) instead of custom base64-JSON
+- Rationale: Cristian's explicit task spec + standard format + interoperability
+- Impact: Token format is now industry-standard JWT
+
+**Pre-existing Issue Noted:**
+- TestWS_RunCompleted_ReceivesTerminal has same timing race (outside Phase 17 scope)
+- Recommend Phase 18 follow-up (NBI-17-05)
+
+**NBI Items for Phase 18:**
+- NBI-17-01: Full auth hardening (JWT signatures, key rotation)
+- NBI-17-02: E2E test parallelization (carry-forward)
+- NBI-17-03: run.delete RPC
+- NBI-17-04: Rate limiting
+- NBI-17-05: WebSocket timing synchronization
+
+**Validation:** `go test ./... -race -count=3` → 156 tests ✅
+
+**Status:** Phase 17 APPROVED, sealed, ready for merge

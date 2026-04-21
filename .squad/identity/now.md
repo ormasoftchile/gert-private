@@ -1,28 +1,32 @@
 ---
-updated_at: 2026-04-21T13:30:01Z
-focus_area: gert v2 implementation — Phase 16 sealed, Phase 17 next
+updated_at: 2026-04-21T13:51:52Z
+focus_area: gert v2 implementation — Phase 17 sealed, Phase 18 next
 active_issues:
-  - NBI-16-01: Use subtle.ConstantTimeCompare for bearer token validation (anchor for Phase 17)
+  - NBI-17-01: Full auth hardening (JWT signatures, key rotation) — anchor for Phase 18
+  - NBI-17-02: E2E test parallelization (carry-forward from NBI-16-03)
 ---
 
 # What We're Focused On
 
-Implementing gert v2 phase-by-phase. Phases 0–16 complete and sealed.
+Implementing gert v2 phase-by-phase. Phases 0–17 complete and sealed.
 
-**Phase 16 sealed:** `ab6f554` — run.list/run.get RPC wiring, CORS, bearer auth (APPROVED 8/10 by Ken)
-- Part A (NBI-15-02): run.list merges registry + store, deduplication by RunID; run.get with 404 path
-- Part B (NBI-15-03): CORS middleware (--cors-origin), bearer auth (--auth-token), gert serve CLI
-- All 14 new tests pass; 4 deviations accepted; 1 non-blocking security item (NBI-16-08)
-- Validation: go test ./... -race -count=3 — all 32 packages pass
+**Phase 17 sealed:** `933cb57` — timing-safe auth, JWT expiry, SSE flake fixed (APPROVED 9/10 by Ken)
+- Part A (NBI-16-01): `subtle.ConstantTimeCompare` for bearer token — timing attacks prevented
+- Part B (NBI-16-02): JWT expiry validation via --auth-token-expiry flag; `exp` and `iat` claims checked
+- Part C (NBI-15-01): `WaitForSubscriber` eliminates SSE timing flake; TestSSE_ConnectReceivesEvents deterministic
+- Additional (NBI-16-04): handleRunList godoc with full schema
+- 6 new middleware tests; 1 test restored; all pass under -race -count=3
+- Validation: go test ./... -race -count=3 — 156 tests ✅
 
-**Phase 17 starting next:** NBI items from Phase 16 review:
+**Phase 18 starting next:** NBI items from Phase 17 review:
 
 **Anchor Item:**
-- **NBI-16-01**: Use `subtle.ConstantTimeCompare` for bearer token validation (prevents timing attacks)
+- **NBI-17-01**: Full auth hardening — JWT signature verification, API key rotation (prevents forged tokens)
 
-**Carry-forward items:**
-- NBI-15-01: E2E test parallelization (low priority)
-- NBI-16-02: Full auth hardening for production (OAuth2/OIDC/API keys)
-- NBI-16-05: run.list RPC schema documentation
+**Priority Carry-forward items:**
+- NBI-17-02: E2E test parallelization (low priority, from Phase 16)
+- NBI-17-03: run.delete RPC (CRUD completion)
+- NBI-17-04: Rate limiting for `gert serve`
+- NBI-17-05: Apply `WaitForSubscriber` to WebSocket timing flake (TestWS_RunCompleted_ReceivesTerminal)
 
 Team: Ken (architect/reviewer), Brian (Go implementor), Barbara (preflight/integrations), Scribe (logger).

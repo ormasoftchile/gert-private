@@ -1378,3 +1378,11 @@ All checks ran successfully in `/Users/cristianormazabal/Projects/gert/v2`:
 
 **Status:** Preflight sealed. Phase 17 kickoff approved.
 
+
+## Phase 18 Preflight — 2026-04-21
+- Baseline: 933cb57
+- Result: **ALL GREEN**
+- go build, go vet, go test -race: all pass
+- Working tree: clean
+- Phase 17 commits: present (HEAD at f9c43c9)
+- Status: Ready for Phase 18 kickoff

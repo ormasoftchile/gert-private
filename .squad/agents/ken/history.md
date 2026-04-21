@@ -2415,3 +2415,67 @@ Reviewed Brian's Phase 15 implementation:
 **Validation:** `go test ./... -race -count=3` → 156 tests ✅
 
 **Status:** Phase 17 APPROVED, sealed, ready for merge
+
+---
+
+## 2026-04-21 — Phase 18 Design
+
+**Task:** Design Phase 18 (JWT signature verification & CRUD completion)  
+**Requestor:** Cristian
+
+### Problem Statement
+
+Phase 17 added JWT expiry validation (`exp` and `iat` claims) but **does not verify the signature**. This is a complete authentication bypass — any attacker can forge a JWT with valid claims and authenticate to `gert serve`.
+
+### Phase 18 Scope
+
+**Part A (Anchor) — NBI-17-01: JWT Signature Verification**
+- New flag: `--auth-jwt-secret <base64-encoded-secret>`
+- HMAC-SHA256 signature verification (HS256 only)
+- Mutual exclusivity: `--auth-token` XOR `--auth-jwt-secret`
+- Fail-secure: Reject JWT-like tokens if no jwtSecret configured
+- Minimum 32-byte (256-bit) secret required
+
+**Part B — NBI-17-03: run.delete RPC**
+- Complete CRUD loop (list + get + delete)
+- Safety invariant: Running runs cannot be deleted
+- Maps to existing `DirRunStore.DeleteRun()`
+
+**Part C — NBI-17-05: WebSocket Timing Fix**
+- Apply `WaitForSubscriber` to `TestWS_RunCompleted_ReceivesTerminal`
+- Same pattern as SSE fix from Phase 17
+
+### Deferred Items
+
+| ID | Rationale |
+|----|-----------|
+| NBI-17-02 | Token rotation — short expiry sufficient, OAuth2 better solution |
+| NBI-16-03 | E2E parallelization — low priority, needs shared state audit |
+| NBI-17-04 | Rate limiting — lower priority than auth bypass fix |
+
+### Key Decisions
+
+| ID | Decision |
+|----|----------|
+| D-18-01 | HS256 only (no RSA/ECDSA) |
+| D-18-02 | `--auth-token` and `--auth-jwt-secret` mutually exclusive |
+| D-18-03 | Fail-secure: JWT-like tokens rejected in plain token mode |
+| D-18-04 | Minimum 32-byte secret |
+| D-18-05 | run.delete refuses running runs |
+
+### Deliverables
+
+- Modified: 7 files (middleware.go, middleware_test.go, rpc.go, rpc_test.go, ws_test.go, serve.go pkg, serve.go cmd)
+- New tests: ~8
+- Estimated effort: 2-2.5 Brian-days
+
+### NBI Items for Phase 19+
+
+- NBI-18-01: OAuth2/OIDC token validation
+- NBI-18-02: Rate limiting (carry-forward)
+- NBI-18-03: E2E parallelization (carry-forward)
+- NBI-18-04: Token revocation/blocklist (if needed)
+
+**Output:** `.squad/tmp/ken-phase18-design.md`, `.squad/decisions/inbox/ken-phase18-design.md`
+
+**Status:** Phase 18 design complete, ready for preflight and implementation

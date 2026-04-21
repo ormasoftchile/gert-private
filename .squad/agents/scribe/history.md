@@ -33,3 +33,15 @@ Initial setup complete.
 - **Summary:** Phase 18 complete — JWT signature verification (NBI-17-01), run.delete RPC (NBI-17-03), WS timing flake fixed (NBI-17-05)
 - **Tests:** All pass under -race -count=3
 - **Next:** Phase 19 queue established with NBI-17-02 (token rotation), NBI-16-03 (E2E parallelization), NBI-17-04 (rate limiting)
+
+## Phase 19 Kickoff
+
+- **Commit:** `b15ccbe`
+- **Date:** 2026-04-21
+- **Summary:** Phase 19 kickoff commit — Ken design artifacts + Barbara preflight validation
+- **Files committed:** .squad/agents/barbara/history.md, .squad/agents/ken/history.md, .squad/agents/scribe/history.md, .squad/identity/now.md, .squad/tmp/ken-phase19-design.md
+- **Design anchors:** 
+  - Part A (ANCHOR): Per-IP rate limiting via golang.org/x/time/rate, --rate-limit flag
+  - Part B: E2E test parallelization (t.Parallel safe — no shared state)
+  - NBI-17-02: Closed WONT_FIX (short expiry + secret rotation is sufficient)
+- **Validation:** Barbara ALL GREEN on 24d863e baseline

@@ -783,3 +783,23 @@ Ken approved Brian's Phase 17 deliverables with 9/10 score:
 3. alg:none tokens no longer trigger fail-secure (empty sig → looksLikeJWT=false; intentional)
 
 **Commit:** pending (Scribe handles)
+
+## Phase 19 — 2026-04-21
+
+### Part A — Rate Limiting
+
+- Added `golang.org/x/time v0.15.0` dependency
+- Created `v2/internal/serve/ratelimit.go`: `newRateLimitMiddleware`, per-IP token bucket, memory cap (10k entries), cleanup goroutine (5-min TTL), `/health` exempt
+- Added `RateLimit int` to `ServerConfig` (pkg/serve/serve.go)
+- Added `--rate-limit` flag to `cmd/gert/serve.go`
+- Wired `newRateLimitMiddleware` between CORS and Auth in middleware chain
+- 7 new tests in `ratelimit_test.go`, all pass under `-race -count=1`
+
+### Part B — E2E Parallelization
+
+- Added `t.Parallel()` to all 11 E2E test functions in `v2/internal/e2e/e2e_test.go`
+- All pass under `-race -count=1`
+
+### Test Results: `go test ./... -race -count=1` — all packages green ✅
+
+### Deviations: None

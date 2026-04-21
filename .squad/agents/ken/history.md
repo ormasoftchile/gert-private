@@ -2577,3 +2577,48 @@ Phase 17 added JWT expiry validation (`exp` and `iat` claims) but **does not ver
 **Output:** `.squad/tmp/ken-phase19-design.md`, `.squad/decisions/inbox/ken-phase19-design.md`
 
 **Status:** Phase 19 design complete, ready for preflight and implementation
+
+---
+
+### 2026-04-21 — Phase 19 Review (Ken as Reviewer)
+
+**Task:** Review Brian's Phase 19 implementation covering:
+- Part A: Rate limiting (NBI-17-04)
+- Part B: E2E test parallelization (NBI-16-03)
+
+### Part A — Rate Limiting Review
+
+**Concurrency Analysis:**
+- ✅ `sync.Mutex` protects map on all reads/writes
+- ⚠️ `cleanupLoop` is fire-and-forget (acceptable for long-lived server)
+- ✅ `evictOldest` called while lock is held
+- ✅ O(n) eviction acceptable at 10k cap
+- ✅ `extractIP` handles malformed XFF safely
+- ✅ `/health` exempt from rate limiting
+- ✅ Middleware order: CORS → RateLimit → Auth
+- ✅ `burst = 2*limit` correctly set
+
+**Test Coverage:** 7 tests covering disabled, below limit, exceeds limit, burst, health exempt, per-IP, and XFF extraction.
+
+### Part B — E2E Parallelization Review
+
+- ✅ `t.Parallel()` as first statement in all 11 tests
+- ✅ No shared mutable global state
+- ✅ `t.TempDir()` used (not `os.MkdirTemp`)
+- ✅ Race detector clean
+
+**Deviations Accepted:**
+1. Separate `ratelimit.go` file (better organization)
+2. 11 tests not 12 (design count was approximate)
+
+**Verification:**
+```
+go test ./... -race -count=1 -timeout=180s
+# 43 packages pass, no races
+```
+
+**Verdict:** APPROVED ✅
+
+**Output:** `.squad/decisions/inbox/ken-phase19-review.md`
+
+**Status:** Phase 19 approved, sealed, ready for Scribe commit

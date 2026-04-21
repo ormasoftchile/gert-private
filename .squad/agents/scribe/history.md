@@ -45,3 +45,14 @@ Initial setup complete.
   - Part B: E2E test parallelization (t.Parallel safe — no shared state)
   - NBI-17-02: Closed WONT_FIX (short expiry + secret rotation is sufficient)
 - **Validation:** Barbara ALL GREEN on 24d863e baseline
+
+## Phase 19 Final Commits
+
+- **Commits:** `c0f9189` (v2 implementation) + `75055b8` (.squad state)
+- **Date:** 2026-04-21T14:22:10Z
+- **Status:** SEALED — Ken APPROVED
+- **Summary:** Phase 19 complete — Per-IP rate limiting (NBI-17-04), E2E test parallelization (NBI-16-03), NBI-17-02 closed WONT_FIX
+- **Part A (rate limiting anchor):** golang.org/x/time v0.15.0; newRateLimitMiddleware per-IP token bucket; burst=2*limit; 10k entry LRU cap; 5-min stale cleanup; /health exempt; middleware order CORS→RateLimit→Auth; --rate-limit flag; 7 tests
+- **Part B (E2E parallelization):** t.Parallel() on all 11 E2E tests; safe via t.TempDir() isolation
+- **Tests:** All pass under -race -count=3
+- **Next:** Phase 20 queue TBD from Ken's Phase 19 review

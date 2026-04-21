@@ -2622,3 +2622,82 @@ go test ./... -race -count=1 -timeout=180s
 **Output:** `.squad/decisions/inbox/ken-phase19-review.md`
 
 **Status:** Phase 19 approved, sealed, ready for Scribe commit
+
+### 2026-04-21 — Phase 20 Design
+
+**Scope:** Consolidation phase completing gert serve CRUD contract
+
+**Budget:** 1.5 Brian-days
+
+**Phase 20 Items:**
+
+| Part | NBI | Item | Priority |
+|------|-----|------|----------|
+| A (ANCHOR) | NBI-17-03 | `run.delete` RPC | Medium |
+| B | NBI-16-05 | API schema documentation | Low |
+| C | NBI-17-05 | WebSocket timing flake fix | Low |
+
+**NBI Carry-Forwards (Phase 21):**
+- NBI-16-06: `--cors-origin` repeatable flag (Low)
+- NBI-16-07: `CompletedAt` for persisted runs (Low)
+- NBI-18-01: OAuth2/OIDC external token validation (Medium, v2.1)
+
+**Key Decisions:**
+- D-20-01: `run.delete` requires terminal state (no deleting active runs)
+- D-20-02: Delete returns error for missing run (not idempotent)
+- D-20-03: Export API response types as Go types with godoc
+
+**Design Document:** `.squad/tmp/ken-phase20-design.md`
+
+**Decision Record:** `.squad/decisions/inbox/ken-phase20-design.md`
+
+**Note:** Phase 20 completes the v2.0 MVP feature set for `gert serve`. All remaining NBI items are low-priority enhancements or v2.1 targets.
+
+---
+
+### 2026-04-21 — Phase 20 Re-scope
+
+**Trigger:** The original Phase 20 design (written the same day) contained Parts A and C that were
+already shipped in Phase 18 (commit 24d863e). The design was written from the NBI queue without
+first reading the actual codebase.
+
+**Why the original design was stale:**
+
+- **Part A (`run.delete` RPC):** `handleRunDelete` is live at `v2/internal/serve/rpc.go:635`.
+  Dispatch is at line 105 (`case "run.delete":`). Error constant `rpcRunDeleteRunning = -32020` is
+  at line 37. The safety invariant (can't delete running runs) is enforced at lines 649–662. Four
+  tests exist in `rpc_test.go`. The NBI item NBI-17-03 is fully closed.
+
+- **Part C (WebSocket timing flake fix):** `WaitForSubscriber` is applied at
+  `v2/internal/serve/ws_test.go:78` in `TestWS_RunCompleted_ReceivesTerminal`. NBI-17-05 is fully
+  closed.
+
+**NBI items confirmed closed (pre-Phase 20):**
+
+| NBI | Item | Evidence |
+|-----|------|----------|
+| NBI-17-03 | run.delete RPC | rpc.go:635 |
+| NBI-17-05 | WS timing flake | ws_test.go:78 |
+
+**Corrected Phase 20 scope:**
+
+| Part | NBI | Item |
+|------|-----|------|
+| A (ANCHOR) | NBI-16-05 + NBI-16-07 | `completedAt` surfacing + `run.get` godoc + fixtures |
+| B | NBI-16-06 | Multiple CORS origins — `--cors-origin` repeatable flag |
+| C | — | `--trust-proxy-headers` security flag (XFF trust opt-in) |
+
+**Key finding on Part A:** `engine.RunState.CompletedAt` IS serialised to disk by `SaveState`. The
+gap is purely in the serve layer: `handleRunGet` (persisted path) and `handleRunList` (both active
+and persisted items) never read or return the field. Three response-building sites in `rpc.go` need
+a one-liner fix each.
+
+**Key finding on Part C:** The rate-limiter's `extractIP` unconditionally trusts
+`X-Forwarded-For`, allowing any client to forge their IP and bypass rate limiting. Phase 19
+decision D-19-02 mentioned XFF trust but did not require opt-in. Default-secure behaviour (trust
+only with `--trust-proxy-headers`) is the correct fix.
+
+**Lesson recorded:** Always read the actual codebase before writing a phase design. NBI items can
+be closed by implementation without the design being updated.
+
+**Output:** `.squad/tmp/ken-phase20-design.md` (overwritten), `.squad/decisions/inbox/ken-phase20-design.md` (overwritten)

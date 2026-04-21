@@ -1,31 +1,32 @@
 ---
-updated_at: 2026-04-21T14:12:35Z
-focus_area: gert v2 implementation — Phase 18 sealed, Phase 19 next
-current_phase: 18 (SEALED)
-next_phase: 19
+updated_at: 2026-04-21T15:00:00Z
+focus_area: gert v2 implementation — Phase 19 sealed, Phase 20 re-scoped
+current_phase: 19 (SEALED)
+next_phase: 20 (RE-SCOPED)
 active_issues:
-  - NBI-17-02: Token rotation/revocation (carry-forward for Phase 19)
-  - NBI-16-03: E2E test parallelization (carry-forward for Phase 19)
+  - Phase 20 design corrected after codebase audit revealed Parts A and C were already shipped
 ---
 
 # What We're Focused On
 
-Implementing gert v2 phase-by-phase. Phases 0–18 complete and sealed.
+Implementing gert v2 phase-by-phase. Phases 0–19 complete and sealed.
 
-**Phase 18 sealed:** `24d863e` + `66c4676` — JWT signature verification, run.delete RPC, WS flake fixed (APPROVED by Ken)
-- Part A (NBI-17-01): HMAC-SHA256 JWT signature verification with --auth-jwt-secret flag; verifyJWT checks alg=HS256, signature first, then exp/iat
-- Part B (NBI-17-03): handleRunDelete RPC; running runs cannot be deleted (rpcRunDeleteRunning=-32020); 4 new tests
-- Part C (NBI-17-05): TestWS_RunCompleted_ReceivesTerminal fixed with WaitForSubscriber before Broadcast
-- Security: --auth-token and --auth-jwt-secret mutually exclusive; hmac.Equal for constant-time comparison
-- 5 new auth tests + updated JWT tests using signed tokens; all pass under -race -count=3
+**Phase 19 sealed:** `c0f9189` + `75055b8` — Per-IP rate limiting, E2E parallelization (APPROVED by Ken)
+- Part A (NBI-17-04): newRateLimitMiddleware with per-IP token bucket (golang.org/x/time v0.15.0); burst=2*limit; 10k entry LRU cap; 5-min stale cleanup; /health exempt; middleware order CORS→RateLimit→Auth; --rate-limit flag; 7 tests
+- Part B (NBI-16-03): E2E parallelization — t.Parallel() on all 11 tests; safe via t.TempDir() isolation
+- NBI-17-02: Closed WONT_FIX (short expiry + secret rotation sufficient for JWT lifecycle)
 - Validation: go test ./... -race -count=3 — all tests ✅
 
-**Phase 19 queue (next):** NBI items from Phase 18 review:
+**Phase 20 queue (RE-SCOPED):** Original design was stale — Parts A and C (run.delete, WS flake) were already shipped in Phase 18 (commit 24d863e). Corrected scope:
 
-**Priority items:**
-- **NBI-17-02**: Token rotation/revocation (JWT lifecycle management)
-- **NBI-16-03**: E2E test parallelization (from Phase 16 carry-forward)
-- **NBI-17-04**: Rate limiting for `gert serve`
-- Any additional items from Ken's Phase 18 review notes
+| Part | NBI | Item |
+|------|-----|------|
+| A (ANCHOR) | NBI-16-05 + NBI-16-07 | `completedAt` surfacing in `run.get`/`run.list` + `handleRunGet` godoc + testdata fixtures |
+| B | NBI-16-06 | Multiple CORS origins — `--cors-origin` repeatable flag |
+| C | — | `--trust-proxy-headers` security flag — XFF trust must be opt-in (rate-limit bypass fix) |
+
+**Budget:** ~1.4 Brian-days  
+**Design:** `.squad/tmp/ken-phase20-design.md` (re-scoped)  
+**Decision record:** `.squad/decisions/inbox/ken-phase20-design.md` (re-scoped)
 
 Team: Ken (architect/reviewer), Brian (Go implementor), Barbara (preflight/integrations), Scribe (logger).

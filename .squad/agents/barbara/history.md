@@ -1399,3 +1399,16 @@ All checks ran successfully in `/Users/cristianormazabal/Projects/gert/v2`:
 - Status: Phase 19 approved to proceed
 
 **Report:** `.squad/decisions/inbox/barbara-phase19-preflight.md`
+
+
+## Phase 20 Preflight — 2025-01-17
+- Baseline: c0f9189 (Phase 19 sealed)
+- Result: **ALL GREEN** ✅
+- go build: PASS
+- go vet: PASS  
+- go test -race: PASS (35 packages with tests, 9 packages no tests, 100% pass rate)
+- Working tree: clean (tracked metadata changes only)
+- Phase 19 commits: present (c0f9189 baseline confirmed, 75055b8 seal at HEAD)
+- Status: Phase 20 cleared to proceed
+
+**Report:** `.squad/decisions/inbox/barbara-phase20-preflight.md`

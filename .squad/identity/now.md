@@ -1,32 +1,31 @@
 ---
-updated_at: 2026-04-21T13:51:52Z
-focus_area: gert v2 implementation — Phase 17 sealed, Phase 18 next
+updated_at: 2026-04-21T14:12:35Z
+focus_area: gert v2 implementation — Phase 18 sealed, Phase 19 next
+current_phase: 18 (SEALED)
+next_phase: 19
 active_issues:
-  - NBI-17-01: Full auth hardening (JWT signatures, key rotation) — anchor for Phase 18
-  - NBI-17-02: E2E test parallelization (carry-forward from NBI-16-03)
+  - NBI-17-02: Token rotation/revocation (carry-forward for Phase 19)
+  - NBI-16-03: E2E test parallelization (carry-forward for Phase 19)
 ---
 
 # What We're Focused On
 
-Implementing gert v2 phase-by-phase. Phases 0–17 complete and sealed.
+Implementing gert v2 phase-by-phase. Phases 0–18 complete and sealed.
 
-**Phase 17 sealed:** `933cb57` — timing-safe auth, JWT expiry, SSE flake fixed (APPROVED 9/10 by Ken)
-- Part A (NBI-16-01): `subtle.ConstantTimeCompare` for bearer token — timing attacks prevented
-- Part B (NBI-16-02): JWT expiry validation via --auth-token-expiry flag; `exp` and `iat` claims checked
-- Part C (NBI-15-01): `WaitForSubscriber` eliminates SSE timing flake; TestSSE_ConnectReceivesEvents deterministic
-- Additional (NBI-16-04): handleRunList godoc with full schema
-- 6 new middleware tests; 1 test restored; all pass under -race -count=3
-- Validation: go test ./... -race -count=3 — 156 tests ✅
+**Phase 18 sealed:** `24d863e` + `66c4676` — JWT signature verification, run.delete RPC, WS flake fixed (APPROVED by Ken)
+- Part A (NBI-17-01): HMAC-SHA256 JWT signature verification with --auth-jwt-secret flag; verifyJWT checks alg=HS256, signature first, then exp/iat
+- Part B (NBI-17-03): handleRunDelete RPC; running runs cannot be deleted (rpcRunDeleteRunning=-32020); 4 new tests
+- Part C (NBI-17-05): TestWS_RunCompleted_ReceivesTerminal fixed with WaitForSubscriber before Broadcast
+- Security: --auth-token and --auth-jwt-secret mutually exclusive; hmac.Equal for constant-time comparison
+- 5 new auth tests + updated JWT tests using signed tokens; all pass under -race -count=3
+- Validation: go test ./... -race -count=3 — all tests ✅
 
-**Phase 18 starting next:** NBI items from Phase 17 review:
+**Phase 19 queue (next):** NBI items from Phase 18 review:
 
-**Anchor Item:**
-- **NBI-17-01**: Full auth hardening — JWT signature verification, API key rotation (prevents forged tokens)
-
-**Priority Carry-forward items:**
-- NBI-17-02: E2E test parallelization (low priority, from Phase 16)
-- NBI-17-03: run.delete RPC (CRUD completion)
-- NBI-17-04: Rate limiting for `gert serve`
-- NBI-17-05: Apply `WaitForSubscriber` to WebSocket timing flake (TestWS_RunCompleted_ReceivesTerminal)
+**Priority items:**
+- **NBI-17-02**: Token rotation/revocation (JWT lifecycle management)
+- **NBI-16-03**: E2E test parallelization (from Phase 16 carry-forward)
+- **NBI-17-04**: Rate limiting for `gert serve`
+- Any additional items from Ken's Phase 18 review notes
 
 Team: Ken (architect/reviewer), Brian (Go implementor), Barbara (preflight/integrations), Scribe (logger).

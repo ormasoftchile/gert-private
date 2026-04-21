@@ -24,3 +24,12 @@ Initial setup complete.
 - **Summary:** Phase 18 kickoff commit — Ken design artifacts staged and committed before Brian implementation phase
 - **Files committed:** .squad/agents/barbara/history.md, .squad/agents/ken/history.md, .squad/tmp/ken-phase18-design.md
 - **Design anchors:** JWT HMAC-SHA256, run.delete RPC, WebSocket timing flake fix
+
+## Phase 18 Final Commits
+
+- **Commits:** `24d863e` (v2 implementation) + `66c4676` (.squad state)
+- **Date:** 2026-04-21T14:12:35Z
+- **Status:** SEALED — Ken APPROVED
+- **Summary:** Phase 18 complete — JWT signature verification (NBI-17-01), run.delete RPC (NBI-17-03), WS timing flake fixed (NBI-17-05)
+- **Tests:** All pass under -race -count=3
+- **Next:** Phase 19 queue established with NBI-17-02 (token rotation), NBI-16-03 (E2E parallelization), NBI-17-04 (rate limiting)

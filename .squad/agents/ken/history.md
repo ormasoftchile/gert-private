@@ -2516,3 +2516,64 @@ Phase 17 added JWT expiry validation (`exp` and `iat` claims) but **does not ver
 **Output:** `.squad/decisions/inbox/ken-phase18-review.md`
 
 **Status:** Phase 18 approved, ready for Scribe commit
+
+---
+
+### 2026-04-21 — Phase 19 Design
+
+**Task:** Design Phase 19 (rate limiting, E2E parallelization, token rotation decision)  
+**Requestor:** Cristian
+
+### NBI Carry-forwards Addressed
+
+| NBI ID | Item | Disposition |
+|--------|------|-------------|
+| NBI-17-02 | Token rotation/revocation | **WONT_FIX** |
+| NBI-16-03 | E2E test parallelization | **IN_SCOPE** (Part B) |
+| NBI-17-04 | Rate limiting | **IN_SCOPE** (Part A) |
+
+### NBI-17-02 Decision: Token Rotation — WONT_FIX
+
+**Analysis:** An in-memory token blocklist (~100 LOC) was considered. Decision to close as WONT_FIX based on:
+
+1. **Marginal security benefit:** With 5-15 min expiry, blocklist only helps if operators detect compromise faster than tokens expire (rare)
+2. **Operational complexity:** In-memory clears on restart; persistent requires shared state for distributed deployments
+3. **Better alternatives:** Short expiry + secret rotation; external identity providers for critical use cases
+4. **Architectural principle:** `gert serve` is a thin adapter, not an identity provider
+
+**Recommendation for production:** Deploy behind identity-aware proxy (OAuth2 Proxy, Keycloak) if fine-grained revocation is needed.
+
+### Phase 19 Scope
+
+**Part A — Rate Limiting (1.5 days)**
+- Flag: `--rate-limit N` (requests/second/IP, default 0 = disabled)
+- Algorithm: Token bucket via `golang.org/x/time/rate`, burst = 2×limit
+- Scope: `/rpc`, `/ws`, `/events`; `/health` exempt
+- Memory cap: 10k IPs with LRU eviction, 5-min TTL cleanup
+- Middleware position: after CORS, before auth
+- ~200 LOC + 7 tests
+
+**Part B — E2E Parallelization (0.5 days)**
+- Analysis confirmed E2EHarness is isolation-safe
+- `t.TempDir()` creates per-test dirs, no shared state
+- No port allocation in E2E tests (in-process engine, not HTTP)
+- Action: Add `t.Parallel()` to all 12 tests
+- Expected 3-4× speedup
+
+### Key Decisions
+
+| ID | Decision |
+|----|----------|
+| D-19-01 | Token revocation via blocklist is WONT_FIX; short expiry + secret rotation is sufficient |
+| D-19-02 | Rate limiting uses per-IP token bucket with X-Forwarded-For trust |
+| D-19-03 | E2E tests are parallelization-safe; no harness changes needed |
+
+### Deliverables
+
+- Modified: 5 files (middleware.go, middleware_test.go, serve.go pkg, serve.go cmd, e2e_test.go)
+- New tests: 7 (rate limiting)
+- Estimated effort: 2 Brian-days
+
+**Output:** `.squad/tmp/ken-phase19-design.md`, `.squad/decisions/inbox/ken-phase19-design.md`
+
+**Status:** Phase 19 design complete, ready for preflight and implementation

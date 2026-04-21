@@ -30,7 +30,6 @@ inputs:
     type: string
     description: API key for external service
     from: env.GERT_TEST_API_KEY
-    fallback: fail
     # If GERT_TEST_API_KEY is not set, run should abort immediately
 
   # Test 2: file provider (JSON Pointer extraction)
@@ -38,7 +37,6 @@ inputs:
     type: string
     description: Database hostname from config file
     from: file.testdata/config.json#/database/host
-    fallback: default
     default: "localhost"
     # Reads testdata/config.json and extracts json.database.host
     # Falls back to "localhost" if file doesn't exist
@@ -48,7 +46,6 @@ inputs:
     type: string
     description: Default AWS region from workspace config
     from: workspace.defaults.region
-    fallback: prompt
     # Reads .gert/config.yaml field: defaults.region
     # If not found, prompts operator interactively
 
@@ -58,7 +55,6 @@ inputs:
     description: Name of the operator running this runbook
     from: prompt
     default: "anonymous"
-    fallback: default
     # Always prompts operator for input
     # Falls back to "anonymous" in dry-run/CI mode
 
@@ -191,4 +187,3 @@ flow:
       outcome:
         category: success
         code: input_provider_test_passed
-        summary: "All input providers resolved values successfully"

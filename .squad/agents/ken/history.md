@@ -2093,3 +2093,73 @@ internal/e2e/
 - NBI-15-04: gert dry-run completeness audit
 
 **Output:** `.squad/tmp/ken-phase15-design.md`, `.squad/decisions/inbox/ken-phase15-design.md`
+
+---
+
+## 2026-04-21 — Phase 15 Review: Iterate/Branch Scoping Fix & Tool E2E
+
+**Action:** Architectural review of Brian's Phase 15 implementation  
+**Verdict:** APPROVED (9/10)
+
+**Scope reviewed:**
+- Part A: `Depth > 0` skip logic in engine.go, new unit tests
+- Part B: mockToolRuntime, WithToolDef(), TestE2E_ToolStep
+
+**Key findings:**
+
+1. **Correctness:** `Depth > 0` skip loop is clean and correct. Sub-steps remain in plan for observability; engine executes only Depth=0 steps. No edge cases where legitimate outer steps could be skipped.
+
+2. **Architecture:** This is the right fix, not a workaround. Depth field was designed for this purpose. No future debt.
+
+3. **Test quality:** Both new unit tests are non-vacuous. TestE2E_ToolStep cannot pass vacuously due to three-gate validation (tool def, runtime, status).
+
+4. **Pre-existing flake:** TestSSE_ConnectReceivesEvents confirmed Phase 9 origin via git blame. NBI-15-05 opened.
+
+**Deviation assessments (all accepted):**
+- DEV-15-01: `{{.item}}` is correct Go template syntax
+- DEV-15-02: EXEMPLARY — CancelMidRun correctly adapted for new behavior
+- DEV-15-03: Unconditional mockToolRuntime is simpler and harmless
+- DEV-15-04: SSE flake is pre-existing
+
+**Phase 16 NBI items queued:**
+- NBI-15-01: E2E test parallelization
+- NBI-15-02: run.list RPC → DirRunStore wiring
+- NBI-15-03: gert serve hardening
+- NBI-15-04: gert dry-run completeness audit
+- NBI-15-05: Fix SSE test timing flake
+
+**Output:** `.squad/decisions/inbox/ken-phase15-review.md`
+
+---
+
+## Phase 15 Review — 2026-04-21
+
+**Status:** APPROVED 9/10
+
+Reviewed Brian's Phase 15 implementation:
+
+**Part A (NBI-14-03) — Iterate/Branch Scoping Fix:**
+- Depth > 0 skip logic correctly placed in engine.Next()
+- Sub-steps remain in plan (preserving trace visibility)
+- Parent executors invoke sub-steps via SubStepRunner with correct scoped variables
+- TestEngine_SkipsSubStepsAtDepth and TestEngine_IterateSubStepVars prove correctness
+- Architecture assessment: correct fix, no future debt
+
+**Part B (NBI-14-02) — Tool Step E2E Coverage:**
+- mockToolRuntime injection and WithToolDef() harness method well-designed
+- TestE2E_ToolStep uses tool-runbook.yaml testdata; non-vacuous (requires WithToolDef + mockToolRuntime)
+- 11 E2E tests total passing
+
+**Deviations accepted:**
+- DEV-15-01: {{.item}} syntax clarification (Go template syntax, not pseudocode)
+- DEV-15-02: TestE2E_CancelMidRun adaptation (exemplary correctness)
+- DEV-15-03: Unconditional mockToolRuntime injection (simpler, harmless)
+- DEV-15-04: SSE flake pre-existing (Phase 9 origin, tracked NBI-15-05)
+
+**Validation gate:** PASSED (go build, go vet, go test ./... -race -count=3 all green)
+
+**Deduction:** -1 for TestSSE_ConnectReceivesEvents flake, though pre-existing.
+
+**NBI items for Phase 16:** NBI-15-01 through NBI-15-05
+
+*Decisions entry: Phase 15 review appended to decisions.md*

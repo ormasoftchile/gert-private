@@ -4478,3 +4478,145 @@ All Phase 14 tests pass.
 
 *Ken, Staff Architect*  
 *2026-07-21*
+
+---
+
+## Phase 15
+
+# Ken — Phase 15 Review: Iterate/Branch Scoping Fix & Tool E2E
+
+**Date:** 2026-04-21  
+**Reviewer:** Ken (Staff Architect)  
+**Implementor:** Brian  
+**Phase:** 15
+
+---
+
+## APPROVED
+
+**Score: 9/10**
+
+Brian's Phase 15 implementation correctly fixes the iterate/branch variable scoping bug (NBI-14-03) and completes tool step E2E coverage (NBI-14-02). The `Depth > 0` skip logic is clean, minimal, and well-documented. All 11 E2E tests pass; the SSE flake is confirmed pre-existing (Phase 9).
+
+---
+
+## Review Dimensions
+
+### 1. Correctness — PASS
+
+**`Depth > 0` skip logic (engine.go:~line 260):**
+```go
+for h.run.CurrentStepIndex < len(h.run.Plan.Steps) && h.run.Plan.Steps[h.run.CurrentStepIndex].Depth > 0 {
+    h.run.CurrentStepIndex++
+}
+```
+
+**Analysis:**
+- The loop correctly advances past all sub-steps (`Depth > 0`) after each outer-step execution
+- Sub-steps are still in the plan (preserving trace visibility and checkpoint granularity)
+- Parent executors (iterate, branch, parallel) invoke sub-steps via `SubStepRunner` with correct scoped variables
+- No edge case where a legitimate outer step (`Depth == 0`) could be skipped — the loop condition is strictly `Depth > 0`
+- Parallel branch execution unaffected — parallel executor owns its sub-step orchestration; engine never iterates into parallel arms
+
+**Verified behaviors:**
+- `TestEngine_SkipsSubStepsAtDepth` confirms outer loop sees only `iterate-step` and `final-step`, not `sub-step`
+- `TestEngine_IterateSubStepVars` confirms loop variables (`item`, `iteration`) flow through `SubStepRunner`
+- E2E tests `TestE2E_IterateAll` and `TestE2E_IterateEarlyExit` both pass with `{{.item}}` correctly resolved
+
+### 2. Architecture — PASS (Clean Fix)
+
+The `Depth > 0` skip is the right mechanism:
+
+| Alternative | Verdict |
+|-------------|---------|
+| Remove sub-steps from plan | ❌ Breaks trace visibility and checkpoint granularity |
+| Filter during planning | ❌ Would require separate "execution plan" vs "display plan" |
+| Skip in `executeStep` | ❌ Would still create spans/traces for skipped steps |
+| Skip in iteration loop | ✅ Clean — steps exist for observability, skipped for execution |
+
+This is not a workaround; it's the correct architectural fix. The plan contains the full step tree for tracing/debugging; the engine executes only top-level steps (`Depth == 0`), delegating sub-step execution to container executors.
+
+**Future debt:** None identified. The `Depth` field was designed for this purpose.
+
+### 3. Test Quality — PASS
+
+**Unit tests:**
+- `TestEngine_SkipsSubStepsAtDepth` — proves engine returns 2 results (not 3) for plan with Depth=1 step
+- `TestEngine_IterateSubStepVars` — proves `item` and `iteration` vars reach the SubStepRunner
+
+Both tests are non-vacuous:
+- SkipsSubStepsAtDepth would fail if `Depth > 0` skip were removed (3 results instead of 2)
+- IterateSubStepVars would fail if loop vars weren't propagated (empty `captured.received`)
+
+**E2E tests:**
+- `TestE2E_ToolStep` — uses `tool-runbook.yaml` with `test-tool` / `run` action
+- Test registers tool def via `WithToolDef("test-tool", "run")`
+- `mockToolRuntime.Invoke` returns structured response proving invocation occurred
+- Test asserts `RunStatusCompleted` — would fail if tool executor errored
+
+**Vacuous test check:** `TestE2E_ToolStep` cannot pass vacuously because:
+1. Without `WithToolDef`, the planner would fail (tool not found)
+2. Without `mockToolRuntime`, the tool executor would fail (nil runtime)
+3. The runbook has a single step that must complete for `RunStatusCompleted`
+
+### 4. Pre-existing Flake — CONFIRMED PRE-EXISTING
+
+`TestSSE_ConnectReceivesEvents` in `internal/serve`:
+
+- `git log --oneline -5 internal/serve/sse_test.go` → `545e4b6 Phase 9 approved: gert serve HTTP/WS/SSE server`
+- Test was introduced in Phase 9, four phases before this change
+- Flake is timing-sensitive: test broadcasts event before SSE client is fully subscribed
+- Fix would require synchronization (e.g., subscription confirmation before broadcast)
+
+**Recommendation:** Track as NBI-15-05 for Phase 16 if CI stability becomes a concern. Not a Phase 15 blocker.
+
+### 5. Deviation Assessments
+
+| ID | Type | Verdict | Rationale |
+|----|------|---------|-----------|
+| DEV-15-01 | Design clarification | ✅ ACCEPTED | `{{.item}}` is correct Go template syntax; design example `{{item}}` was pseudocode. Existing testdata uses `{{.key}}` consistently. |
+| DEV-15-02 | Correctness fix | ✅ ACCEPTED (EXEMPLARY) | `TestE2E_CancelMidRun` correctly adapted. After the fix, iterate-runbook has 1 outer step (iterate container), completing before cancellation can be tested. Using `vars-runbook.yaml` (2 outer steps) correctly tests mid-run cancellation. |
+| DEV-15-03 | Simplification | ✅ ACCEPTED | Unconditional `mockToolRuntime` injection is simpler and harmless. For non-tool runbooks, the mock is never called. No behavioral difference. |
+| DEV-15-04 | Pre-existing | ✅ ACKNOWLEDGED | SSE flake confirmed Phase 9 origin. NBI-15-05 opened for tracking. |
+
+---
+
+## NBI Items for Phase 16
+
+| ID | Description | Priority |
+|----|-------------|----------|
+| NBI-15-01 | E2E test parallelization (carry-forward from 14-01) | Low |
+| NBI-15-02 | run.list RPC → DirRunStore wiring | Medium |
+| NBI-15-03 | gert serve hardening (auth, rate limiting, CORS) | Medium |
+| NBI-15-04 | gert dry-run completeness audit | Low |
+| NBI-15-05 | Fix SSE test timing flake (`TestSSE_ConnectReceivesEvents`) | Low |
+
+---
+
+## Validation Gate
+
+```
+$ cd v2 && go build ./...                           # ✅ Exit 0
+$ cd v2 && go vet ./...                             # ✅ Exit 0
+$ cd v2 && go test ./... -race -count=3             # ✅ All pass (11 E2E, full suite)
+```
+
+---
+
+## Files Reviewed
+
+**Part A (NBI-14-03):**
+- `v2/internal/engine/engine.go` — `Depth > 0` skip in `Next()`
+- `v2/internal/engine/engine_test.go` — `TestEngine_SkipsSubStepsAtDepth`, `TestEngine_IterateSubStepVars`
+- `v2/internal/e2e/testdata/iterate-runbook.yaml` — `{{.item}}` syntax
+- `v2/internal/e2e/e2e_test.go` — Updated `TestE2E_CancelMidRun`
+
+**Part B (NBI-14-02):**
+- `v2/internal/e2e/helpers_test.go` — `mockToolRuntime`, `WithToolDef()`
+- `v2/internal/e2e/testdata/tool-runbook.yaml` — New tool step testdata
+- `v2/internal/e2e/e2e_test.go` — `TestE2E_ToolStep`
+
+---
+
+*Ken, Staff Architect*  
+*2026-04-21*

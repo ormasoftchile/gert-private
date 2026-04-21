@@ -1,22 +1,23 @@
 ---
-updated_at: 2026-04-21T06:43:03Z
-focus_area: gert v2 implementation — Phase 15 design (Phase 14 sealed)
+updated_at: 2026-04-21T12:51:24Z
+focus_area: gert v2 implementation — Phase 15 sealed, Phase 16 next
 active_issues: []
 ---
 
 # What We're Focused On
 
-Implementing gert v2 phase-by-phase. Phases 0–14 complete and sealed.
+Implementing gert v2 phase-by-phase. Phases 0–15 complete and sealed.
 
-**Phase 14 sealed:** `c8d8f53` — E2E integration suite, OTLP TLS, gc edge cases (APPROVED 9/10 by Ken)
-- Part A: WithTLS option, gc edge-case tests, ls JSON schema doc
-- Part B: Full E2E test suite (10 tests), E2EHarness, 5 testdata runbooks
-- All deviations accepted; 4 NBI items queued for Phase 15
+**Phase 15 sealed:** `e4c4aee` — Iterate scoping fix, tool E2E coverage (APPROVED 9/10 by Ken)
+- Part A (NBI-14-03): Depth > 0 skip logic; TestEngine_SkipsSubStepsAtDepth, TestEngine_IterateSubStepVars
+- Part B (NBI-14-02): mockToolRuntime, WithToolDef() harness; TestE2E_ToolStep (11 E2E tests total)
+- All deviations accepted; SSE flake confirmed pre-existing (Phase 9)
 
-**Phase 15 starting next:** Ken designing scope. Phase 15 NBI items:
-- NBI-14-01: E2E test parallelization (low priority)
-- NBI-14-02: E2E coverage for tool steps (medium priority)
-- NBI-14-03: Fix planner iterate/branch sub-step variable scoping (medium priority)
-- NBI-12-03: context.AfterFunc optimization (fourth deferral, low priority)
+**Phase 16 starting next:** NBI items from Phase 15 review:
+- NBI-15-01: E2E test parallelization (carry-forward from 14-01, low priority)
+- NBI-15-02: run.list RPC → DirRunStore wiring (medium priority)
+- NBI-15-03: gert serve hardening (auth, rate limiting, CORS) (medium priority)
+- NBI-15-04: gert dry-run completeness audit (low priority)
+- NBI-15-05: Fix SSE test timing flake (`TestSSE_ConnectReceivesEvents`) (low priority)
 
 Team: Ken (architect/reviewer), Brian (Go implementor), Barbara (preflight/integrations), Scribe (logger).

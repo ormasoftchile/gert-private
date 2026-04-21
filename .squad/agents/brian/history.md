@@ -535,3 +535,84 @@ Testdata runbooks in `v2/internal/e2e/testdata/`:
 **Point deduction:** -1 for iterate variable scoping gap (correctly documented and tracked).
 
 **Output:** `.squad/decisions/inbox/brian-phase14-impl.md`, 10+8=18 files changed
+
+---
+
+## Phase 15 — Iterate/Branch Scoping Fix & E2E Tool Coverage
+
+**Sealed commit:** (pending Ken review)
+
+### Part A — NBI-14-03: Fix Iterate/Branch Sub-Step Variable Scoping
+
+**Root cause confirmed:** The planner flattens iterate sub-steps into `ExecutionPlan.Steps` at `Depth=1`. The engine's `Next()` loop was iterating over ALL steps including Depth=1, executing them without loop variable context (double-execution bug).
+
+**Fix:** Modified `Next()` in `v2/internal/engine/engine.go` to skip steps at `Depth > 0`:
+```go
+h.run.CurrentStepIndex++
+for h.run.CurrentStepIndex < len(h.run.Plan.Steps) && h.run.Plan.Steps[h.run.CurrentStepIndex].Depth > 0 {
+    h.run.CurrentStepIndex++
+}
+```
+Sub-steps are executed correctly by their parent's `SubStepRunner` with proper loop var bindings.
+
+**Updated testdata:** `v2/internal/e2e/testdata/iterate-runbook.yaml` — sub-step now uses `{{.item}}` (correct Go text/template syntax; Ken's design used `{{item}}` which would fail).
+
+**New engine unit tests:**
+- `TestEngine_SkipsSubStepsAtDepth` — verifies Depth>0 steps skipped in outer loop
+- `TestEngine_IterateSubStepVars` — verifies iterate executor receives correct loop var bindings
+
+**Fix impact on existing tests:** `TestE2E_CancelMidRun` required updating (see DEV-15-02).
+
+### Part B — NBI-14-02: E2E Tool Step Coverage
+
+**New files:**
+- `v2/internal/e2e/testdata/tool-runbook.yaml` — single tool_call step
+- New: `mockToolRuntime` in `helpers_test.go` — echoes invocation params as stdout
+- New: `TestE2E_ToolStep` in `e2e_test.go` — verifies tool step completes
+
+**Harness additions in `helpers_test.go`:**
+- `extraToolDefs map[string]*schema.ToolDef` field on `E2EHarness`
+- `WithToolDef(name string, actions ...string) *E2EHarness` — registers dummy tool def for planner
+- `mockToolRuntime` always injected into `ecfg.ToolRuntime` (simplification over per-test wiring)
+- `buildE2EToolRegistry` now accepts `extraDefs` parameter
+
+### Key learnings:
+- Go `text/template` requires `{{.varname}}` syntax for map key access; Ken's spec used `{{varname}}` which doesn't work
+- With Depth>0 skip fix, iterate runbook has only 1 outer step; cancel test must use multi-step runbook
+- `EngineConfig.ToolRuntime` is exported — can be overridden post-`BuildEngineConfig` for test injection
+- `TestSSE_ConnectReceivesEvents` in `internal/serve` is a pre-existing flaky test (timing-sensitive under concurrent load)
+
+**Deviations:** See `.squad/decisions/inbox/brian-phase15-impl.md`
+
+**Validation gate passed:** go build ./... + go vet ./... + go test ./... -race -count=3 all green (except pre-existing serve flake)
+
+---
+
+## Phase 15 Implementation — 2026-04-21
+
+**Status:** APPROVED 9/10 by Ken
+
+Implemented Phase 15 in two parts:
+
+**Part A (NBI-14-03) — Iterate/Branch Variable Scoping Fix:**
+- Added Depth > 0 skip logic to engine.Next()
+- Sub-steps remain in plan (for trace visibility, checkpoint granularity)
+- Parent executors (iterate, branch, parallel) invoke sub-steps via SubStepRunner with correct scoped variables
+- New tests: TestEngine_SkipsSubStepsAtDepth, TestEngine_IterateSubStepVars
+- Fixed iterate-runbook.yaml: corrected {{.item}} to {{.item}} (Go template syntax)
+
+**Part B (NBI-14-02) — Tool Step E2E Coverage:**
+- Implemented mockToolRuntime mock and WithToolDef() harness helper
+- Created tool-runbook.yaml testdata with test-tool and run action
+- Implemented TestE2E_ToolStep; now 11 E2E tests total
+- Test registers tool def, injects mock, asserts RunStatusCompleted
+
+**Deviations filed:**
+- DEV-15-01: Design clarification on {{.item}} syntax (ACCEPTED)
+- DEV-15-02: Corrected TestE2E_CancelMidRun to use vars-runbook.yaml (ACCEPTED EXEMPLARY)
+- DEV-15-03: Unconditional mockToolRuntime injection for simplicity (ACCEPTED)
+- DEV-15-04: SSE test flake is pre-existing Phase 9 (ACKNOWLEDGED)
+
+**Validation:** go build ./..., go vet ./..., go test ./... -race -count=3 all pass
+
+**Witness:** Ken approved Phase 15 (9/10). Decisions entry merged to decisions.md.

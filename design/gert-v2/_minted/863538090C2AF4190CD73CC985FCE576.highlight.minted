@@ -1,0 +1,6 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{p}{\PYGZob{}}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}failed\PYGZus{}step\PYGZus{}id\PYGZdq{}}\PYG{p}{:}\PYG{+w}{     }\PYG{err}{\PYGZlt{}}\PYG{err}{s}\PYG{k+kc}{tr}\PYG{err}{i}\PYG{k+kc}{n}\PYG{err}{g}\PYG{err}{\PYGZgt{}}\PYG{p}{,}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}compensation\PYGZus{}steps\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{p}{[}\PYG{err}{\PYGZlt{}}\PYG{err}{s}\PYG{k+kc}{tr}\PYG{err}{i}\PYG{k+kc}{n}\PYG{err}{g}\PYG{err}{\PYGZgt{}}\PYG{p}{]}\PYG{+w}{  }\PYG{c+c1}{// step IDs to execute in reverse order}
+\PYG{p}{\PYGZcb{}}
+\end{MintedVerbatim}

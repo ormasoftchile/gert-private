@@ -1,0 +1,13 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYGZdl{}\PYG{+w}{ }gert\PYG{+w}{ }verify\PYG{+w}{ }\PYGZhy{}\PYGZhy{}workspace\PYG{+w}{ }.
+Verifying\PYG{+w}{ }tools...
+\PYG{+w}{  }✓\PYG{+w}{ }kubectl:\PYG{+w}{ }checksum\PYG{+w}{ }verified\PYG{+w}{ }\PYG{o}{(}sha256:a3b4c5...\PYG{o}{)}
+\PYG{+w}{  }✓\PYG{+w}{ }curl:\PYG{+w}{ }no\PYG{+w}{ }checksum\PYG{+w}{ }declared\PYG{+w}{ }\PYG{o}{(}skipped\PYG{o}{)}
+\PYG{+w}{  }✗\PYG{+w}{ }jq:\PYG{+w}{ }checksum\PYG{+w}{ }mismatch\PYG{+w}{ }\PYG{o}{(}expected\PYG{+w}{ }sha256:abc123,\PYG{+w}{ }got\PYG{+w}{ }sha256:def456\PYG{o}{)}
+
+Verifying\PYG{+w}{ }extensions...
+\PYG{+w}{  }✓\PYG{+w}{ }acme.incident\PYGZhy{}pack:\PYG{+w}{ }signature\PYG{+w}{ }valid\PYG{+w}{ }\PYG{o}{(}ed25519,\PYG{+w}{ }expires\PYG{+w}{ }\PYG{l+m}{2025}\PYGZhy{}01\PYGZhy{}01\PYG{o}{)}
+\PYG{+w}{  }✗\PYG{+w}{ }debug\PYGZhy{}tools:\PYG{+w}{ }no\PYG{+w}{ }signature\PYG{+w}{ }\PYG{o}{(}required\PYG{+w}{ }\PYG{k}{for}\PYG{+w}{ }remote\PYG{+w}{ }extensions\PYG{o}{)}
+
+Verification:\PYG{+w}{ }FAILED\PYG{+w}{ }\PYG{o}{(}\PYG{l+m}{2}\PYG{+w}{ }errors\PYG{o}{)}
+\end{MintedVerbatim}

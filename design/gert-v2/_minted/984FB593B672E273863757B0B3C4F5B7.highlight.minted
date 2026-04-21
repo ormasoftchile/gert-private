@@ -1,0 +1,12 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{p}{\PYGZob{}}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}step\PYGZus{}id\PYGZdq{}}\PYG{p}{:}\PYG{+w}{  }\PYG{l+s+s2}{\PYGZdq{}gather\PYGZhy{}approval\PYGZhy{}details\PYGZdq{}}\PYG{p}{,}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}kind\PYGZdq{}}\PYG{p}{:}\PYG{+w}{     }\PYG{l+s+s2}{\PYGZdq{}collector.validation\PYGZus{}failed\PYGZdq{}}\PYG{p}{,}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}attempts\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+m+mi}{3}\PYG{p}{,}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}fields\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{n+nt}{\PYGZdq{}amount\PYGZdq{}}\PYG{p}{:}\PYG{+w}{     }\PYG{l+s+s2}{\PYGZdq{}value 49000 is below minimum 50000\PYGZdq{}}\PYG{p}{,}
+\PYG{+w}{    }\PYG{n+nt}{\PYGZdq{}start\PYGZus{}date\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}2025\PYGZhy{}12\PYGZhy{}01 is before minimum 2026\PYGZhy{}01\PYGZhy{}01\PYGZdq{}}\PYG{p}{,}
+\PYG{+w}{    }\PYG{n+nt}{\PYGZdq{}department\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}\PYGZbs{}\PYGZdq{}legal\PYGZbs{}\PYGZdq{} is not a valid option\PYGZdq{}}
+\PYG{+w}{  }\PYG{p}{\PYGZcb{}}
+\PYG{p}{\PYGZcb{}}
+\end{MintedVerbatim}

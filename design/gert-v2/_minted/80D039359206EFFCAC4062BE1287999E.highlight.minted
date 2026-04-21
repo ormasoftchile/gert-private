@@ -1,0 +1,28 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{// TraceWriter is the interface the engine uses to record events.}
+\PYG{c+c1}{// Implementations must be safe for concurrent use from a single goroutine}
+\PYG{c+c1}{// (the engine\PYGZsq{}s execution loop); multi\PYGZhy{}goroutine safety is optional.}
+\PYG{k+kd}{type}\PYG{+w}{ }\PYG{n+nx}{TraceWriter}\PYG{+w}{ }\PYG{k+kd}{interface}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{n+nx}{Write}\PYG{p}{(}\PYG{n+nx}{event}\PYG{+w}{ }\PYG{n+nx}{DurableEvent}\PYG{p}{)}\PYG{+w}{ }\PYG{k+kt}{error}
+\PYG{+w}{    }\PYG{n+nx}{Close}\PYG{p}{(}\PYG{p}{)}\PYG{+w}{ }\PYG{k+kt}{error}
+\PYG{p}{\PYGZcb{}}
+
+\PYG{c+c1}{// RunStore manages all artefacts for a single run.}
+\PYG{k+kd}{type}\PYG{+w}{ }\PYG{n+nx}{RunStore}\PYG{+w}{ }\PYG{k+kd}{interface}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{n+nx}{RunID}\PYG{p}{(}\PYG{p}{)}\PYG{+w}{ }\PYG{k+kt}{string}
+\PYG{+w}{    }\PYG{n+nx}{WriteTrace}\PYG{p}{(}\PYG{n+nx}{event}\PYG{+w}{ }\PYG{n+nx}{DurableEvent}\PYG{p}{)}\PYG{+w}{ }\PYG{k+kt}{error}
+\PYG{+w}{    }\PYG{n+nx}{ReadTrace}\PYG{p}{(}\PYG{p}{)}\PYG{+w}{ }\PYG{p}{(}\PYG{p}{[}\PYG{p}{]}\PYG{n+nx}{DurableEvent}\PYG{p}{,}\PYG{+w}{ }\PYG{k+kt}{error}\PYG{p}{)}
+\PYG{+w}{    }\PYG{n+nx}{ReadTraceSince}\PYG{p}{(}\PYG{n+nx}{afterSeq}\PYG{+w}{ }\PYG{k+kt}{int64}\PYG{p}{)}\PYG{+w}{ }\PYG{p}{(}\PYG{p}{[}\PYG{p}{]}\PYG{n+nx}{DurableEvent}\PYG{p}{,}\PYG{+w}{ }\PYG{k+kt}{error}\PYG{p}{)}
+\PYG{+w}{    }\PYG{n+nx}{SaveCheckpoint}\PYG{p}{(}\PYG{n+nx}{state}\PYG{+w}{ }\PYG{o}{*}\PYG{n+nx}{RunState}\PYG{p}{)}\PYG{+w}{ }\PYG{p}{(}\PYG{k+kt}{string}\PYG{p}{,}\PYG{+w}{ }\PYG{k+kt}{error}\PYG{p}{)}
+\PYG{+w}{    }\PYG{n+nx}{LoadLatestCheckpoint}\PYG{p}{(}\PYG{p}{)}\PYG{+w}{ }\PYG{p}{(}\PYG{o}{*}\PYG{n+nx}{RunState}\PYG{p}{,}\PYG{+w}{ }\PYG{k+kt}{int64}\PYG{p}{,}\PYG{+w}{ }\PYG{k+kt}{error}\PYG{p}{)}
+\PYG{+w}{    }\PYG{n+nx}{AcquireLock}\PYG{p}{(}\PYG{p}{)}\PYG{+w}{ }\PYG{k+kt}{error}
+\PYG{+w}{    }\PYG{n+nx}{ReleaseLock}\PYG{p}{(}\PYG{p}{)}\PYG{+w}{ }\PYG{k+kt}{error}
+\PYG{+w}{    }\PYG{n+nx}{WriteManifest}\PYG{p}{(}\PYG{n+nx}{manifest}\PYG{+w}{ }\PYG{o}{*}\PYG{n+nx}{RunManifest}\PYG{p}{)}\PYG{+w}{ }\PYG{k+kt}{error}
+\PYG{p}{\PYGZcb{}}
+
+\PYG{c+c1}{// EvidenceCollector is the interface for gathering evidence at manual steps.}
+\PYG{k+kd}{type}\PYG{+w}{ }\PYG{n+nx}{EvidenceCollector}\PYG{+w}{ }\PYG{k+kd}{interface}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{n+nx}{Collect}\PYG{p}{(}\PYG{n+nx}{ctx}\PYG{+w}{ }\PYG{n+nx}{context}\PYG{p}{.}\PYG{n+nx}{Context}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{stepID}\PYG{+w}{ }\PYG{k+kt}{string}\PYG{p}{,}
+\PYG{+w}{        }\PYG{n+nx}{prompts}\PYG{+w}{ }\PYG{p}{[}\PYG{p}{]}\PYG{n+nx}{Prompt}\PYG{p}{)}\PYG{+w}{ }\PYG{p}{(}\PYG{k+kd}{map}\PYG{p}{[}\PYG{k+kt}{string}\PYG{p}{]}\PYG{o}{*}\PYG{n+nx}{EvidenceValue}\PYG{p}{,}\PYG{+w}{ }\PYG{k+kt}{error}\PYG{p}{)}
+\PYG{p}{\PYGZcb{}}
+\end{MintedVerbatim}

@@ -1,0 +1,11 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{contract}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{effects}\PYG{p}{:}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{network.probe}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{service.restart}
+\PYG{+w}{  }\PYG{n+nt}{reads}\PYG{p}{:}\PYG{+w}{   }\PYG{p+pIndicator}{[}\PYG{n+nv}{hostname}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{port}\PYG{p+pIndicator}{]}
+\PYG{+w}{  }\PYG{n+nt}{writes}\PYG{p}{:}\PYG{+w}{  }\PYG{p+pIndicator}{[}\PYG{n+nv}{http\PYGZus{}result}\PYG{p+pIndicator}{]}
+\PYG{+w}{  }\PYG{n+nt}{deterministic}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{true}
+\PYG{+w}{  }\PYG{n+nt}{idempotent}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{false}
+\PYG{+w}{  }\PYG{n+nt}{secrets}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{auth\PYGZus{}token}\PYG{p+pIndicator}{]}
+\end{MintedVerbatim}

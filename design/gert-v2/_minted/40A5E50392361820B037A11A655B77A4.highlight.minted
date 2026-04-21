@@ -1,0 +1,8 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{scrape\PYGZus{}configs}\PYG{p}{:}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{job\PYGZus{}name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZsq{}}\PYG{l+s}{gert}\PYG{l+s}{\PYGZsq{}}
+\PYG{+w}{    }\PYG{n+nt}{static\PYGZus{}configs}\PYG{p}{:}
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{targets}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{l+s}{\PYGZsq{}}\PYG{l+s}{localhost:8080}\PYG{l+s}{\PYGZsq{}}\PYG{p+pIndicator}{]}
+\PYG{+w}{    }\PYG{n+nt}{metrics\PYGZus{}path}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZsq{}}\PYG{l+s}{/metrics}\PYG{l+s}{\PYGZsq{}}
+\PYG{+w}{    }\PYG{n+nt}{scrape\PYGZus{}interval}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{15s}
+\end{MintedVerbatim}

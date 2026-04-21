@@ -1,0 +1,4 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nb}{export}\PYG{+w}{ }\PYG{n+nv}{OTEL\PYGZus{}EXPORTER\PYGZus{}OTLP\PYGZus{}ENDPOINT}\PYG{o}{=}http://localhost:4317
+gert\PYG{+w}{ }run\PYG{+w}{ }deploy.yaml
+\end{MintedVerbatim}

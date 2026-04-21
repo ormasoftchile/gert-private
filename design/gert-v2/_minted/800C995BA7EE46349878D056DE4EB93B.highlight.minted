@@ -1,0 +1,5 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{capture}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{pod\PYGZus{}name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{json.items[0].metadata.name}
+\PYG{+w}{  }\PYG{n+nt}{status}\PYG{p}{:}\PYG{+w}{   }\PYG{l+lScalar+lScalarPlain}{json.items[0].status.phase}
+\end{MintedVerbatim}

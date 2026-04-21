@@ -1,0 +1,41 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+//\PYG{+w}{ }Suspend\PYG{+w}{ }path
+ExecuteStep\PYG{o}{(}step:\PYG{+w}{ }WaitForEvent,\PYG{+w}{ }run:\PYG{+w}{ }Run\PYG{o}{)}:
+\PYG{+w}{  }store.Persist\PYG{o}{(}run\PYG{o}{)}\PYG{+w}{                          }//\PYG{+w}{ }\PYG{l+m}{1}.\PYG{+w}{ }durable\PYG{+w}{ }checkpoint
+\PYG{+w}{  }\PYG{n+nv}{token}\PYG{+w}{ }\PYG{o}{=}\PYG{+w}{ }dispatcher.Register\PYG{o}{(}\PYG{+w}{               }//\PYG{+w}{ }\PYG{l+m}{2}.\PYG{+w}{ }register\PYG{+w}{ }listener
+\PYG{+w}{    }run.id,\PYG{+w}{ }step.event.id,\PYG{+w}{ }step.event.source,
+\PYG{+w}{    }step.event.filter,\PYG{+w}{ }step.event.payload\PYGZus{}schema,
+\PYG{+w}{    }step.timeout\PYG{o}{)}
+\PYG{+w}{  }run.variables\PYG{o}{[}\PYG{l+s+s2}{\PYGZdq{}gert.event.\PYGZdq{}}+step.event.id+\PYG{l+s+s2}{\PYGZdq{}.token\PYGZdq{}}\PYG{o}{]}\PYG{+w}{ }\PYG{o}{=}\PYG{+w}{ }token\PYG{+w}{  }//\PYG{+w}{ }HMAC\PYG{+w}{ }token
+\PYG{+w}{  }run.state\PYG{+w}{ }\PYG{o}{=}\PYG{+w}{ }WAITING
+\PYG{+w}{  }emit\PYG{o}{(}step/waiting,\PYG{+w}{ }\PYG{o}{\PYGZob{}}event\PYGZus{}id:\PYG{+w}{ }step.event.id,\PYG{+w}{ }deadline:\PYG{+w}{ }now\PYG{o}{(}\PYG{o}{)}+step.timeout\PYG{o}{\PYGZcb{}}\PYG{o}{)}
+\PYG{+w}{  }\PYG{k}{return}\PYG{+w}{ }\PYG{o}{(}suspended\PYG{o}{)}\PYG{+w}{                          }//\PYG{+w}{ }\PYG{l+m}{3}.\PYG{+w}{ }goroutine\PYG{+w}{ }exits
+
+//\PYG{+w}{ }Resume\PYG{+w}{ }path
+OnEventArrived\PYG{o}{(}run\PYGZus{}id,\PYG{+w}{ }event\PYGZus{}id,\PYG{+w}{ }payload\PYG{o}{)}:
+\PYG{+w}{  }\PYG{n+nv}{run}\PYG{+w}{  }\PYG{o}{=}\PYG{+w}{ }store.Load\PYG{o}{(}run\PYGZus{}id\PYG{o}{)}\PYG{+w}{                   }//\PYG{+w}{ }\PYG{l+m}{1}.\PYG{+w}{ }rehydrate
+\PYG{+w}{  }\PYG{n+nv}{step}\PYG{+w}{ }\PYG{o}{=}\PYG{+w}{ }run.currentStep\PYG{o}{(}\PYG{o}{)}\PYG{+w}{                    }//\PYG{+w}{    }\PYG{o}{(}WaitForEvent\PYG{+w}{ }step\PYG{o}{)}
+\PYG{+w}{  }ValidatePayload\PYG{o}{(}payload,\PYG{+w}{ }step.event.payload\PYGZus{}schema\PYG{o}{)}\PYG{+w}{  }//\PYG{+w}{ }\PYG{l+m}{2}.\PYG{+w}{ }schema\PYG{+w}{ }check
+\PYG{+w}{  }\PYG{k}{if}\PYG{+w}{ }not\PYG{+w}{ }MatchFilter\PYG{o}{(}payload,\PYG{+w}{ }step.event.filter\PYG{o}{)}:\PYG{+w}{      }//\PYG{+w}{ }\PYG{l+m}{3}.\PYG{+w}{ }filter
+\PYG{+w}{    }\PYG{k}{return}\PYG{+w}{  }//\PYG{+w}{ }discard\PYG{p}{;}\PYG{+w}{ }listener\PYG{+w}{ }stays\PYG{+w}{ }registered
+\PYG{+w}{  }ApplyCapture\PYG{o}{(}payload,\PYG{+w}{ }step.capture,\PYG{+w}{ }run.variables\PYG{o}{)}\PYG{+w}{   }//\PYG{+w}{ }\PYG{l+m}{4}.\PYG{+w}{ }capture
+\PYG{+w}{  }emit\PYG{o}{(}step/eventReceived,\PYG{+w}{ }\PYG{o}{\PYGZob{}}run\PYGZus{}id,\PYG{+w}{ }event\PYGZus{}id\PYG{o}{\PYGZcb{}}\PYG{o}{)}\PYG{+w}{         }//\PYG{+w}{ }\PYG{l+m}{5}.\PYG{+w}{ }trace
+\PYG{+w}{  }run.state\PYG{+w}{ }\PYG{o}{=}\PYG{+w}{ }RUNNING
+\PYG{+w}{  }ExecuteNextStep\PYG{o}{(}run\PYG{o}{)}\PYG{+w}{                        }//\PYG{+w}{ }\PYG{l+m}{6}.\PYG{+w}{ }advance
+
+//\PYG{+w}{ }Timeout\PYG{+w}{ }path
+OnTimeout\PYG{o}{(}run\PYGZus{}id,\PYG{+w}{ }event\PYGZus{}id\PYG{o}{)}:
+\PYG{+w}{  }\PYG{n+nv}{run}\PYG{+w}{ }\PYG{o}{=}\PYG{+w}{ }store.Load\PYG{o}{(}run\PYGZus{}id\PYG{o}{)}
+\PYG{+w}{  }\PYG{n+nv}{step}\PYG{+w}{ }\PYG{o}{=}\PYG{+w}{ }run.currentStep\PYG{o}{(}\PYG{o}{)}
+\PYG{+w}{  }switch\PYG{+w}{ }step.on\PYGZus{}timeout:
+\PYG{+w}{    }\PYG{k}{case}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}fail\PYGZdq{}}:
+\PYG{+w}{      }run.state\PYG{+w}{ }\PYG{o}{=}\PYG{+w}{ }FAILED
+\PYG{+w}{      }emit\PYG{o}{(}step/failed,\PYG{+w}{ }\PYG{o}{\PYGZob{}}reason:\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}wait\PYGZus{}for\PYGZus{}event timeout\PYGZdq{}}\PYG{o}{\PYGZcb{}}\PYG{o}{)}
+\PYG{+w}{    }\PYG{k}{case}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}continue\PYGZdq{}}:
+\PYG{+w}{      }run.state\PYG{+w}{ }\PYG{o}{=}\PYG{+w}{ }RUNNING
+\PYG{+w}{      }ExecuteNextStep\PYG{o}{(}run\PYG{o}{)}
+\PYG{+w}{    }\PYG{k}{case}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}branch:\PYGZlt{}step\PYGZhy{}id\PYGZgt{}\PYGZdq{}}:
+\PYG{+w}{      }run.state\PYG{+w}{ }\PYG{o}{=}\PYG{+w}{ }RUNNING
+\PYG{+w}{      }run.stepCursor\PYG{+w}{ }\PYG{o}{=}\PYG{+w}{ }resolve\PYG{o}{(}step\PYGZhy{}id\PYG{o}{)}
+\PYG{+w}{      }ExecuteNextStep\PYG{o}{(}run\PYG{o}{)}
+\end{MintedVerbatim}

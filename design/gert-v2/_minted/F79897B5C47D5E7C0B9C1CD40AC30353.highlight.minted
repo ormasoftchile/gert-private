@@ -1,0 +1,19 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{assertions}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{outcome}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{passed}\PYG{+w}{           }\PYG{c+c1}{\PYGZsh{} \PYGZdq{}passed\PYGZdq{} | \PYGZdq{}failed\PYGZdq{} | \PYGZdq{}skipped\PYGZdq{}}
+\PYG{+w}{  }\PYG{n+nt}{steps\PYGZus{}passed}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{5}
+\PYG{+w}{  }\PYG{n+nt}{steps\PYGZus{}failed}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{0}
+
+\PYG{+w}{  }\PYG{n+nt}{captures}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{db\PYGZus{}host}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{equals}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{prod\PYGZhy{}db.example.com}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{n+nt}{migration\PYGZus{}status}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{contains}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{complete}\PYG{l+s}{\PYGZdq{}}
+
+\PYG{+w}{  }\PYG{n+nt}{trace}\PYG{p}{:}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{step/completed}
+\PYG{+w}{      }\PYG{n+nt}{step\PYGZus{}id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{run\PYGZhy{}migration}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{governance/blocked}
+\PYG{+w}{      }\PYG{n+nt}{step\PYGZus{}id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{drop\PYGZhy{}table}
+\PYG{+w}{      }\PYG{n+nt}{data.rule}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{denylist}
+\end{MintedVerbatim}

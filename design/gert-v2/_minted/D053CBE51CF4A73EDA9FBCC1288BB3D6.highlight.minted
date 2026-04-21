@@ -1,0 +1,6 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+docker\PYG{+w}{ }run\PYG{+w}{ }\PYGZhy{}d\PYG{+w}{ }\PYGZhy{}\PYGZhy{}name\PYG{+w}{ }jaeger\PYG{+w}{ }\PYG{l+s+se}{\PYGZbs{}}
+\PYG{+w}{  }\PYGZhy{}p\PYG{+w}{ }\PYG{l+m}{16686}:16686\PYG{+w}{ }\PYG{l+s+se}{\PYGZbs{}}
+\PYG{+w}{  }\PYGZhy{}p\PYG{+w}{ }\PYG{l+m}{4317}:4317\PYG{+w}{ }\PYG{l+s+se}{\PYGZbs{}}
+\PYG{+w}{  }jaegertracing/all\PYGZhy{}in\PYGZhy{}one:latest
+\end{MintedVerbatim}

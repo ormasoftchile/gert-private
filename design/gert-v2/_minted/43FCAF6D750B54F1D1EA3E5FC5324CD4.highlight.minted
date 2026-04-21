@@ -1,0 +1,10 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{p}{\PYGZob{}}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}step\PYGZus{}id\PYGZdq{}}\PYG{p}{:}\PYG{+w}{      }\PYG{err}{\PYGZlt{}}\PYG{err}{s}\PYG{k+kc}{tr}\PYG{err}{i}\PYG{k+kc}{n}\PYG{err}{g}\PYG{err}{\PYGZgt{}}\PYG{p}{,}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}error\PYGZus{}code\PYGZdq{}}\PYG{p}{:}\PYG{+w}{   }\PYG{err}{\PYGZlt{}}\PYG{err}{s}\PYG{k+kc}{tr}\PYG{err}{i}\PYG{k+kc}{n}\PYG{err}{g}\PYG{err}{\PYGZgt{}}\PYG{p}{,}\PYG{+w}{  }\PYG{c+c1}{// \PYGZdq{}exit\PYGZus{}nonzero\PYGZdq{} | \PYGZdq{}timeout\PYGZdq{} | \PYGZdq{}tool\PYGZus{}error\PYGZdq{}}
+\PYG{+w}{                             }\PYG{c+c1}{// | \PYGZdq{}governance\PYGZus{}blocked\PYGZdq{} | \PYGZdq{}invoke\PYGZus{}failed\PYGZdq{}}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}error\PYGZus{}message\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{err}{\PYGZlt{}}\PYG{err}{s}\PYG{k+kc}{tr}\PYG{err}{i}\PYG{k+kc}{n}\PYG{err}{g}\PYG{err}{\PYGZgt{}}\PYG{p}{,}\PYG{+w}{ }\PYG{c+c1}{// human\PYGZhy{}readable (redacted)}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}retryable\PYGZdq{}}\PYG{p}{:}\PYG{+w}{    }\PYG{err}{\PYGZlt{}}\PYG{err}{b}\PYG{err}{o}\PYG{err}{o}\PYG{err}{l}\PYG{err}{\PYGZgt{}}\PYG{p}{,}\PYG{+w}{    }\PYG{c+c1}{// true if retry policy allows retry}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}exit\PYGZus{}code\PYGZdq{}}\PYG{p}{:}\PYG{+w}{    }\PYG{err}{\PYGZlt{}}\PYG{err}{i}\PYG{k+kc}{nt}\PYG{err}{\PYGZgt{}}\PYG{+w}{      }\PYG{c+c1}{// for exit\PYGZus{}nonzero; omitted otherwise}
+\PYG{p}{\PYGZcb{}}
+\end{MintedVerbatim}

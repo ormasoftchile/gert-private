@@ -1,0 +1,10 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{p}{\PYGZob{}}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}outcome\PYGZdq{}}\PYG{p}{:}\PYG{+w}{     }\PYG{err}{\PYGZlt{}}\PYG{err}{s}\PYG{k+kc}{tr}\PYG{err}{i}\PYG{k+kc}{n}\PYG{err}{g}\PYG{err}{\PYGZgt{}}\PYG{p}{,}\PYG{+w}{  }\PYG{c+c1}{// \PYGZdq{}success\PYGZdq{} | \PYGZdq{}failure\PYGZdq{} | \PYGZdq{}cancelled\PYGZdq{}}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}step\PYGZus{}count\PYGZdq{}}\PYG{p}{:}\PYG{+w}{  }\PYG{err}{\PYGZlt{}}\PYG{err}{i}\PYG{k+kc}{nt}\PYG{err}{\PYGZgt{}}\PYG{p}{,}\PYG{+w}{     }\PYG{c+c1}{// total steps in the plan}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}passed\PYGZdq{}}\PYG{p}{:}\PYG{+w}{      }\PYG{err}{\PYGZlt{}}\PYG{err}{i}\PYG{k+kc}{nt}\PYG{err}{\PYGZgt{}}\PYG{p}{,}\PYG{+w}{     }\PYG{c+c1}{// steps that completed successfully}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}failed\PYGZdq{}}\PYG{p}{:}\PYG{+w}{      }\PYG{err}{\PYGZlt{}}\PYG{err}{i}\PYG{k+kc}{nt}\PYG{err}{\PYGZgt{}}\PYG{p}{,}\PYG{+w}{     }\PYG{c+c1}{// steps that failed}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}skipped\PYGZdq{}}\PYG{p}{:}\PYG{+w}{     }\PYG{err}{\PYGZlt{}}\PYG{err}{i}\PYG{k+kc}{nt}\PYG{err}{\PYGZgt{}}\PYG{p}{,}\PYG{+w}{     }\PYG{c+c1}{// steps skipped (branch/iterate)}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}duration\PYGZus{}ms\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{err}{\PYGZlt{}}\PYG{err}{i}\PYG{k+kc}{nt}\PYG{l+m+mi}{64}\PYG{err}{\PYGZgt{}}\PYG{+w}{    }\PYG{c+c1}{// wall\PYGZhy{}clock duration from run/started}
+\PYG{p}{\PYGZcb{}}
+\end{MintedVerbatim}

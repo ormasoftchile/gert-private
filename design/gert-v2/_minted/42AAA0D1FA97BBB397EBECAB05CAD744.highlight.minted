@@ -1,0 +1,11 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+//\PYG{+w}{ }Client\PYG{+w}{ }sends\PYG{+w}{ }an\PYG{+w}{ }old\PYG{+w}{ }request\PYG{+w}{ }format\PYG{+w}{ }\PYG{o}{(}before\PYG{+w}{ }a\PYG{+w}{ }new\PYG{+w}{ }optional\PYG{+w}{ }field\PYG{+w}{ }was\PYG{+w}{ }added\PYG{o}{)}
+\PYG{o}{\PYGZob{}}
+\PYG{+w}{  }\PYG{l+s+s2}{\PYGZdq{}method\PYGZdq{}}:\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}exec/start\PYGZdq{}},
+\PYG{+w}{  }\PYG{l+s+s2}{\PYGZdq{}params\PYGZdq{}}:\PYG{+w}{ }\PYG{o}{\PYGZob{}}
+\PYG{+w}{    }\PYG{l+s+s2}{\PYGZdq{}runbookPath\PYGZdq{}}:\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}./runbook.yaml\PYGZdq{}}
+\PYG{+w}{    }//\PYG{+w}{ }Missing\PYG{+w}{ }new\PYG{+w}{ }optional\PYG{+w}{ }field\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}labels\PYGZdq{}}
+\PYG{+w}{  }\PYG{o}{\PYGZcb{}}
+\PYG{o}{\PYGZcb{}}
+//\PYG{+w}{ }Server\PYG{+w}{ }accepts\PYG{+w}{ }and\PYG{+w}{ }defaults\PYG{+w}{ }the\PYG{+w}{ }missing\PYG{+w}{ }field
+\end{MintedVerbatim}

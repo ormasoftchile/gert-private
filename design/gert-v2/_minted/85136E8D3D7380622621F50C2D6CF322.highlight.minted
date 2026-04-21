@@ -1,0 +1,8 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nx}{GET}\PYG{+w}{ }\PYG{o}{/}\PYG{n+nx}{gert}\PYG{o}{\PYGZhy{}}\PYG{n+nx}{logs}\PYG{o}{\PYGZhy{}}\PYG{o}{*}\PYG{o}{/}\PYG{n+nx}{\PYGZus{}search}
+\PYG{p}{\PYGZob{}}
+\PYG{+w}{  }\PYG{l+s}{\PYGZdq{}query\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{l+s}{\PYGZdq{}term\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{p}{\PYGZob{}}\PYG{l+s}{\PYGZdq{}run\PYGZus{}id\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}20260418T143022\PYGZhy{}a3f9c1\PYGZdq{}}\PYG{p}{\PYGZcb{}}
+\PYG{+w}{  }\PYG{p}{\PYGZcb{}}
+\PYG{p}{\PYGZcb{}}
+\end{MintedVerbatim}

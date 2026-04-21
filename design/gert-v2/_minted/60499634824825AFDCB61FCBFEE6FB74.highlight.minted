@@ -1,0 +1,36 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{step}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{route\PYGZus{}on\PYGZus{}env}
+\PYG{+w}{    }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{branch}
+\PYG{+w}{    }\PYG{n+nt}{title}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Route}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{by}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{environment}
+\PYG{+w}{    }\PYG{n+nt}{branches}\PYG{p}{:}
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{condition}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZsq{}}\PYG{l+s}{environment}\PYG{n+nv}{ }\PYG{l+s}{==}\PYG{n+nv}{ }\PYG{l+s}{\PYGZdq{}production\PYGZdq{}}\PYG{l+s}{\PYGZsq{}}
+\PYG{+w}{        }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Production}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{path}
+\PYG{+w}{        }\PYG{n+nt}{steps}\PYG{p}{:}
+\PYG{+w}{          }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{step}\PYG{p}{:}
+\PYG{+w}{              }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{require\PYGZus{}approval}
+\PYG{+w}{              }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{manual}
+\PYG{+w}{              }\PYG{n+nt}{title}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Require}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{change\PYGZhy{}manager}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{approval}
+\PYG{+w}{              }\PYG{n+nt}{approvals}\PYG{p}{:}
+\PYG{+w}{                }\PYG{n+nt}{min}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{1}
+\PYG{+w}{                }\PYG{n+nt}{roles}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{change\PYGZhy{}manager}\PYG{p+pIndicator}{]}
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{condition}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZsq{}}\PYG{l+s}{environment}\PYG{n+nv}{ }\PYG{l+s}{==}\PYG{n+nv}{ }\PYG{l+s}{\PYGZdq{}staging\PYGZdq{}}\PYG{l+s}{\PYGZsq{}}
+\PYG{+w}{        }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Staging}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{path}
+\PYG{+w}{        }\PYG{n+nt}{steps}\PYG{p}{:}
+\PYG{+w}{          }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{step}\PYG{p}{:}
+\PYG{+w}{              }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{log\PYGZus{}staging}
+\PYG{+w}{              }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{cli}
+\PYG{+w}{              }\PYG{n+nt}{title}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Log}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{staging}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{deploy}
+\PYG{+w}{              }\PYG{n+nt}{command}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{echo}
+\PYG{+w}{              }\PYG{n+nt}{args}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Deploying}\PYG{n+nv}{ }\PYG{l+s}{to}\PYG{n+nv}{ }\PYG{l+s}{staging}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{]}
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{else}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{true}
+\PYG{+w}{        }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Unknown}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{environment}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{—}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{abort}
+\PYG{+w}{        }\PYG{n+nt}{steps}\PYG{p}{:}
+\PYG{+w}{          }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{step}\PYG{p}{:}
+\PYG{+w}{              }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{abort}
+\PYG{+w}{              }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{end}
+\PYG{+w}{              }\PYG{n+nt}{title}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Unknown}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{environment}
+\PYG{+w}{              }\PYG{n+nt}{outcome}\PYG{p}{:}
+\PYG{+w}{                }\PYG{n+nt}{category}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{escalated}
+\PYG{+w}{                }\PYG{n+nt}{code}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{unknown\PYGZus{}env}
+\end{MintedVerbatim}

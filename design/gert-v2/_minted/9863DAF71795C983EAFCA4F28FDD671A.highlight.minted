@@ -1,0 +1,5 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nb}{export}\PYG{+w}{ }\PYG{n+nv}{OTEL\PYGZus{}EXPORTER\PYGZus{}OTLP\PYGZus{}ENDPOINT}\PYG{o}{=}https://otlp.nr\PYGZhy{}data.net:4317
+\PYG{n+nb}{export}\PYG{+w}{ }\PYG{n+nv}{NEW\PYGZus{}RELIC\PYGZus{}API\PYGZus{}KEY}\PYG{o}{=}\PYGZlt{}your\PYGZhy{}api\PYGZhy{}key\PYGZgt{}
+gert\PYG{+w}{ }run\PYG{+w}{ }deploy.yaml
+\end{MintedVerbatim}

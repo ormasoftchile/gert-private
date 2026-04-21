@@ -1,0 +1,9 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYGZdl{}\PYG{+w}{ }gert\PYG{+w}{ }contract\PYG{+w}{ }\PYG{n+nb}{test}\PYG{+w}{ }\PYGZhy{}\PYGZhy{}adapter\PYG{o}{=}vscode
+Running\PYG{+w}{ }contract\PYG{+w}{ }tests\PYG{+w}{ }\PYG{k}{for}\PYG{+w}{ }adapter:\PYG{+w}{ }vscode
+\PYG{+w}{  }✓\PYG{+w}{ }exec\PYGZhy{}v2/01\PYGZhy{}start\PYGZhy{}run\PYG{+w}{ }\PYG{o}{(}passed\PYG{o}{)}
+\PYG{+w}{  }✓\PYG{+w}{ }exec\PYGZhy{}v2/02\PYGZhy{}cancel\PYGZhy{}run\PYG{+w}{ }\PYG{o}{(}passed\PYG{o}{)}
+\PYG{+w}{  }✗\PYG{+w}{ }events\PYGZhy{}v2/01\PYGZhy{}subscribe\PYG{+w}{ }\PYG{o}{(}failed:\PYG{+w}{ }missing\PYG{+w}{ }\PYG{l+s+s1}{\PYGZsq{}sequence\PYGZsq{}}\PYG{+w}{ }field\PYG{o}{)}
+
+Contract\PYG{+w}{ }\PYG{n+nb}{test}\PYG{+w}{ }results:\PYG{+w}{ }\PYG{l+m}{2}\PYG{+w}{ }passed,\PYG{+w}{ }\PYG{l+m}{1}\PYG{+w}{ }failed
+\end{MintedVerbatim}

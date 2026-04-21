@@ -1,0 +1,61 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{\PYGZsh{} providers/pagerduty.provider.yaml}
+\PYG{n+nt}{apiVersion}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{provider/v2}
+
+\PYG{n+nt}{meta}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{pd}\PYG{+w}{                         }\PYG{c+c1}{\PYGZsh{} Prefix used in from: bindings (e.g. pd.*)}
+\PYG{+w}{  }\PYG{n+nt}{version}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{1.0.0}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{  }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Resolves}\PYG{n+nv}{ }\PYG{l+s}{inputs}\PYG{n+nv}{ }\PYG{l+s}{from}\PYG{n+nv}{ }\PYG{l+s}{PagerDuty}\PYG{n+nv}{ }\PYG{l+s}{incidents}\PYG{n+nv}{ }\PYG{l+s}{and}\PYG{n+nv}{ }\PYG{l+s}{services}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{  }\PYG{n+nt}{binary}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{pd\PYGZhy{}provider}\PYG{+w}{              }\PYG{c+c1}{\PYGZsh{} Executable name (looked up in PATH)}
+
+\PYG{n+nt}{transport}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{mode}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{stdio\PYGZhy{}jsonrpc}\PYG{+w}{              }\PYG{c+c1}{\PYGZsh{} stdio | stdio\PYGZhy{}jsonrpc | mcp}
+\PYG{+w}{  }\PYG{n+nt}{startup}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{argv}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{\PYGZhy{}\PYGZhy{}config}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{pd.yaml}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{]}
+\PYG{+w}{    }\PYG{n+nt}{ready\PYGZhy{}pattern}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{provider}\PYG{n+nv}{ }\PYG{l+s}{ready}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{n+nt}{timeout}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{10s}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{n+nt}{shutdown\PYGZhy{}method}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{shutdown}\PYG{l+s}{\PYGZdq{}}
+
+\PYG{n+nt}{resolution}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{method}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{provider/resolve}\PYG{+w}{         }\PYG{c+c1}{\PYGZsh{} JSON\PYGZhy{}RPC method the host calls}
+\PYG{+w}{  }\PYG{n+nt}{prefixes}\PYG{p}{:}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{pd.}\PYG{l+s}{\PYGZdq{}}\PYG{+w}{                        }\PYG{c+c1}{\PYGZsh{} All from: values starting with pd.}
+\PYG{+w}{                                   }\PYG{c+c1}{\PYGZsh{} are dispatched to this provider}
+
+\PYG{+w}{  }\PYG{c+c1}{\PYGZsh{} Schema for what the provider needs in each resolution request}
+\PYG{+w}{  }\PYG{n+nt}{input\PYGZhy{}schema}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{object}
+\PYG{+w}{    }\PYG{n+nt}{properties}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{bindings}\PYG{p}{:}
+\PYG{+w}{        }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{object}
+\PYG{+w}{        }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Map}\PYG{n+nv}{ }\PYG{l+s}{of}\PYG{n+nv}{ }\PYG{l+s}{input}\PYG{n+nv}{ }\PYG{l+s}{name}\PYG{n+nv}{ }\PYG{l+s}{to}\PYG{n+nv}{ }\PYG{l+s}{from:}\PYG{n+nv}{ }\PYG{l+s}{binding}\PYG{n+nv}{ }\PYG{l+s}{string}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{      }\PYG{n+nt}{context}\PYG{p}{:}
+\PYG{+w}{        }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{object}
+\PYG{+w}{        }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Execution}\PYG{n+nv}{ }\PYG{l+s}{context}\PYG{n+nv}{ }\PYG{l+s}{(runId,}\PYG{n+nv}{ }\PYG{l+s}{userId,}\PYG{n+nv}{ }\PYG{l+s}{mode)}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{n+nt}{required}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{bindings}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{]}
+
+\PYG{+w}{  }\PYG{c+c1}{\PYGZsh{} Schema for what the provider returns}
+\PYG{+w}{  }\PYG{n+nt}{output\PYGZhy{}schema}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{object}
+\PYG{+w}{    }\PYG{n+nt}{properties}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{resolved}\PYG{p}{:}
+\PYG{+w}{        }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{object}
+\PYG{+w}{        }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Map}\PYG{n+nv}{ }\PYG{l+s}{of}\PYG{n+nv}{ }\PYG{l+s}{input}\PYG{n+nv}{ }\PYG{l+s}{name}\PYG{n+nv}{ }\PYG{l+s}{to}\PYG{n+nv}{ }\PYG{l+s}{resolved}\PYG{n+nv}{ }\PYG{l+s}{string}\PYG{n+nv}{ }\PYG{l+s}{value}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{      }\PYG{n+nt}{warnings}\PYG{p}{:}
+\PYG{+w}{        }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{array}
+\PYG{+w}{        }\PYG{n+nt}{items}\PYG{p}{:}
+\PYG{+w}{          }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{string}
+\PYG{+w}{    }\PYG{n+nt}{required}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{resolved}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{]}
+
+\PYG{+w}{  }\PYG{n+nt}{cache}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{enabled}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{true}
+\PYG{+w}{    }\PYG{n+nt}{scope}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{run}\PYG{+w}{                     }\PYG{c+c1}{\PYGZsh{} run | step | none}
+\PYG{+w}{    }\PYG{n+nt}{ttl}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{60s}\PYG{l+s}{\PYGZdq{}}
+
+\PYG{n+nt}{governance}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{requires\PYGZhy{}capabilities}\PYG{p}{:}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{capability/network}\PYG{+w}{           }\PYG{c+c1}{\PYGZsh{} This provider needs outbound network}
+\PYG{+w}{  }\PYG{n+nt}{env\PYGZhy{}read\PYGZhy{}patterns}\PYG{p}{:}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{PD\PYGZus{}API\PYGZus{}KEY}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{PD\PYGZus{}*}\PYG{l+s}{\PYGZdq{}}
+\end{MintedVerbatim}

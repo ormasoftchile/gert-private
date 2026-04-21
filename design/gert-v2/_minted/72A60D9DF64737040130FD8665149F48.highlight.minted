@@ -1,0 +1,17 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{p}{\PYGZob{}}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}event\PYGZus{}id\PYGZdq{}}\PYG{p}{:}\PYG{+w}{    }\PYG{l+s+s2}{\PYGZdq{}b1c2d3e4\PYGZhy{}5f6a\PYGZhy{}7b8c\PYGZhy{}9d0e\PYGZhy{}1f2a3b4c5d6e\PYGZdq{}}\PYG{p}{,}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}run\PYGZus{}id\PYGZdq{}}\PYG{p}{:}\PYG{+w}{      }\PYG{l+s+s2}{\PYGZdq{}20260418T143022\PYGZhy{}a3f9c1\PYGZdq{}}\PYG{p}{,}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}runbook\PYGZus{}id\PYGZdq{}}\PYG{p}{:}\PYG{+w}{  }\PYG{l+s+s2}{\PYGZdq{}deploy\PYGZhy{}frontend\PYGZdq{}}\PYG{p}{,}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}timestamp\PYGZdq{}}\PYG{p}{:}\PYG{+w}{   }\PYG{l+s+s2}{\PYGZdq{}2026\PYGZhy{}04\PYGZhy{}18T14:32:10.456789Z\PYGZdq{}}\PYG{p}{,}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}kind\PYGZdq{}}\PYG{p}{:}\PYG{+w}{        }\PYG{l+s+s2}{\PYGZdq{}governance/approval\PYGZus{}requested\PYGZdq{}}\PYG{p}{,}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}sequence\PYGZdq{}}\PYG{p}{:}\PYG{+w}{    }\PYG{l+m+mi}{12}\PYG{p}{,}
+\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}payload\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{n+nt}{\PYGZdq{}step\PYGZus{}id\PYGZdq{}}\PYG{p}{:}\PYG{+w}{         }\PYG{l+s+s2}{\PYGZdq{}deploy\PYGZus{}to\PYGZus{}prod\PYGZdq{}}\PYG{p}{,}
+\PYG{+w}{    }\PYG{n+nt}{\PYGZdq{}approver\PYGZus{}roles\PYGZdq{}}\PYG{p}{:}\PYG{+w}{  }\PYG{p}{[}\PYG{l+s+s2}{\PYGZdq{}SRE\PYGZdq{}}\PYG{p}{,}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}PM\PYGZdq{}}\PYG{p}{],}
+\PYG{+w}{    }\PYG{n+nt}{\PYGZdq{}min\PYGZus{}approvals\PYGZdq{}}\PYG{p}{:}\PYG{+w}{   }\PYG{l+m+mi}{2}\PYG{p}{,}
+\PYG{+w}{    }\PYG{n+nt}{\PYGZdq{}timeout\PYGZus{}seconds\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+m+mi}{3600}\PYG{p}{,}
+\PYG{+w}{    }\PYG{n+nt}{\PYGZdq{}message\PYGZdq{}}\PYG{p}{:}\PYG{+w}{         }\PYG{l+s+s2}{\PYGZdq{}Deploying to production. Confirm change window.\PYGZdq{}}
+\PYG{+w}{  }\PYG{p}{\PYGZcb{}}
+\PYG{p}{\PYGZcb{}}
+\end{MintedVerbatim}

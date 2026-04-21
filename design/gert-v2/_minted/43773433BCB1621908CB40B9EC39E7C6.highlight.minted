@@ -1,0 +1,27 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{\PYGZsh{} Basic multiline with hint}
+\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{description}
+\PYG{+w}{  }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{text}
+\PYG{+w}{  }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Incident}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{description}
+\PYG{+w}{  }\PYG{n+nt}{multiline}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{true}
+\PYG{+w}{  }\PYG{n+nt}{required}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{true}
+\PYG{+w}{  }\PYG{n+nt}{hint}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Describe}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{what}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{happened,}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{when,}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{and}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{which}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{services}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{were}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{affected}
+
+\PYG{c+c1}{\PYGZsh{} Pattern validation — IPv4 address}
+\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{target\PYGZus{}ip}
+\PYG{+w}{  }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{text}
+\PYG{+w}{  }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Target}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{IP}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{address}
+\PYG{+w}{  }\PYG{n+nt}{required}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{true}
+\PYG{+w}{  }\PYG{n+nt}{validation}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{pattern}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{\PYGZca{}((25[0\PYGZhy{}5]|2[0\PYGZhy{}4][0\PYGZhy{}9]|[01]?[0\PYGZhy{}9][0\PYGZhy{}9]?)}\PYG{l+s}{\PYGZbs{}\PYGZbs{}}\PYG{l+s}{.)\PYGZob{}3\PYGZcb{}(25[0\PYGZhy{}5]|2[0\PYGZhy{}4][0\PYGZhy{}9]|[01]?[0\PYGZhy{}9][0\PYGZhy{}9]?)\PYGZdl{}}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{n+nt}{pattern\PYGZus{}hint}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Must}\PYG{n+nv}{ }\PYG{l+s}{be}\PYG{n+nv}{ }\PYG{l+s}{a}\PYG{n+nv}{ }\PYG{l+s}{valid}\PYG{n+nv}{ }\PYG{l+s}{IPv4}\PYG{n+nv}{ }\PYG{l+s}{address}\PYG{n+nv}{ }\PYG{l+s}{(e.g.}\PYG{n+nv}{ }\PYG{l+s}{192.168.1.1)}\PYG{l+s}{\PYGZdq{}}
+
+\PYG{c+c1}{\PYGZsh{} Length constraints}
+\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{summary}
+\PYG{+w}{  }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{text}
+\PYG{+w}{  }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Executive}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{summary}
+\PYG{+w}{  }\PYG{n+nt}{required}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{true}
+\PYG{+w}{  }\PYG{n+nt}{validation}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{min\PYGZus{}length}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{20}
+\PYG{+w}{    }\PYG{n+nt}{max\PYGZus{}length}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{500}
+\end{MintedVerbatim}

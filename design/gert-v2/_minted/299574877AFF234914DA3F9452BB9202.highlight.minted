@@ -1,0 +1,27 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{// Parser transforms raw YAML bytes into a validated ParsedRunbook.}
+\PYG{k+kd}{type}\PYG{+w}{ }\PYG{n+nx}{Parser}\PYG{+w}{ }\PYG{k+kd}{interface}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{c+c1}{// Parse reads YAML from r, validates against the v2 JSON Schema,}
+\PYG{+w}{    }\PYG{c+c1}{// applies structural semantic checks, and returns a ParsedRunbook.}
+\PYG{+w}{    }\PYG{c+c1}{// Errors carry structured diagnostics (file, line, column, message).}
+\PYG{+w}{    }\PYG{n+nx}{Parse}\PYG{p}{(}\PYG{n+nx}{ctx}\PYG{+w}{ }\PYG{n+nx}{context}\PYG{p}{.}\PYG{n+nx}{Context}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{r}\PYG{+w}{ }\PYG{n+nx}{io}\PYG{p}{.}\PYG{n+nx}{Reader}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{opts}\PYG{+w}{ }\PYG{n+nx}{ParseOptions}\PYG{p}{)}\PYG{+w}{ }\PYG{p}{(}\PYG{o}{*}\PYG{n+nx}{ParsedRunbook}\PYG{p}{,}\PYG{+w}{ }\PYG{k+kt}{error}\PYG{p}{)}
+\PYG{p}{\PYGZcb{}}
+
+\PYG{k+kd}{type}\PYG{+w}{ }\PYG{n+nx}{ParseOptions}\PYG{+w}{ }\PYG{k+kd}{struct}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{c+c1}{// SchemaVersion overrides the apiVersion field for compatibility shims.}
+\PYG{+w}{    }\PYG{n+nx}{SchemaVersion}\PYG{+w}{ }\PYG{k+kt}{string}
+\PYG{+w}{    }\PYG{c+c1}{// StrictMode causes deprecation warnings to be surfaced as errors.}
+\PYG{+w}{    }\PYG{n+nx}{StrictMode}\PYG{+w}{ }\PYG{k+kt}{bool}
+\PYG{p}{\PYGZcb{}}
+
+\PYG{c+c1}{// ParsedRunbook is an immutable, fully\PYGZhy{}validated representation of a runbook.}
+\PYG{c+c1}{// All fields have been structurally validated. Templates are not yet evaluated.}
+\PYG{k+kd}{type}\PYG{+w}{ }\PYG{n+nx}{ParsedRunbook}\PYG{+w}{ }\PYG{k+kd}{struct}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{n+nx}{Meta}\PYG{+w}{       }\PYG{n+nx}{RunbookMeta}
+\PYG{+w}{    }\PYG{n+nx}{Governance}\PYG{+w}{ }\PYG{n+nx}{GovernancePolicy}\PYG{+w}{  }\PYG{c+c1}{// nil if no governance block}
+\PYG{+w}{    }\PYG{n+nx}{Steps}\PYG{+w}{      }\PYG{p}{[}\PYG{p}{]}\PYG{n+nx}{ParsedStep}
+\PYG{+w}{    }\PYG{n+nx}{Imports}\PYG{+w}{    }\PYG{k+kd}{map}\PYG{p}{[}\PYG{k+kt}{string}\PYG{p}{]}\PYG{k+kt}{string}\PYG{+w}{ }\PYG{c+c1}{// alias \PYGZhy{}\PYGZgt{} path (not yet resolved)}
+\PYG{+w}{    }\PYG{n+nx}{Tools}\PYG{+w}{      }\PYG{p}{[}\PYG{p}{]}\PYG{k+kt}{string}\PYG{+w}{          }\PYG{c+c1}{// tool names (not yet discovered)}
+\PYG{+w}{    }\PYG{n+nx}{Schema}\PYG{+w}{     }\PYG{n+nx}{SchemaRef}\PYG{+w}{         }\PYG{c+c1}{// version and \PYGZdl{}schema URL}
+\PYG{p}{\PYGZcb{}}
+\end{MintedVerbatim}

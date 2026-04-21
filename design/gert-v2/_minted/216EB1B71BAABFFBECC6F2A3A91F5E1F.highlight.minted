@@ -1,0 +1,17 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{err}{\PYGZsh{}}\PYG{+w}{ }\PYG{n+nx}{Example}\PYG{+w}{ }\PYG{n+nx}{provider}\PYG{+w}{ }\PYG{n+nx}{capability}\PYG{+w}{ }\PYG{n+nx}{declaration}
+\PYG{p}{\PYGZob{}}
+\PYG{+w}{  }\PYG{l+s}{\PYGZdq{}jsonrpc\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}2.0\PYGZdq{}}\PYG{p}{,}
+\PYG{+w}{  }\PYG{l+s}{\PYGZdq{}method\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}provider/initialize\PYGZdq{}}\PYG{p}{,}
+\PYG{+w}{  }\PYG{l+s}{\PYGZdq{}params\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{l+s}{\PYGZdq{}capabilities\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{      }\PYG{l+s}{\PYGZdq{}resolution\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{k+kc}{true}\PYG{p}{,}
+\PYG{+w}{      }\PYG{l+s}{\PYGZdq{}choice\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{k+kc}{true}\PYG{p}{,}
+\PYG{+w}{      }\PYG{l+s}{\PYGZdq{}decision\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{k+kc}{false}\PYG{p}{,}
+\PYG{+w}{      }\PYG{l+s}{\PYGZdq{}collector\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{k+kc}{true}\PYG{p}{,}
+\PYG{+w}{      }\PYG{l+s}{\PYGZdq{}getOptions\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{k+kc}{true}\PYG{p}{,}
+\PYG{+w}{      }\PYG{l+s}{\PYGZdq{}search\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{k+kc}{true}
+\PYG{+w}{    }\PYG{p}{\PYGZcb{}}
+\PYG{+w}{  }\PYG{p}{\PYGZcb{}}
+\PYG{p}{\PYGZcb{}}
+\end{MintedVerbatim}

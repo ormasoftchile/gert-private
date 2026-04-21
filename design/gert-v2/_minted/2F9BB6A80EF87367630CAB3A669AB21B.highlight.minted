@@ -1,0 +1,6 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{inputs}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{server\PYGZus{}name}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{from}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{prompt}
+\PYG{+w}{    }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Server}\PYG{n+nv}{ }\PYG{l+s}{to}\PYG{n+nv}{ }\PYG{l+s}{check}\PYG{l+s}{\PYGZdq{}}
+\end{MintedVerbatim}

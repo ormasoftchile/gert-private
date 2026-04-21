@@ -1,0 +1,23 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{\PYGZdl{}schema}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{https://schemas.gert.dev/runbook/v2.json}\PYG{l+s}{\PYGZdq{}}
+\PYG{n+nt}{apiVersion}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{runbook/v2}
+\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{hello\PYGZhy{}world}
+\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Hello}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{World}
+
+\PYG{n+nt}{flow}\PYG{p}{:}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{step}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{greet}
+\PYG{+w}{      }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{cli}
+\PYG{+w}{      }\PYG{n+nt}{title}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Print}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{greeting}
+\PYG{+w}{      }\PYG{n+nt}{command}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{echo}
+\PYG{+w}{      }\PYG{n+nt}{args}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Hello,}\PYG{n+nv}{ }\PYG{l+s}{world!}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{]}
+\PYG{+w}{      }\PYG{n+nt}{capture}\PYG{p}{:}
+\PYG{+w}{        }\PYG{n+nt}{output}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{stdout}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{step}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{done}
+\PYG{+w}{      }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{end}
+\PYG{+w}{      }\PYG{n+nt}{title}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Complete}
+\PYG{+w}{      }\PYG{n+nt}{outcome}\PYG{p}{:}
+\PYG{+w}{        }\PYG{n+nt}{category}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{resolved}
+\PYG{+w}{        }\PYG{n+nt}{code}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{success}
+\end{MintedVerbatim}

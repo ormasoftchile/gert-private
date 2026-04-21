@@ -1,0 +1,7 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{meta}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{governance}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{requires\PYGZus{}role}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{incident\PYGZhy{}responder}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{c+c1}{\PYGZsh{} or: requires\PYGZus{}any\PYGZus{}role: [\PYGZdq{}DRI\PYGZdq{}, \PYGZdq{}incident\PYGZhy{}responder\PYGZdq{}]}
+\PYG{+w}{    }\PYG{c+c1}{\PYGZsh{} or: requires\PYGZus{}all\PYGZus{}roles: [\PYGZdq{}DRI\PYGZdq{}, \PYGZdq{}change\PYGZhy{}manager\PYGZdq{}]}
+\end{MintedVerbatim}

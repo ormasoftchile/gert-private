@@ -1,0 +1,13 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{// ConformanceTest validates any Runtime implementation.}
+\PYG{k+kd}{func}\PYG{+w}{ }\PYG{n+nx}{ConformanceTest}\PYG{p}{(}\PYG{n+nx}{t}\PYG{+w}{ }\PYG{o}{*}\PYG{n+nx}{testing}\PYG{p}{.}\PYG{n+nx}{T}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{rt}\PYG{+w}{ }\PYG{n+nx}{Runtime}\PYG{p}{)}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{n+nx}{t}\PYG{p}{.}\PYG{n+nx}{Helper}\PYG{p}{(}\PYG{p}{)}
+\PYG{+w}{    }\PYG{n+nx}{bus}\PYG{+w}{ }\PYG{o}{:=}\PYG{+w}{ }\PYG{n+nx}{newTestEventBus}\PYG{p}{(}\PYG{p}{)}
+\PYG{+w}{    }\PYG{n+nx}{err}\PYG{+w}{ }\PYG{o}{:=}\PYG{+w}{ }\PYG{n+nx}{rt}\PYG{p}{.}\PYG{n+nx}{Execute}\PYG{p}{(}\PYG{n+nx}{context}\PYG{p}{.}\PYG{n+nx}{Background}\PYG{p}{(}\PYG{p}{)}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{fixtureRunbook}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{bus}\PYG{p}{)}
+\PYG{+w}{    }\PYG{n+nx}{require}\PYG{p}{.}\PYG{n+nx}{NoError}\PYG{p}{(}\PYG{n+nx}{t}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{err}\PYG{p}{)}
+\PYG{+w}{    }\PYG{n+nx}{events}\PYG{+w}{ }\PYG{o}{:=}\PYG{+w}{ }\PYG{n+nx}{bus}\PYG{p}{.}\PYG{n+nx}{Events}\PYG{p}{(}\PYG{p}{)}
+\PYG{+w}{    }\PYG{n+nx}{require}\PYG{p}{.}\PYG{n+nx}{Equal}\PYG{p}{(}\PYG{n+nx}{t}\PYG{p}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}run/started\PYGZdq{}}\PYG{p}{,}\PYG{+w}{   }\PYG{n+nx}{events}\PYG{p}{[}\PYG{l+m+mi}{0}\PYG{p}{]}\PYG{p}{.}\PYG{n+nx}{Type}\PYG{p}{)}
+\PYG{+w}{    }\PYG{n+nx}{require}\PYG{p}{.}\PYG{n+nx}{Equal}\PYG{p}{(}\PYG{n+nx}{t}\PYG{p}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}run/completed\PYGZdq{}}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{events}\PYG{p}{[}\PYG{n+nb}{len}\PYG{p}{(}\PYG{n+nx}{events}\PYG{p}{)}\PYG{o}{\PYGZhy{}}\PYG{l+m+mi}{1}\PYG{p}{]}\PYG{p}{.}\PYG{n+nx}{Type}\PYG{p}{)}
+\PYG{+w}{    }\PYG{n+nx}{assertNoEventsAfterTerminal}\PYG{p}{(}\PYG{n+nx}{t}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{events}\PYG{p}{)}
+\PYG{p}{\PYGZcb{}}
+\end{MintedVerbatim}

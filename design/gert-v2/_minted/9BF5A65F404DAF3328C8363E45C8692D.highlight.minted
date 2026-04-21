@@ -1,0 +1,13 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{steps}\PYG{p}{:}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{delete\PYGZus{}database}
+\PYG{+w}{    }\PYG{n+nt}{kind}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{cli}
+\PYG{+w}{    }\PYG{n+nt}{command}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{kubectl}\PYG{n+nv}{ }\PYG{l+s}{delete}\PYG{n+nv}{ }\PYG{l+s}{namespace}\PYG{n+nv}{ }\PYG{l+s}{\PYGZob{}\PYGZob{}}\PYG{n+nv}{ }\PYG{l+s}{.targetNamespace}\PYG{n+nv}{ }\PYG{l+s}{\PYGZcb{}\PYGZcb{}}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{n+nt}{approvals}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{min}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{2}
+\PYG{+w}{      }\PYG{n+nt}{roles}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{DRI}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{change\PYGZhy{}manager}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{]}
+\PYG{+w}{      }\PYG{n+nt}{timeout}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{24h}
+\PYG{+w}{      }\PYG{n+nt}{on\PYGZus{}timeout}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{fail}\PYG{+w}{   }\PYG{c+c1}{\PYGZsh{} or: escalate}
+\PYG{+w}{      }\PYG{n+nt}{escalate\PYGZus{}to}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{senior\PYGZhy{}sre}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{director\PYGZhy{}of\PYGZhy{}eng}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{]}
+\PYG{+w}{      }\PYG{n+nt}{message}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Deleting}\PYG{n+nv}{ }\PYG{l+s}{\PYGZob{}\PYGZob{}}\PYG{n+nv}{ }\PYG{l+s}{.targetNamespace}\PYG{n+nv}{ }\PYG{l+s}{\PYGZcb{}\PYGZcb{}}\PYG{n+nv}{ }\PYG{l+s}{is}\PYG{n+nv}{ }\PYG{l+s}{irreversible.}\PYG{n+nv}{ }\PYG{l+s}{Confirm}\PYG{n+nv}{ }\PYG{l+s}{change}\PYG{n+nv}{ }\PYG{l+s}{window.}\PYG{l+s}{\PYGZdq{}}
+\end{MintedVerbatim}

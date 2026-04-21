@@ -1,0 +1,15 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{// Adapter is the interface every consumer of the Runtime Core must implement.}
+\PYG{k+kd}{type}\PYG{+w}{ }\PYG{n+nx}{Adapter}\PYG{+w}{ }\PYG{k+kd}{interface}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{c+c1}{// Attach binds the adapter to a RunHandle before the first Next call.}
+\PYG{+w}{    }\PYG{n+nx}{Attach}\PYG{p}{(}\PYG{n+nx}{handle}\PYG{+w}{ }\PYG{n+nx}{RunHandle}\PYG{p}{)}\PYG{+w}{ }\PYG{k+kt}{error}
+
+\PYG{+w}{    }\PYG{c+c1}{// Run blocks until the run completes or is cancelled. It is responsible}
+\PYG{+w}{    }\PYG{c+c1}{// for draining Events(), rendering output, and forwarding user input.}
+\PYG{+w}{    }\PYG{n+nx}{Run}\PYG{p}{(}\PYG{n+nx}{ctx}\PYG{+w}{ }\PYG{n+nx}{context}\PYG{p}{.}\PYG{n+nx}{Context}\PYG{p}{)}\PYG{+w}{ }\PYG{k+kt}{error}
+\PYG{p}{\PYGZcb{}}
+
+\PYG{c+c1}{// The gert serve JSON\PYGZhy{}RPC layer implements Adapter over stdio.}
+\PYG{c+c1}{// The TUI (Bubble Tea) implements Adapter over a terminal.}
+\PYG{c+c1}{// Future: a web adapter implements Adapter over WebSocket.}
+\end{MintedVerbatim}

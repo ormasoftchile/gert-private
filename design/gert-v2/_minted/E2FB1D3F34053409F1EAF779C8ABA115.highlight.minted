@@ -1,0 +1,4 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+step.outcome     = \PYGZdq{}success\PYGZdq{}            // \PYGZdq{}success\PYGZdq{} | \PYGZdq{}failure\PYGZdq{} | \PYGZdq{}skipped\PYGZdq{}
+step.retries     = 2                    // number of retry attempts
+\end{MintedVerbatim}

@@ -1,0 +1,7 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+remaining\PYGZus{}possible = len(pool) \PYGZhy{} len(rejections) \PYGZhy{} len(approvals)
+if (len(approvals) + remaining\PYGZus{}possible) \PYGZlt{} required:
+    // quorum is impossible — fail immediately
+    step.state = FAILED
+    emit(step/failed, \PYGZob{}reason: \PYGZdq{}QuorumImpossible\PYGZdq{}, ...\PYGZcb{})
+\end{MintedVerbatim}

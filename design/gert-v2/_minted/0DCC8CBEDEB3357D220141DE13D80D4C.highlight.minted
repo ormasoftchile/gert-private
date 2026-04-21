@@ -1,0 +1,5 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nb}{export}\PYG{+w}{ }\PYG{n+nv}{OTEL\PYGZus{}EXPORTER\PYGZus{}OTLP\PYGZus{}ENDPOINT}\PYG{o}{=}https://api.datadoghq.com
+\PYG{n+nb}{export}\PYG{+w}{ }\PYG{n+nv}{DD\PYGZus{}API\PYGZus{}KEY}\PYG{o}{=}\PYGZlt{}your\PYGZhy{}api\PYGZhy{}key\PYGZgt{}
+gert\PYG{+w}{ }run\PYG{+w}{ }deploy.yaml
+\end{MintedVerbatim}

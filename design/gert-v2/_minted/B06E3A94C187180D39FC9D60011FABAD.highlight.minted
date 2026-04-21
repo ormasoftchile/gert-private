@@ -1,0 +1,9 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{meta}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{governance}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{deny\PYGZus{}env\PYGZus{}vars}\PYG{p}{:}
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{*\PYGZus{}SECRET*}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{*\PYGZus{}TOKEN}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{AWS\PYGZus{}*}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{GITHUB\PYGZus{}*}\PYG{l+s}{\PYGZdq{}}
+\end{MintedVerbatim}

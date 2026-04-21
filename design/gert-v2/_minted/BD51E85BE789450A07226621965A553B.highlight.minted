@@ -1,0 +1,11 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{\PYGZsh{} In runbook meta or .gert/config.yaml}
+\PYG{n+nt}{tools}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{mcp\PYGZhy{}servers}\PYG{p}{:}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{acme\PYGZhy{}mcp}
+\PYG{+w}{      }\PYG{n+nt}{binary}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{acme\PYGZhy{}mcp\PYGZhy{}server}
+\PYG{+w}{      }\PYG{n+nt}{args}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{\PYGZhy{}\PYGZhy{}port}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{stdio}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{]}
+\PYG{+w}{      }\PYG{n+nt}{transport}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{mcp}
+\PYG{+w}{      }\PYG{n+nt}{startup}\PYG{p}{:}
+\PYG{+w}{        }\PYG{n+nt}{timeout}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{15s}\PYG{l+s}{\PYGZdq{}}
+\end{MintedVerbatim}

@@ -1,0 +1,20 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{\PYGZsh{} gert\PYGZhy{}extension.yaml — signed extension}
+\PYG{n+nt}{apiVersion}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{extension/v2}
+
+\PYG{n+nt}{meta}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{acme.incident\PYGZhy{}pack}
+\PYG{+w}{  }\PYG{n+nt}{version}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{1.2.0}\PYG{l+s}{\PYGZdq{}}
+
+\PYG{n+nt}{signature}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{algorithm}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{ed25519}
+\PYG{+w}{  }\PYG{n+nt}{publicKeyFingerprint}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{sha256:abcd1234...}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{  }\PYG{n+nt}{signatureData}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{base64\PYGZhy{}encoded\PYGZhy{}signature}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{  }\PYG{n+nt}{signedFields}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{meta}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{capabilities}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{entry\PYGZhy{}point}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{transport}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{]}
+
+\PYG{n+nt}{trust\PYGZus{}chain}\PYG{p}{:}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{fingerprint}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{sha256:abcd1234...}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{n+nt}{issuer}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Acme}\PYG{n+nv}{ }\PYG{l+s}{Platform}\PYG{n+nv}{ }\PYG{l+s}{Team}\PYG{n+nv}{ }\PYG{l+s}{CA}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{n+nt}{notBefore}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{2024\PYGZhy{}01\PYGZhy{}01T00:00:00Z}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{n+nt}{notAfter}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{2025\PYGZhy{}01\PYGZhy{}01T00:00:00Z}\PYG{l+s}{\PYGZdq{}}
+\end{MintedVerbatim}

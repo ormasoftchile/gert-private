@@ -1,0 +1,6 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+policy.name      = \PYGZdq{}allow\PYGZhy{}ssh\PYGZdq{}          // policy identifier
+policy.outcome   = \PYGZdq{}allow\PYGZdq{}              // \PYGZdq{}allow\PYGZdq{} | \PYGZdq{}deny\PYGZdq{}
+run.id           = \PYGZdq{}20260418T143022\PYGZhy{}a3f9c1\PYGZdq{}
+step.id          = \PYGZdq{}backup\PYGZhy{}db\PYGZdq{}
+\end{MintedVerbatim}

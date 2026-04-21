@@ -1446,3 +1446,79 @@ Replacement of Go `text/template` Polish/prefix notation for boolean conditions 
 - v2/pkg/testutil/fake_input_provider.go, fake_prompt_provider.go
 
 **Output:** .squad/tmp/ken-phase8-review.md, .squad/decisions/inbox/ken-phase8-review.md
+
+
+---
+
+## 2026-04-22 — Phase 9 Design: gert serve (HTTP/WS/SSE Server)
+
+**Action:** Architecture design for Phase 9 — the `gert serve` HTTP server adapter
+**Requested by:** Cristian
+
+**What was designed:**
+
+Full architecture for `gert serve` as an HTTP-based adapter to the gert v2 runtime, replacing the v1 stdio-only JSON-RPC model with a network-accessible server supporting JSON-RPC 2.0 over HTTP, WebSocket event streaming, and SSE fallback.
+
+**Key decisions:**
+
+1. **D1: net/http stdlib only** — No third-party HTTP frameworks. Go 1.22+ enhanced mux.
+2. **D2: github.com/coder/websocket** — Actively maintained successor to gorilla/websocket.
+3. **D3: SSE via pure stdlib** — text/event-stream with http.Flusher, no library needed.
+4. **D4: JSON-RPC 2.0 strict** — Required field validation, standard error codes.
+5. **D5: Step-by-step execution** — Client-driven via run.next; no auto-advance.
+6. **D6: No auth in Phase 9** — CORS open for dev; security hardening deferred.
+7. **D7: MaxRunAge TTL with GC** — 1hr default, background goroutine every 60s.
+8. **D8: 256-slot drop-on-full** — Non-blocking emission per spec; trace file is authority.
+
+**Package layout:**
+- `v2/cmd/serve/main.go` — binary entry point
+- `v2/pkg/serve/` — public types (ServerConfig, RunEvent)
+- `v2/internal/serve/` — implementation (server, rpc, ws, sse, health, registry, events, middleware)
+- `v2/pkg/testutil/fake_serve_client.go` — integration test helper
+
+**Endpoints:** POST /rpc, GET /ws, GET /events, GET /health
+**RPC methods:** run.start, run.next, run.cancel, run.status, run.list
+**Test plan:** 24 tests covering RPC, WS, SSE, health, registry, server lifecycle
+
+**Deliverables:**
+1. `.squad/tmp/ken-phase9-design.md` (full architecture doc)
+2. `.squad/decisions/inbox/ken-phase9-design.md` (8 decisions: D1-D8)
+
+**Status:** DESIGN COMPLETE. Ready for Brian to implement.
+
+---
+
+## 2026-07-17 — Phase 11 Review: Evidence & Replay
+
+**Action:** Five-axis architectural review of Brian's Phase 11 implementation
+**Verdict:** APPROVED (8/10)
+
+**Scope reviewed:**
+- 29 new files: pkg/evidence/*, pkg/trace/{reader,filter}.go, internal/trace/jsonl_reader{,_test}.go, internal/evidence/*, internal/replay/*, internal/resume/*, internal/runstore/*
+- 11 modified files: cmd/gert/run.go, internal/adapter/{options,wire,wire_test}.go, internal/engine/engine.go, internal/serve/{server,rpc,rpc_test,test_helpers_test}.go, pkg/engine/{engine,run}.go
+- 40 Phase 11 test functions across 10 test files, all passing with -race
+
+**Key findings:**
+- Evidence model (pkg/evidence) is a clean leaf package with zero internal imports — exactly as designed
+- DefaultCollector caches AttachmentStore per runDir (deviation from spec) — accepted, bounded by single-run-per-process constraint
+- ReplayExecutorRegistry correctly mirrors Phase 10 DryRunExecutorRegistry pattern
+- Resume uses CurrentStepIndex instead of TreePath (deviation) — accepted for v2.0 flat plans
+- Replay emits run/replayed event (not in spec) — approved, good addition to distinguish replay from real runs
+- Evidence hook correctly placed: post-redaction, pre-trace-event in engine executeStep
+- JSONL reader crash-safe: malformed lines silently skipped, 1MB buffer cap, context cancellation per-line
+- No import cycles — verified clean dependency DAG
+- DirRunStore uses atomic writes (temp → fsync → rename) for snapshots
+
+**Non-blocking items:**
+1. RunStore has zero tests (225 lines untested) — Brian should add before Phase 12
+2. Attachment write is not atomic (uses direct Create, not temp→rename) — low severity, consumers verify SHA256
+3. Silent attachment errors (no logging on storage failure) — should add warn-level logging
+
+**Deviations approved:**
+- D1: Per-runDir AttachmentStore cache (bounded, sound)
+- D2: CurrentStepIndex instead of TreePath (v2.0 flat plans only)
+- D3: run/replayed event (additive, good)
+- D4: Orphaned tool call detection without action (deferred to v2.1)
+- D5: No PID lock protocol (deferred to v2.1)
+
+**Output:** .squad/tmp/ken-phase11-review.md (comprehensive review report)

@@ -1,0 +1,6 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{inputs}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{api\PYGZus{}key}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{from}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{env.ACME\PYGZus{}API\PYGZus{}KEY}
+\PYG{+w}{    }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{API}\PYG{n+nv}{ }\PYG{l+s}{key}\PYG{n+nv}{ }\PYG{l+s}{for}\PYG{n+nv}{ }\PYG{l+s}{the}\PYG{n+nv}{ }\PYG{l+s}{Acme}\PYG{n+nv}{ }\PYG{l+s}{service}\PYG{l+s}{\PYGZdq{}}
+\end{MintedVerbatim}

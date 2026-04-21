@@ -1,0 +1,16 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{\PYGZsh{} gert\PYGZhy{}project.yaml}
+\PYG{n+nt}{access}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{roles}\PYG{p}{:}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{role}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{admin}
+\PYG{+w}{      }\PYG{n+nt}{actors}\PYG{p}{:}
+\PYG{+w}{        }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{alice@acme.example}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{        }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{bob@acme.example}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{role}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{operator}
+\PYG{+w}{      }\PYG{n+nt}{actors}\PYG{p}{:}
+\PYG{+w}{        }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{ops\PYGZhy{}team@acme.example}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{        }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{oncall@acme.example}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{role}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{viewer}
+\PYG{+w}{      }\PYG{n+nt}{actors}\PYG{p}{:}
+\PYG{+w}{        }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{*@acme.example}\PYG{l+s}{\PYGZdq{}}\PYG{+w}{  }\PYG{c+c1}{\PYGZsh{} All Acme employees}
+\end{MintedVerbatim}

@@ -1,0 +1,15 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{step}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{run\PYGZus{}db\PYGZus{}checks}
+\PYG{+w}{    }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{include}
+\PYG{+w}{    }\PYG{n+nt}{title}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Run}\PYG{n+nv}{ }\PYG{l+s}{database}\PYG{n+nv}{ }\PYG{l+s}{pre\PYGZhy{}flight}\PYG{n+nv}{ }\PYG{l+s}{checks}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{n+nt}{include}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{runbook}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{./shared/db\PYGZhy{}preflight.runbook.yaml}
+\PYG{+w}{      }\PYG{n+nt}{with}\PYG{p}{:}
+\PYG{+w}{        }\PYG{n+nt}{db\PYGZus{}host}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{\PYGZob{}\PYGZob{}}\PYG{n+nv}{ }\PYG{l+s}{.target\PYGZus{}db}\PYG{n+nv}{ }\PYG{l+s}{\PYGZcb{}\PYGZcb{}}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{        }\PYG{n+nt}{check\PYGZus{}mode}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{read\PYGZhy{}only}
+\PYG{+w}{    }\PYG{n+nt}{contract}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{effects}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{db.read}\PYG{p+pIndicator}{]}
+\PYG{+w}{      }\PYG{n+nt}{reads}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{target\PYGZus{}db}\PYG{p+pIndicator}{]}
+\PYG{+w}{      }\PYG{n+nt}{writes}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{p+pIndicator}{]}
+\end{MintedVerbatim}

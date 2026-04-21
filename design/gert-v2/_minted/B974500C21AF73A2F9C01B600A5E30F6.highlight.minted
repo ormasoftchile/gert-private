@@ -1,0 +1,40 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{\PYGZdl{}schema}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{https://schemas.gert.dev/runbook/v2.json}\PYG{l+s}{\PYGZdq{}}
+\PYG{n+nt}{apiVersion}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{runbook/v2}
+
+\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{service\PYGZhy{}health\PYGZhy{}check}
+\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Service}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{Health}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{Check}
+\PYG{n+nt}{kind}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{operational}
+\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Check}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{service}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{health}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{and}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{restart}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{if}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{needed}
+
+\PYG{n+nt}{vars}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{service\PYGZus{}name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{api\PYGZhy{}server}\PYG{l+s}{\PYGZdq{}}
+
+\PYG{n+nt}{governance}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{allowed\PYGZus{}commands}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{systemctl}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{curl}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{jq}\PYG{p+pIndicator}{]}
+
+\PYG{n+nt}{flow}\PYG{p}{:}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{step}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{check\PYGZus{}status}
+\PYG{+w}{      }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{cli}
+\PYG{+w}{      }\PYG{n+nt}{title}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Check}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{service}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{status}
+\PYG{+w}{      }\PYG{n+nt}{with}\PYG{p}{:}
+\PYG{+w}{        }\PYG{n+nt}{argv}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{systemctl}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{status}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{\PYGZob{}\PYGZob{}}\PYG{n+nv}{ }\PYG{l+s}{.service\PYGZus{}name}\PYG{n+nv}{ }\PYG{l+s}{\PYGZcb{}\PYGZcb{}}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{]}
+\PYG{+w}{      }\PYG{n+nt}{capture}\PYG{p}{:}
+\PYG{+w}{        }\PYG{n+nt}{exit\PYGZus{}code}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{exit\PYGZus{}status}
+
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{step}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{prompt\PYGZus{}restart}
+\PYG{+w}{      }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{manual}
+\PYG{+w}{      }\PYG{n+nt}{title}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Service}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{is}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{down.}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{Restart?}
+\PYG{+w}{      }\PYG{n+nt}{evidence}\PYG{p}{:}
+\PYG{+w}{        }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{kind}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{text}
+\PYG{+w}{          }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{decision}
+
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{step}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{restart\PYGZus{}service}
+\PYG{+w}{      }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{cli}
+\PYG{+w}{      }\PYG{n+nt}{when}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{decision}\PYG{n+nv}{ }\PYG{l+s}{==}\PYG{n+nv}{ }\PYG{l+s}{\PYGZbs{}\PYGZdq{}}\PYG{l+s}{yes}\PYG{l+s}{\PYGZbs{}\PYGZdq{}}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{      }\PYG{n+nt}{with}\PYG{p}{:}
+\PYG{+w}{        }\PYG{n+nt}{argv}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{systemctl}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{restart}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{\PYGZob{}\PYGZob{}}\PYG{n+nv}{ }\PYG{l+s}{.service\PYGZus{}name}\PYG{n+nv}{ }\PYG{l+s}{\PYGZcb{}\PYGZcb{}}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{]}
+\end{MintedVerbatim}

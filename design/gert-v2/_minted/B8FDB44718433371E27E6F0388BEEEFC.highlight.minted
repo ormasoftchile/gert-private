@@ -1,0 +1,7 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{\PYGZsh{} vault.provider.yaml}
+\PYG{n+nt}{outputs}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{credentials}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{object}
+\PYG{+w}{    }\PYG{n+nt}{sensitive}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{true}
+\end{MintedVerbatim}

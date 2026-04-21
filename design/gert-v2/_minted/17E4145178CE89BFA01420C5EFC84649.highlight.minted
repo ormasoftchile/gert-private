@@ -1,0 +1,8 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+runbook.id       = \PYGZdq{}deploy\PYGZhy{}app\PYGZhy{}v3\PYGZdq{}      // runbook identifier
+runbook.version  = \PYGZdq{}1.2.3\PYGZdq{}              // version (if specified)
+actor.id         = \PYGZdq{}alice@example.com\PYGZdq{}  // human or service principal
+run.id           = \PYGZdq{}20260418T143022\PYGZhy{}a3f9c1\PYGZdq{}  // unique run ID
+run.mode         = \PYGZdq{}real\PYGZdq{}               // \PYGZdq{}real\PYGZdq{} | \PYGZdq{}replay\PYGZdq{} | \PYGZdq{}dry\PYGZhy{}run\PYGZdq{}
+client.type      = \PYGZdq{}cli\PYGZdq{}                // \PYGZdq{}cli\PYGZdq{} | \PYGZdq{}tui\PYGZdq{} | \PYGZdq{}web\PYGZdq{} | \PYGZdq{}mcp\PYGZdq{}
+\end{MintedVerbatim}

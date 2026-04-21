@@ -1,0 +1,6 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{// InProcessTransport runs the extension handler in\PYGZhy{}process for unit testing.}
+\PYG{k+kd}{type}\PYG{+w}{ }\PYG{n+nx}{InProcessTransport}\PYG{+w}{ }\PYG{k+kd}{struct}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{n+nx}{Handler}\PYG{+w}{ }\PYG{n+nx}{ExtensionHandler}
+\PYG{p}{\PYGZcb{}}
+\end{MintedVerbatim}

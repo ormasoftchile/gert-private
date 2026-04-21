@@ -1,0 +1,6 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{apiVersion}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{provider/v0}
+\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{incident\PYGZhy{}id}
+\PYG{n+nt}{source}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{env}
+\PYG{n+nt}{env\PYGZus{}var}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{INCIDENT\PYGZus{}ID}
+\end{MintedVerbatim}

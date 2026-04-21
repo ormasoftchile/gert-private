@@ -1,0 +1,5 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{requires}\PYG{p}{:}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{package}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{github.com/acme/gert\PYGZhy{}tools}
+\PYG{+w}{    }\PYG{n+nt}{version}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{\PYGZgt{}=1.2.0}\PYG{n+nv}{ }\PYG{l+s}{\PYGZlt{}2.0.0}\PYG{l+s}{\PYGZdq{}}
+\end{MintedVerbatim}

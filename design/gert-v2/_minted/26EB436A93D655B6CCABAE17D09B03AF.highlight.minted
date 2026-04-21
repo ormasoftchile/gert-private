@@ -1,0 +1,8 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{start\PYGZus{}date}
+\PYG{+w}{  }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{date}
+\PYG{+w}{  }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Start}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{date}
+\PYG{+w}{  }\PYG{n+nt}{required}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{true}
+\PYG{+w}{  }\PYG{n+nt}{validation}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{min}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{2024\PYGZhy{}01\PYGZhy{}01}\PYG{l+s}{\PYGZdq{}}
+\end{MintedVerbatim}

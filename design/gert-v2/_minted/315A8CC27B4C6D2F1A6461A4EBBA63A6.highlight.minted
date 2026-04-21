@@ -1,0 +1,31 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{\PYGZdl{}schema}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{https://schemas.gert.dev/provider/v2.json}\PYG{l+s}{\PYGZdq{}}
+\PYG{n+nt}{apiVersion}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{provider/v2}
+
+\PYG{n+nt}{meta}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{incident}
+\PYG{+w}{  }\PYG{n+nt}{version}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{1.0}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{  }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{PagerDuty}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{incident}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{context}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{provider}
+\PYG{+w}{  }\PYG{n+nt}{kind}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{input\PYGZhy{}provider}\PYG{+w}{    }\PYG{c+c1}{\PYGZsh{} input\PYGZhy{}provider | enrichment\PYGZhy{}provider}
+
+\PYG{n+nt}{transport}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{mode}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{jsonrpc}
+\PYG{+w}{  }\PYG{n+nt}{start}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{./providers/pagerduty\PYGZhy{}provider}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{]}
+
+\PYG{n+nt}{fields}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{id}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{string}
+\PYG{+w}{    }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Active}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{incident}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{ID}
+\PYG{+w}{  }\PYG{n+nt}{title}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{string}
+\PYG{+w}{    }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Incident}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{title}
+\PYG{+w}{  }\PYG{n+nt}{severity}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{string}
+\PYG{+w}{    }\PYG{n+nt}{enum}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{P1}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{P2}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{P3}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{P4}\PYG{p+pIndicator}{]}
+\PYG{+w}{  }\PYG{n+nt}{affected\PYGZus{}service}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{string}
+\PYG{+w}{    }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Primary}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{impacted}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{service}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{name}
+
+\PYG{n+nt}{capabilities}\PYG{p}{:}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{input\PYGZhy{}resolution}
+\end{MintedVerbatim}

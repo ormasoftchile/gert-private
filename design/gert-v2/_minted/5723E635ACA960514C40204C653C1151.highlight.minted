@@ -1,0 +1,18 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{step}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{wait\PYGZus{}approval\PYGZus{}callback}
+\PYG{+w}{    }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{wait\PYGZus{}for\PYGZus{}event}
+\PYG{+w}{    }\PYG{n+nt}{title}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Wait}\PYG{n+nv}{ }\PYG{l+s}{for}\PYG{n+nv}{ }\PYG{l+s}{external}\PYG{n+nv}{ }\PYG{l+s}{approval}\PYG{n+nv}{ }\PYG{l+s}{system}\PYG{n+nv}{ }\PYG{l+s}{callback}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{n+nt}{event}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{source}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{channel}
+\PYG{+w}{      }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{approval.\PYGZob{}\PYGZob{}}\PYG{n+nv}{ }\PYG{l+s}{.request\PYGZus{}id}\PYG{n+nv}{ }\PYG{l+s}{\PYGZcb{}\PYGZcb{}}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{n+nt}{capture}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{approved\PYGZus{}by}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{json.approver}
+\PYG{+w}{      }\PYG{n+nt}{decision}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{json.decision}
+\PYG{+w}{    }\PYG{n+nt}{timeout}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{48h}
+\PYG{+w}{    }\PYG{n+nt}{on\PYGZus{}timeout}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{branch:escalate\PYGZus{}approval}
+\PYG{+w}{    }\PYG{n+nt}{contract}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{effects}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{p+pIndicator}{]}
+\PYG{+w}{      }\PYG{n+nt}{reads}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{request\PYGZus{}id}\PYG{p+pIndicator}{]}
+\PYG{+w}{      }\PYG{n+nt}{writes}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{approved\PYGZus{}by}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{decision}\PYG{p+pIndicator}{]}
+\end{MintedVerbatim}

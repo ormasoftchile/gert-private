@@ -1,0 +1,6 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{retry}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{max}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{3}\PYG{+w}{              }\PYG{c+c1}{\PYGZsh{} maximum retry attempts (required)}
+\PYG{+w}{  }\PYG{n+nt}{interval}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{5s}\PYG{l+s}{\PYGZdq{}}\PYG{+w}{      }\PYG{c+c1}{\PYGZsh{} initial wait between attempts}
+\PYG{+w}{  }\PYG{n+nt}{backoff}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{linear}\PYG{+w}{     }\PYG{c+c1}{\PYGZsh{} linear | exponential (default: linear)}
+\end{MintedVerbatim}

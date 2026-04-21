@@ -1,0 +1,3 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+gert\PYG{+w}{ }run\PYG{+w}{ }deploy.yaml\PYG{+w}{ }\PYGZhy{}\PYGZhy{}otel\PYGZhy{}console
+\end{MintedVerbatim}

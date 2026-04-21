@@ -1,0 +1,7 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{steps}\PYG{p}{:}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{promote\PYGZus{}to\PYGZus{}production}
+\PYG{+w}{    }\PYG{n+nt}{kind}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{cli}
+\PYG{+w}{    }\PYG{n+nt}{requires\PYGZus{}role}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{release\PYGZhy{}manager}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{n+nt}{command}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{kubectl}\PYG{n+nv}{ }\PYG{l+s}{set}\PYG{n+nv}{ }\PYG{l+s}{image}\PYG{n+nv}{ }\PYG{l+s}{deployment/app}\PYG{n+nv}{ }\PYG{l+s}{app=\PYGZob{}\PYGZob{}}\PYG{n+nv}{ }\PYG{l+s}{.imageTag}\PYG{n+nv}{ }\PYG{l+s}{\PYGZcb{}\PYGZcb{}}\PYG{l+s}{\PYGZdq{}}
+\end{MintedVerbatim}

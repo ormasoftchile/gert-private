@@ -1,0 +1,8 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{step}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{deploy}
+\PYG{+w}{    }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{tool}
+\PYG{+w}{    }\PYG{n+nt}{title}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Deploy}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{to}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{production}
+\PYG{+w}{    }\PYG{n+nt}{x\PYGZhy{}myorg\PYGZhy{}risk\PYGZhy{}level}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{high}
+\PYG{+w}{    }\PYG{n+nt}{x\PYGZhy{}myorg\PYGZhy{}rollback\PYGZhy{}id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{\PYGZob{}\PYGZob{}}\PYG{n+nv}{ }\PYG{l+s}{.deploy\PYGZus{}id}\PYG{n+nv}{ }\PYG{l+s}{\PYGZcb{}\PYGZcb{}}\PYG{l+s}{\PYGZdq{}}
+\end{MintedVerbatim}

@@ -1,0 +1,13 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{deploy}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{script}\PYG{p}{:}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{gert}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{run}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{deploy.yaml}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{\PYGZhy{}\PYGZhy{}output=json}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{|}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{tee}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{run\PYGZhy{}output.json}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{RUN\PYGZus{}ID=\PYGZdl{}(jq}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{\PYGZhy{}r}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{.run\PYGZus{}id}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{run\PYGZhy{}output.json)}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{echo}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{\PYGZdq{}Run}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{ID}\PYG{p+pIndicator}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{\PYGZdl{}RUN\PYGZus{}ID\PYGZdq{}}
+\PYG{+w}{  }\PYG{n+nt}{artifacts}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{when}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{always}
+\PYG{+w}{    }\PYG{n+nt}{paths}\PYG{p}{:}
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{.runbook/runs/}
+\PYG{+w}{    }\PYG{n+nt}{reports}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{junit}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{.runbook/runs/*/trace.jsonl}
+\end{MintedVerbatim}

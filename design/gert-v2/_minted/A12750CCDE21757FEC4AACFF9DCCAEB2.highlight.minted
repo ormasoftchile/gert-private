@@ -1,0 +1,20 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{scrape\PYGZus{}configs}\PYG{p}{:}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{job\PYGZus{}name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{gert}
+\PYG{+w}{    }\PYG{n+nt}{static\PYGZus{}configs}\PYG{p}{:}
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{targets}\PYG{p}{:}
+\PYG{+w}{          }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{localhost}
+\PYG{+w}{        }\PYG{n+nt}{labels}\PYG{p}{:}
+\PYG{+w}{          }\PYG{n+nt}{job}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{gert}
+\PYG{+w}{          }\PYG{n+nt}{\PYGZus{}\PYGZus{}path\PYGZus{}\PYGZus{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{/var/log/gert/*.log}
+\PYG{+w}{    }\PYG{n+nt}{pipeline\PYGZus{}stages}\PYG{p}{:}
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{json}\PYG{p}{:}
+\PYG{+w}{          }\PYG{n+nt}{expressions}\PYG{p}{:}
+\PYG{+w}{            }\PYG{n+nt}{timestamp}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{timestamp}
+\PYG{+w}{            }\PYG{n+nt}{level}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{level}
+\PYG{+w}{            }\PYG{n+nt}{msg}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{msg}
+\PYG{+w}{            }\PYG{n+nt}{run\PYGZus{}id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{run\PYGZus{}id}
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{labels}\PYG{p}{:}
+\PYG{+w}{          }\PYG{n+nt}{level}\PYG{p}{:}
+\PYG{+w}{          }\PYG{n+nt}{run\PYGZus{}id}\PYG{p}{:}
+\end{MintedVerbatim}

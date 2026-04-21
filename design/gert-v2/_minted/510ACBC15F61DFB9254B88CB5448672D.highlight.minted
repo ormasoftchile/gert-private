@@ -1,0 +1,5 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{meta}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{governance}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{allowed\PYGZus{}commands}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{kubectl}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{curl}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{jq}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{aws}\PYG{p+pIndicator}{]}
+\end{MintedVerbatim}

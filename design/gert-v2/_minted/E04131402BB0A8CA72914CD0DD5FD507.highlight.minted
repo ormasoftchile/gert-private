@@ -1,0 +1,26 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{k+kd}{type}\PYG{+w}{ }\PYG{n+nx}{EventDispatcher}\PYG{+w}{ }\PYG{k+kd}{interface}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{c+c1}{// Register creates a listener for an inbound event on a waiting run.}
+\PYG{+w}{    }\PYG{c+c1}{// Returns a one\PYGZhy{}time HMAC token (non\PYGZhy{}empty for webhook source only).}
+\PYG{+w}{    }\PYG{n+nx}{Register}\PYG{p}{(}\PYG{n+nx}{ctx}\PYG{+w}{ }\PYG{n+nx}{context}\PYG{p}{.}\PYG{n+nx}{Context}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{reg}\PYG{+w}{ }\PYG{n+nx}{ListenerRegistration}\PYG{p}{)}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nx}{token}\PYG{+w}{ }\PYG{k+kt}{string}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{err}\PYG{+w}{ }\PYG{k+kt}{error}\PYG{p}{)}
+
+\PYG{+w}{    }\PYG{c+c1}{// Deregister removes a listener (called on run completion or cancellation).}
+\PYG{+w}{    }\PYG{n+nx}{Deregister}\PYG{p}{(}\PYG{n+nx}{runID}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{eventID}\PYG{+w}{ }\PYG{k+kt}{string}\PYG{p}{)}\PYG{+w}{ }\PYG{k+kt}{error}
+
+\PYG{+w}{    }\PYG{c+c1}{// Send posts a payload to a named in\PYGZhy{}process channel listener.}
+\PYG{+w}{    }\PYG{n+nx}{Send}\PYG{p}{(}\PYG{n+nx}{eventID}\PYG{+w}{ }\PYG{k+kt}{string}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{payload}\PYG{+w}{ }\PYG{n+nx}{json}\PYG{p}{.}\PYG{n+nx}{RawMessage}\PYG{p}{)}\PYG{+w}{ }\PYG{k+kt}{error}
+
+\PYG{+w}{    }\PYG{c+c1}{// RestoreFromStore re\PYGZhy{}registers all WAITING listeners after process restart.}
+\PYG{+w}{    }\PYG{n+nx}{RestoreFromStore}\PYG{p}{(}\PYG{n+nx}{store}\PYG{+w}{ }\PYG{n+nx}{RunStore}\PYG{p}{)}\PYG{+w}{ }\PYG{k+kt}{error}
+\PYG{p}{\PYGZcb{}}
+
+\PYG{k+kd}{type}\PYG{+w}{ }\PYG{n+nx}{ListenerRegistration}\PYG{+w}{ }\PYG{k+kd}{struct}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{n+nx}{RunID}\PYG{+w}{          }\PYG{k+kt}{string}
+\PYG{+w}{    }\PYG{n+nx}{EventID}\PYG{+w}{        }\PYG{k+kt}{string}
+\PYG{+w}{    }\PYG{n+nx}{Source}\PYG{+w}{         }\PYG{n+nx}{EventSource}\PYG{+w}{          }\PYG{c+c1}{// webhook | message | signal | channel}
+\PYG{+w}{    }\PYG{n+nx}{Filter}\PYG{+w}{         }\PYG{k+kd}{map}\PYG{p}{[}\PYG{k+kt}{string}\PYG{p}{]}\PYG{k+kt}{string}
+\PYG{+w}{    }\PYG{n+nx}{PayloadSchema}\PYG{+w}{  }\PYG{k+kt}{string}\PYG{+w}{               }\PYG{c+c1}{// JSON Schema URL, may be empty}
+\PYG{+w}{    }\PYG{n+nx}{TimeoutAt}\PYG{+w}{      }\PYG{n+nx}{time}\PYG{p}{.}\PYG{n+nx}{Time}
+\PYG{+w}{    }\PYG{n+nx}{OnTimeout}\PYG{+w}{      }\PYG{n+nx}{TimeoutPolicy}\PYG{+w}{        }\PYG{c+c1}{// fail | continue | branch:\PYGZlt{}step\PYGZhy{}id\PYGZgt{}}
+\PYG{p}{\PYGZcb{}}
+\end{MintedVerbatim}

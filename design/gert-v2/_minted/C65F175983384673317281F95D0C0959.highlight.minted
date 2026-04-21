@@ -1,0 +1,7 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+tool.name        = \PYGZdq{}kubectl\PYGZdq{}            // tool identifier
+tool.transport   = \PYGZdq{}exec\PYGZdq{}               // \PYGZdq{}exec\PYGZdq{} | \PYGZdq{}ssh\PYGZdq{} | \PYGZdq{}http\PYGZdq{}
+tool.exit\PYGZus{}code   = 0                    // process exit code (exec only)
+run.id           = \PYGZdq{}20260418T143022\PYGZhy{}a3f9c1\PYGZdq{}  // run correlation
+step.id          = \PYGZdq{}deploy\PYGZdq{}             // parent step
+\end{MintedVerbatim}

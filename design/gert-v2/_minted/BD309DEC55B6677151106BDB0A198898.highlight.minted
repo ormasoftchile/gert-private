@@ -1,0 +1,6 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{apiVersion}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{tool/v0}
+\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{kubectl}
+\PYG{n+nt}{executable}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{/usr/local/bin/kubectl}
+\PYG{n+nt}{args\PYGZus{}template}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{\PYGZob{}\PYGZob{}}\PYG{n+nv}{ }\PYG{l+s}{.args}\PYG{n+nv}{ }\PYG{l+s}{\PYGZcb{}\PYGZcb{}}\PYG{l+s}{\PYGZdq{}}
+\end{MintedVerbatim}

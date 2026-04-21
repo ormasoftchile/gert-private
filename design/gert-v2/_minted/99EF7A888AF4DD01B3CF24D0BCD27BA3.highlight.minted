@@ -1,0 +1,10 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{\PYGZsh{} Dry\PYGZhy{}run preview}
+gert\PYG{+w}{ }migrate\PYG{+w}{ }\PYGZhy{}\PYGZhy{}dry\PYGZhy{}run\PYG{+w}{ }runbook.yaml
+
+\PYG{c+c1}{\PYGZsh{} In\PYGZhy{}place rewrite}
+gert\PYG{+w}{ }migrate\PYG{+w}{ }runbook.yaml
+
+\PYG{c+c1}{\PYGZsh{} Migrate a whole directory}
+gert\PYG{+w}{ }migrate\PYG{+w}{ }./runbooks/
+\end{MintedVerbatim}

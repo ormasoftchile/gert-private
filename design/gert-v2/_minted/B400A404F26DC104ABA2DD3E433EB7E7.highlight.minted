@@ -1,0 +1,40 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{\PYGZdl{}schema}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{https://schemas.gert.dev/tool/v2.json}\PYG{l+s}{\PYGZdq{}}
+\PYG{n+nt}{apiVersion}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{tool/v2}
+
+\PYG{n+nt}{meta}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{kubectl}
+\PYG{+w}{  }\PYG{n+nt}{version}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{1.2}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{  }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Kubernetes}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{CLI}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{wrapper}
+\PYG{+w}{  }\PYG{n+nt}{binary}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{kubectl}
+
+\PYG{n+nt}{transport}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{mode}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{stdio}\PYG{+w}{         }\PYG{c+c1}{\PYGZsh{} stdio | jsonrpc | mcp}
+\PYG{+w}{  }\PYG{c+c1}{\PYGZsh{} jsonrpc options:}
+\PYG{+w}{  }\PYG{c+c1}{\PYGZsh{} start: [\PYGZdq{}node\PYGZdq{}, \PYGZdq{}server.js\PYGZdq{}]}
+\PYG{+w}{  }\PYG{c+c1}{\PYGZsh{} port: 3000}
+\PYG{+w}{  }\PYG{c+c1}{\PYGZsh{} mcp options:}
+\PYG{+w}{  }\PYG{c+c1}{\PYGZsh{} start: [\PYGZdq{}python\PYGZdq{}, \PYGZdq{}mcp\PYGZus{}server.py\PYGZdq{}]}
+
+\PYG{n+nt}{actions}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{get\PYGZhy{}pods}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{List}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{pods}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{in}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{a}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{namespace}
+\PYG{+w}{    }\PYG{n+nt}{argv}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{get}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{pods}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{\PYGZhy{}n}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{\PYGZob{}\PYGZob{}}\PYG{n+nv}{ }\PYG{l+s}{.namespace}\PYG{n+nv}{ }\PYG{l+s}{\PYGZcb{}\PYGZcb{}}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{\PYGZhy{}o}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{json}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{]}
+\PYG{+w}{    }\PYG{n+nt}{args}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{namespace}\PYG{p}{:}
+\PYG{+w}{        }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{string}
+\PYG{+w}{        }\PYG{n+nt}{required}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{true}
+\PYG{+w}{        }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Kubernetes}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{namespace}
+\PYG{+w}{      }\PYG{n+nt}{output}\PYG{p}{:}
+\PYG{+w}{        }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{string}
+\PYG{+w}{        }\PYG{n+nt}{required}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{false}
+\PYG{+w}{        }\PYG{n+nt}{default}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{json}
+\PYG{+w}{    }\PYG{n+nt}{capture}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{stdout}\PYG{p}{:}
+\PYG{+w}{        }\PYG{n+nt}{format}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{json}\PYG{+w}{    }\PYG{c+c1}{\PYGZsh{} json | text | lines}
+\PYG{+w}{    }\PYG{n+nt}{contract}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{effects}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{k8s.read}\PYG{p+pIndicator}{]}
+\PYG{+w}{      }\PYG{n+nt}{reads}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{namespace}\PYG{p+pIndicator}{]}
+\PYG{+w}{    }\PYG{n+nt}{governance}\PYG{p}{:}
+\PYG{+w}{      }\PYG{n+nt}{action}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{allow}
+\end{MintedVerbatim}

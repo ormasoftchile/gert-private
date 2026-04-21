@@ -1,0 +1,16 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{\PYGZsh{} Preview migration (dry\PYGZhy{}run)}
+gert\PYG{+w}{ }migrate\PYG{+w}{ }\PYGZhy{}\PYGZhy{}to\PYGZhy{}v2\PYG{+w}{ }\PYGZhy{}\PYGZhy{}dry\PYGZhy{}run\PYG{+w}{ }runbook.yaml
+
+\PYG{c+c1}{\PYGZsh{} Migrate a single runbook in\PYGZhy{}place}
+gert\PYG{+w}{ }migrate\PYG{+w}{ }\PYGZhy{}\PYGZhy{}to\PYGZhy{}v2\PYG{+w}{ }runbook.yaml
+
+\PYG{c+c1}{\PYGZsh{} Migrate all runbooks in a directory tree}
+gert\PYG{+w}{ }migrate\PYG{+w}{ }\PYGZhy{}\PYGZhy{}to\PYGZhy{}v2\PYG{+w}{ }./runbooks/
+
+\PYG{c+c1}{\PYGZsh{} Output migrated YAML to stdout (for review)}
+gert\PYG{+w}{ }migrate\PYG{+w}{ }\PYGZhy{}\PYGZhy{}to\PYGZhy{}v2\PYG{+w}{ }\PYGZhy{}\PYGZhy{}output\PYG{+w}{ }\PYGZhy{}\PYG{+w}{ }runbook.yaml
+
+\PYG{c+c1}{\PYGZsh{} Check if migration is needed (exit 1 if needed, 0 if already v2)}
+gert\PYG{+w}{ }migrate\PYG{+w}{ }\PYGZhy{}\PYGZhy{}to\PYGZhy{}v2\PYG{+w}{ }\PYGZhy{}\PYGZhy{}check\PYG{+w}{ }runbook.yaml
+\end{MintedVerbatim}

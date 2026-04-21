@@ -1000,3 +1000,112 @@ Comprehensive audit of Phase 8 spec (§14 Input Provider Framework) to identify 
 **Next:** Ken reviews design decisions, Brian implements Phase 8 per priority order.
 
 ---
+
+## 2026-04-20: Phase 11 Evidence & Replay — Spec Audit + r22 Fixture
+
+**Requested by:** Cristian  
+**Phase:** 11 (Evidence & Replay)  
+**Status:** AUDIT COMPLETE
+
+### Task
+
+Comprehensive audit of Phase 11 spec (§12 Evidence, Tracing, and Resumption) to answer 8 audit questions, then create r22 fixture for evidence collection and replay testing.
+
+### What was done
+
+**1. Full spec audit (§12 + §06)**
+- Read 657-line §12 Evidence, Tracing, and Resumption spec
+- Read §06 Runtime Events for event envelope details
+- Analyzed existing trace infrastructure: v2/pkg/trace/, v2/internal/trace/
+- Cross-referenced §13 Adapter Contracts for RPC integration
+
+**2. Answered all 8 audit questions**
+1. Evidence kinds: 4 types (command output, manual attestations, tool responses, file attachments)
+2. Trace format: JSONL envelope with 7 required fields, 20+ normative event kinds, atomic writes
+3. Replay semantics: Deterministic execution from pre-recorded scenario.yaml, cli/manual/tool interception
+4. Resumption protocol: Atomic checkpoints, lock protocol, load-from-last-valid-snapshot, idempotency guidance
+5. RPC methods: exec/v2 contract has run/list, run/get but NO trace/query methods (GAP identified)
+6. Last r-number: r21 (Phase 10 gert run fixture)
+7. Phase 9 integration: TraceWriter fanout to JSONL + EventBus, no new RPC methods needed
+8. Existing trace infra: pkg/trace/event.go + writer.go exist, RunStore interface missing
+
+**3. Created r22 fixture runbook**
+- File: design/gert-v2/testdata/runbooks/r22-evidence-replay/schema.yaml
+- Tests: 7 steps covering all 4 evidence kinds
+  - stdout capture (build_env variable)
+  - file artifact with SHA256 (build-artifact-b123.txt)
+  - env snapshot (text evidence)
+  - deterministic branching (build_env == "production")
+- Replay scenario: 18 expected trace events documented
+- Resumption scenario: 8 checkpoints (step-0000.json through step-0007.json)
+- Deterministic: Fixed inputs, no timestamps/random values, idempotent commands
+
+**4. Wrote comprehensive audit report**
+- File: .squad/tmp/barbara-phase11-audit.md (30 KB)
+- Covers: Evidence kinds, trace format, replay mode, resumption protocol, RPC gaps, integration concerns
+- Includes: 3 test scenarios (real mode, replay mode, resumption), expected trace event table
+
+**5. Design decisions document**
+- File: .squad/decisions/inbox/barbara-phase11-audit.md (9.2 KB)
+- 9 key design decisions for Brian's implementation
+- 3 open questions for Ken (remote trace access, HMAC signing, checkpoint events on WebSocket)
+
+### Key Findings
+
+**What the SPEC defines:**
+- ✅ Complete evidence model (4 kinds, SHA256 hashing, deduplication)
+- ✅ JSONL trace format (atomic writes, crash-safe, HMAC tamper-evidence)
+- ✅ Replay mode (scenario.yaml format, deterministic requirements)
+- ✅ Resumption protocol (atomic checkpoints, lock safety, idempotency)
+- ✅ Go interfaces (TraceWriter, RunStore, EvidenceCollector)
+- ✅ OpenTelemetry integration (span hierarchy, attribute mapping, opt-in config)
+
+**What EXISTS in codebase:**
+- ✅ pkg/trace/event.go — TraceEvent struct, EventKind constants
+- ✅ pkg/trace/writer.go — TraceWriter interface
+- ✅ internal/trace/jsonl_writer.go — JSONL file writer
+- ✅ internal/trace/multi_writer.go — Fanout to multiple destinations
+
+**What is MISSING (Phase 11 deliverables):**
+- ❌ RunStore interface (ReadTrace, SaveCheckpoint, LoadLatestCheckpoint, AcquireLock)
+- ❌ DirRunStore implementation (filesystem-backed, atomic checkpoint writes)
+- ❌ MemRunStore implementation (in-memory, for testing)
+- ❌ EvidenceCollector interface + ReplayEvidenceCollector
+- ❌ Replay scenario parser (scenario.yaml → command/evidence mocks)
+- ❌ Resumption command handler (gert exec --resume <run-id>)
+- ❌ HMAC-SHA256 signing (deferred to v2.1 per decision D3)
+
+**GAP identified:**
+- ⚠️ No RPC methods for remote trace access (trace/query, evidence/get)
+- Impact: Remote Web UI cannot query traces (local adapters work via filesystem)
+- Mitigation: Defer to Phase 12 or v2.1 (local adapters are v2.0 priority)
+
+### Deliverables
+
+- Audit report: .squad/tmp/barbara-phase11-audit.md (30 KB, 12 sections)
+- r22 fixture: testdata/runbooks/r22-evidence-replay/schema.yaml (11.9 KB)
+- Design decisions: .squad/decisions/inbox/barbara-phase11-audit.md (9.2 KB, 9 decisions)
+- History update: .squad/agents/barbara/history.md
+
+### Recommendations for Brian
+
+**Priority 1 (Phase 11 core):**
+1. Implement RunStore interface (6 methods from §12.6)
+2. Implement DirRunStore with atomic checkpoint writes
+3. Implement evidence.HashFile() and attachment deduplication
+4. Implement replay mode (scenario parser, command mocking)
+5. Implement resumption (load checkpoint, re-acquire lock, skip completed steps)
+
+**Priority 2 (defer to v2.1):**
+6. HMAC-SHA256 trace signing (optional per spec)
+7. Remote trace access RPC methods (trace/query, evidence/get)
+
+**Test strategy:**
+- Use r22 as golden trace baseline
+- Unit tests: checkpoint atomicity, lock protocol, SHA256 hashing
+- Integration tests: resumption after crash, replay mode determinism
+- Golden trace: normalize timestamps/event_ids, diff against committed baseline
+
+**Next:** Ken reviews open questions (D1, D3), Brian implements Phase 11 per audit recommendations.
+
+---

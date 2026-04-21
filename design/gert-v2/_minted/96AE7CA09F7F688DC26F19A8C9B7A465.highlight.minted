@@ -1,0 +1,4 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nb}{export}\PYG{+w}{ }\PYG{n+nv}{OTEL\PYGZus{}TRACES\PYGZus{}SAMPLER}\PYG{o}{=}parentbased\PYGZus{}traceidratio
+\PYG{n+nb}{export}\PYG{+w}{ }\PYG{n+nv}{OTEL\PYGZus{}TRACES\PYGZus{}SAMPLER\PYGZus{}ARG}\PYG{o}{=}\PYG{l+m}{0}.1\PYG{+w}{  }\PYG{c+c1}{\PYGZsh{} sample 10\PYGZpc{} of traces}
+\end{MintedVerbatim}

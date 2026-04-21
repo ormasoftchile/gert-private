@@ -2218,3 +2218,61 @@ Reviewed Brian's Phase 15 implementation:
 - NBI-16-05: run.list RPC schema documentation
 
 **Output:** `.squad/tmp/ken-phase16-design.md`, `.squad/decisions/inbox/ken-phase16-design.md`
+
+---
+
+## 2026-04-21 — Phase 16 Review: run.list RPC Wiring & Server Hardening
+
+**Action:** Architectural review of Brian's Phase 16 implementation
+**Verdict:** APPROVED (8/10)
+
+**Scope reviewed:**
+- Part A: run.list merge (registry + store), run.get wiring
+- Part B: CORS middleware, bearer auth middleware, SSE t.Skip, gert serve CLI
+
+**Key findings:**
+
+1. **Correctness:** run.list correctly merges registry and store with deduplication (activeIDs map). run.get returns rpcRunNotFound when not in registry AND store lookup fails. /health is correctly exempted from auth.
+
+2. **Security (NBI-16-08 opened):** Bearer token comparison uses direct string `!=` instead of `subtle.ConstantTimeCompare`. Low practical impact (dev auth only per D-16-04), but establishes wrong pattern for Phase 17 production auth. Fix is trivial — track in NBI-16-08.
+
+3. **Architecture:** Middleware stack order is correct (CORS before Auth). Duck-typed ListRuns via anonymous interface is idiomatic Go for optional capabilities. Store injection via wire.go → EngineConfig.Store is correct.
+
+4. **Test quality:** All 14 new tests are meaningful and pass. Coverage includes: merge logic, deduplication, fallback, 404 path, CORS preflight, bearer validation, /health exemption.
+
+**Deviation assessments:**
+
+| ID | Assessment |
+|----|------------|
+| D-16-IMPL-01 | ACCEPT — Duck-typed ListRuns is correct adaptation to minimal interface |
+| D-16-IMPL-02 | ACCEPT — CompletedAt optional in API; NBI-16-07 tracks schema enhancement |
+| D-16-IMPL-03 | ACCEPT — Single middleware.go follows existing pattern |
+| D-16-IMPL-04 | ACCEPT — Single --cors-origin sufficient; NBI-16-06 tracks multi-origin |
+
+**NBI items opened:**
+- NBI-16-08: Use subtle.ConstantTimeCompare for bearer token validation
+
+**Output:** `.squad/decisions/inbox/ken-phase16-review.md`
+
+---
+
+## Phase 16 Review — APPROVED (8/10)
+
+**Date:** 2026-04-21  
+**Action:** Architectural review of Brian's Phase 16 implementation
+
+**Verdict:** APPROVED (8/10)
+
+**Scope:** Part A (run.list/run.get RPC wiring), Part B (CORS + bearer auth middleware, gert serve CLI)
+
+**Key findings:**
+- ✅ Correctness: run.list merge logic sound, run.get 404 path correct, /health exemption working
+- ⚠️ Security (NBI-16-08): Bearer token uses string != instead of subtle.ConstantTimeCompare (low impact, must fix in Phase 17)
+- ✅ Architecture: Middleware stack order correct (CORS before Auth), duck-typed ListRuns is idiomatic Go
+- ✅ Test quality: 14 new tests meaningful and comprehensive
+
+**Deviations accepted:** D-16-IMPL-01 through -04 (duck-typed ListRuns, optional CompletedAt, single middleware.go, single --cors-origin)
+
+**Blocking issues:** None.
+
+**Review document:** `.squad/decisions/inbox/ken-phase16-review.md`

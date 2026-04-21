@@ -1,23 +1,28 @@
 ---
-updated_at: 2026-04-21T12:51:24Z
-focus_area: gert v2 implementation — Phase 15 sealed, Phase 16 next
-active_issues: []
+updated_at: 2026-04-21T13:30:01Z
+focus_area: gert v2 implementation — Phase 16 sealed, Phase 17 next
+active_issues:
+  - NBI-16-01: Use subtle.ConstantTimeCompare for bearer token validation (anchor for Phase 17)
 ---
 
 # What We're Focused On
 
-Implementing gert v2 phase-by-phase. Phases 0–15 complete and sealed.
+Implementing gert v2 phase-by-phase. Phases 0–16 complete and sealed.
 
-**Phase 15 sealed:** `e4c4aee` — Iterate scoping fix, tool E2E coverage (APPROVED 9/10 by Ken)
-- Part A (NBI-14-03): Depth > 0 skip logic; TestEngine_SkipsSubStepsAtDepth, TestEngine_IterateSubStepVars
-- Part B (NBI-14-02): mockToolRuntime, WithToolDef() harness; TestE2E_ToolStep (11 E2E tests total)
-- All deviations accepted; SSE flake confirmed pre-existing (Phase 9)
+**Phase 16 sealed:** `ab6f554` — run.list/run.get RPC wiring, CORS, bearer auth (APPROVED 8/10 by Ken)
+- Part A (NBI-15-02): run.list merges registry + store, deduplication by RunID; run.get with 404 path
+- Part B (NBI-15-03): CORS middleware (--cors-origin), bearer auth (--auth-token), gert serve CLI
+- All 14 new tests pass; 4 deviations accepted; 1 non-blocking security item (NBI-16-08)
+- Validation: go test ./... -race -count=3 — all 32 packages pass
 
-**Phase 16 starting next:** NBI items from Phase 15 review:
-- NBI-15-01: E2E test parallelization (carry-forward from 14-01, low priority)
-- NBI-15-02: run.list RPC → DirRunStore wiring (medium priority)
-- NBI-15-03: gert serve hardening (auth, rate limiting, CORS) (medium priority)
-- NBI-15-04: gert dry-run completeness audit (low priority)
-- NBI-15-05: Fix SSE test timing flake (`TestSSE_ConnectReceivesEvents`) (low priority)
+**Phase 17 starting next:** NBI items from Phase 16 review:
+
+**Anchor Item:**
+- **NBI-16-01**: Use `subtle.ConstantTimeCompare` for bearer token validation (prevents timing attacks)
+
+**Carry-forward items:**
+- NBI-15-01: E2E test parallelization (low priority)
+- NBI-16-02: Full auth hardening for production (OAuth2/OIDC/API keys)
+- NBI-16-05: run.list RPC schema documentation
 
 Team: Ken (architect/reviewer), Brian (Go implementor), Barbara (preflight/integrations), Scribe (logger).

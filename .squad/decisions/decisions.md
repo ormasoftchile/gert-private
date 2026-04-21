@@ -4620,3 +4620,96 @@ $ cd v2 && go test ./... -race -count=3             # ✅ All pass (11 E2E, full
 
 *Ken, Staff Architect*  
 *2026-04-21*
+# APPROVED — Phase 16 Review
+
+**Reviewer:** Ken (Software Architect)  
+**Date:** 2026-04-21  
+**Phase:** 16  
+**Score:** 8/10
+
+---
+
+## Summary
+
+Brian delivered a solid Phase 16 implementation. The `run.list` merge logic is correct, `run.get` returns 404 properly, CORS/auth middleware composition is clean with correct layering, and all 14 new tests pass. The four deviations are pragmatic adaptations to real interface contracts. **One non-blocking security item** must be addressed in Phase 17: the bearer token comparison should use `subtle.ConstantTimeCompare` to prevent timing attacks.
+
+---
+
+## Review Dimensions
+
+### 1. Correctness ✅
+
+- **`run.list` merge logic**: Correctly queries registry first, builds `activeIDs` map, then queries store via duck-typed interface. Deduplication is correct (registry wins). ✅
+- **`run.get` 404 path**: Returns `rpcRunNotFound` when ID not in registry AND store lookup fails. ✅
+- **`/health` exemption**: Bearer auth middleware correctly exempts `/health` at line 134. ✅
+
+### 2. Security ⚠️ (Non-blocking)
+
+**NBI-16-08 OPENED**: Bearer token comparison at `middleware.go:143-146` uses direct string `!=` comparison:
+
+```go
+if strings.TrimPrefix(auth, "Bearer ") != token {
+```
+
+This is vulnerable to timing attacks. Must use `subtle.ConstantTimeCompare`:
+
+```go
+if subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(auth, "Bearer ")), []byte(token)) != 1 {
+```
+
+**Impact:** Low in practice (development auth only, per design D-16-04), but the fix is trivial and establishes correct security hygiene for production auth in Phase 17.
+
+### 3. Architecture ✅
+
+- **Middleware order**: CORS → Auth is correct (preflight must succeed without auth). Stack order in `withMiddleware` processes `[requestID, logging, CORS, auth, recovery]` outside-in via reverse iteration. ✅
+- **Duck-typed `ListRuns`**: Elegant solution to D-16-IMPL-01. Preserves graceful degradation for stores without `ListRuns`. ✅
+- **Store injection**: `wire.go` correctly constructs `DirRunStore` and passes via `EngineConfig.Store`. ✅
+
+### 4. Test Quality ✅
+
+New tests cover the specified scenarios:
+- `TestRPC_RunList_MergesActiveAndPersisted` ✅
+- `TestRPC_RunList_ActiveOverridesPersisted` ✅
+- `TestRPC_RunList_StoreNilFallback` ✅
+- `TestRPC_RunGet_ActiveRun` ✅
+- `TestRPC_RunGet_PersistedRun` ✅
+- `TestRPC_RunGet_NotFound` ✅
+- `TestRPC_RunGet_InvalidParams` ✅
+- `TestCORSMiddleware_*` (4 tests) ✅
+- `TestBearerAuth_*` (5 tests including `/health` exemption) ✅
+
+All tests pass: `go test -race -count=1 ./internal/serve/...` → OK
+
+### 5. Deviation Assessments
+
+| # | Deviation | Assessment | Risk |
+|---|-----------|------------|------|
+| D-16-IMPL-01 | Duck-typed `ListRuns` via anonymous interface | **ACCEPT** — Correct adaptation. `engine.RunStore` interface is minimal by design; extending it for optional methods would be invasive. Duck-typing is idiomatic Go for optional capabilities. | None |
+| D-16-IMPL-02 | No `CompletedAt` in persisted `RunState` | **ACCEPT** — Field is optional in API response per design. Active runs show `completedAt` from `RunEntry`; persisted runs omit it. NBI-16-07 captures schema enhancement for v2.1. | Low (cosmetic) |
+| D-16-IMPL-03 | Single `middleware.go` file | **ACCEPT** — Follows existing codebase pattern. No architectural concern. | None |
+| D-16-IMPL-04 | Single `--cors-origin` value | **ACCEPT** — Sufficient for intended use (development/single-origin). NBI-16-06 captures repeatable flag for production multi-origin. | Low |
+
+---
+
+## NBI Items for Phase 17
+
+| ID | Priority | Description |
+|----|----------|-------------|
+| NBI-16-01 | Low | Proper SSE test synchronization (fix t.Skip'd test) |
+| NBI-16-02 | Low | E2E test parallelization (carry-forward) |
+| NBI-16-03 | Medium | Full auth layer (OAuth2/OIDC/API keys) |
+| NBI-16-04 | Medium | Rate limiting for `gert serve` |
+| NBI-16-05 | Low | run.list RPC schema documentation |
+| NBI-16-06 | Low | `--cors-origin` repeatable flag for multiple allowed origins |
+| NBI-16-07 | Medium | Add `CompletedAt` to `engine.RunState` for persisted run detail |
+| **NBI-16-08** | **Medium** | **Use `subtle.ConstantTimeCompare` for bearer token validation** |
+
+---
+
+## Blocking Issues
+
+None. Approved for merge.
+
+---
+
+*Ken, Software Architect*

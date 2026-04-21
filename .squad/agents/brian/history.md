@@ -616,3 +616,69 @@ Implemented Phase 15 in two parts:
 **Validation:** go build ./..., go vet ./..., go test ./... -race -count=3 all pass
 
 **Witness:** Ken approved Phase 15 (9/10). Decisions entry merged to decisions.md.
+
+---
+
+## Phase 16 Implementation — 2026-04-21
+
+**Status:** COMPLETE — Pending Ken review
+
+**Sealed from Phase 15:** `e4c4aee`
+
+Implemented Phase 16 per Ken's design (`ken-phase16-design.md`):
+
+**Part A — run.list + run.get RPC wiring (NBI-15-02):**
+- `handleRunList`: updated to merge `RunRegistry` (active) + `DirRunStore.ListRuns()` (persisted). Deduplication by RunID; registry wins. Added `source` field ("active"/"persisted") to each entry. Silent fallback if store unavailable or store doesn't implement `ListRuns`.
+- `handleRunGet` (new): looks up registry first (active), then store (persisted), 404 if not found. Returns `currentStep`, `currentStepIndex`, `vars`, `source`, and `completedAt` (active only) in addition to the base fields.
+- New tests: `TestRPC_RunList_MergesActiveAndPersisted`, `TestRPC_RunList_ActiveOverridesPersisted`, `TestRPC_RunList_StoreNilFallback`, `TestRPC_RunGet_ActiveRun`, `TestRPC_RunGet_PersistedRun`, `TestRPC_RunGet_NotFound`, `TestRPC_RunGet_InvalidParams`
+
+**Part B — Server Hardening:**
+- **CORS middleware** (`middleware.go`): replaced `corsMiddleware` with `newCORSMiddleware(allowedOrigins []string)` — configurable per-origin echo, OPTIONS preflight returns 204, includes `Authorization` and `Last-Event-ID` in allowed headers.
+- **Bearer auth middleware** (`middleware.go`): `newBearerAuthMiddleware(token string)` — no-op when token empty, `/health` always exempt, 401 on missing `Authorization: Bearer`, 403 on wrong token.
+- **Middleware stack** updated in `withMiddleware` to use config from `ServerConfig`.
+- **`pkg/serve/serve.go`**: added `AllowedOrigins []string` and `BearerToken string` to `ServerConfig`.
+- **New tests** (`middleware_test.go`): 8 tests covering CORS allowed/disallowed/preflight/no-origin and bearer auth valid/invalid/missing/no-config/health-exempt.
+- **SSE flake annotated**: `TestSSE_ConnectReceivesEvents` gets `t.Skip("flaky: timing-sensitive SSE test — see NBI-15-01")`.
+- **`cmd/gert/serve.go`** (new): `gert serve` command with `--addr`, `--cors-origin`, `--auth-token`, `--run-dir` flags; builds full engine config via adapter, starts HTTP server.
+- **`cmd/gert/main.go`**: registered `serve` command.
+
+**Deviations filed:** `.squad/decisions/inbox/brian-phase16-impl.md`
+- `engine.RunStore` interface has no `ListRuns` → used anonymous interface type assertion
+- `engine.RunState` has no `CompletedAt` → used `RunEntry.CompletedAt` for active runs, omit for persisted
+- Middleware in same file/package (not separate subdirectory)
+- `--cors-origin` flag accepts single value only
+
+**Validation:** `go build ./...`, `go vet ./...`, `go test ./... -race -count=3` all pass (32 packages).
+
+**Key design decisions held:**
+- D-16-01: Registry authoritative for active runs ✓
+- D-16-02: Silent store fallback on error ✓
+- D-16-03: SSE flake annotated with t.Skip ✓
+- D-16-04: Bearer token positioned as development-only ✓
+- D-16-05: run.get added alongside run.list ✓
+
+---
+
+## Phase 16 Implementation — Witness Entry (Ken Approval)
+
+**Date:** 2026-04-21  
+**Action:** Implementation submitted for architectural review and approved by Ken
+
+**Verdict:** APPROVED (8/10)
+
+**Scope:** Part A (run.list/run.get RPC wiring), Part B (CORS + bearer auth)
+
+**Key deliverables:**
+- `run.list`: Merges registry + store, deduplication by RunID, registry wins
+- `run.get`: Lookup by ID with 404 path, enriched response with source field
+- CORS middleware: Configurable origin per --cors-origin flag
+- Bearer auth: --auth-token flag, /health exempt
+- 14 new tests, all passing
+
+**Deviations:** Filed 4 deviations; Ken assessed all as ACCEPTED (duck-typed ListRuns, optional CompletedAt, single middleware.go, single --cors-origin)
+
+**Security note (NBI-16-08):** Bearer token uses string != instead of subtle.ConstantTimeCompare. Non-blocking, must fix Phase 17.
+
+**Validation:** All 32 packages pass: go test ./... -race -count=3
+
+**Commit:** `ab6f554` (feat(v2): Phase 16 — run.list/run.get RPC wiring, CORS, bearer auth)

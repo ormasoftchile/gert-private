@@ -2037,3 +2037,92 @@ Note: The original `run.go` had `"OTLP gRPC endpoint for OTel spans (e.g. http:/
 ---
 
 *Brian, Go Programmer*
+
+---
+
+## Phase 15 Decisions
+
+**Date:** 2026-04-21  
+**Author:** Ken (Staff Architect)  
+**Phase:** 15
+
+---
+
+### D-15-01: Skip Depth > 0 Steps in Engine Main Loop
+
+The engine's `Next()` loop will skip steps with `Depth > 0`. Sub-steps at depth > 0 are owned by their parent container (iterate, branch, parallel) and executed via `SubStepRunner`.
+
+**Rationale:**
+- Fixes NBI-14-03 (iterate/branch variable scoping bug)
+- The planner flattens sub-steps into ExecutionPlan.Steps for visibility/checkpointing
+- But the engine should not execute them directly — the parent container handles execution
+- Without this fix, sub-steps execute twice: once by parent (correctly), once by main loop (incorrectly, missing scoped vars)
+
+**Impact:** Correctness fix. Sub-steps will only execute in their scoped context with proper variable access.
+
+---
+
+### D-15-02: Mock Tool Runtime in E2E Harness
+
+E2E tests will use a mock `ToolRuntime` instead of a real tool registry.
+
+**Rationale:**
+- Real tool runtime requires filesystem setup (`.tool.yaml` files, tool directories)
+- E2E tests verify step wiring, not tool implementation details
+- Mock provides predictable, fast, deterministic behavior
+- Tool-specific behavior tested in `internal/executor/tool_test.go`
+
+**Impact:** Enables E2E coverage for tool_call steps without filesystem complexity.
+
+---
+
+### D-15-03: Close NBI-12-03 (context.AfterFunc) as WONT_FIX
+
+The `mergeContexts` goroutine-based implementation will remain unchanged. NBI-12-03 is closed.
+
+**Rationale:**
+- Deferred four times (Phases 12, 13, 14, and now considered for 15)
+- Current implementation is correct and bounded (max 2 goroutines per step)
+- No observed performance issues in 14 phases of development and stress testing
+- Optimization saves one goroutine per merge — negligible benefit
+- Risk of subtle cancellation timing changes outweighs reward
+
+**Impact:** No code change. Item closed permanently.
+
+---
+
+### D-15-04: Defer run.list RPC Wiring
+
+The `run.list` RPC will continue returning only in-memory active runs. Historical run listing via DirRunStore is deferred.
+
+**Rationale:**
+- `gert ls` works locally against filesystem — no RPC needed
+- Remote historical listing requires authentication (not implemented)
+- gert serve is not production-hardened
+- Phase 15 scope is full with correctness fix + test coverage
+
+**Impact:** Carry forward as NBI-15-02.
+
+---
+
+### NBI Items Addressed
+
+| ID | Status | Notes |
+|----|--------|-------|
+| NBI-14-03 | IN SCOPE | Iterate/branch variable scoping fix (D-15-01) |
+| NBI-14-02 | IN SCOPE | E2E coverage for tool steps (D-15-02) |
+| NBI-14-01 | DEFERRED | E2E parallelization → NBI-15-01 |
+| NBI-12-03 | CLOSED | context.AfterFunc optimization (D-15-03) |
+
+### New NBI Items
+
+| ID | Description | Priority |
+|----|-------------|----------|
+| NBI-15-01 | E2E test parallelization | Low |
+| NBI-15-02 | run.list RPC → DirRunStore wiring | Medium |
+| NBI-15-03 | gert serve hardening | Medium |
+| NBI-15-04 | gert dry-run completeness audit | Low |
+
+---
+
+*Ken, Staff Architect*

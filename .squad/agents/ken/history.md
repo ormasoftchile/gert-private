@@ -2041,3 +2041,55 @@ internal/e2e/
 - NBI-12-03: context.AfterFunc optimization (fourth deferral)
 
 **Output:** `.squad/decisions/inbox/ken-phase14-review.md`
+
+---
+
+## 2026-04-21 — Phase 15 Design: Iterate/Branch Scoping Fix & Test Coverage
+
+**Action:** Design Phase 15 scope and architecture
+**Requestor:** Cristian
+
+### Context
+- Phase 14 (E2E Integration Tests & NBI Closure) sealed and approved (9/10)
+- Four NBI carry-forwards: NBI-14-01 (parallelization), NBI-14-02 (tool E2E), NBI-14-03 (iterate scoping), NBI-12-03 (context.AfterFunc)
+- NBI-14-03 is a correctness bug exposed during Phase 14 review (DEV-14-03)
+- NBI-12-03 has been deferred four times — requires final disposition
+
+### Part A — NBI Carry-Forwards
+
+| ID | Disposition | Rationale |
+|----|-------------|-----------|
+| NBI-14-03 | IN SCOPE | Correctness bug — iterate/branch sub-steps lack scoped variables |
+| NBI-14-02 | IN SCOPE | Completes E2E coverage for all step types |
+| NBI-14-01 | DEFERRED | Low priority; suite runs in 3-5s; no CI pressure |
+| NBI-12-03 | CLOSED (WONT_FIX) | Four deferrals; current impl is correct/bounded; negligible benefit |
+
+### Part B — New Work Considered
+
+- **run.list RPC wiring** → Deferred (requires auth layer not implemented)
+- **gert serve hardening** → Deferred (internal/dev-only; no external exposure planned)
+- **gert dry-run audit** → Deferred (lower priority than correctness fix)
+
+### Key Decisions
+
+| ID | Decision |
+|----|----------|
+| D-15-01 | Skip Depth > 0 steps in engine main loop (fixes variable scoping) |
+| D-15-02 | Mock tool runtime in E2E harness |
+| D-15-03 | Close NBI-12-03 as WONT_FIX |
+| D-15-04 | Defer run.list RPC wiring |
+
+### Deliverables
+
+**Modified files:** 5 (engine.go, engine_test.go, helpers_test.go, e2e_test.go, iterate-runbook.yaml)
+**New files:** 1 (tool-runbook.yaml)
+**Estimated effort:** 3-4 Brian-days
+
+### NBI Items for Phase 16+
+
+- NBI-15-01: E2E test parallelization
+- NBI-15-02: run.list RPC → DirRunStore wiring
+- NBI-15-03: gert serve hardening
+- NBI-15-04: gert dry-run completeness audit
+
+**Output:** `.squad/tmp/ken-phase15-design.md`, `.squad/decisions/inbox/ken-phase15-design.md`

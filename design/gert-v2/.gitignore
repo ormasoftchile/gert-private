@@ -11,3 +11,4 @@ main.run.xml
 main.toc
 main.xdv
 _minted-main/
+*.fdb_latexmk

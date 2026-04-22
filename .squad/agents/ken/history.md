@@ -723,6 +723,47 @@ be closed by implementation without the design being updated.
 
 ## Learnings
 
+### 2026-04-22 — Domain Kit Traceability: Reverse Mapping as a Mandatory Contract
+
+**Context:** Domain Kit compilers lower kit-specific abstractions (e.g., Vacation Kit's `DayFlavor`, `MealSlot`, `ActivityPool`) into core GERT YAML using only primitives. After lowering, kit-level semantic information is lost — trace events carry only core step IDs. Without reverse mapping, operators cannot correlate runtime events back to kit concepts, projections become impossible, and debugging requires manual trace-through of lowered runbooks.
+
+**Solution:** Adopted a three-layer reverse mapping strategy as the canonical GERT Domain Kit contract:
+
+1. **Layer 1 — Step ID Naming Convention (MANDATORY, zero cost):**  
+   All Domain Kit compilers MUST produce deterministic, structured step IDs:  
+   `{kit-prefix}.{concept-kind}.{concept-name}.{sub-element}`  
+   Example: `vacation.day.2.afternoon-activity.weather-branch`  
+   Projection tools parse step IDs by splitting on `.` to recover kit provenance. Works TODAY in GERT v2.0 without schema changes.
+
+2. **Layer 2 — Compiler-Emitted Source Map (RECOMMENDED):**  
+   Kit compiler MUST emit a `{runbook-name}.sourcemap.yaml` sidecar file containing:
+   - `version`, `kit`, `runbook`, `lowered_at` metadata
+   - `entries` map: `{step-id → {kind, name, source_file, source_line, ...}}`  
+   Enables rich projections, operator dashboards, and post-mortem analysis with source file references. Standard best practice for production kits (~150 LOC implementation).
+
+3. **Layer 3 — Schema Extension (OPTIONAL, requires GERT v2.1+):**  
+   Add `Meta map[string]string` field to core `Step` struct. Compiler populates `meta` fields on every generated step during lowering. Runtime propagates `meta` unchanged into trace events. Enables self-describing traces (no external source map required), streaming projections, and multi-kit composition. Not available in v2.0 — proposed for v2.1.
+
+**Kit Traceability Contract (5 Rules):**
+1. Step IDs MUST follow structured naming convention
+2. Compiler MUST emit source map sidecar for every lowered runbook
+3. Source map MUST be deterministic (same kit source → same source map)
+4. Source map MUST version the kit (`version` and `kit` fields required)
+5. Compiler SHOULD populate `meta` fields if Layer 3 available in target GERT version
+
+**Impact:**
+- Without traceability: Domain Kits are write-only abstractions — unusable in production (debugging takes 10x longer, projections impossible, audit trails opaque)
+- With traceability: Operator dashboards can project domain-level views from core trace events, debugging correlates step IDs to kit concepts in seconds, audit trails are semantically meaningful
+
+**Design implications for GERT core:** Minimal. Layers 1 and 2 are compiler concerns with no runtime dependency. Layer 3 (proposed for v2.1) requires a 1-line schema change (`Meta map[string]string`) and 1-line trace writer update. No new core concepts required — the Clean Kernel Principle is preserved.
+
+**Lesson:** Reverse mapping is not a "nice-to-have" for Domain Kits — it is the **price of admission for production**. This is the same lesson learned by every compiler ecosystem (TypeScript, SASS, Terraform) that lowers high-level abstractions to lower-level runtimes. The Vacation Kit validates this as a general Domain Kit pattern applicable to all future kits.
+
+**Decision record:** `.squad/decisions/inbox/ken-traceability-reverse-mapping.md`  
+**Documentation:** Vacation Domain Kit v0, §4.10 (canonical GERT answer, concrete Vacation Kit illustration)
+
+---
+
 ### 2026-04-20 — DRI Reference Audit and Decoupling Decision
 
 **Context:** User requested a full audit of DRI-domain references across the three main design files
@@ -876,3 +917,41 @@ All 10 chapters of the **DRI Domain Kit Manual** (`design/dri-kit-manual/`) are 
 - leslie-refactor-complete: Approved — all 67 instances addressed
 
 **Pending:** Ken's cross-consistency review (ken-review) to validate all three gert-v2 sections against new domain kit frameworks.
+
+---
+
+## 2026-04-22 — Vacation Domain Kit Prototype Design
+
+**Task:** Write sections 1, 2, 4, 5, 8 of the Vacation Domain Kit prototype design  
+**Requestor:** Cristian
+
+### Key Decisions
+
+| ID | Decision |
+|----|----------|
+| VK-01 | Vacation Kit is a Domain Kit (compiler + schemas), NOT an extension. Companion tools (token-gen, ledger, suggest, weather) are separate extension tools per §4 boundary. |
+| VK-02 | Stay Template → parent run, Day → child sub-run via iterate + invoke. Sub-run isolation protects stay-level state from day-level failures. |
+| VK-03 | Credits are GERT runtime state variables, not a dedicated store. Ledger tool enforces non-negativity. Local-first, no external infrastructure. |
+| VK-04 | QR guest pass is a self-contained signed token (HMAC-SHA256). Issued/revoked by tool steps. Reuses GERT JWT infrastructure from Phases 17-18. |
+| VK-05 | Suggestions are non-blocking human tasks with timeout. Guest's "What now?" does not gate day progression. |
+| VK-06 | Weather replanning: event → state variable → branch → replanning child sub-run. Exercises full GERT event pipeline. |
+| VK-07 | MVP scope: 2 weeks, ~2,850 LOC. Week 1: foundation (stay + QR + timeline). Week 2: intelligence (suggestions + override + credits + weather). |
+| VK-08 | Operator overrides use GERT approval gates directly. No custom override mechanism. |
+
+### GERT Primitive Mappings Established
+
+- Stay Run → parent run
+- Day → child sub-run (iterate + invoke)
+- Slot transitions → timer tool steps (`gert.timer`)
+- QR pass → tool-issued signed token + policy scopes
+- Credits → runtime state variables (`credits.<category>.balance`)
+- Suggestions → tool step (compute) + manual step with timeout (present)
+- Weather override → event → state change → branch → replanning sub-run
+- Operator override → approval-gated manual step with role verification
+- Activities → manual or tool steps selected via branch conditions
+- Evidence → all mutations emit trace events in `trace.jsonl`
+
+### Deliverables
+
+- `.squad/tmp/ken-vacation-kit.md` — Full design (sections 1, 2, 4, 5, 8)
+- `.squad/decisions/inbox/ken-vacation-kit.md` — 8 architectural decisions + deferred decisions

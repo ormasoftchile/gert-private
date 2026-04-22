@@ -2126,3 +2126,4278 @@ The `run.list` RPC will continue returning only in-memory active runs. Historica
 ---
 
 *Ken, Staff Architect*
+
+
+---
+
+# Phase 10 Architectural Decisions: CLI Specification & EventDispatcher Contract
+
+**Proposed By:** Barbara (Integrations Specialist)  
+**Date:** 2026-04-20  
+**Status:** PENDING KEN APPROVAL  
+**Relates To:** Phase 10 — Adapters (`gert run` CLI, EventDispatcher wiring)
+
+---
+
+## Decision 1: Minimal Viable `gert run` CLI Specification
+
+**Context:**
+
+The v2 spec references `gert run` in 15+ locations but does NOT provide a formal CLI specification. References are constraint-only:
+- "gert run MUST reject wait_for_event steps"
+- "gert run mode" vs. "gert serve mode"
+- Observability examples showing `--otel-endpoint`, `--log-level`, etc.
+
+No formal specification exists for:
+- Positional arguments (runbook path)
+- Variable/input overrides
+- Trace file output location
+- Output formatting
+- Exit codes
+- Error handling
+
+**Impact:**
+
+Phase 10 cannot implement `cmd/gert/run.go` without a CLI spec. Brian is blocked.
+
+**Proposed Decision:**
+
+Approve the following **Minimal Viable CLI Specification** for `gert run`:
+
+```bash
+gert run <runbook-path> [flags]
+
+Arguments:
+  runbook-path         Path to runbook YAML file (required, positional)
+
+Flags:
+  --var KEY=VALUE      Variable override (repeatable)
+  --input KEY=VALUE    Input binding override (repeatable)
+  --trace PATH         Trace file output path (default: ./trace.jsonl)
+  --output FORMAT      Output format: text, json, quiet (default: text)
+  --help, -h           Show this help message
+
+Exit Codes:
+  0  Success (run completed, all steps succeeded)
+  1  Execution failure (one or more steps failed)
+  2  Validation error (parse/plan failed, malformed runbook)
+  3  Runtime error (crash, panic, internal error)
+
+Output Streams:
+  Stdout:  Step output (CLI commands, tool results) when --output=text
+           JSON-formatted run summary when --output=json
+           Silent when --output=quiet
+  Stderr:  gert diagnostics, progress, warnings, errors
+  Trace:   Append-only JSONL event log at --trace path
+
+Behavior:
+  - Parses runbook with Parser
+  - Resolves imports/tools with Planner
+  - Executes plan with Runtime Core
+  - Writes trace events to trace.jsonl
+  - EventDispatcher is nil (wait_for_event rejected)
+  - No checkpointing (runs to completion or failure)
+```
+
+**Advanced Flags (Deferred to Phase 11+):**
+
+```bash
+# Phase 11 (Evidence & Replay):
+  --resume RUN_ID      Resume from checkpoint
+
+# Phase 12 (Observability):
+  --otel-endpoint URL  OpenTelemetry collector endpoint
+  --otel-console       Emit OTel spans to console
+  --log-level LEVEL    Log level: debug, info, warn, error
+  --log-output TARGET  Log output: stderr, file:PATH, syslog:HOST:PORT
+```
+
+**Rationale:**
+
+1. **Minimal Surface:** Only flags required for basic execution
+2. **Spec-Aligned:** Exit codes match v1 behavior, output flags match §15 examples
+3. **Extensible:** Advanced flags can be added in later phases without breaking changes
+4. **Testable:** r21 fixture can validate all basic behaviors
+
+**Alternatives Considered:**
+
+1. **Defer CLI to Phase 11** — Rejected: Phase 10 is "Adapters", `gert run` is the primary standalone adapter
+2. **Match v1 CLI exactly** — Rejected: v2 uses different internal architecture, some v1 flags are obsolete
+3. **Add all §15 flags now** — Rejected: Observability is Phase 12, premature to implement
+
+**Decision Required:**
+
+- [ ] APPROVED by Ken — proceed with implementation
+- [ ] REJECTED by Ken — revise proposal
+- [ ] DEFERRED — implement placeholder, revisit in Phase 11
+
+---
+
+## Decision 2: EventDispatcher Interface Alignment
+
+**Context:**
+
+The spec defines EventDispatcher as (§02-architecture.tex:1874):
+
+```go
+type EventDispatcher interface {
+    Register(ctx context.Context, reg ListenerRegistration) (token string, err error)
+    Send(ctx context.Context, eventID string, payload map[string]any) error
+    Unregister(ctx context.Context, runID, eventID string) error
+}
+```
+
+But the **existing implementation** at `pkg/eventbus/dispatcher.go` defines:
+
+```go
+type EventDispatcher interface {
+    Dispatch(ev InboundEvent) error
+    Wait(ctx context.Context, stepID string, filter EventFilter, timeout time.Duration) (*InboundEvent, error)
+    Cancel(stepID string, reason string)
+}
+```
+
+**Discrepancy:**
+
+- Spec: `Register/Send/Unregister` (async, event-driven)
+- Impl: `Dispatch/Wait/Cancel` (sync, blocking Wait)
+
+**Impact:**
+
+Phase 10 implementation must match the spec interface, not the current code.
+
+**Proposed Decision:**
+
+**REWRITE `pkg/eventbus/dispatcher.go` to match spec exactly:**
+
+```go
+type EventDispatcher interface {
+    // Register creates a listener for an inbound event on a waiting run.
+    // Returns a one-time HMAC token (non-empty for webhook source only).
+    Register(ctx context.Context, reg ListenerRegistration) (token string, err error)
+
+    // Send posts an event to a named channel (in-process transport only).
+    // Returns ErrNotRegistered if no listener exists for the eventID.
+    Send(ctx context.Context, eventID string, payload map[string]any) error
+
+    // Unregister removes a listener (called on timeout or run cancellation).
+    Unregister(ctx context.Context, runID, eventID string) error
+}
+
+type ListenerRegistration struct {
+    RunID         string
+    EventID       string
+    Source        string              // "webhook" | "channel" | "broker"
+    Filter        map[string]string   // key-value pairs that must match
+    PayloadSchema *jsonschema.Schema  // validation schema for inbound payload
+    Timeout       time.Duration
+}
+```
+
+**Implementation Notes:**
+
+1. **Async Execution Model:**
+   - `Register()` does NOT block
+   - Returns immediately with HMAC token
+   - Dispatcher spawns goroutine with timeout timer
+   - When event arrives via `Send()`, dispatcher resumes the waiting run
+
+2. **Timeout Handling:**
+   - Each registration starts a `time.AfterFunc(timeout, callback)`
+   - Callback invokes runtime's timeout handler
+   - `Unregister()` cancels the timer
+
+3. **Webhook Token:**
+   - `Register()` generates `HMAC-SHA256(runID + eventID + secret)`
+   - Token stored in `map[string]*ListenerRegistration`
+   - Webhook handler validates token, calls `Send(eventID, payload)`
+
+**Rationale:**
+
+- Spec is the source of truth, not existing code
+- Async model matches `gert serve` long-running architecture
+- Blocking `Wait()` in current impl is incompatible with serve's event loop
+
+**Alternatives Considered:**
+
+1. **Keep current impl, update spec** — Rejected: Spec was reviewed and approved, code is wrong
+2. **Support both interfaces** — Rejected: Adds complexity, violates YAGNI
+
+**Decision Required:**
+
+- [ ] APPROVED by Ken — rewrite dispatcher interface
+- [ ] REJECTED by Ken — justify current impl, update spec
+- [ ] DEFERRED — use current impl for Phase 10, align in Phase 11
+
+---
+
+## Decision 3: TraceWriter Signature Field (Stub vs. Full Implementation)
+
+**Context:**
+
+The `TraceEvent` struct includes a `Signature` field for HMAC-SHA256 chain verification (§12-evidence-tracing-resumption.tex).
+
+```go
+type TraceEvent struct {
+    // ... other fields ...
+    Signature string `json:"sig,omitempty"` // HMAC-SHA256 over canonical JSON
+}
+```
+
+Full HMAC chain implementation requires:
+- Secret key management (`GERT_TRACE_KEY` env var)
+- Canonical JSON serialization (deterministic field order)
+- Chained signing (signature of event N includes signature of event N-1)
+- Verification logic for replay
+
+**This is a Phase 11 deliverable** (Evidence & Replay), not Phase 10.
+
+**Proposed Decision:**
+
+**Phase 10: Leave `Signature` field empty (`""`).**
+
+- `TraceWriter.Append()` writes events with `"sig": ""` or omits field entirely
+- JSONL output is valid JSON, signature optional per spec (`omitempty` tag)
+- Tests verify JSONL format, not signature correctness
+
+**Phase 11: Implement HMAC chain.**
+
+- `TraceWriter` constructor accepts optional secret key
+- If key is non-empty, compute signatures
+- If key is empty (Phase 10 behavior), leave signatures blank
+
+**Rationale:**
+
+1. **Separation of Concerns:** Phase 10 is about wiring, not evidence integrity
+2. **Incremental Delivery:** Basic trace output is useful without signatures
+3. **Test Independence:** Phase 10 tests can validate trace structure without crypto
+
+**Alternatives Considered:**
+
+1. **Implement HMAC now** — Rejected: Scope creep, delays Phase 10
+2. **Remove Signature field** — Rejected: Breaks spec, requires Phase 11 rewrite
+
+**Decision Required:**
+
+- [ ] APPROVED by Ken — stub signatures in Phase 10
+- [ ] REJECTED by Ken — implement HMAC now
+- [ ] DEFERRED — remove field, add in Phase 11
+
+---
+
+## Decision 4: r21 Fixture Scope (Serve-Only Constraint Testing)
+
+**Context:**
+
+The r21 fixture exercises `gert run` standalone execution. It includes a **commented-out scenario** demonstrating `wait_for_event` rejection:
+
+```yaml
+# SCENARIO 2 (serve-only): wait_for_event rejection
+# Uncomment to test serve-only constraint validation.
+# Expected: gert run MUST reject with error:
+#   "step type 'wait_for_event' requires gert serve mode"
+#
+# - step:
+#     id: wait_approval
+#     type: wait_for_event
+#     ...
+```
+
+**Question:** Should this be a separate fixture (`r21-wait-for-event-reject.yaml`) or remain as a commented-out scenario in the main fixture?
+
+**Proposed Decision:**
+
+**Keep as commented-out scenario in r21/schema.yaml.**
+
+**Rationale:**
+
+1. **Documentation Value:** Shows developers what NOT to do in `gert run` mode
+2. **Manual Testing:** Can be uncommented for ad-hoc validation
+3. **Integration Test:** Automated test can create temporary variant with wait_for_event and assert rejection
+
+**Integration Test Pattern:**
+
+```go
+func TestGertRunRejectsWaitForEvent(t *testing.T) {
+    // Load r21 fixture
+    rb := loadFixture(t, "r21-gert-run/schema.yaml")
+    
+    // Inject wait_for_event step
+    rb.Flow = append(rb.Flow, waitForEventStep())
+    
+    // Write to temp file
+    tmpPath := writeRunbook(t, rb)
+    
+    // Run: gert run tmpPath
+    output, exitCode := runGertRun(t, tmpPath)
+    
+    // Assert: exit code 2 (validation error)
+    assert.Equal(t, 2, exitCode)
+    
+    // Assert: error message matches spec
+    assert.Contains(t, output, "step type 'wait_for_event' requires gert serve mode")
+}
+```
+
+**Alternatives Considered:**
+
+1. **Separate fixture r21b-wait-reject.yaml** — Rejected: Duplication, harder to maintain
+2. **No documentation of constraint** — Rejected: Loses teaching value
+
+**Decision Required:**
+
+- [ ] APPROVED by Ken — keep commented scenario
+- [ ] REJECTED by Ken — create separate fixture
+- [ ] DEFERRED — remove, test manually
+
+---
+
+## Summary of Decisions Pending Approval
+
+| # | Decision | Status | Blocker? |
+|---|----------|--------|----------|
+| 1 | Minimal Viable `gert run` CLI Spec | PENDING | ✅ YES — blocks cmd/gert/run.go |
+| 2 | EventDispatcher Interface Rewrite | PENDING | ✅ YES — blocks pkg/eventbus impl |
+| 3 | TraceWriter Signature Stub | PENDING | ⚠️ NO — can proceed with empty sigs |
+| 4 | r21 Fixture Commented Scenario | PENDING | ⚠️ NO — documentation only |
+
+**Next Step:** Ken reviews and approves/rejects/revises each decision.
+
+---
+
+**End of Architectural Decisions**
+
+---
+
+# Barbara — Phase 11 Audit Decisions
+
+**Date:** 2026-04-20  
+**Author:** Barbara (Integrations Specialist)  
+**Phase:** 11 (Evidence & Replay)  
+**Status:** Proposed (awaiting Ken's review)
+
+---
+
+## Decision 1: Defer Remote Trace Access RPC Methods to Phase 12
+
+**Context:**
+- Phase 11 spec (§12) defines local filesystem-based trace access
+- Adapters (TUI, VS Code) access `.runbook/runs/<run-id>/trace.jsonl` directly
+- Remote Web UI would need RPC methods: `trace/query`, `trace/read`, `evidence/get`
+- Current exec/v2 contract (§13) has `run/list`, `run/get` but no trace query methods
+
+**Proposal:**
+- Phase 11 delivers `RunStore` interface with `ReadTrace()`, `ReadTraceSince()` methods
+- Local adapters use filesystem access (works for TUI, VS Code)
+- Defer RPC methods for remote trace access to **Phase 12** (or v2.1)
+
+**Rationale:**
+- Local adapters are the v2.0 priority (remote Web UI is v2.1 per PLAN.md)
+- Adding RPC methods now would expand Phase 11 scope without validated use case
+- `RunStore` interface is sufficient for Phase 11 implementation
+
+**Assigned to:** Ken (architectural approval)
+
+---
+
+## Decision 2: Omit `checkpoint` Events from WebSocket Event Stream
+
+**Context:**
+- `checkpoint` event kind (§12.1.3) is "internal event... not user-facing"
+- Emitted by `RunStore.SaveCheckpoint()` to link snapshot file to trace sequence
+- Required for resumption, but not needed for live UI rendering
+
+**Proposal:**
+- `checkpoint` events written to JSONL trace (required for resumption)
+- `checkpoint` events **omitted** from WebSocket event stream (not user-facing)
+- EventBus filter: skip events where `kind == "checkpoint"`
+
+**Rationale:**
+- Adapters (TUI, Web, VS Code) render step/run lifecycle events, not internal checkpoints
+- Including checkpoints in WebSocket stream adds noise without value
+- Spec explicitly says "internal event... not user-facing"
+
+**Assigned to:** Brian (Phase 11 implementation)
+
+---
+
+## Decision 3: Defer HMAC Trace Signing to v2.1
+
+**Context:**
+- §12.1.5 specifies optional HMAC-SHA256 signing of trace events
+- Enabled via `GERT_TRACE_KEY` environment variable
+- Provides tamper-evidence (detects modification, not deletion)
+
+**Proposal:**
+- Phase 11 delivers trace format with optional `sig` field (schema supports it)
+- HMAC signing **implementation deferred to v2.1**
+- Compliance/audit use case not yet validated (SOC2 fixture r04 doesn't require it)
+
+**Rationale:**
+- Append-only JSONL provides tamper-resistance at filesystem level
+- HMAC signing is optional per spec (not required for v2.0 GA)
+- No validated compliance requirement for cryptographic trace integrity in v2.0 scope
+- Deferring reduces Phase 11 complexity
+
+**Assigned to:** Ken (architectural approval)
+
+---
+
+## Decision 4: r22 Fixture as Phase 11 Golden Trace Baseline
+
+**Context:**
+- r22-evidence-replay fixture created with deterministic evidence collection
+- Covers: stdout capture, file attachments, env snapshots, replay, resumption
+- Expected trace: 18 events (run/started → step/completed x7 → run/completed)
+
+**Proposal:**
+- Use r22 as **golden trace baseline** for Phase 11 regression tests
+- Test workflow:
+  1. Run r22 in real mode, capture trace.jsonl
+  2. Normalize timestamps, event_ids, durations
+  3. Commit normalized trace as `r22-golden.jsonl`
+  4. Regression: re-run r22, normalize, diff against golden
+  5. Update golden via `go test -update` when schema evolves
+
+**Rationale:**
+- r22 is deterministic (fixed inputs, no random/time-dependent values)
+- Comprehensive evidence coverage (all 4 evidence kinds)
+- Clear expected event sequence (documented in schema.yaml comments)
+
+**Assigned to:** Brian (Phase 11 implementation)
+
+---
+
+## Decision 5: `MultiWriter` Pattern for Trace Fanout
+
+**Context:**
+- Runtime Core must write events to:
+  1. `DirRunStore.WriteTrace()` → `trace.jsonl` (durable, authoritative)
+  2. `EventBus` → WebSocket subscribers (ephemeral, best-effort)
+- Phase 3 Runtime Core established `MultiWriter` pattern
+
+**Proposal:**
+- Use existing `internal/trace/multi_writer.go` for fanout
+- `Engine` instantiates `MultiWriter` with:
+  - `DirRunStore` (JSONL writer)
+  - `EventBusWriter` (WebSocket forwarder, bounded channel, discard-on-full)
+- Write failures to JSONL are fatal (halt execution)
+- Write failures to EventBus are logged and ignored (best-effort delivery)
+
+**Rationale:**
+- Aligns with §06.1.2 delivery semantics ("at-least-once to JSONL, best-effort to subscribers")
+- Prevents slow WebSocket clients from blocking execution
+- MultiWriter already implemented in codebase
+
+**Assigned to:** Brian (Phase 11 integration with Phase 3 Runtime Core)
+
+---
+
+## Decision 6: Resumption from Last Valid Checkpoint (Not Last Event)
+
+**Context:**
+- Spec §12.4.1: "Load latest checkpoint — scan snapshots/ descending, skip .tmp files"
+- Question: Should resumption use last checkpoint or last trace event?
+
+**Proposal:**
+- Resumption uses **last valid checkpoint** (`step-NNNN.json`, not `.tmp`)
+- Trace events between last checkpoint and crash are **discarded** (not replayed)
+- Example:
+  - Checkpoint: `step-0003.json` (after step 3 completes)
+  - Crash: during step 4 execution (step/started written, no step/completed)
+  - Resume: re-execute step 4 from beginning (step/started written again)
+  - Result: Trace has duplicate `step/started` events for step 4
+
+**Rationale:**
+- Checkpoints are the authoritative resumption state (atomic, fsync'd)
+- Trace events are append-only (no way to "uncommit" partial step events)
+- Duplicate `step/started` events are acceptable (tooling can deduplicate via sequence number)
+
+**Assigned to:** Brian (Phase 11 resumption implementation)
+
+---
+
+## Decision 7: Evidence Attachment Deduplication by SHA256
+
+**Context:**
+- Spec §12.2.3: "Attachments are deduplicated by content"
+- Same file content → same SHA256 → single attachment file
+
+**Proposal:**
+- Attachment storage: `.runbook/runs/<run-id>/attachments/<sha256>.<ext>`
+- Deduplication algorithm:
+  1. Compute SHA256 of source file
+  2. If `attachments/<sha256>.<ext>` exists, skip copy
+  3. If not exists, copy source → `attachments/<sha256>.<ext>`
+  4. Emit evidence event with SHA256 reference
+
+**Edge case: Different extensions, same content**
+- File1: `report.txt` (SHA256: abc123)
+- File2: `report.md` (SHA256: abc123, identical content)
+- Result: Both reference `attachments/abc123.txt` (first-written extension wins)
+
+**Rationale:**
+- Content-addressed storage enables deduplication
+- Extension preserved for MIME type detection (tooling can infer from extension)
+- First-written extension is deterministic (timestamp-ordered)
+
+**Assigned to:** Brian (Phase 11 evidence implementation)
+
+---
+
+## Decision 8: No Replay Mode for `wait_for_event` Steps
+
+**Context:**
+- `wait_for_event` step type requires EventDispatcher (gert serve mode)
+- Replay mode (§12.4) intercepts cli/manual/tool steps with pre-recorded responses
+- Question: How should `wait_for_event` behave in replay mode?
+
+**Proposal:**
+- `wait_for_event` steps **fail in replay mode** with error:
+  - `error_type: "replay_not_supported"`
+  - `error: "wait_for_event requires gert serve mode; not supported in replay"`
+- Runbook authors must design separate replay fixtures without `wait_for_event` steps
+
+**Rationale:**
+- `wait_for_event` depends on external event sources (webhooks, message queues)
+- Pre-recording external events in scenario YAML is complex and not validated in v2.0 use cases
+- Failing fast is clearer than silently skipping or faking events
+
+**Assigned to:** Brian (Phase 11 replay implementation)
+
+---
+
+## Decision 9: Idempotency Declaration is Optional, Default is `false`
+
+**Context:**
+- Spec §12.4.2: "Authors must declare `idempotent: true` on tools where safe"
+- Question: What happens if `idempotent` field is omitted?
+
+**Proposal:**
+- `idempotent` field in tool definitions is **optional**, default is `false`
+- Resumption behavior:
+  - If `idempotent: true`: re-issue in-flight tool calls on resume
+  - If `idempotent: false` (or omitted): treat in-flight calls as **failed** on resume
+
+**Rationale:**
+- Safer default (fail rather than double-execute non-idempotent operations)
+- Forces authors to explicitly opt into re-execution (conscious decision)
+- Aligns with spec §12.4.2: "If idempotent: false (default): step treated as failed"
+
+**Assigned to:** Brian (Phase 11 resumption implementation)
+
+---
+
+## Summary Table
+
+| Decision | Status | Assigned To | Phase |
+|----------|--------|-------------|-------|
+| Defer remote trace access RPC methods | Proposed | Ken | 12 or v2.1 |
+| Omit `checkpoint` events from WebSocket | Proposed | Brian | 11 |
+| Defer HMAC signing | Proposed | Ken | v2.1 |
+| r22 as golden trace baseline | Proposed | Brian | 11 |
+| MultiWriter fanout pattern | Proposed | Brian | 11 |
+| Resume from last checkpoint (not last event) | Proposed | Brian | 11 |
+| Evidence deduplication by SHA256 | Proposed | Brian | 11 |
+| No replay mode for `wait_for_event` | Proposed | Brian | 11 |
+| Idempotency default is `false` | Proposed | Brian | 11 |
+
+---
+
+**Next Steps:**
+1. Ken reviews architectural decisions (1, 3)
+2. Brian implements Phase 11 with decisions 2, 4-9
+3. Update `.squad/decisions.md` after Ken's approval
+
+---
+
+**End of Decision Inbox**
+
+---
+
+# Decision: Phase 4 Governance Fakes Implementation
+
+**Date:** 2026-04-19  
+**Author:** Barbara (Integrations Specialist)  
+**Status:** Implemented  
+**Phase:** Phase 4 — Governance
+
+## Context
+
+Ken's Phase 4 design (`ken-phase4-design.md`) specified two fake implementations for governance testing:
+- `FakeGovernancePolicy` — test double for `governance.GovernancePolicy`
+- `FakeApprovalGate` — test double for `governance.ApprovalGate`
+
+Brian had already created the public interface files in `v2/pkg/governance/`, unblocking the fake implementations.
+
+## Decision
+
+### 1. Pattern Matching Strategy
+
+**Decision:** Use `filepath.Match` for env var pattern matching in `FakeGovernancePolicy.FilterEnvVars`.
+
+**Rationale:**
+- Ken's design note in §Fake Implementations explicitly calls for `filepath.Match` in the fake
+- Ken's open question 2 confirms v2.0 uses basic glob matching (no `**`, no `{a,b}`)
+- `filepath.Match` is stdlib, no external dependencies
+- Sufficient for Phase 4 test scenarios (exact match + basic `*` wildcard)
+
+**Alternative considered:** `path.Match` — rejected because Ken's spec uses `filepath.Match` in the example code.
+
+### 2. Token Generation (No UUID)
+
+**Decision:** Generate approval tokens as `fmt.Sprintf("fake-token-%d", time.Now().UnixNano())` instead of using `github.com/google/uuid`.
+
+**Rationale:**
+- The task explicitly said "no external UUID dependency"
+- `google/uuid` is in `go.mod` for other packages, but testutil should be lightweight
+- Nano-timestamp tokens are unique within a test run (adequate for test doubles)
+- Real `ApprovalGate` implementations will use proper UUIDs; the fake doesn't need that correctness
+
+**Impact:** Test assertions on approval tokens will need to handle the `fake-token-*` format, not UUID format.
+
+### 3. Thread Safety
+
+**Decision:** Add `sync.Mutex` to `FakeApprovalGate` to protect the `Calls` slice.
+
+**Rationale:**
+- The approval gate is called from the engine's step execution path
+- Phase 7+ introduces concurrent step execution (parallel flow nodes)
+- Without a mutex, concurrent `RequestApproval` calls would race on slice append
+- Follows the pattern established in `FakeStepExecutor` (which also has a mutex on `Calls`)
+
+**Cost:** Minimal — one mutex lock per call, no contention in typical tests.
+
+### 4. Compile-Time Guards
+
+**Decision:** Add interface guards at the top of each fake file:
+```go
+var _ governance.GovernancePolicy = (*FakeGovernancePolicy)(nil)
+var _ governance.ApprovalGate = (*FakeApprovalGate)(nil)
+```
+
+**Rationale:**
+- Established testutil convention (all fakes have guards)
+- Catches interface drift at compile time, not at test runtime
+- Zero runtime cost (the assignment is optimized away)
+
+## Implementation Summary
+
+**Files created:**
+- `v2/pkg/testutil/fake_governance_policy.go` (67 lines)
+- `v2/pkg/testutil/fake_approval_gate.go` (76 lines)
+
+**Build status:**
+- ✅ `go build ./pkg/testutil/...`
+- ✅ `go vet ./pkg/testutil/...`
+- ✅ `go build ./pkg/governance/...`
+
+**Dependencies:**
+- Imports `github.com/ormasoftchile/gert/v2/pkg/governance` (public interfaces only)
+- Stdlib only: `context`, `errors`, `fmt`, `path/filepath`, `sync`, `time`
+
+## Consequences
+
+### Positive
+- Unblocks Brian's PolicyEvaluator implementation tests
+- Unblocks Phase 4 integration tests (governance pre-flight checks)
+- Follows established testutil patterns (guards, thread safety, recording)
+- No external dependencies added to testutil
+
+### Negative
+- `filepath.Match` is not as powerful as `gobwas/glob` — phase-out risk if v2.1 upgrades to richer pattern syntax
+- Fake token format (`fake-token-{nanos}`) is non-standard — tests must not assume UUID shape
+
+### Neutral
+- Brian must implement the real `PolicyEvaluator` and policy builder next
+- Engine integration must wire the evaluator into `executeStep` pre-flight (Phase 4 milestone)
+
+## Open Questions
+
+None. Implementation is complete and matches Ken's spec.
+
+## References
+
+- Ken's design: `.squad/tmp/ken-phase4-design.md` §Fake Implementations
+- Brian's interfaces: `v2/pkg/governance/{evaluator,evidence,approval}.go`
+- Existing pattern: `v2/pkg/testutil/fake_step_executor.go`
+
+---
+
+# Decision: Phase 5 Fixture Coverage and Integration Test Strategy
+
+**Proposer:** Barbara (Integrations Specialist)  
+**Date:** 2026-04-19  
+**Phase:** Phase 5 — StepExecutor implementations  
+**Status:** FOR REVIEW
+
+---
+
+## Summary
+
+Completed comprehensive audit of runbook fixtures (r01-r16). All 14 step types now have fixture coverage. Propose documenting the step type → fixture mapping as the authoritative reference for Phase 5-13 integration tests.
+
+---
+
+## Background
+
+Phase 5 requires implementing 14 concrete StepExecutor types (CliExecutor, ToolExecutor, IncludeExecutor, etc.). Each executor needs:
+
+1. **Unit tests** — with fakes (FakeToolRegistry, etc.)
+2. **Integration tests** — with real parser + planner + executor stack
+
+Fixtures provide the integration test corpus. Before this task, 3 step types had thin or no dedicated fixture coverage:
+- `assert` — had r02/r06 but no dedicated fixture
+- `compensate` — had r02/r06 but no explicit multi-step compensation example
+- `end` — present everywhere but no fixture showcasing end step explicitly
+
+---
+
+## Proposal
+
+### 1. Document Step Type → Fixture Mapping
+
+Create authoritative mapping (already in `.squad/tmp/barbara-phase5-fixture-audit.md`):
+
+| Step Type | Primary Fixtures | Coverage |
+|-----------|------------------|----------|
+| cli | r11, r14, r16 | Basic cli, cli with capture |
+| tool | r01, r03 | Builtin tools, tool with capture |
+| collector | r03, r15 | Field validation, multi-field collection |
+| branch | r13, r15 | Conditional branching |
+| assert | r02, r14 | Assert with failure triggers |
+| compensate | r02, r14 | Compensation registration and execution |
+| end | r16 | Explicit end with outcome |
+| ... | ... | ... |
+
+### 2. New Fixtures Created
+
+**r14-assert-compensate:**
+- Demonstrates assert + compensate step types
+- Assert validates cli output with multiple assertion types (eq, contains)
+- Compensate registers multi-step rollback handler
+- Validates assert failure triggers compensation chain
+
+**r15-branch-collector:**
+- Demonstrates collector + branch step types
+- Collector with 4 field types: select (3 options), text, boolean, optional text
+- Branch with 3 conditional paths based on environment selection
+- Nested collector within production branch (approval gate)
+
+**r16-end-step:**
+- Demonstrates end step type with explicit outcome
+- Outcome structure: category "resolved" + code "task_succeeded"
+- Distinguishes explicit end vs. implicit end-of-flow
+
+### 3. Integration Test Pattern
+
+Each StepExecutor follows this pattern:
+
+```go
+func TestCliExecutor_Execute(t *testing.T) {
+    // Load fixture via parser
+    p := parser.New(platform.NewFakePlatform())
+    pr := p.Parse(ctx, "testdata/runbooks/r11-iterate-loop/schema.yaml")
+    
+    // Find step to test
+    step := findStep(pr.Runbook.Flow, "init")
+    
+    // Execute with fake dependencies
+    executor := NewCliExecutor(fakePlatform, fakeLogger)
+    result := executor.Execute(ctx, step, state)
+    
+    // Validate
+    assert.Equal(t, StepStatusSuccess, result.Status)
+    assert.Contains(t, state.Variables["init_msg"], "Starting")
+}
+```
+
+### 4. Coverage Status
+
+All 14 step types now have fixture coverage:
+
+✅ **Excellent coverage (5+ fixtures):** cli, collector, branch, iterate, parallel  
+✅ **Good coverage (1-4 fixtures):** tool, include, decision, approve, assert, compensate, end  
+⚠️ **Thin coverage (1 fixture):** choice, wait_for_event (adequate for Phase 5)
+
+---
+
+## Rationale
+
+**Why document this mapping?**
+
+1. **Consistency:** All 14 executor implementations reference the same fixture set
+2. **Traceability:** Clear fixture → step type → executor mapping
+3. **Completeness:** Verifiable coverage — every step type has test fixture
+4. **Reusability:** Fixtures serve dual purpose (parser tests + executor integration tests)
+
+**Why create r14/r15/r16?**
+
+Before this task:
+- `assert` fixtures (r02, r06) embedded assert in complex workflows — no dedicated test
+- `compensate` fixtures (r02, r06) demonstrated rollback but lacked explicit multi-step compensation
+- `end` fixtures (r01-r10) implicitly ended but no fixture showcased end step structure
+
+New fixtures provide **focused, minimal examples** for:
+- Testing single executor in isolation
+- Demonstrating step type clearly
+- Validating spec compliance (assert types, compensate on: trigger, end outcome structure)
+
+---
+
+## Impact
+
+**Positive:**
+- ✅ Phase 5 executor implementation unblocked
+- ✅ Integration test corpus complete
+- ✅ Parser tests validate all 16 fixtures
+- ✅ Clear fixture selection guide per executor
+
+**Risk:**
+- ⚠️ Minor: `choice` and `wait_for_event` have thin coverage (1 fixture each)
+- Mitigation: Adequate for Phase 5; can add more fixtures in Phase 6+ if complex scenarios arise
+
+**Maintenance:**
+- New fixtures (r17+) should follow same pattern: dedicated fixture per thin coverage area
+- Fixture audit should be repeated before Phase 10 (comprehensive integration testing phase)
+
+---
+
+## Alternatives Considered
+
+### Alternative 1: Use only production fixtures (r01-r13)
+
+**Rejected:** Production fixtures are complex, multi-step workflows. Testing a single step type in isolation is harder. Dedicated fixtures (r14-r16) provide minimal, focused examples.
+
+### Alternative 2: Create 14 dedicated fixtures (r14-r27, one per step type)
+
+**Rejected:** Overkill. Many step types already have excellent coverage (cli, collector, branch). Only 3 step types (assert, compensate, end) needed dedicated fixtures.
+
+### Alternative 3: Skip fixture audit, rely on unit tests only
+
+**Rejected:** Unit tests with fakes don't exercise parser → planner → executor stack. Integration tests with real fixtures catch:
+- YAML schema drift
+- Variable interpolation bugs
+- Step type dispatch errors
+- Contract validation issues
+
+---
+
+## Decision
+
+**PROPOSED:** Adopt step type → fixture mapping as authoritative reference for Phase 5-13 integration tests.
+
+**Artifacts:**
+1. `.squad/tmp/barbara-phase5-fixture-audit.md` — full audit report with fixture usage guide
+2. `testdata/runbooks/r14-assert-compensate/schema.yaml`
+3. `testdata/runbooks/r15-branch-collector/schema.yaml`
+4. `testdata/runbooks/r16-end-step/schema.yaml`
+5. `v2/internal/parser/parser_test.go` — added 3 fixture tests
+
+**Validation:**
+- All 16 fixtures parse successfully
+- Parser tests: `TestParser_FixtureR14_AssertCompensate`, `TestParser_FixtureR15_BranchCollector`, `TestParser_FixtureR16_EndStep`
+- Build: `go build ./internal/parser/...` ✅
+- Tests: `go test ./internal/parser/... -run TestParser_Fixtures` ✅ (16/16 pass)
+
+---
+
+## Approval
+
+**Awaiting review:**
+- Ken (architect) — validate fixture coverage adequacy for Phase 5 architectural review
+- Brian (implementor) — confirm fixture selection aligns with StepExecutor implementation plan
+
+**Expected outcome:** Approved for Phase 5 integration test implementation
+
+---
+
+# Decision Required: Phase 6 Tool Infrastructure
+
+**From:** Barbara (Integrations Specialist)  
+**Date:** 2026-04-19  
+**Context:** Phase 6 Tool Runtime audit — critical gaps identified  
+**Priority:** HIGH — blocks Phase 6 implementation  
+**Full Analysis:** `.squad/tmp/barbara-phase6-tool-audit.md`
+
+---
+
+## Summary
+
+Phase 6 (Tool Runtime) **CANNOT BEGIN** until tool test infrastructure is created. Audit of all 16 runbooks reveals:
+
+- **23 unique tools** referenced across runbooks
+- **13 builtin tool stubs** (slack, pagerduty, aws, okta, etc.) have NO `.tool.yaml` definitions
+- **ZERO transport test fixtures** exist (stdio, stdio-jsonrpc, mcp all untested)
+- **8 reference test tools** needed (echo, fail, slow + variants)
+- **r17 fixture runbook** required for transport validation
+
+**Estimated tooling work:** 9 days before Brian can start Phase 6 implementation.
+
+---
+
+## Decisions Needed (Ken)
+
+### 1. Test Tool Location
+
+**Question:** Where should test tools live?
+
+**Options:**
+- **A)** `design/gert-v2/testdata/tools/` — co-located with runbook fixtures
+- **B)** `v2/internal/testtools/` — part of Go test infrastructure
+- **C)** Both (definitions in testdata, binaries in v2/internal)
+
+**Barbara's recommendation:** **Option C** — `.tool.yaml` definitions in `testdata/tools/`, Go binaries in `v2/internal/testtools/bin/` (Makefile builds them)
+
+**Rationale:** Separates fixture data (testdata) from test infrastructure (v2/internal). Parser tests can reference testdata, runtime tests can execute binaries.
+
+---
+
+### 2. Minimal Builtin Registry for v2.0
+
+**Question:** What tools should be in the "built-in tool registry compiled into the host binary"?
+
+**Analysis:** Runbooks reference 13 builtin tools, but spec does NOT define what's in the registry.
+
+**Options:**
+- **A)** All 13 tools inferred from runbooks (slack, pagerduty, aws, okta, github, prometheus, alertmanager, palo-alto, splunk, email, kubectl, git, docker)
+- **B)** Minimal set: only CLI tools (kubectl, git, docker, psql) — real tools, not stubs
+- **C)** ZERO builtin tools in v2.0 — all tools are project-defined (simplest, most flexible)
+
+**Barbara's recommendation:** **Option B (minimal)** for v2.0, defer stubs to v2.1
+
+**Rationale:**
+- CLI tools (kubectl, git, docker, psql) are real binaries, easy to define as stdio tools
+- Builtin stubs (slack, aws, okta) are testing artifacts, not product features
+- For Phase 6, test with reference tools (echo, fail, slow), not builtin stubs
+- Runbooks r01–r05 can be updated to use reference tools instead of stubs
+
+**Revised blockers if Option B:** Only 8 reference test tools needed, NOT 11 builtin stubs (saves 2 days)
+
+---
+
+### 3. Builtin Stub Transport Mode
+
+**Question:** If we do implement builtin stubs (Option A above), what transport should they use?
+
+**Options:**
+- **A)** All stubs use `stdio-jsonrpc` — tests persistent process lifecycle
+- **B)** Mixed transports (slack/pagerduty use stdio-jsonrpc, kubectl/git use stdio)
+- **C)** All stubs use `stdio` — simplest implementation
+
+**Barbara's recommendation:** **Option A (stdio-jsonrpc)** IF stubs are implemented
+
+**Rationale:** stdio-jsonrpc is the most complex transport (persistent process, JSON-RPC envelope, context injection). Using it for all stubs provides maximum test coverage. stdio transport is already covered by kubectl/git/docker (real binaries).
+
+---
+
+### 4. MCP Server Registry Multi-Server Behavior
+
+**Question:** How should the host handle multiple MCP servers with overlapping tool names?
+
+**Spec gap:** Spec §5.3 shows one MCP server example but does NOT define multi-server behavior.
+
+**Scenario:** Two MCP servers both provide a `lookup` tool. Which wins?
+
+**Options:**
+- **A)** First registration wins (MCP server declaration order)
+- **B)** Namespace all MCP tools as `<server-name>/<tool-name>` (no collision possible)
+- **C)** Error on collision (fail-fast)
+
+**Barbara's recommendation:** **Option B (namespace)** — aligns with tool discovery spec
+
+**Rationale:** Spec §5.3 lines 328–329 says:
+> Registers each returned tool under the name `<server-name>/<tool-name>` in the dynamic tool catalog.
+
+This already implies namespacing. Decision: make this EXPLICIT in spec (not ambiguous).
+
+---
+
+## Proposed Phase 6 Entry Criteria Update
+
+Current PLAN.md entry criteria:
+```
+Phase 6: Tool Runtime
+Entry Criteria:
+  - Phase 5 complete (all 14 step types implemented)
+```
+
+**Recommended addition:**
+```
+Phase 6: Tool Runtime
+Entry Criteria:
+  - Phase 5 complete (all 14 step types implemented)
+  - Reference test tools created (8 tools: echo, fail, slow, echo-server, fail-server, slow-server, echo-mcp, echo-json)
+  - r17-tool-transports.yaml fixture exists and parses
+  - Ken has approved tool infrastructure decisions (test tool location, builtin registry scope, transport modes)
+  - [OPTIONAL] Builtin stub server implemented (if Decision 2 = Option A)
+```
+
+---
+
+## Barbara's Proposed Work (Pending Decisions)
+
+**IF Decision 2 = Option B (minimal builtin registry):**
+1. Create 8 reference test tools (`.tool.yaml` + Go binaries) — 3 days
+2. Create r17-tool-transports.yaml fixture — 1 day
+3. Update r01–r05 to use reference tools instead of builtin stubs — 1 day
+4. **Total:** 5 days (4 days saved vs. full stub implementation)
+
+**IF Decision 2 = Option A (all builtin stubs):**
+1. Create 8 reference test tools — 3 days
+2. Create 11 builtin stubs — 2 days
+3. Create r17-tool-transports.yaml fixture — 1 day
+4. **Total:** 6 days (still 3 days saved vs. original 9-day estimate due to scope clarity)
+
+---
+
+## Impact if Decisions Delayed
+
+**Phase 6 blocked:** Brian cannot implement tool runtime without test tools.
+
+**Phase 11 blocked:** Evidence & Replay requires tool invocation traces (depends on Phase 6).
+
+**Phase 13 blocked:** Acceptance corpus requires golden traces from tool steps.
+
+**Critical path:** ~9 days of tooling work + Ken's decision time before Phase 6 can start. If decisions delayed by 1 week, Phase 6 start date slips by 1 week.
+
+---
+
+## Next Steps
+
+1. Ken reviews this decision doc + full audit (`.squad/tmp/barbara-phase6-tool-audit.md`)
+2. Ken decides on 4 questions above
+3. Barbara implements chosen approach
+4. Ken reviews tool definitions and r17 fixture
+5. Phase 6 entry criteria met → Brian begins implementation
+
+---
+
+**Related artifacts:**
+- Full audit: `.squad/tmp/barbara-phase6-tool-audit.md` (28KB, 10 sections)
+- Prior gap analysis: `.squad/tmp/barbara-runbook-toolset-gaps.md`
+- Spec: `design/gert-v2/sections/05-tool-runtime.tex`
+- Parser tests: `v2/internal/parser/parser_test.go` (TestParser_Fixtures)
+
+---
+
+# Phase 7 Audit Findings — Team Decision Required
+
+**Author:** Barbara  
+**Date:** 2026-04-20  
+**Context:** Pre-implementation audit of Phase 7 Extension Host spec
+
+---
+
+## BLOCKER: ToolRegistry Dynamic Registration
+
+**Problem:** Phase 6 `ToolRegistry` interface lacks dynamic registration method.
+
+**Evidence:**
+- Interface (`v2/pkg/tool/tool.go`) defines only `Lookup(name string)` and `All()`
+- Extension lifecycle requires dynamic tool registration after host startup
+- Extension calls `contributions/list` → host receives `tools: [...]` array → **no way to register into registry**
+
+**Impact:**
+- Phase 7 BLOCKED
+- Phase 6 `MapRegistry` implementation is read-only after construction
+
+**Proposed Fix:**
+```go
+// v2/pkg/tool/tool.go
+type ToolRegistry interface {
+    Lookup(name string) (*ToolDef, bool)
+    All() []ToolDef
+    Register(def ToolDef) error  // NEW
+}
+
+// v2/internal/tool/registry.go
+func (r *MapRegistry) Register(def ToolDef) error {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    if _, exists := r.tools[def.Name]; exists {
+        return fmt.Errorf("tool %q already registered", def.Name)
+    }
+    r.tools[def.Name] = def
+    return nil
+}
+```
+
+**Decision required:**
+1. Ken: Approve augmenting `ToolRegistry` interface with `Register()`?
+2. Brian: Implement as Phase 6 patch or defer to Phase 7?
+
+---
+
+## Schema Gaps for Phase 7
+
+**Missing types in `v2/pkg/schema/`:**
+
+1. **ExtensionManifest** — no type for `gert-extension.yaml` parsing
+2. **Runbook.Extensions** — no field for runbook-level extension declarations
+3. **WorkspaceConfig** — no type for `.gert/extensions.yaml` (if workspace discovery in scope)
+
+**Decision required:**
+1. Ken: Design `ExtensionManifest` type to match spec (see audit §4.1.1 for proposed shape)
+2. Ken: Add `Extensions []*ExtensionRef` field to `Runbook` struct
+3. Ken: Clarify Phase 7 scope — does it include workspace discovery or only runbook-level `extensions:` field?
+
+---
+
+## Extension Contribution Type Ambiguity
+
+**Question:** Do extension-contributed tools/providers use existing schema types or distinct contribution types?
+
+**Evidence:**
+- Spec shows contribution response: `{ "tools": [...], "providers": [...] }`
+- Existing types: `schema.ToolDef`, `schema.ProviderDef`
+- Normative spec shows tool contribution with different fields: `inputSchema`, `outputSchema`, `requiredCapabilities`, `timeoutMsDefault`
+- Current `ToolDef` has `Transport`, `Command`, `Args` — extension-contributed tools may not declare these (host manages invocation)
+
+**Decision required:**
+Ken: Are extension-contributed tools a **different type** than `.tool.yaml` file definitions?
+
+**Options:**
+- **A:** Same type — `schema.ToolDef` is flexible enough for both
+- **B:** Distinct type — `schema.ContributedToolDef` for extensions, `schema.ToolDef` for `.tool.yaml` files
+- **C:** Polymorphic — `ToolDef` has `Source` field that determines which fields are valid
+
+---
+
+## Fixture Scope for Phase 7
+
+**Recommended fixtures:**
+1. ✅ **r18-extension-contrib** runbook
+2. ✅ **acme-stub-extension** reference binary (Go, ~500 lines)
+3. ✅ **gert-extension.yaml** manifest fixture
+4. ❓ **`.gert/extensions.yaml`** workspace config (depends on scope decision)
+
+**Decision required:**
+Ken: Does Phase 7 implement all 3 discovery sources (workspace, runbook, CLI) or only runbook + CLI?
+
+---
+
+## Transport Scope
+
+**Spec mentions 3 transports:** stdio-jsonrpc, grpc, mcp
+
+**Decision required:**
+Ken: Phase 7 implements only stdio-jsonrpc (simplest)? Or all three?
+
+**Recommendation:** stdio-jsonrpc only for Phase 7. Defer grpc/mcp to Phase 7.1 or v2.1.
+
+---
+
+## Status
+
+⚠️ **Needs Ken's decisions before Brian can begin Phase 7 implementation.**
+
+Team discussion required on:
+1. Registry augmentation approval
+2. Schema type design
+3. Phase 7 scope boundaries (workspace discovery? multiple transports?)
+
+---
+
+# Decision: Phase 8 Input Provider Framework — Scope and Design
+
+**Date:** 2026-04-20  
+**Type:** Design Decision  
+**Status:** Proposed  
+**Owner:** Barbara (Integrations Specialist)  
+**Phase:** 8 (Input Provider Framework)  
+**Reviewers:** Ken (architect), Brian (implementer)
+
+---
+
+## Context
+
+Phase 8 delivers the Input Provider Framework per spec §14. Audit of current codebase shows:
+- ✅ Public `InputProvider` interface exists for interactive steps (choice/decision/collector)
+- ✅ `prompt` provider already implemented (`internal/input/terminal.go`)
+- ✅ Schema supports `Input.From` field
+- ❌ No provider registry, resolution pipeline, or external provider support
+- ❌ Built-in providers (`env`, `file`, `workspace`) not implemented
+- ❌ Dynamic options and autocomplete protocols not implemented
+
+Full audit: `.squad/tmp/barbara-phase8-audit.md`
+
+---
+
+## Decisions Required
+
+### D1: Provider Composition — Array Syntax for Chained Providers
+
+**Question:** Should `Input.From` support both `string` and `[]string` for provider chains?
+
+**Spec Requirement (§14.7):**
+```yaml
+inputs:
+  api_token:
+    from:
+      - env.ACME_API_TOKEN
+      - vault.secret/acme/api-token
+      - prompt
+```
+
+**Current Schema:**
+```go
+type Input struct {
+    From string `yaml:"from,omitempty" json:"from,omitempty"`
+    // ...
+}
+```
+
+**Options:**
+
+**A) Change `From` to `any` and unmarshal as `string | []string`**
+- ✅ Matches spec exactly
+- ✅ Backward compatible with existing `from: "env.VAR"` syntax
+- ⚠️ Requires custom YAML unmarshaling logic
+- ⚠️ Parser must validate: array elements are strings, no duplicates
+
+**B) Keep `From` as `string`, defer array syntax to v2.1**
+- ✅ Simpler parser implementation
+- ✅ Phase 8 can ship with single-provider resolution only
+- ❌ Breaks spec compliance (§14.7 is MUST, not MAY)
+- ❌ Requires workaround in r19 fixture
+
+**Recommendation:** **Option A** — Implement array syntax in Phase 8. Spec §14.7 is explicit, and chained providers are a core security pattern (env → vault → prompt). Deferring to v2.1 would require runbook rewrites.
+
+**Implementation Notes:**
+- Add custom `UnmarshalYAML` to `Input` struct
+- Normalize to internal `[]string` representation (single-item array for string syntax)
+- Validation: all strings must match `^[a-z0-9_-]+\.[a-zA-Z0-9_\.\-/#~]+$` (prefix + binding)
+
+---
+
+### D2: Built-in Provider Registration
+
+**Question:** How should built-in providers (`env`, `file`, `workspace`, `prompt`) be registered?
+
+**Options:**
+
+**A) Hard-coded registration in engine initialization**
+```go
+func NewEngine(cfg EngineConfig) (Engine, error) {
+    registry := provider.NewRegistry()
+    registry.RegisterBuiltin("env", builtin.NewEnvProvider())
+    registry.RegisterBuiltin("file", builtin.NewFileProvider())
+    registry.RegisterBuiltin("workspace", builtin.NewWorkspaceProvider())
+    registry.RegisterBuiltin("prompt", cfg.InputProvider) // Reuse terminal.go
+    // ...
+}
+```
+- ✅ Simple, no discovery overhead
+- ✅ Predictable initialization order
+- ❌ Tight coupling to engine package
+
+**B) Auto-registration via `init()` in provider packages**
+```go
+// internal/provider/builtin/env.go
+func init() {
+    provider.RegisterBuiltin("env", &EnvProvider{})
+}
+```
+- ✅ Decoupled from engine
+- ❌ Hidden initialization, harder to test
+- ❌ Order non-deterministic
+
+**C) Explicit registration in `main()` / test setup**
+```go
+func main() {
+    engine := gert.NewEngine(cfg)
+    engine.RegisterProvider("env", builtin.NewEnvProvider())
+    // ...
+}
+```
+- ✅ Explicit, testable
+- ✅ User can override built-ins
+- ❌ Boilerplate in every CLI/test
+
+**Recommendation:** **Option A** — Hard-coded registration in engine initialization. Built-in providers are part of the spec (§14.4), not optional extensions. They should be present in every engine instance without user action.
+
+**Fallback for `prompt`:** If `EngineConfig.InputProvider` is nil, instantiate `internal/input/terminal.go` as the default `prompt` provider. This matches existing behavior where interactive steps fall back to terminal.
+
+---
+
+### D3: Provider Process Lifecycle — Shared vs. Per-Run
+
+**Question:** Should provider processes be shared across multiple runs, or spawned per-run?
+
+**Spec (§14.8):**
+> Providers [...] are persistent: the host spawns each provider process once at the start of the pre-flight resolution phase and keeps it alive for the entire run.
+
+Spec says "for the entire run" but doesn't address cross-run pooling.
+
+**Options:**
+
+**A) Per-run processes (spawn on run start, kill on run end)**
+- ✅ Isolation: one run can't poison another
+- ✅ Simpler state management (no run ID multiplexing)
+- ✅ Matches spec literal reading
+- ❌ Startup latency for every run (Vault auth, PagerDuty OAuth on every run)
+
+**B) Shared process pool (spawn once, reuse across runs)**
+- ✅ Performance: amortize startup cost
+- ✅ Matches v1 behavior (provider pool)
+- ❌ Complexity: must pass runId in every RPC request
+- ❌ Security: one run's secrets visible to other runs if provider doesn't isolate
+
+**C) Configurable per provider (default: per-run, opt-in to shared)**
+```yaml
+# .provider.yaml
+transport:
+  lifecycle: shared  # or "per-run"
+```
+- ✅ Flexibility for performance-critical providers
+- ❌ More complex implementation
+- ❌ Not in spec (would be extension)
+
+**Recommendation:** **Option A (per-run)** for Phase 8. Ship with simple, secure default. If performance becomes a problem in production, add Option C in Phase 8.1 or v2.1.
+
+**Rationale:** Isolation is more important than performance for v2.0 launch. External providers (Vault, PagerDuty) should cache credentials internally if startup is expensive. gert should not manage credential lifetime across runs.
+
+---
+
+### D4: Dynamic Options — Synchronous vs. Async Fetching
+
+**Question:** When a collector field declares `options_from.provider`, should the run engine fetch options synchronously (blocking step execution) or asynchronously (prefetch in parallel)?
+
+**Spec (§14.5.3):**
+> The run engine sends an `inputProvider/getOptions` JSON-RPC request [...] before rendering the field or dispatching the interactive step request.
+
+Spec implies synchronous (fetch before dispatch), but doesn't forbid prefetch optimization.
+
+**Options:**
+
+**A) Synchronous fetch (when step is about to execute)**
+- ✅ Simple implementation
+- ✅ Options always fresh (no staleness)
+- ❌ Adds latency to step execution
+
+**B) Async prefetch (when runbook is parsed, before run starts)**
+- ✅ No runtime latency
+- ❌ Stale options if run is paused/resumed
+- ❌ All options fetched even for conditional steps that may not execute
+
+**C) Hybrid (prefetch on parse, refetch on step if TTL expired)**
+- ✅ Best performance for common case
+- ✅ Freshness guaranteed via TTL
+- ❌ Most complex implementation
+
+**Recommendation:** **Option A (synchronous)** for Phase 8. Optimize to Option C in Phase 8.1 if latency becomes a problem in production.
+
+**Rationale:** Correctness > performance for v2.0 launch. Dynamic options are likely to be time-sensitive (e.g., "list of active PagerDuty incidents"). Fetching at step execution time ensures freshness. Cache with `cacheTtlSeconds` if provider returns it.
+
+---
+
+### D5: File Provider — Security Model
+
+**Question:** Should the `file` provider enforce a whitelist of allowed paths, or trust runbook governance?
+
+**Spec (§14.4.2):**
+```yaml
+inputs:
+  ssh_key:
+    from: "file.~/.ssh/id_rsa"
+```
+
+No mention of path restrictions or sandboxing.
+
+**Security Risk:** Malicious runbook could read arbitrary files:
+```yaml
+inputs:
+  secrets:
+    from: "file./etc/shadow"
+```
+
+**Options:**
+
+**A) No restrictions (trust governance layer)**
+- ✅ Matches spec (no restrictions mentioned)
+- ✅ Simple implementation
+- ❌ Runbook can read any file the gert process can read
+
+**B) Whitelist allowed paths in `.gert/config.yaml`**
+```yaml
+# .gert/config.yaml
+input_providers:
+  file:
+    allowed_paths:
+      - "~/.ssh/"
+      - "~/.config/gert/"
+      - "/etc/gert/"
+```
+- ✅ Defense in depth
+- ❌ Not in spec (would be extension)
+- ❌ Breaks portability (path config per workspace)
+
+**C) Governance rule: require approval for file.* bindings**
+```yaml
+# In runbook governance block
+governance:
+  rules:
+    - effects: ["input.file"]
+      action: require-approval
+```
+- ✅ Uses existing governance framework
+- ✅ Auditable in trace
+- ❌ Requires new effect type `input.file`
+
+**Recommendation:** **Option C** — Add governance effect `input.provider.<name>` for all provider resolutions. Phase 8 implements; runbooks opt-in to approval gates.
+
+**Implementation:**
+- Pre-flight resolution emits trace event: `{"event": "input.provider_called", "provider": "file", "binding": "~/.ssh/id_rsa"}`
+- Governance evaluator checks effects: `["input.provider.file"]`
+- If rule requires approval, pause for approval gate before reading file
+
+**Security Note:** This doesn't prevent file reads by malicious operators with approval rights, but ensures audit trail and enforces policy.
+
+---
+
+### D6: Workspace Provider — Config File Location
+
+**Question:** Where should the workspace config file be located?
+
+**Spec (§14.4.4):**
+> Reads values from the workspace configuration file (`.gert/config.yaml`).
+
+**Options:**
+
+**A) Fixed path: `.gert/config.yaml` in current working directory**
+- ✅ Matches spec exactly
+- ❌ Requires runbook execution from workspace root
+- ❌ Doesn't work for multi-workspace setups
+
+**B) Search upward from CWD to find `.gert/` directory**
+- ✅ Works from any subdirectory
+- ✅ Matches git's `.git/` discovery pattern
+- ❌ Not in spec (would be extension)
+
+**C) Configurable via `GERT_WORKSPACE` env var**
+```bash
+export GERT_WORKSPACE=/path/to/workspace
+gert run runbook.yaml
+```
+- ✅ Flexible for CI/CD
+- ❌ Not in spec
+- ❌ Env var shadows workspace config (circular dependency)
+
+**Recommendation:** **Option B** — Search upward for `.gert/config.yaml`, starting from CWD. This matches user expectations from git, and makes `gert run` work from any subdirectory.
+
+**Fallback:** If no `.gert/config.yaml` found after reaching filesystem root, provider returns error. Runbook's `fallback:` strategy applies (prompt/default/fail).
+
+---
+
+## Open Questions for Ken
+
+1. **Q: Should `from:` bindings support template expressions?**
+   - Example: `from: env.{{ .environment }}_API_KEY`
+   - Use case: Dynamic env var names based on other inputs
+   - Spec doesn't mention this; is it in scope for Phase 8?
+
+2. **Q: How should external providers authenticate?**
+   - Spec §14.2 shows `env-read-patterns` for governance, but no auth mechanism
+   - Example: Vault provider needs VAULT_TOKEN, PagerDuty needs PAGERDUTY_API_KEY
+   - Should providers read from env vars? From `.gert/credentials.yaml`? From OS keychain?
+
+3. **Q: Should provider binaries be version-locked?**
+   - Example: `pd-provider` v1.2.3 vs v2.0.0 may have different resolution behavior
+   - Should `.provider.yaml` include `version: "1.2.3"` and gert enforce exact match?
+   - Or trust PATH to have correct version?
+
+4. **Q: What's the error recovery model if a provider crashes mid-batch?**
+   - Spec §14.8: "apply fallback strategy for in-flight bindings"
+   - But what if 3 of 5 inputs in batch were already resolved?
+   - Should run discard partial results and re-resolve? Or use partial + fallback for rest?
+
+---
+
+## Implementation Checklist for Brian
+
+Phase 8 deliverables (derived from audit):
+
+### Core Infrastructure
+- [ ] `pkg/provider/provider.go`: `Provider` interface
+- [ ] `pkg/provider/registry.go`: `ProviderRegistry` with prefix matching
+- [ ] `pkg/provider/resolver.go`: Resolution pipeline (pre-flight phase)
+- [ ] `pkg/provider/builtin.go`: Built-in provider registration
+- [ ] Schema change: `Input.From` as `string | []string`
+- [ ] Parser: Custom unmarshal for `From` field
+
+### Built-in Providers
+- [ ] `internal/provider/env.go`: `EnvProvider`
+- [ ] `internal/provider/file.go`: `FileProvider` with JSON Pointer
+- [ ] `internal/provider/workspace.go`: `WorkspaceProvider`
+- [ ] Wire `internal/input/terminal.go` as `prompt` provider
+
+### External Provider Support
+- [ ] `pkg/provider/process.go`: Process lifecycle management
+- [ ] `pkg/provider/rpc.go`: JSON-RPC `provider/resolve` dispatcher
+- [ ] Batching logic: group inputs by provider prefix
+- [ ] Caching: run/step/none scope
+- [ ] Graceful shutdown sequence
+
+### Dynamic Options & Autocomplete
+- [ ] `pkg/provider/options.go`: `inputProvider/getOptions` dispatcher
+- [ ] `pkg/provider/search.go`: `inputProvider/search` dispatcher (500ms timeout)
+- [ ] Integrate with choice/collector executors
+- [ ] CLI degradation for autocomplete → select
+
+### Trace & Governance
+- [ ] Trace events: `input.resolved`, `input.provider_started`, `input.fallback`
+- [ ] Governance effect: `input.provider.<name>`
+- [ ] Approval gate integration for provider calls
+
+### Testing
+- [ ] Unit tests for all built-in providers
+- [ ] Contract tests: Provider interface compliance
+- [ ] Integration tests: Full resolution pipeline
+- [ ] Golden traces: `input.resolved` events
+- [ ] r19 fixture: End-to-end validation
+
+---
+
+**Status:** Awaiting Ken's review and Brian's implementation.
+
+---
+
+# Decision: Phase 9 Serve Implementation Architecture
+
+**Status:** Proposed  
+**Decider:** Barbara (Integrations Specialist)  
+**Date:** 2026-04-18  
+**Context:** Phase 9 — gert serve implementation planning
+
+---
+
+## Decision
+
+Implement `gert serve` as a **thin adapter** over the existing Engine API with the following architecture:
+
+### Package Structure
+
+```
+v2/cmd/serve/          # Entry point, CLI flags
+v2/internal/serve/     # All serve implementation (NOT public API)
+  ├── server.go        # Main server struct + lifecycle
+  ├── jsonrpc.go       # JSON-RPC 2.0 handler (exec/v2 contract)
+  ├── websocket.go     # WebSocket event streaming (events/v2 contract)
+  ├── webhook.go       # POST /events handler for wait_for_event
+  ├── session.go       # Session map: run_id -> RunHandle
+  └── errors.go        # Error code constants
+```
+
+**Rationale:** serve does NOT expose a public Go API. External consumers integrate via the JSON-RPC contract. Keep all serve logic in `internal/` to signal this intent.
+
+### Transport Support (exec/v2)
+
+1. **stdio JSON-RPC 2.0** (Phase 9.1)
+   - Newline-delimited JSON over stdin/stdout
+   - Flag: `gert serve --stdio`
+   - Use case: VS Code extension
+
+2. **HTTP POST /rpc** (Phase 9.2)
+   - JSON-RPC 2.0 over HTTP
+   - Flags: `gert serve --http --port 8080 --bind 0.0.0.0`
+   - Use case: Web clients, CI/CD integrations
+
+### Event Streaming (events/v2)
+
+- **WebSocket at /ws** (Phase 9.2)
+- Client sends: `{"action": "subscribe", "runId": "...", "sinceSequence": 0}`
+- Server streams: One JSON event per WS message
+- Supports reconnection with sequence replay
+
+### Webhook Transport
+
+- **POST /events/{run-id}/{event-id}** (Phase 9.3)
+- HMAC-SHA256 signature verification (secret from listener registration)
+- Used by `wait_for_event` step type
+- Returns: 202 Accepted | 401 Unauthorized | 404 Not Found | 410 Gone
+
+### Health Endpoint
+
+- **GET /health** (Phase 9.2)
+- Returns: `{"status": "ok", "version": "v2.0.0"}`
+
+---
+
+## Alternatives Considered
+
+### 1. Expose pkg/serve public API
+
+**Rejected.** No identified use case for embedding gert serve in other Go programs. External integrations use JSON-RPC. If demand emerges, we can promote to `pkg/serve` later (additive change).
+
+### 2. Use gRPC instead of JSON-RPC
+
+**Rejected.** JSON-RPC is simpler, better VS Code extension support, easier browser clients. gRPC adds protobuf overhead with no clear benefit for this use case.
+
+### 3. Server-Sent Events (SSE) instead of WebSocket
+
+**Considered.** SSE is simpler (unidirectional), but WebSocket is already specified in Section 13. WebSocket supports bidirectional communication (useful for future features like interactive input).
+
+---
+
+## Implementation Notes
+
+### Dependencies
+
+- **JSON-RPC:** Hand-roll or use `github.com/sourcegraph/jsonrpc2`
+  - Spec is simple (~200 LOC to hand-roll)
+  - Recommendation: Start with hand-rolled, migrate to library if complexity grows
+
+- **WebSocket:** `github.com/gorilla/websocket`
+  - Stdlib WS is low-level; gorilla is production-grade
+
+- **HTTP:** stdlib `net/http`
+  - No routing complexity; simple mux is sufficient
+
+### Session Lifecycle
+
+```go
+// internal/serve/session.go
+type SessionManager struct {
+    mu       sync.RWMutex
+    sessions map[string]*Session  // run_id -> Session
+}
+
+type Session struct {
+    RunID   string
+    Handle  engine.RunHandle
+    Events  <-chan engine.Event
+    Cancel  context.CancelFunc
+}
+```
+
+- `exec/start` → create Session, store in map
+- `exec/next` → lookup Session, call `Handle.Next()`
+- Event forwarder: drain `Handle.Events()` in goroutine, forward to JSON-RPC notification or WebSocket
+
+### Error Codes (exec/v2)
+
+```go
+// internal/serve/errors.go
+const (
+    ErrCodeRunNotFound       = 1001
+    ErrCodeInvalidParams     = 1002
+    ErrCodeInternalError     = 1003
+    ErrCodeRunbookNotFound   = 1004
+    ErrCodePlanningFailed    = 1005
+    ErrCodeEngineStartFailed = 1006
+    ErrCodeStepFailed        = 1007
+    ErrCodeNoNextStep        = 1008  // io.EOF from Handle.Next()
+)
+```
+
+Per Section 13, error responses include:
+- `code` (int)
+- `message` (string)
+- `data.category` ("client_error" | "server_error")
+- `data.retryable` (bool)
+
+### Crash Recovery
+
+Per Section 02.7.2:
+
+1. On startup, scan `--trace-dir` for runs in WAITING state
+2. For each: `handle, err := engine.Resume(ctx, runID, opts)`
+3. Restore session in SessionManager
+4. Re-register EventDispatcher listeners from checkpoint
+
+**Phase 9 scope:** Basic resume support. Full persistence of EventDispatcher state deferred to Phase 10.
+
+---
+
+## Testing Strategy
+
+### Unit Tests
+
+- `internal/serve/jsonrpc_test.go` — Mock engine, test each RPC method
+- `internal/serve/session_test.go` — Session lifecycle (create, lookup, cleanup)
+- `internal/serve/websocket_test.go` — Event streaming, reconnection
+
+### Integration Test
+
+- Fixture: r20-serve-rpc
+- Start `gert serve --stdio` in subprocess
+- Send: `{"jsonrpc": "2.0", "id": 1, "method": "exec/start", "params": {...}}`
+- Verify: `{"jsonrpc": "2.0", "id": 1, "result": {"runId": "..."}}`
+- Send: `{"jsonrpc": "2.0", "id": 2, "method": "exec/next", "params": {"runId": "..."}}`
+- Verify step events on stdout
+
+### Acceptance Test
+
+- Full HTTP server with WebSocket
+- Browser client (or `wscat`) connects to `ws://localhost:8080/ws`
+- Verify real-time event delivery during run execution
+
+---
+
+## Open Questions
+
+1. **Authentication:** Section 07.7 mentions RBAC for gert serve. Is this Phase 9 or Phase 10?
+   - **Proposal:** Defer to Phase 10. Phase 9 ships with no auth (local-only use case).
+
+2. **TLS:** Should --http support --tls-cert / --tls-key flags?
+   - **Proposal:** Yes, but optional. Use reverse proxy (nginx/caddy) for prod.
+
+3. **Rate limiting:** Should serve implement per-client rate limits?
+   - **Proposal:** No. Use reverse proxy for prod deployments.
+
+---
+
+## Consequences
+
+### Positive
+
+- Clean separation: serve is pure adapter, no execution logic
+- Easy to test: mock Engine interface
+- Contract-first: JSON-RPC spec drives implementation
+- Future-proof: Can add gRPC adapter later without touching Engine
+
+### Negative
+
+- No public Go API: Go programs wanting to embed gert must use JSON-RPC (adds overhead)
+  - Mitigation: If demand emerges, promote to pkg/serve (additive change)
+
+### Risks
+
+- **EventDispatcher persistence:** WAITING runs across restart requires careful checkpoint design
+  - Mitigation: Start with simple in-memory dispatcher, add persistence in Phase 10
+
+---
+
+## Timeline Estimate
+
+**Phase 9.1 (stdio JSON-RPC):** 3–5 days
+- cmd/serve/main.go skeleton
+- internal/serve/jsonrpc.go with exec/start, exec/next, exec/cancel
+- internal/serve/session.go
+- Integration test with r20 fixture
+
+**Phase 9.2 (HTTP + WebSocket):** 2–3 days
+- HTTP handler for POST /rpc
+- WebSocket upgrade at /ws
+- Event streaming with reconnection
+- GET /health endpoint
+
+**Phase 9.3 (webhook transport):** 2–3 days
+- EventDispatcher implementation
+- POST /events handler
+- HMAC-SHA256 verification
+- Basic persistence (defer full crash recovery to Phase 10)
+
+**Total:** 7–11 days (1.5–2 weeks)
+
+---
+
+## Next Steps
+
+1. **Brian:** Review this decision
+2. **Brian:** Implement Phase 9.1 (stdio JSON-RPC)
+3. **Barbara:** Test with VS Code extension stub (mock client)
+4. **Cristian:** Review exec/v2 contract compliance
+
+---
+
+# R18 Extension Host Fixture — Schema Gaps
+
+**Author:** Barbara (Integrations Specialist)  
+**Date:** 2026-04-20  
+**Status:** SCHEMA GAP DOCUMENTED  
+**Related:** Phase 7 Extension Host
+
+---
+
+## Summary
+
+Created r18-extension-host fixture runbook per Cristian's request. The fixture validates the full extension lifecycle but exposes an expected schema gap.
+
+## Schema Gap: `extensions:` Field Missing from Runbook
+
+**Error from parser test:**
+```
+Parse(r18-extension-host): unexpected error: [schema/structural] additional properties 'extensions' not allowed
+```
+
+**Root cause:** `pkg/schema/runbook.go` does not define an `Extensions` field on the `Runbook` struct.
+
+**Expected schema addition (for Brian):**
+```go
+type Runbook struct {
+	// ... existing fields ...
+	Extensions  []*ExtensionDecl  `yaml:"extensions,omitempty"  json:"extensions,omitempty"`
+	// ... rest of fields ...
+}
+
+type ExtensionDecl struct {
+	Name   string   `yaml:"name"   json:"name"`
+	Path   string   `yaml:"path"   json:"path"`
+	Grants []string `yaml:"grants" json:"grants"`
+}
+```
+
+**Rationale:**
+- Ken's D8 decision in `.squad/decisions/inbox/ken-phase7-design-decisions.md` explicitly defines runbook `extensions:` block as valid extension declaration location
+- The Phase 7 design document (Section 8) shows `extensions:` used in runbooks
+- The fixture is structurally correct per the design; the schema just hasn't caught up yet
+
+## Fixture Files Created
+
+All files created successfully:
+
+1. **`design/gert-v2/testdata/runbooks/r18-extension-host/schema.yaml`**
+   - Declares `hello-ext` extension with `capability/tool-registration` grant
+   - Invokes `gert.hello` tool (contributed by extension) via tool step
+   - Asserts the greeting output contains the expected name
+   - Follows r17 patterns for tool step structure
+
+2. **`design/gert-v2/testdata/extensions/hello-ext/gert-extension.yaml`**
+   - Extension manifest per Ken's Section 8 specification
+   - Declares `capability/tool-registration` and `capability/policy-contribution`
+   - Specifies `stdio-jsonrpc` transport
+   - Compatible with API version `>=2.0.0 <3.0.0`
+
+3. **`design/gert-v2/testdata/tools/hello.tool.yaml`**
+   - Tool descriptor for the `gert.hello` tool
+   - Uses `extension` transport type (references `hello-ext`)
+   - Defines `greet` action with `name` input and `result` output
+   - Follows patterns from existing tool descriptors (echo.tool.yaml, etc.)
+
+## Parser Test Behavior
+
+The r18 fixture is already being discovered by `TestParser_Fixtures` (via the glob pattern `r*/schema.yaml`) and the test runs automatically. Currently fails with the expected schema gap error.
+
+**Once Brian adds the `Extensions` field to the Runbook schema:**
+- The test will pass automatically (no test code changes needed)
+- r18 will join r01–r17 as a validated fixture
+
+## Action Items for Brian
+
+1. Add `Extensions []*ExtensionDecl` field to `pkg/schema/runbook.go`
+2. Define `ExtensionDecl` struct (name, path, grants)
+3. Verify r18 parser test passes
+
+## Fixture Design Notes
+
+**Alignment with Ken's design:**
+- Extension declaration format matches D8 decision exactly
+- Tool invocation uses qualified name `gert.hello` per Section 8
+- Capability grant model follows D5 decision (explicit grants list)
+- Extension manifest structure matches Section 8 reference implementation
+
+**Integration coverage:**
+- Tests extension discovery (from runbook `extensions:` block)
+- Tests extension contribution (tool registration capability)
+- Tests extension-contributed tool invocation (via tool step)
+- Tests output validation (assert step on tool result)
+
+**Future test coverage (not in r18):**
+- Extension loaded from `.gert/extensions.yaml`
+- Extension with policy contribution capability
+- Extension handshake failures
+- Extension crash scenarios
+
+Those are better suited for Brian's internal/extension package unit tests rather than parser fixtures.
+
+---
+
+**Decision:** Fixture is structurally correct per Phase 7 design. Schema gap is expected and documented for Brian's implementation work.
+
+---
+
+# Decision Inbox: Vacation Domain Kit — Integration Contracts
+
+**By:** Barbara (Integrations Specialist)  
+**Date:** 2026-04-21  
+**Status:** Proposed (awaiting team review)  
+**Full design:** `.squad/tmp/barbara-vacation-kit.md`
+
+---
+
+## Decision 1: Guest JWT Is Long-Lived, Aligned to Stay Duration
+
+**ID:** vacation-kit-token-lifetime  
+**Section:** §6.1
+
+Long-lived JWTs (duration = stay end + 4hr buffer, max 14 days) are the right trade-off for a mobile guest app. Mobile browsers have unreliable session/cookie persistence. A token that expires mid-hike creates a broken experience with no recovery path for a non-technical guest.
+
+**Consequence:** Token revocation (e.g., stay cancellation) must be enforced at the serve layer via a blocklist or run-status check on each request — not by relying on short expiry.
+
+---
+
+## Decision 2: Write Contract Maps Entirely to Existing RPC Primitives
+
+**ID:** vacation-kit-no-new-rpc  
+**Section:** §6.3
+
+All guest write actions (confirm activity, accept upgrade, upload document, acknowledge alert, request assistance) map to existing `gert serve` RPCs:
+- `run.task.resolve` — confirmations and upgrades
+- `run.evidence.attach` — document uploads
+- `run.event.emit` — acknowledgements and assistance requests
+
+**No new gert serve RPC methods are needed for MVP.** This is a deliberate constraint: the serve layer stays domain-agnostic. Domain-specific semantics live in the Kit compiler and the runtime event handlers.
+
+---
+
+## Decision 3: AI Is a Non-Blocking Read-Only Advisor with Hard Timeout
+
+**ID:** vacation-kit-ai-non-blocking  
+**Section:** §7.1, §7.6
+
+The AI Ranker operates outside the execution critical path:
+- 3-second hard timeout
+- On timeout or failure: static fallback ranking (operator priority order)
+- AI never modifies run state
+- AI never sees infeasible activities (Suggestion Resolver pre-filters)
+
+AI unavailability must never block run progression. This is a hard requirement, not a nice-to-have.
+
+---
+
+## Decision 4: Credit Ledger Is Event-Sourced (Append-Only)
+
+**ID:** vacation-kit-credit-ledger-event-sourced  
+**Section:** §6.2.5, §9.3
+
+The credit ledger is implemented as append-only debit events on the Stay Run. The current balance is a projection (query over events) at read time. There is no mutable "balance" field in run state.
+
+**Consequence:** Concurrent debit attempts need an advisory lock or optimistic concurrency check on event sequence number. For MVP (single guest per run), this is low-risk. Multi-device support requires explicit concurrency handling.
+
+---
+
+## Decision 5: Kit Vocabulary Must Not Leak into gert serve
+
+**ID:** vacation-kit-serve-domain-agnostic  
+**Section:** §9.5
+
+All domain-specific read surfaces (§6.2) must be expressible as `run.get` projections with a projection parameter — not as new Kit-specific RPC methods on `gert serve`. The serve layer remains domain-agnostic.
+
+**Enforcement:** Any new Kit that requires a new `gert serve` RPC method is a design smell. Route domain-specific queries through projection parameters on `run.get`, not through new methods.
+
+---
+
+## Decision 6: Two Kit Patterns Worth Promoting to Kit Standard Library
+
+**ID:** vacation-kit-standard-patterns  
+**Section:** §9.5
+
+Two patterns from the Vacation Kit are general enough to become Kit standard library components:
+
+1. **Advisory human task** — "suggest + confirm" interaction (AI suggests, guest/user confirms). Any Kit with a recommendation-then-acknowledgement flow should follow this shape.
+2. **Event-sourced ledger** — append-only debit events with projection-at-read. Reusable for any Kit with budget/quota/credit tracking (incident response time budgets, compliance audit credits, change budgets).
+
+These should be extracted and documented before the second domain Kit is designed.
+
+---
+
+## Assumptions Needing Validation with a Real Operator
+
+1. **Activity catalog size** — how many activities does a typical operator have? 20? 200? This affects AI prompt size and static ranking complexity.
+2. **Credit granularity** — do operators think in whole credits (1, 2, 3) or fractional (0.5)? The ledger design assumes integer credits.
+3. **Operator authoring capability** — can the operator (or someone on their team) write YAML? Or is the stay builder UI a hard dependency for MVP?
+4. **Weather data source** — what weather API does the operator use / have access to? The Kit assumes a weather provider tool but doesn't specify the API.
+5. **Multi-guest stays** — does a "stay" always have one guest, or can couples/families share a single Stay Run? This affects the token model and credit ledger concurrency design.
+
+---
+
+# Infix Condition Evaluation Implementation (Brian)
+
+Date: 2026-04-20
+
+## Summary
+- Replaced `SimpleConditionEvaluator` with expr-lang/expr compilation/execution (infix syntax), preserving the `ConditionEvaluator` interface.
+- Kept `TemplateEvaluator` unchanged for string interpolation; `NewSimpleConditionEvaluator` ignores its evaluator argument but remains signature-compatible.
+- Added whitespace trimming + legacy `{{ ... }}` unwrapping for backward compatibility and enforced boolean output via `expr.AsBool()`.
+- Updated condition/when/until strings across v2 tests and design fixtures to infix syntax, including expr operator-style `contains`.
+
+## Notes
+- Numeric comparisons now use numeric literals where appropriate (e.g., financial approval tiers).
+- Executor iterate test conditions now use infix expressions (`n == "2"`).
+- Dependency added: `github.com/expr-lang/expr`.
+
+---
+
+# Decision: Phase 4 Governance Engine Implementation
+
+**Date:** 2026-04-20
+**Author:** Brian (Go Programmer)
+**Status:** Implemented
+**Related:** Ken's Phase 4 Design (`.squad/tmp/ken-phase4-design.md`)
+
+## Context
+
+Ken's Phase 4 design specified a governance engine with pre-flight policy evaluation, post-execution redaction, and approval gates. The design included specific architectural constraints to avoid import cycles and maintain clean separation between public contracts (pkg/) and private implementations (internal/).
+
+## Decisions Made
+
+### D1: Import Cycle Resolution via StepInfo Projection
+
+**Decision:** Created `governance.StepInfo` type in `pkg/governance/evaluator.go` as a projection of `engine.ResolvedStep`.
+
+**Rationale:**
+- `pkg/engine` already imports `pkg/governance` for `ExecutionPlan.Governance` field
+- Cannot have `pkg/governance` import `pkg/engine` without creating a cycle
+- `StepInfo` carries only the fields needed for governance: ID, Kind, Command, EnvVars
+- Engine converts `ResolvedStep → StepInfo` at evaluation call site
+
+**Alternative Considered:** Move `GovernancePolicy` to `pkg/engine` to eliminate the need for projection.
+
+**Rejected Because:** Governance is a domain concept independent of the engine. The policy interface should be usable by other consumers (TUI, debugger, static analyzer) without coupling to engine types.
+
+### D2: Approval Requirement Extraction
+
+**Decision:** Store `requireApproval bool` in the `evaluator` struct, extracted from the concrete `policy` type at construction time via type assertion.
+
+**Rationale:**
+- The `GovernancePolicy` interface doesn't expose `RequiresApproval()` method
+- Adding the method would break encapsulation (policy internals leaking)
+- Type assertion `pol.(*policy)` is safe since `BuildPolicy` always returns `*policy`
+- Alternative of passing `requireApproval` as a separate parameter to `NewEvaluator` would split the policy into two pieces
+
+**Trade-off:** Tight coupling between `NewEvaluator` and the concrete `policy` type. Acceptable for Phase 4 since all policies come from `BuildPolicy`. If external policy implementations arise in Phase 6+, we can add `RequiresApproval()` to the interface.
+
+### D3: Glob Matching with path.Match
+
+**Decision:** Use `path.Match` (not `filepath.Match`) for allow/deny pattern matching.
+
+**Rationale:**
+- Ken's design recommends basic glob support for Phase 4
+- `path.Match` is OS-independent (uses `/` separator, not backslash on Windows)
+- Supports `*`, `?`, `[range]` — sufficient for common cases
+- Does NOT support `**` (recursive) or `{a,b}` (alternation) — acceptable limitation for v2.0
+
+**Alternative Considered:** Use `github.com/gobwas/glob` for richer pattern syntax.
+
+**Rejected For Phase 4:** Adds external dependency. Chose simplicity. If richer glob syntax is needed in Phase 5+, we can swap the implementation without changing the interface.
+
+### D4: Redaction Implementation
+
+**Decision:** Create `internal/governance/redaction.go` with `Redactor` struct holding pre-compiled `*regexp.Regexp` patterns. Apply redaction recursively to `map[string]any` in-place.
+
+**Rationale:**
+- Pre-compile patterns at policy construction time → fail fast on invalid regex
+- In-place redaction avoids allocating new maps
+- Recursive walk handles nested maps and `[]any` slices
+- Redaction count returned for trace event payload
+
+**Edge Case:** Redaction does NOT modify `result.Error` messages (command names may appear in errors, but not output). Ken's design specifies "output scrubbing only" to avoid obscuring debugging info.
+
+### D5: Step-Level Governance Deferred
+
+**Decision:** `BuildPolicy` accepts `...*schema.GovernanceConfig` variadic, but Phase 4 only uses runbook-level.
+
+**Rationale:**
+- `schema.Step` does NOT have a `Governance *GovernanceConfig` field yet
+- Adding the field is a schema change requiring fixture updates, JSON schema updates, parser changes
+- The merge logic (allow=replace, deny=union, approval=OR) is fully implemented and tested
+- Phase 5 can trivially activate step-level governance by adding the schema field and passing `step.Governance` to the builder
+
+**Validation:** Tests explicitly verify merge semantics with multiple configs. The variadic signature is exercised and working.
+
+### D6: Evidence Value Type Design
+
+**Decision:** `Evidence` and `ApprovalRecord` are value types with no pointers to interfaces, no mutexes, no channels. All fields have JSON tags.
+
+**Rationale:**
+- Evidence is attached to trace events (serialized to JSONL)
+- Evidence is embedded in `EvaluationResult` (passed across package boundaries)
+- Value types are safe to copy, marshal, unmarshal without race conditions
+- Test coverage includes `json.Marshal → json.Unmarshal` roundtrip
+
+**Validation:** `TestEvaluate_EvidenceJSON_Roundtrip` verifies Evidence survives JSON serialization.
+
+## Implementation Notes
+
+### Mutex Discipline in Engine Integration
+
+The engine integration follows the existing pattern for blocking I/O:
+1. Acquire `h.mu`
+2. Call `evaluator.Evaluate()` (fast, stateless)
+3. If approval required:
+   - Release `h.mu`
+   - Call `ApprovalGate.RequestApproval()` (blocks for human input)
+   - Re-acquire `h.mu`
+4. Continue with step execution
+
+This prevents deadlocks and allows signal handling to run concurrently with approval waits.
+
+### Redaction Pass Location
+
+Redaction happens in `executeStep()` after the executor returns but before:
+- Recording the result in `h.run.StepResults`
+- Emitting `step/completed` trace event
+- Merging `result.Vars` into `h.run.Vars`
+
+This ensures redacted values never reach persistent storage or event channels.
+
+### Helper Functions
+
+Added three helpers at the end of `internal/engine/engine.go`:
+- `extractCommand(step)` — returns `cli.Command` or empty string
+- `extractEnvVars(step)` — returns `cli.Env` or `nil`
+- `applyFilteredEnvVars(step, filtered)` — replaces `cli.Env` in-place
+
+These helpers encapsulate the type assertion to `*schema.CLISpec` and handle nil-safety.
+
+## Future Work (Phase 5+)
+
+1. **Step-level governance activation:** Add `Governance *GovernanceConfig` to `schema.Step`, pass to builder
+2. **Richer glob patterns:** Upgrade to `github.com/gobwas/glob` if `**` or `{a,b}` needed
+3. **Approval gate persistence:** Store approval tokens in run state for audit trail
+4. **Extension-contributed policies:** Allow extensions to register policy rules via Extension Host API
+5. **Policy cache:** Cache compiled policies per runbook to avoid rebuilding on every run
+
+## Validation
+
+All 26 tests passing with race detection. Zero regressions in existing engine/planner/parser tests.
+
+- `go build ./...` → clean
+- `go vet ./...` → clean
+- `go test ./internal/governance/... -v` → 26/26 PASS
+- `go test ./internal/governance/... -race -count=5` → PASS (no data races)
+- `go test ./... -race -count=3` → all packages PASS
+
+---
+
+# Phase 5 Implementation Notes — Brian
+
+## SubStepRunner wiring
+- NewDefaultRegistry requires a SubStepRunner in RegistryConfig; engine callers must inject it.
+- The engine does not yet provide a default SubStepRunner helper; compensation execution uses direct executor dispatch.
+
+## Capture map processing
+- Added Capture to engine.ResolvedStep so executors can read step capture rules.
+- Capture handling is implemented in CLIExecutor (stdout/stderr/exit_code); no engine-level capture pass.
+
+## Compensation execution
+- Engine scans run.Plan.Steps for __compensation_<stepID> keys, then executes registered steps in reverse plan order (LIFO) when a step fails.
+- Compensation steps are executed via executor dispatch (no trace events), and registrations are removed after execution.
+
+## Decision step goto
+- DecisionExecutor records route_goto/route_runbook in Output; engine does not yet perform goto dispatch.
+
+## CLISpec.Run handling
+- CLIExecutor supports Run as string or map.
+- For maps, it prefers an entry whose key matches the shell basename (case-insensitive); otherwise selects the lexicographically first key.
+
+---
+
+# Phase 6 Implementation Decisions (Brian)
+
+Date: 2026-04-23
+
+## Decisions
+
+1. **Test tool binaries built in-repo**: TestMain helpers build reference tool binaries into `.testtools/` under the v2 repo and update PATH per package. This avoids forbidden `/tmp` usage while keeping tests hermetic.
+2. **JSON-RPC/MCP output mapping**: JSON-RPC responses map `result` into `ToolResult.Output` when it is a JSON object; MCP uses `content[0].text` JSON when parseable. Non-JSON outputs are left as raw stdout.
+3. **MCP initialized notification**: The transport sends `initialized` and the test MCP server accepts both `initialized` and `notifications/initialized` to stay aligned with the Phase 6 handshake spec.
+
+---
+
+# Phase 7 Implementation Decisions (Brian)
+
+## 1) Test binary build location
+Decision: Build the hello-ext test binary under .testextensions/ in the repo root instead of /tmp.
+Rationale: The environment forbids writing to /tmp, so tests follow the existing Phase 6 pattern of repo-local build directories and clean them up in TestMain.
+
+## 2) Runbook extensions schema expansion
+Decision: Extend Runbook.Extensions to allow name, path, and grants fields and update the JSON Schema accordingly.
+Rationale: The r18 extension-host fixture already declares name and grants; parser tests must accept these fields for Phase 7 fixtures to parse.
+
+---
+
+# Phase 8 Implementation Notes (Brian)
+
+Date: 2026-04-24
+
+## Interface split for inputs
+- Added a new `pkg/input.InputProvider` for value resolution (Provide/Name) and moved the interactive prompt interface to `PromptProvider` in `prompt.go` to avoid name conflicts.
+- Updated executors and test fakes to use `PromptProvider`, while adding a new `FakeInputProvider` for resolution providers.
+
+## Prompt executor integration
+- Implemented an internal `PromptExecutor` and `PromptSpec` that consume the new input provider chain; no schema/parser change yet, keeping the prompt step internal until spec alignment.
+
+## Schema alignment for fixtures
+- Extended runbook schema and Go structs to accept `inputs.fallback` and `outcome.summary` so the r19 fixture validates.
+
+---
+
+# Fix Agent — Phase 5 Assert Test Defect Fixed
+
+**Date:** 2026-04-21
+**Fix Agent:** Copilot CLI Fix Agent
+**Phase:** 5 — Step Type Executors
+**Defect:** C9 sub-criterion — Missing failure details verification in `TestAssertExecutor_OneFails`
+
+---
+
+## VERDICT: ✅ FIXED
+
+The Phase 5 rejection defect has been successfully fixed. The test now validates the failure details shape in `Output["failures"]`.
+
+---
+
+## Changes Made
+
+**File:** `/Volumes/Projects/gert/v2/internal/executor/assert_test.go`
+
+**Action:** Extended `TestAssertExecutor_OneFails` to add verification of `Output["failures"]` content.
+
+**Added verification (lines 16-27):**
+```go
+failures, ok := res.Output["failures"].([]map[string]any)
+if !ok || len(failures) == 0 {
+    t.Fatal("expected failures in output")
+}
+if failures[0]["type"] != "eq" {
+    t.Fatalf("expected failure type eq, got %v", failures[0]["type"])
+}
+if failures[0]["subject"] != "hello" {
+    t.Fatalf("expected failure subject hello, got %v", failures[0]["subject"])
+}
+if failures[0]["expected"] != "world" {
+    t.Fatalf("expected failure expected world, got %v", failures[0]["expected"])
+}
+```
+
+**Rationale:** The test now verifies not only that `res.Status == StepStatusFailed` but also that the failure details are properly captured with the expected shape (`type`, `subject`, `expected` fields) matching the implementation in `assert.go` lines 47-51.
+
+---
+
+## Validation Results
+
+All tests pass with race detector:
+
+```bash
+cd /Volumes/Projects/gert/v2
+go test ./internal/executor/... -race -count=5 -v -run TestAssert
+```
+**Result:** ✅ All 25 test runs (5 tests × 5 iterations) PASS
+
+```bash
+go test ./... -race -count=3 2>&1 | tail -20
+```
+**Result:** ✅ All packages PASS with zero race conditions
+
+---
+
+## Implementation Notes
+
+1. **No production code changed** — only test enhancement to meet C9 coverage requirement
+2. **Test matches actual implementation** — verified against `assert.go` lines 47-51 to ensure field names match
+3. **Race detector clean** — all tests pass with `-race -count=5`
+4. **Failure details contract validated** — test now covers the complete failure output shape, not just status
+
+---
+
+## Ready for Re-Review
+
+Phase 5 is now ready for re-review by Ken. The single defect (C9 sub-criterion) has been addressed with proper test coverage of failure details.
+
+---
+
+# John — Vacation Domain Kit DSL Decisions
+
+**Date:** 2026-04-22
+**Context:** Section 3 of the Vacation Domain Kit prototype
+
+| ID | Decision | Rationale |
+|----|----------|-----------|
+| VK-01 | `apiVersion/kind` discriminator on every resource | Enables per-kind schema validation; aligns with GERT v2 core conventions |
+| VK-02 | `$ref:` cross-file linking (relative paths) | Skeleton/flavor reuse across templates without copy-paste |
+| VK-03 | Skeleton ≠ Flavor strict separation | Skeleton = time structure; Flavor = activity bias. Composable independently |
+| VK-04 | Compiler auto-generates weather branching | Authors declare `weather_constraint`; compiler writes branches. No manual if/else |
+| VK-05 | Credits are integer units | Avoids floating-point accounting errors; auditable |
+| VK-06 | Slot type is strict enum: activity\|meal\|free\|rest\|transfer | Prevents ambiguous slot definitions; compiler knows what to generate |
+| VK-07 | JSON Schema Draft 2020-12 | Aligns with GERT v2 core; `gert validate` works on kit resources |
+| VK-08 | Operator extension fields use `x-` prefix | Prevents collisions with kit fields; forward-compatible |
+| VK-09 | ActivityPool uses tag filter model (require_tags / exclude_tags) | Declarative and composable; pools referenced by multiple flavors |
+| VK-10 | DayModifier is separate from OperatorMessage | Messages communicate; Modifiers change the plan. Separate concerns |
+| VK-11 | `trigger.type` determines lowering target | weather → event watcher + branch; operator-manual → governance gate |
+| VK-12 | `lock: bool` on DayModifier | Explicit control over whether guest advisory can override operator modification |
+| VK-13 | Fallback flavor referenced in primary flavor | Decouples rain handling from compiler — compiler follows the ref, no hardcoded rain logic |
+
+---
+
+# ADR: Domain Kits Are a Semantic Layer Above Core, Not an Extension Mechanism
+
+**Decision ID:** domain-kit-layer-boundary
+**Author:** Ken (Software Architect)
+**Date:** 2026-04-20
+**Status:** Proposed
+**Requested by:** Cristian
+
+---
+
+## Context
+
+The gert v2 architecture defines two extension points: the extension runtime (out-of-process plugins contributing tools, schema fields, policies, and providers) and the tool runtime (invocable side-effecting actions). Neither is the right home for domain-specific authoring semantics — specialized step types, domain validation rules, lowering/compilation into core primitives, projections over traces, and testing contracts.
+
+Without a defined layer for domain semantics, these concerns will either leak into the core schema (making the kernel unstable as new domains are added) or be forced into extensions (conflating authoring-time concerns with runtime capabilities).
+
+## Decision
+
+**Domain Kits are a semantic layer above the core runtime, not an extension mechanism.**
+
+A Domain Kit:
+- Provides authoring schemas, validation rules, lowering/compilation, projections, and testing contracts
+- Operates at author time and compile time, never at run time
+- Compiles (lowers) domain-specific vocabulary into core `runbook/v2` primitives before the planner sees them
+- Does not contribute runtime capabilities (no tool registration, no event subscription, no policy contribution)
+- Does not run as a child process during execution
+- Is a portable, local-first artifact with no cloud or registry dependency
+
+The runtime never executes Kit-specific step types. The lowered output is a valid core document.
+
+## Consequences
+
+1. **Core schema remains stable.** New domains do not add fields or step types to the core schema. The core contains only execution primitives.
+2. **Extension runtime stays focused.** Extensions contribute runtime capabilities; they are not overloaded with authoring concerns.
+3. **Clear separation of concerns.** Three distinct extension points (Kits for authoring, extensions for capabilities, tools for effects) with different contracts, lifecycles, and trust models.
+4. **Kit-0 is the current DRI/operations model.** The existing operations runbook vocabulary is retroactively understood as the first Domain Kit, grounding the concept in something concrete.
+5. **`capability/schema-extension` needs a clarifying note.** The existing extension capability for schema contribution (`x-*` namespaced fields) is for runtime-observable namespace extensions, not for authoring-vocabulary contributions. A clarifying paragraph should be added to §4 (extension runtime).
+
+## Alternatives Considered
+
+1. **Encode domain semantics in extensions.** Rejected: conflates authoring concerns with runtime capabilities. An extension that contributes validators, schemas, and projections is doing fundamentally different work than one that registers tools or subscribes to events.
+2. **Expand the core schema per domain.** Rejected: makes the kernel unstable. Every new domain would add fields and step types, turning the core into an ever-growing union type.
+3. **No formal layer; let authors use core primitives directly.** Rejected: forces every domain to reinvent validation, authoring vocabulary, and testing contracts with no shared structure or tooling.
+
+## Scope
+
+This decision applies to v2.1+ as a roadmap item. The Kit model is designed in v2.0 but Kit extraction (separating the operations vocabulary from core into Kit-0) is deferred to v2.1.
+
+---
+
+# Decisions: Infix Expression Language (expr-lang/expr)
+
+**Author:** Ken (Architect)  
+**Date:** 2026-07-16  
+**Context:** Replace Go text/template Polish notation with expr-lang/expr infix syntax for boolean conditions.
+
+---
+
+## D1: Replace `text/template` boolean evaluation with `expr-lang/expr`
+
+**Status:** APPROVED  
+**Scope:** `v2/internal/expr/condition.go`, `SimpleConditionEvaluator`
+
+**Decision:** Boolean condition evaluation (used in `condition:`, `when:`, `until:` fields) switches from Go `text/template` wrapping to `expr-lang/expr` compilation and execution.
+
+**Rationale:**
+- Go template Polish notation (`{{ and (eq .env "prod") (gt .count 1) }}`) is unreadable for operators
+- Infix syntax (`env == "prod" && count > 1`) is universally understood
+- `expr-lang/expr` provides compile-time type checking, zero transitive dependencies, and is well-maintained
+- The `ConditionEvaluator` interface is unchanged — only internal implementation swaps
+
+**Consequences:**
+- All `condition:` / `when:` / `until:` strings in runbook YAML files use infix syntax
+- Old Go-template condition strings are no longer valid
+- Dependency added: `github.com/expr-lang/expr`
+
+---
+
+## D2: Variable access — no prefix (just `varname`)
+
+**Status:** APPROVED  
+**Scope:** All condition expressions
+
+**Decision:** Variables in condition expressions are accessed by bare name (`env`, `count`, `flag`) without any prefix. The old `.varname` (Go template dot) and `$.varname` (JSONPath-style) conventions are dropped.
+
+**Rationale:**
+- `expr-lang/expr` maps variables directly from `map[string]any` keys to expression identifiers
+- No syntactic prefix needed — `vars["env"]` is just `env` in the expression
+- The `$.` JSONPath shim was a compatibility hack for a single test case; adds no value
+
+**Consequences:**
+- Simpler, cleaner expressions
+- `$.varname` no longer supported (breaking, but no external users of v2 yet)
+- String interpolation (`Evaluator.Eval`) retains `.varname` since it still uses Go templates
+
+---
+
+## D3: Non-boolean expression result = hard error
+
+**Status:** APPROVED  
+**Scope:** `ConditionEvaluator.EvalBool()`
+
+**Decision:** If a condition expression does not return a boolean value, `EvalBool` returns an error. It does NOT silently return `false`.
+
+**Rationale:**
+- Silent false masking is a source of subtle bugs in operational runbooks
+- `expr-lang/expr` with `expr.AsBool()` catches most type mismatches at compile time
+- Fail-fast philosophy aligns with gert's governance model — runbook authors need immediate feedback
+- The existing implementation already had this behavior (`"condition did not evaluate to boolean"`)
+
+**Consequences:**
+- Expressions like `count + 1` in a condition field produce a clear error
+- Runbook authors get immediate feedback about malformed conditions
+- No silent failures in branch/iterate/collector condition evaluation
+
+---
+
+## D4: String interpolation stays on `text/template`
+
+**Status:** APPROVED  
+**Scope:** `v2/internal/expr/template.go`, `TemplateEvaluator`, `Evaluator.Eval()`
+
+**Decision:** The `Evaluator` interface (string interpolation for shell commands, instructions, args, etc.) continues to use `text/template`. Only `ConditionEvaluator` (boolean conditions) moves to `expr-lang/expr`.
+
+**Rationale:**
+- Shell command templates (`kubectl get pod {{ .pod_name }} -n {{ .namespace }}`) are natural Go templates
+- `args` fields reference variables with `{{ .var }}` — this is text interpolation, not boolean logic
+- Changing string interpolation would require inventing a new syntax (e.g., `${varname}`) with much larger blast radius
+- Clear separation of concerns: text/template for string assembly, expr-lang for boolean evaluation
+- Minimizes migration scope and risk
+
+**Consequences:**
+- Two expression systems coexist: text/template for strings, expr-lang for booleans
+- Runbook authors use `{{ .var }}` in command/args fields, bare `var` in condition/when fields
+- `TemplateEvaluator` code unchanged
+- Future: if unified syntax is desired, it's a separate decision with its own migration
+
+---
+
+## Summary
+
+| ID | Decision | Impact |
+|----|----------|--------|
+| D1 | expr-lang/expr for boolean conditions | Internal impl change, interface preserved |
+| D2 | Bare variable names (no prefix) | Simpler expressions, `$.` dropped |
+| D3 | Non-bool = error (not silent false) | Fail-fast, preserves existing behavior |
+| D4 | text/template for string interpolation | Minimal blast radius, two systems coexist |
+
+---
+
+# Phase 10 Design Decisions — Adapters
+
+**Author:** Ken (Architect)  
+**Date:** 2026-04-23  
+**Phase:** 10 — Adapters  
+**Design Doc:** `.squad/tmp/ken-phase10-design.md`
+
+---
+
+## D1: Shared Wiring Harness — `internal/adapter`
+
+**Context:** `cmd/serve` and `cmd/gert` both need to construct `EngineConfig` with identical production implementations. Without sharing, wiring code is duplicated and diverges.
+
+**Decision:** Create `internal/adapter` with `BuildEngineConfig(ctx, plat, WireOptions) (EngineConfig, io.Closer, error)`. Both entry points call this single function.
+
+**Consequences:**
+- Single source of truth for production EngineConfig construction
+- `cmd/*` files reduced to ~40 lines of flag parsing + BuildEngineConfig call
+- `internal/adapter` imports many `internal/*` packages (acceptable for a wiring package — it's the composition root)
+- Easy to unit-test: pass WireOptions, assert all EngineConfig fields are non-nil
+
+---
+
+## D2: JSONL TraceWriter — `internal/trace.JSONLWriter`
+
+**Context:** Phase 9 used `discardTraceWriter{}`. The audit log requires durable, append-only writes.
+
+**Decision:** `internal/trace.JSONLWriter` — mutex-serialized writes to `os.File` opened with `O_APPEND|O_CREATE|O_WRONLY`. Optional HMAC-SHA256 signing when `GERT_TRACE_KEY` is set.
+
+**Consequences:**
+- Every Append() is one write() syscall (JSON line + newline)
+- No buffered writer — crash safety over throughput (per locked decision #6: synchronous trace writes)
+- HMAC signing adds ~1µs per event; negligible vs. file I/O
+
+---
+
+## D3: EventDispatcher — In-process + Optional Webhook
+
+**Context:** `wait_for_event` steps need external event delivery. `testutil.FakeEventDispatcher` was the Phase 9 placeholder.
+
+**Decision:** `internal/eventbus.Dispatcher` with two inbound paths: (1) in-process `Dispatch()` for programmatic/test use, (2) optional HTTP webhook listener started when `--webhook-addr` is provided.
+
+**Consequences:**
+- Webhook is opt-in (no HTTP listener unless explicitly configured)
+- Consume semantics preserved (locked decision #5: first-waiter-wins)
+- Buffer cap of 1000 events per channel prevents unbounded memory growth
+- No auth on webhook endpoint in Phase 10 (consistent with Phase 9 D6 — auth deferred)
+- Future: message queue backends (NATS, Redis) can be added as alternative Dispatch() sources
+
+---
+
+## D4: Dry-Run via Executor Wrapping
+
+**Context:** `gert dry-run` must validate parse → plan → governance without executing side effects.
+
+**Decision:** Wrap each `Executor` with `DryRunExecutor` that returns synthetic `StepResult` without calling the inner executor. Engine, governance, trace, and events run normally.
+
+**Consequences:**
+- Full pipeline exercised including governance denial reporting
+- Trace files produced for dry-run (with `"mode": "dry-run"` and `"dry_run": true` markers)
+- Assert steps run their real executor (no side effects; provides useful validation feedback)
+- No dry-run conditionals scattered through engine code
+
+---
+
+## D5: SubStep Event Emission via Callback
+
+**Context:** The `runSubSteps` function in `cmd/serve/main.go` bypasses engine event emission and governance checks for substeps inside iterate/parallel blocks.
+
+**Decision:** Add `OnStepEvent func(engine.Event)` to `executor.RegistryConfig`. Substep runner emits events via this callback. Engine sets the callback to its own `emitEvent` method.
+
+**Consequences:**
+- Substeps emit `step/started`, `step/completed`, `step/failed` events
+- Governance pre-flight evaluates for each substep
+- No import cycle: `internal/executor` depends on `func(Event)`, not on `internal/engine`
+- Trace file now includes substep events (audit completeness)
+
+---
+
+## D6: Input Provider Chain Order
+
+**Context:** Interactive (TTY) and non-interactive (serve/CI) modes need different input resolution.
+
+**Decision:**
+- Interactive (`gert run` + TTY): env → vault → static (`--var`) → terminal prompt
+- Non-interactive (`gert serve`, piped): env → vault → static → return error
+
+**Consequences:**
+- `gert run` in CI never hangs on a prompt (fails fast)
+- `gert serve` never reads from stdin (RPC-driven input deferred to Phase 11)
+- Terminal prompt is last resort, not default
+
+---
+
+## D7: Tool Registry via Directory Scan
+
+**Context:** Phase 9 used `noopToolRegistry`. Production needs tools from `.tool.yaml` files.
+
+**Decision:** Add `internal/tool.ScanDir(dir string) ([]ToolDef, error)`. `BuildEngineConfig` scans all `WireOptions.ToolDirs`, merges into `MapRegistry`. Builtin stubs registered as fallbacks.
+
+**Consequences:**
+- Tools discovered at startup (deterministic, testable)
+- Missing directory is a warning, not error
+- Duplicate tool names: first-seen-wins (matches v1 behavior)
+
+---
+
+## D8: No New External Dependencies
+
+**Context:** Phase 10 adds JSONL writer, event bus, dispatcher, webhook listener, CLI adapter.
+
+**Decision:** All implementations use Go stdlib + existing deps (`uuid`, `x/sync`, `coder/websocket`). No new entries in `go.mod`.
+
+**Consequences:**
+- Zero supply chain risk
+- Slightly more boilerplate for HTTP webhook handler (acceptable — ~40 lines)
+- Structured logging deferred to observability phase
+
+---
+
+*Ken, Software Architect*
+
+---
+
+# Phase 11 Design Decisions — Evidence & Replay
+
+**Author:** Ken (Architect)  
+**Date:** 2026-04-24  
+**Phase:** 11 — Evidence & Replay  
+**Design Doc:** `.squad/tmp/ken-phase11-design.md`
+
+---
+
+## D1: `pkg/evidence` as a Leaf Package
+
+**Context:** Evidence types are needed by `pkg/engine` (for `StepResult.Evidence`) and `internal/evidence` (for collection logic). Where should the types live?
+
+**Decision:** Create `pkg/evidence` as a leaf package with zero dependencies on other gert packages. Only depends on Go stdlib.
+
+**Consequences:**
+- `pkg/engine` can import `pkg/evidence` without creating cycles
+- External consumers can use evidence types without pulling in engine internals
+- `internal/evidence` implements collection logic using `pkg/evidence` types
+- Mirrors the `pkg/trace` → `internal/trace` pattern from Phase 10
+
+---
+
+## D2: Evidence Collection via Hook — Not Executor Modification
+
+**Context:** Evidence must be captured at each step. Two approaches: (a) modify every executor to call an evidence collector, or (b) have the engine call a hook after each step.
+
+**Decision:** Option (b) — an `EvidenceHook` in `EngineConfig`, called by the engine after step completion. Executors are unaware of evidence collection.
+
+**Consequences:**
+- Zero changes to Phase 5's executor implementations
+- Single integration point in `internal/engine/engine.go` (one `if` block in `executeStep`)
+- Easy to disable (set `EvidenceHook` to nil)
+- Evidence collection can be extended without touching executor code
+- Trade-off: the hook cannot capture pre-execution state (but snapshot checkpoints handle that)
+
+---
+
+## D3: Trace Reader as Symmetric Interface to TraceWriter
+
+**Context:** Phase 10 defined `TraceWriter` (append-only). Phase 11 needs to read traces for evidence queries, replay, and resume.
+
+**Decision:** Add `TraceReader` interface to `pkg/trace` with `ReadAll`, `ReadSince`, and `ReadFiltered` methods. `internal/trace.JSONLReader` is the file-based implementation.
+
+**Consequences:**
+- Symmetric with TraceWriter (same package, same event type)
+- Filter predicates allow efficient querying without loading all events into memory for simple cases
+- `ReadSince` enables incremental reading for SSE/WS event streaming
+- Malformed line skipping provides crash-safe recovery (per §12.1.4 spec)
+
+---
+
+## D4: Replay via Executor Wrapping — Same Pattern as Dry-Run
+
+**Context:** Phase 10 established `DryRunExecutorRegistry` wrapping. Replay is similar: intercept executors, return pre-recorded output.
+
+**Decision:** `ReplayExecutorRegistry` wraps the real registry, replacing each executor with `ReplayExecutor` that returns scenario fixtures. Governance, conditions, and events run normally.
+
+**Consequences:**
+- Full pipeline exercised (governance can block replay steps, trace events are written)
+- Pattern is established: `DryRunExecutorRegistry` (Phase 10) → `ReplayExecutorRegistry` (Phase 11)
+- Regression testing: compare replay trace against golden trace
+- Scenario files are YAML (consistent with runbook format)
+- Only `gopkg.in/yaml.v3` dependency (already used throughout the project)
+
+---
+
+## D5: Resume Scans Trace + Loads Checkpoint — Two-Phase Recovery
+
+**Context:** Resume could work from (a) trace only, (b) checkpoint only, or (c) both.
+
+**Decision:** Option (c) — two-phase: load checkpoint snapshot for state, then scan trace for context (orphaned tool calls, maximum sequence). The checkpoint provides the authoritative state; the trace provides supplementary metadata.
+
+**Consequences:**
+- Checkpoint is the fast path (one file read for state)
+- Trace scan catches edge cases (orphaned tool calls, sequence gaps)
+- If snapshot is corrupted, resume fails cleanly (no partial state)
+- Align with spec §12.3.1: "the last clean checkpoint event determines the recoverable state"
+
+---
+
+## D6: Non-Idempotent Orphaned Tool Calls Fail — Not Re-Execute
+
+**Context:** A `tool/invoked` with no `tool/completed` means the call was interrupted. Should we re-execute?
+
+**Decision:** If `idempotent: true`, re-execute. Otherwise, mark the step as failed and follow the normal failure path.
+
+**Consequences:**
+- Safe default: never re-execute a potentially destructive operation
+- Runbook authors must declare `idempotent: true` on safe tools
+- Warning is logged for operator awareness
+- Aligns with spec §12.3.5: "default: the step is treated as failed"
+
+---
+
+## D7: `run.evidence` RPC Returns Evidence from Trace Events
+
+**Context:** Evidence could be served from (a) in-memory RunHandle state, (b) the trace file, or (c) a separate evidence store.
+
+**Decision:** Option (b) — read from trace file via `TraceReader`. The `step/completed` events carry embedded evidence records.
+
+**Consequences:**
+- Works for completed runs (no in-memory state needed)
+- Works for in-progress runs (trace is append-only, events are already written)
+- Single source of truth (the trace file)
+- No separate evidence database to maintain
+- Slight latency for large traces (mitigated by `ReadFiltered` with step ID)
+
+---
+
+## D8: Checkpoint Event Kind Uses String Literal — Not New EventKind Constant
+
+**Context:** The `checkpoint` event is an internal implementation detail, not a user-facing event kind. Should we add `EventKindCheckpoint` to `pkg/trace/event.go`?
+
+**Decision:** Use string literal `"checkpoint"` in the engine code. Do NOT add a constant to `pkg/trace/event.go`.
+
+**Consequences:**
+- `pkg/trace` stays focused on user-facing event types
+- Checkpoint events are engine-internal; consumers should not depend on them
+- The resume scanner matches on the string directly
+- If checkpoint events are later promoted to public API, the constant can be added then
+- Consistent with the spec categorization: "not user-facing but required for resumption"
+
+---
+
+# Phase 4 — Governance Engine: APPROVED
+
+**Reviewer:** Ken (Software Architect)
+**Date:** 2026-04-20
+**Implementor:** Brian (contracts + implementation + engine integration)
+**Fakes:** Barbara (testutil)
+
+---
+
+## Verdict: ✅ APPROVED
+
+All 10 review criteria pass. Phase 4 is ready to merge.
+
+---
+
+## Criterion Results
+
+### C1 — Import discipline: ✅ PASS
+- `pkg/governance` imports only `context` — no imports from `internal/engine`, `pkg/engine`, or `internal/governance`
+- `internal/governance` imports `pkg/governance` and `pkg/schema` — no imports from `internal/engine`
+- `internal/engine` imports `pkg/governance` (allowed) and `internal/governance` (for `NewRedactor` — not prohibited by C1, no cycle)
+- `go build ./...` passes with zero errors
+
+### C2 — Deny-wins invariant: ✅ PASS
+- `internal/governance/builder.go:CheckCommand()` — deny patterns evaluated FIRST (lines 74-78), immediate return on first match
+- Allow patterns only evaluated when all deny patterns fail (lines 81-93)
+- Command in BOTH allow and deny → denied (deny list checked first, short-circuits)
+
+### C3 — EvaluationResult correctness: ✅ PASS
+- `Allowed=true` set only after passing deny check and allow check (evaluator.go:90)
+- `Denied=true` causes immediate return from engine without calling executor (engine.go:205-228)
+- `RequiresApproval=true` only set when `!result.Denied` (evaluator.go:121)
+- States are mutually consistent — deny blocks approval check; approval only on non-denied
+
+### C4 — Evidence value type: ✅ PASS
+- `Evidence` struct: no unexported mutex, no interface fields, all exported fields have JSON tags
+- `ApprovalRecord` pointer field is JSON-safe (`*ApprovalRecord` with `json:"approval_record,omitempty"`)
+- `TestEvaluate_EvidenceJSON_Roundtrip` verifies `json.Marshal` + `json.Unmarshal` succeed
+
+### C5 — Engine nil-safety: ✅ PASS
+- `GovernanceEvaluator == nil`: guard at engine.go:181 skips entire governance block — existing behavior unchanged
+- `ApprovalGate == nil` with approval required: engine.go:237-238 calls `failRun()` with descriptive error (no panic)
+- All existing tests pass (`go test ./... -race -count=3` clean)
+
+### C6 — Mutex discipline in engine: ✅ PASS
+- `ApprovalGate.RequestApproval` called with mutex released: `h.mu.Unlock()` (line 242), call (line 243), `h.mu.Lock()` (line 244)
+- Same unlock/call/lock pattern as `executor.Execute` (lines 287-289)
+- No mutex held during any blocking I/O introduced by Phase 4
+
+### C7 — StepStatusDenied: ✅ PASS
+- `StepStatusDenied StepStatus = "denied"` at `pkg/engine/run.go:179`
+- `StepOutcomeDenied StepOutcome = "denied"` at `pkg/engine/run.go:190`
+- Denied steps: executor never called, result has `Status: StepStatusDenied` (engine.go:208)
+- `step/failed` trace event emitted with `"error_type": "governance"` (engine.go:222-226)
+
+### C8 — Redaction timing: ✅ PASS
+- Redaction at engine.go:296-317 — AFTER `exec.Execute()` returns (line 288) and BEFORE completion event emission (line 338+)
+- Redactor is NOT called during pre-flight `Evaluate()` — evaluator.go has no redaction logic
+- Redaction trace event (`governance/redaction_applied`) emitted only when matches > 0
+
+### C9 — Test coverage: ✅ PASS
+- `TestEvaluate_DenyOverridesAllow` exists and passes ✅
+- `TestBuildPolicy_MergeDenyIsAdditive` exists and passes ✅
+- `TestRedactor_RecursiveMapRedaction` exists and passes ✅
+- Compile-time interface guards: `FakeGovernancePolicy` (fake_governance_policy.go:29), `FakeApprovalGate` (fake_approval_gate.go:38) ✅
+- Total tests in `internal/governance/`: **26** (14 evaluator + 6 builder + 4 redaction + 2 approval) ✅
+
+### C10 — Race safety: ✅ PASS
+- `go test ./internal/governance/... -race -count=5` — all 26 tests pass × 5 runs, zero data races
+- `go test ./... -race -count=3` — full suite clean
+- `FakeApprovalGate` uses `sync.Mutex` on `Calls` slice (fake_approval_gate.go:28, 52-54)
+
+---
+
+## Quality Notes (non-blocking)
+
+1. **`internal/engine` → `internal/governance` import**: The design graph shows `internal/engine` importing only `pkg/governance`, but the implementation also imports `internal/governance` for `NewRedactor`. This is not a C1 violation (no cycle, not prohibited), but could be refactored by injecting a `Redactor` interface through `EngineConfig` to keep the engine fully decoupled from governance internals.
+
+2. **Missing compile-time guard on evaluator**: `internal/governance/evaluator.go` lacks `var _ governance.PolicyEvaluator = (*evaluator)(nil)`. Non-blocking since the constructor returns the interface type, but adding it would be consistent with the project pattern.
+
+3. **`FakeGovernancePolicy.CheckCommandCalls` not mutex-protected**: Unlike `FakeApprovalGate.Calls`, the `CheckCommandCalls` slice in `FakeGovernancePolicy` has no mutex. Safe only if the fake is used from a single goroutine. Non-blocking for Phase 4 but worth noting for Phase 5+ when parallel branches may invoke governance.
+
+---
+
+# Decision: Phase 4 — Governance Engine Architecture
+
+**Author:** Ken (Software Architect)
+**Date:** 2026-04-20
+**Status:** ACCEPTED
+**Scope:** `pkg/governance/`, `internal/governance/`, `internal/engine/`, `pkg/testutil/`
+
+---
+
+## Context
+
+Phase 3 delivered the runtime engine (`internal/engine/engine.go`) with step execution, parallel branches, wait-for-event, and trace emission. The `ExecutionPlan.Governance` field carries a `GovernancePolicy` interface, but the engine currently ignores it — no pre-flight checks, no redaction, no approval gates.
+
+Phase 4 must add the governance layer that makes gert's core differentiator real: command allow/deny, env-var filtering, approval gates, output redaction, and audit evidence.
+
+## Decision
+
+### D1: StepInfo breaks the import cycle
+
+`pkg/governance` defines a `StepInfo` struct that carries only what governance needs (ID, Kind, Command, EnvVars). The engine converts `ResolvedStep` → `StepInfo` before calling `PolicyEvaluator.Evaluate()`. This avoids `pkg/governance` importing `pkg/engine`.
+
+**Alternatives considered:**
+- Put `PolicyEvaluator` in `pkg/engine` — rejected: governance is a separate domain; engine should not own governance interfaces.
+- Use `any` parameter — rejected: loses type safety, forces casts.
+
+### D2: PolicyEvaluator wraps GovernancePolicy
+
+The existing `GovernancePolicy` interface has fine-grained methods (`CheckCommand`, `FilterEnvVars`, `RedactionPatterns`). The new `PolicyEvaluator` interface has a single `Evaluate()` method that orchestrates the checks and returns a unified `EvaluationResult`. The engine calls `PolicyEvaluator` only; the evaluator calls `GovernancePolicy` internally.
+
+**Rationale:** Single-method interface is easier for the engine to consume. The `GovernancePolicy` interface remains stable for extension-contributed policies.
+
+### D3: Deny-wins enforced by evaluation order
+
+The evaluator checks deny patterns FIRST. If any deny pattern matches, evaluation short-circuits with `Denied=true`. Allow patterns are only checked if no deny matched. This is an invariant, not a configuration option.
+
+### D4: Redaction is post-execution only
+
+Redaction patterns are NOT evaluated during pre-flight. They are applied to `StepResult.Output` and `StepResult.Vars` AFTER the executor returns but BEFORE trace events are emitted. This ensures:
+- Pre-redaction values are never written to disk
+- The evaluator stays focused on allow/deny/approval decisions
+- Redaction logic is testable in isolation
+
+### D5: ApprovalGate is injectable
+
+`ApprovalGate` is an interface in `pkg/governance`, injected via `EngineConfig`. Two implementations:
+- `NoOpApprovalGate` — always approves (tests, headless, CI)
+- `TerminalApprovalGate` — prompts stdin/stdout (interactive `gert run`)
+
+The engine does not know which implementation is injected. Future implementations (Slack, PagerDuty, API-based) can be added without engine changes.
+
+### D6: Evidence is a value type
+
+`Evidence` struct has no pointers to interfaces, no mutexes, no channels. All fields have JSON tags. It can be:
+- Serialised with `json.Marshal`
+- Compared with `reflect.DeepEqual`
+- Embedded in trace event payloads
+- Constructed in tests without mocks
+
+### D7: StepStatusDenied added as new status
+
+A new `StepStatusDenied = "denied"` constant is added to `pkg/engine/run.go`. This is distinct from `StepStatusFailed` because:
+- Denied steps were never executed (the executor was never called)
+- Failed steps were executed and returned an error
+- Consumers (adapters, UIs) display denied and failed differently
+
+### D8: Step-level governance deferred to Phase 5
+
+The `schema.Step` struct does not currently have a `Governance` field. The builder accepts variadic `GovernanceConfig` for future merge support, but Phase 4 only uses runbook-level governance. Adding step-level governance requires a schema change coordinated with John.
+
+## Consequences
+
+- Engine `executeStep` gains ~40 lines of governance pre-flight code
+- Two new fields on `EngineConfig` (optional, backward compatible)
+- One new `StepStatus` constant (adapters should already handle unknown statuses gracefully)
+- 8 new files total (4 in `pkg/governance`, 4 in `internal/governance`, 2 in `pkg/testutil`)
+- 28+ test cases
+
+## Verification
+
+Brian must verify:
+1. `go build ./...` succeeds (no import cycles)
+2. All 28 tests pass
+3. Existing engine tests still pass (governance evaluator is optional/nil)
+4. `json.Marshal(Evidence{...})` produces valid JSON matching the documented schema
+
+---
+
+**Ken**
+Software Architect
+
+---
+
+# Ken — Phase 5 Re-review: APPROVED
+
+**Date:** 2026-04-21
+**Reviewer:** Ken (Software Architect)
+**Phase:** 5 — Step Type Executors
+**Previous verdict:** REJECTED (C9 — missing failure details test)
+**Trigger:** Fix Agent extended `TestAssertExecutor_OneFails` per C9 defect
+
+---
+
+## VERDICT: ✅ APPROVED
+
+The C9 defect is fully resolved. Phase 5 is approved for merge.
+
+---
+
+## C9 Fix Verification
+
+**File:** `v2/internal/executor/assert_test.go`, lines 42–54
+
+The Fix Agent extended `TestAssertExecutor_OneFails` with the following verifications:
+
+1. **`Output["failures"]` is non-nil and non-empty** — type-asserted as `[]map[string]any`, with `!ok || len(failures) == 0` guarded by `t.Fatal` (lines 42–45).
+2. **`type` field** — verified `failures[0]["type"] == "eq"` (lines 46–48).
+3. **`subject` field** — verified `failures[0]["subject"] == "hello"` (lines 49–51).
+4. **`expected` field** — verified `failures[0]["expected"] == "world"` (lines 52–54).
+
+This matches the example fix provided in the rejection and satisfies the C9 criterion: failure details are covered by tests, not just the status code.
+
+---
+
+## Validation Results
+
+```
+go test ./internal/executor/... -race -count=5 -v -run TestAssert
+  → 25 runs (5 tests × 5), all PASS, zero races
+
+go test ./... -race -count=3
+  → All packages PASS, zero failures, zero races
+```
+
+---
+
+## Updated Criterion Table
+
+| # | Criterion | Result |
+|---|-----------|--------|
+| C1 | Import discipline | ✅ PASS |
+| C2 | Nil-safety | ✅ PASS |
+| C3 | Deny-wins in assert | ✅ PASS |
+| C4 | CLI executor subprocess model | ✅ PASS |
+| C5 | Template evaluator thread-safety | ✅ PASS |
+| C6 | end step terminal handling | ✅ PASS |
+| C7 | parallel/wait_for_event NOT registered | ✅ PASS |
+| C8 | include executor registered as no-op | ✅ PASS |
+| C9 | Test coverage | ✅ PASS |
+| C10 | Race safety | ✅ PASS |
+
+**10/10 criteria pass. Phase 5 is approved.**
+
+---
+
+# Decision: Phase 5 — Step Type Executors Design
+
+**Author:** Ken (Software Architect)  
+**Date:** 2026-04-21  
+**Status:** PROPOSED  
+**Scope:** v2 runtime — executor implementations for all 14 step types
+
+---
+
+## Summary
+
+Phase 5 implements concrete `StepExecutor` for each of the 14 v2 step types. The design specifies:
+
+- **Package layout:** Flat `internal/executor/{kind}.go` with `MapRegistry` in `registry.go`
+- **CLI subprocess model:** New `Platform.Exec()` method for hermetic testability
+- **Expression evaluation:** `text/template`-based `pkg/expr.Evaluator` and `pkg/expr.ConditionEvaluator` interfaces
+- **Input collection:** New `pkg/input.InputProvider` interface with `FakeInputProvider` for tests
+- **Engine-native steps:** `parallel` and `wait_for_event` are NOT registered — engine dispatches them natively
+- **Include:** Registered as no-op pass-through (planner already flattens)
+- **End:** Sets `__run_outcome_*` vars as terminal markers for the engine
+
+## Key Decisions
+
+| ID | Decision | Rationale |
+|----|----------|-----------|
+| D1 | Flat `internal/executor/` | 14 executors share same interface; sub-packages add ceremony without benefit |
+| D2 | `Platform.Exec()` for CLI | Extends existing Platform abstraction; FakePlatform enables hermetic tests |
+| D3 | `text/template` for expressions | Fixtures already use Go template syntax; CEL deferred to v2.1 |
+| D4 | Same engine for conditions | Single syntax, single implementation; conditions wrap in `{{ if }}` |
+| D5 | `pkg/input.InputProvider` | Separate from Platform (UI/protocol concern, not OS concern) |
+| D6 | Include = registered no-op | Safer than unregistered (no ExecutorNotFoundError if planner emits marker) |
+| D7 | parallel/wait_for_event = unregistered | Engine checks before registry; unregistered = correct diagnostic for planner bugs |
+| D8 | Registry in `internal/executor/` | Colocated with executors; avoids coupling to engine package |
+
+## Import Graph (verified cycle-free)
+
+```
+pkg/expr, pkg/input → (leaf packages, no gert imports)
+internal/executor   → pkg/engine, pkg/schema, pkg/expr, pkg/input, pkg/governance, pkg/platform
+                    ✗ NEVER imports internal/engine
+internal/engine     → pkg/engine, internal/executor (for NewDefaultRegistry wiring only)
+```
+
+## Deliverables
+
+- Full design doc: `.squad/tmp/ken-phase5-design.md`
+- 46 test cases specified across executor, expression, registry, and input tests
+- 5 new fixture proposals (r14–r18) for coverage gaps
+- 5 open questions for Brian on implementation wiring
+
+## Risks
+
+1. `SubStepRunner` callback creates a runtime dependency from executor→engine; design mitigates via function injection, not import
+2. Compensation LIFO execution requires engine-level changes beyond executor scope; design documents the split clearly
+3. Decision `goto` dispatch requires engine jump-by-ID support not yet built; flagged as open question
+
+---
+
+# Ken — Phase 5 Review: Step Type Executors
+
+**Date:** 2026-04-21
+**Reviewer:** Ken (Software Architect)
+**Implementor:** Brian
+**Phase:** 5 — Step Type Executors
+
+---
+
+## VERDICT: ⚠️ REJECTED
+
+Phase 5 is excellent work — 9 of 10 criteria pass cleanly. One test coverage gap prevents approval.
+
+---
+
+## Criterion Results
+
+| # | Criterion | Result |
+|---|-----------|--------|
+| C1 | Import discipline | ✅ PASS |
+| C2 | Nil-safety | ✅ PASS |
+| C3 | Deny-wins in assert | ✅ PASS |
+| C4 | CLI executor subprocess model | ✅ PASS |
+| C5 | Template evaluator thread-safety | ✅ PASS |
+| C6 | end step terminal handling | ✅ PASS |
+| C7 | parallel/wait_for_event NOT registered | ✅ PASS |
+| C8 | include executor registered as no-op | ✅ PASS |
+| C9 | Test coverage | ❌ FAIL (1 sub-criterion) |
+| C10 | Race safety | ✅ PASS |
+
+---
+
+## Defect: C9 — Missing `TestAssertExecutor_FailureDetails` or equivalent
+
+**File:** `v2/internal/executor/assert_test.go`
+**Issue:** `TestAssertExecutor_OneFails` verifies `res.Status == StepStatusFailed` but does NOT verify the content of `res.Output["failures"]`. The C9 criterion requires a test that validates failure **details** are properly captured in the output map.
+
+**What the test does now (lines 28-41):**
+```go
+func TestAssertExecutor_OneFails(t *testing.T) {
+    // ... sets up assertion where "hello" != "world" ...
+    if res.Status != engine.StepStatusFailed {
+        t.Fatalf("expected failed, got %s", res.Status)
+    }
+    // ← Missing: no verification of Output["failures"] content
+}
+```
+
+**What's needed:** Verify that `Output["failures"]` is a non-empty slice containing the expected failure shape (`type`, `subject`, `expected` fields). This ensures the failure-details contract is covered by tests — not just the status code.
+
+**Example fix:**
+```go
+failures, ok := res.Output["failures"].([]map[string]any)
+if !ok || len(failures) == 0 {
+    t.Fatal("expected failures in output")
+}
+if failures[0]["type"] != "eq" {
+    t.Fatalf("expected failure type eq, got %v", failures[0]["type"])
+}
+if failures[0]["subject"] != "hello" {
+    t.Fatalf("expected failure subject hello, got %v", failures[0]["subject"])
+}
+if failures[0]["expected"] != "world" {
+    t.Fatalf("expected failure expected world, got %v", failures[0]["expected"])
+}
+```
+
+**Severity:** Low (production code is correct; this is a test gap only)
+**Assigned to:** Fix Agent (executor test — NOT Brian, who is locked out on rejection)
+
+---
+
+## What's Working Well
+
+1. **Import discipline is clean.** Production code in `internal/executor/` imports only `pkg/*` interfaces. `pkg/expr` and `pkg/input` are proper leaf packages with no gert imports.
+
+2. **Nil-safety is thorough.** All three new optional EngineConfig fields (`Evaluator`, `ConditionEvaluator`, `InputProvider`) degrade gracefully: `resolveTemplate` passes through when nil, `evalCondition` defaults to true, interactive executors return `StepStatusSkipped`. All existing engine tests pass.
+
+3. **Assert deny-wins is correct.** `assert.go:55-58`: if ANY assertion fails → `StepStatusFailed` + `Output["failures"]` + `return result, nil` (no infra error). This is exactly the design contract.
+
+4. **CLI subprocess model is properly abstracted.** `Platform.Exec` with `ExecRequest/ExecResult` types. `FakePlatform.Exec` uses mutex-protected request recording. No `os/exec` in executor code. Output map has `stdout`, `stderr`, `exit_code`.
+
+5. **Template evaluator is stateless.** `TemplateEvaluator` has zero fields — inherently thread-safe. Race detector confirms: `go test ./internal/expr/... -race -count=5` passes.
+
+6. **Terminal handling chain is solid.** `EndExecutor` → `Output["terminal"] = true` + `Vars["__run_outcome_*"]` → `isTerminalOutput()` → `completeTerminalRun()` with nil-safe output reading. `EndSpec.Outcome == nil` correctly skips vars.
+
+7. **25 tests pass with -race -count=5.** All packages pass `go test ./... -race -count=3` with zero races.
+
+8. **FakeInputProvider uses sync.Mutex** for `Calls` recording — race-safe across goroutines.
+
+9. **NewDefaultRegistry** correctly omits `parallel` and `wait_for_event`, registers `include` as no-op. Comment documents the omission.
+
+---
+
+## Validation Commands Run
+
+```
+go build ./...                              → PASS (clean)
+go vet ./...                                → PASS (clean)
+go test ./internal/executor/... -race -count=5 -v  → 25 tests, all PASS
+go test ./internal/expr/... -race -count=5 -v      → 8 tests, all PASS
+go test ./... -race -count=3                → all packages PASS
+```
+
+---
+
+## Action Required
+
+Fix Agent: Add failure details verification to `v2/internal/executor/assert_test.go`. Either extend `TestAssertExecutor_OneFails` or add a new `TestAssertExecutor_FailureDetails` test that verifies `Output["failures"]` contains the expected shape. Re-request review from Ken after fix.
+
+---
+
+# Phase 6 — Tool Runtime: APPROVED
+
+**Reviewer:** Ken (Software Architect)  
+**Date:** 2026-04-20  
+**Implementation by:** Brian  
+**Requested by:** Cristian (Coordinator)
+
+---
+
+## Criterion Table
+
+| ID  | Criterion                         | Verdict | Notes |
+|-----|-----------------------------------|---------|-------|
+| C1  | Import discipline                 | ✅ PASS | `pkg/tool` imports only stdlib (context). `internal/tool` imports only `pkg/tool` + stdlib. `internal/executor/tool.go` imports `pkg/tool` (interface), NOT `internal/tool` (impl). Grep confirmed zero matches. |
+| C2  | Transport interface correctness   | ✅ PASS | `ToolTransport` has `Invoke` + `Close`. All three transports implement it. `Close()` is no-op for stdio, sends shutdown+Kill for jsonrpc/mcp. Interface simplified vs. D2 (no `InvocationContext` param, no `ctx` in `Close`) — acceptable pragmatic adaptation. |
+| C3  | stdio spawn-per-invocation (D3)   | ✅ PASS | Each `StdioTransport.Invoke` calls `StartProcess` → new `exec.Cmd`. No pooling. Context cancellation goroutine kills subprocess. |
+| C4  | Persistent process management (D4)| ✅ PASS | `JSONRPCTransport` lazy-starts on first Invoke, reuses `proc` across calls. `MCPTransport` uses `ensureStarted` for same. `TestJSONRPCTransport_MultiCall` explicitly verifies process identity. Mutex protects shared state in both. |
+| C5  | MCP handshake correctness (D7)    | ✅ PASS | `ensureStarted` sends `initialize` with `protocolVersion: "2024-11-05"` ✅. Waits for response ✅. Sends `initialized` notification ✅. Handles `isError: true` ✅. Minor: method sent as `"initialized"` not `"notifications/initialized"` — test server accepts both; real MCP servers may expect the latter. Non-blocking. |
+| C6  | Builtin stubs (D5)                | ✅ PASS | All 8 stubs registered in `NewBuiltinRegistry()`. `.tool.yaml` files exist for all 8 in `design/gert-v2/testdata/tools/`. All point to `gert-stub` binary. `TestBuiltinRegistry_AllStubsPresent` verifies all 8 by name. |
+| C7  | ToolExecutor wiring               | ✅ PASS | Phase 5 stub fully replaced. Resolves tool name + action with template eval. Args resolved per-key. `ToolResult` mapped to `StepResult` with stdout/stderr/exit_code. Non-zero exit → error → Status=failed. See recommendation R1. |
+| C8  | Reference tool binaries           | ✅ PASS | All 7 binaries present and compile (verified by TestMain). stdio: JSON on stdin, output on stdout. jsonrpc-server: `tools/call` + `shutdown`. mcp-server: `initialize` + `initialized`/`notifications/initialized` + `tools/list` + `tools/call` + `shutdown`. |
+| C9  | Test coverage                     | ✅ PASS | Transport: 4+4+4=12. Registry: 6. Executor: 8. Cmd: 6. Total: 32 ✅. TestMain builds all 7 binaries before test run. mcp-server has no dedicated test file — covered by 4 mcp_test.go tests exercising the binary end-to-end. |
+| C10 | Race safety                       | ✅ PASS | Coordinator verified `go test ./... -race -count=3` all green. By inspection: `JSONRPCTransport.mu`, `MCPTransport.mu`, `DefaultToolRuntime.mu`, `MapRegistry.mu` (RWMutex), `ProcessHandle.mu` all correctly scoped. |
+
+---
+
+## Recommendations (non-blocking)
+
+### R1: Preserve stdout/stderr on non-zero exit
+
+When `StdioTransport` returns `(result, error)` for non-zero exit, the `ToolExecutor` error path discards the result and only captures `err`. Stdout/stderr from the failed tool are lost. The design spec (§4.4) shows these should be captured regardless of exit code. Suggest: check if `res != nil` in the error path and still populate `Output["stdout"]`, `Output["stderr"]`, `Output["exit_code"]`.
+
+### R2: MCP notification method name
+
+`MCPTransport.ensureStarted` sends `"initialized"` as the method. The MCP specification uses `"notifications/initialized"`. The test mcp-server accepts both. When connecting to real MCP servers in v2.1+, this should be corrected.
+
+### R3: Stale doc comment
+
+`internal/executor/tool.go` line 14 still reads "stubs tool invocation for Phase 5". Update to reflect the full implementation.
+
+### R4: aws.tool.yaml copy-paste
+
+`aws.tool.yaml` has description "Send a Slack message" copied from `slack-notify.tool.yaml`. Cosmetic.
+
+---
+
+## Verdict
+
+**APPROVED.** All 10 criteria pass. The implementation is clean, well-structured, and correctly layered. Import discipline is perfect — the dependency graph is acyclic exactly as designed. Transport implementations are solid: stdio is correctly ephemeral, jsonrpc/mcp correctly persist, mutex discipline is sound. The four recommendations are quality improvements for follow-up, none blocking.
+
+---
+
+# Phase 6 Tool Runtime — Design Decisions
+
+**Author:** Ken (Software Architect)  
+**Date:** 2026-04-20  
+**Status:** PROPOSED  
+**Priority:** CRITICAL (blocking Phase 6 implementation)  
+**Source:** `.squad/tmp/ken-phase6-design.md`
+
+---
+
+## D1: Three Transport Implementations for v2.0
+
+**What:** Ship three transports: `stdio`, `stdio-jsonrpc`, `mcp`. No gRPC.  
+**Why:** Spec §05 defines these three. gRPC is an open question (Q8 §09) with no runbook usage. Protobuf codegen dependency is unacceptable.  
+**Constraint:** No gRPC transport in v2.0. `ToolTransport` interface allows future addition.
+
+---
+
+## D2: `ToolTransport` Interface in `pkg/tool`
+
+**What:** Public `ToolTransport` interface in `pkg/tool/`. Implementations in `internal/tool/`.  
+**Why:** `pkg/tool` is a leaf package (no gert imports). Interface must be importable by both executor and transport impls without cycles.  
+**Constraint:** `pkg/tool` imports only stdlib + `pkg/schema`. No other gert packages.
+
+---
+
+## D3: stdio Transport Spawns Per-Invocation
+
+**What:** Each `stdio` invocation spawns a new subprocess. No process pooling.  
+**Why:** Spec §05: "The binary is spawned once per invocation." Simplest model.  
+**Constraint:** stdio processes are ephemeral.
+
+---
+
+## D4: JSON-RPC and MCP Use Persistent Processes
+
+**What:** Single subprocess per tool, spawned on first use, alive for run duration.  
+**Why:** Spec §05: "A single process is spawned at first use and kept alive for the duration of the run." Efficient for multi-invocation tools.  
+**Constraint:** Persistent processes scoped to single run. No cross-run reuse.
+
+---
+
+## D5: Builtin Tools Are Embedded Stubs in v2.0
+
+**What:** 8 builtin tools (slack, pagerduty, alertmanager, aws, okta, palo-alto, splunk, email) are stubs using `gert-test-stub` binary.  
+**Why:** Real integrations require API keys and network. Stubs satisfy resolution + transport testing. Real impls deferred to v2.1.  
+**Constraint:** No real API calls from builtins in v2.0.
+
+---
+
+## D6: Reference Tools Are Go Binaries
+
+**What:** 7 reference tool binaries in Go under `v2/cmd/tools/`.  
+**Why:** Cross-platform (Windows Tier 2). Shell scripts need bash. Go is self-contained.  
+**Constraint:** Reference tools have zero external dependencies (stdlib only).
+
+---
+
+## D7: MCP Minimal Compliance
+
+**What:** MCP supports `initialize`, `initialized`, `tools/list`, `tools/call`, `tools/cancel` only.  
+**Why:** Gert uses MCP for tool discovery/invocation only. Full MCP includes resources/prompts/sampling not used by gert.  
+**Constraint:** No MCP `resources/*`, `prompts/*`, or `sampling/*`.
+
+---
+
+## D8: `pkg/tool.ToolRegistry` Coexists with `pkg/planner.ToolRegistry`
+
+**What:** New `pkg/tool.ToolRegistry` with Get/Lookup/List/Register. Planner's ToolRegistry unchanged.  
+**Why:** Planner needs "does tool+action exist?" Runtime needs "full ToolDef for transport selection." `internal/tool.MultiSourceRegistry` implements both.  
+**Constraint:** `pkg/planner.ToolRegistry` stable. `pkg/tool.ToolRegistry` additive. No Phase 2 breakage.
+
+---
+
+## Impact
+
+- Unblocks Phase 6 implementation
+- Unblocks r01 and r05 runbook execution (via builtin stubs)
+- Unblocks Phase 11 tool replay fixtures
+- Unblocks Phase 13 acceptance corpus (all 10+ runbooks executable)
+
+---
+
+*Ken — Software Architect*
+
+---
+
+# Phase 7 Extension Host — Design Decisions
+
+**Author:** Ken (Software Architect)  
+**Date:** 2026-04-20  
+**Status:** PROPOSED  
+**Phase:** 7 (Extension Host)
+
+---
+
+## D1: JSON-RPC 2.0 over stdio as Extension Protocol
+
+**Decision:** Extensions communicate via JSON-RPC 2.0 over stdin/stdout. No gRPC in v2.0.
+
+**Rationale:** §04 spec mandates JSON-RPC 2.0. `stdio-jsonrpc` is the required transport.
+MCP is optional (adapted to JSON-RPC internally). gRPC deferred per Q8/§09.
+
+**Constraint:** Host is always initiator. Extensions never send unsolicited requests.
+
+---
+
+## D2: Multi-Source, Manifest-Based Discovery
+
+**Decision:** Extensions discovered via `gert-extension.yaml` manifests from 4 sources
+(built-in → workspace `.gert/extensions.yaml` → runbook `extensions:` → CLI `--extension`).
+Later sources take precedence. Dedup by `meta.name`.
+
+**Rationale:** §04 §ext-discovery defines this exact resolution order.
+
+**Constraint:** Discovery is synchronous and completes before any process starts.
+
+---
+
+## D3: Eager Contribution Registration at Load Time
+
+**Decision:** All contributions collected via `contributions/list` immediately after handshake.
+No lazy loading. Tool catalog frozen before run starts.
+
+**Rationale:** §04 lifecycle requires contributions registered before dispatch phase.
+Phase 6 ToolRegistry and planner validation require complete catalog before execution.
+
+**Constraint:** No mid-run registration of new tools/providers/policies.
+
+---
+
+## D4: One Process Per Extension
+
+**Decision:** Each extension runs as exactly one child process. No pooling.
+
+**Rationale:** §04 mandates out-of-process isolation. One-per-extension provides clean
+isolation, simple capability enforcement, deterministic shutdown, clear stderr attribution.
+
+**Constraint:** Process count bounded by OS limits. Acceptable for v2.0 (1-5 extensions typical).
+
+---
+
+## D5: Spec-Driven Capability Grant Model
+
+**Decision:** `Grants []string` in `ExtensionDecl` declares host-offered capabilities.
+Actual granted set = intersection(extension's requested, host's offered).
+
+**Rationale:** §04 two-phase model (request + grant) provides defense-in-depth.
+Uses exact `capability/*` strings from §04 Table 1.
+
+**Constraint:** Unknown capability strings silently ignored (forward compatibility).
+
+---
+
+## D6: Ping + Crash Detection, No Auto-Restart
+
+**Decision:** Periodic ping (30s interval, 5s timeout). On failure: mark crashed,
+cancel in-flight, surface to operator. No automatic restart in v2.0.
+
+**Rationale:** §04 §ext-crash defines crash handling. Auto-restart is dangerous
+(partial state, non-determinism, governance auditability concerns).
+
+**Constraint:** Failed extensions stay in `crashed` state for run duration.
+
+---
+
+## D7: ExtensionHost Loads Before Run Start
+
+**Decision:** Engine calls `ExtensionHost.Load()` after config validation, before first step.
+Calls `ExtensionHost.Shutdown()` at run completion.
+
+**Rationale:** Planner validation needs complete tool catalog. Governance needs all rules.
+Provider resolution needs registered prefixes. All must be ready before step 1.
+
+**Constraint:** `Load()` is synchronous and blocking. Individual extension failures
+are non-fatal (extension skipped with warning).
+
+---
+
+## D8: `.gert/extensions.yaml` + Runbook `extensions:` (No Separate gert.yaml)
+
+**Decision:** Extension declarations in `.gert/extensions.yaml` and runbook `extensions:`.
+`ProjectManifest` is the in-memory aggregation, not a file format.
+
+**Rationale:** §04 defines exactly these locations. No additional config file needed.
+
+**Constraint:** `ProjectManifest` represents merged discovery result from all sources.
+
+---
+
+## Open Questions Requiring Team Input
+
+- **Q1:** Should `ToolRegistry` gain `Register()` (breaking) or use new `MutableToolRegistry`? → Recommend (b): additive interface.
+- **Q3:** How to route tool invocations back to extension process? → Recommend delegation via ExtensionHost.
+- **Q4:** Extension-vs-extension policy rule conflicts? → Recommend deny-union (deny from ANY source wins).
+
+---
+
+# Ken — Phase 8 Design Decisions
+
+**Author:** Ken (Software Architect)  
+**Date:** 2026-04-22  
+**Phase:** 8 — Input Provider Framework  
+**Design Doc:** `.squad/tmp/ken-phase8-design.md`
+
+---
+
+## D1: Split InputResolver from InputProvider
+
+**Decision:** Two separate interfaces — `InputResolver` for `from:` binding resolution and `InputProvider` for interactive prompts.
+
+**Rationale:** Interface Segregation Principle. Env/file/vault don't prompt; terminal doesn't resolve bindings. Existing `InputProvider` (3 methods, deployed in 3 executors + test double) remains untouched. New `InputResolver` handles resolution-only providers.
+
+**Impact:** Zero breaking changes to Phase 5 code.
+
+---
+
+## D2: Add InputRegistry to EngineConfig (preserve InputProvider)
+
+**Decision:** Keep `EngineConfig.InputProvider` for backward compat. Add new `EngineConfig.InputRegistry` for `from:` binding resolution. Registry exposes `Provider()` to unify both paths.
+
+**Rationale:** Three executors + FakeInputProvider depend on the existing field. Adding a separate registry field avoids touching existing code while enabling the full resolution pipeline.
+
+---
+
+## D3: Per-run caching with provider-declared scope override
+
+**Decision:** Default cache scope is `run` (value reused for all steps in same run). Providers can override to `step` or `none`.
+
+**Rationale:** Env vars and vault secrets don't change mid-run. Per-run caching avoids redundant I/O. External providers (Phase 15) may need per-step freshness for time-sensitive data.
+
+---
+
+## D4: Sensitive marking on ResolveResponse
+
+**Decision:** `ResolveResponse.Sensitive bool` marks values for trace redaction. Vault values always sensitive. Env vars heuristically detected (KEY/SECRET/TOKEN/PASSWORD patterns).
+
+**Rationale:** Defense-in-depth. Complements Phase 4's governance redactor (which catches patterns in output). Resolvers know their own sensitivity context better than a regex.
+
+---
+
+## D5: Validation at plan time (static) + resolution time (runtime)
+
+**Decision:** Two validation passes. Plan-time: schema type check. Resolution-time: value validation against Input.Type before merging into vars.
+
+**Rationale:** Fail-fast. If env var should be a number but contains "abc", fail before any steps execute — not mid-run after irreversible changes.
+
+---
+
+## D6: Default resolution chain order
+
+**Decision:** CLI --var → workspace config → environment → interactive prompt.
+
+**Rationale:** Explicit values (CLI) always win. Workspace provides team defaults. Env is CI-friendly. Prompt is last resort (only in interactive modes). Matches spec §14 "Provider Composition".
+
+---
+
+## D7: Prompt executors receive InputProvider directly, not via registry
+
+**Decision:** Choice/decision/collector executors continue to get `input.InputProvider` injected. They do NOT route through `InputRegistry`.
+
+**Rationale:** Interactive step execution is in-flight (during step), not pre-flight (before steps). Different lifecycle moment, different interface. Registry handles resolution; executors handle interaction.
+
+---
+
+## D8: ResolveResponse carries replay-compatible metadata
+
+**Decision:** `ResolveResponse` includes Source, CacheKey, Sensitive, Metadata, Timestamp — enough for Phase 12 replay without coupling.
+
+**Rationale:** Phase 12 will record these in traces and replay via StaticResolver. Designing the metadata now prevents Phase 12 from requiring interface changes to Phase 8 code.
+
+---
+
+## Housekeeping
+
+### H1: Engine must call ExtensionHost.Shutdown() — process leak fix
+
+**Location:** `v2/internal/engine/engine.go` — `completeRun()`, `failRun()`, signal handler  
+**Assigned to:** Brian  
+**Effort:** 15 min
+
+### H2: Plumb runbook extensions as ProjectManifest to Load()
+
+**Location:** `v2/internal/engine/engine.go:48` — replace `nil` with manifest built from plan  
+**Assigned to:** Brian  
+**Effort:** 30 min
+
+---
+
+## Status
+
+**DESIGN COMPLETE.** Ready for Brian to implement.
+
+---
+
+# Decision: Phase 8 — Input Provider Framework
+
+**Decision:** APPROVED ✅  
+**Date:** 2026-04-22  
+**Author:** Ken (Software Architect)  
+**Score:** 8.5/10  
+
+## Summary
+
+Phase 8 delivers a clean, pragmatic Input Provider Framework with 5 providers (env, static, vault-stub, prompt, chain), a priority-based registry, and correct engine integration. All 26 tests pass with `-race`. Phase 7 housekeeping (Shutdown deferred, ProjectManifest plumbed) verified fixed.
+
+## Scope Delivered
+
+- `pkg/input/` — InputProvider, InputRequest, InputResponse, InputRegistry, PromptProvider interfaces
+- `internal/input/` — EnvProvider, StaticProvider, VaultProvider, PromptProvider, ChainProvider, Registry
+- `internal/executor/prompt.go` — PromptExecutor wired to InputProvider
+- `pkg/engine/engine.go` — InputProvider + PromptProvider fields in EngineConfig
+- `internal/engine/engine.go` — Default chain construction, Phase 7 housekeeping fixes
+- `pkg/testutil/` — FakeInputProvider, FakePromptProvider
+
+## Deferred (non-blocking)
+
+- Pre-flight `from:` binding auto-resolution (R1 — wire in Phase 9)
+- FileResolver, WorkspaceResolver (R2 — Phase 8b)
+- Compile-time guards on all providers (R3)
+- LookupEnv vs Getenv distinction (R4)
+
+## Full Review
+
+See: `.squad/tmp/ken-phase8-review.md`
+
+---
+
+# Phase 9 Design Decisions — `gert serve`
+
+**Author:** Ken (Architect)  
+**Date:** 2026-04-22  
+**Phase:** 9 — HTTP/WS/SSE Server  
+**Design Doc:** `.squad/tmp/ken-phase9-design.md`
+
+---
+
+## D1: HTTP Framework — `net/http` stdlib only
+
+**Context:** gert v2 needs an HTTP server for 4 routes (POST /rpc, GET /ws, GET /events, GET /health).
+
+**Decision:** Use Go standard library `net/http` with `http.ServeMux` (Go 1.22+ enhanced routing). No third-party frameworks (Gin, Echo, Chi).
+
+**Consequences:**
+- Zero new framework dependencies
+- Method+path routing natively supported in Go 1.22+ mux
+- Slightly more boilerplate for middleware chaining vs. Chi/Echo
+- Consistent with gert's zero-framework convention
+
+---
+
+## D2: WebSocket Library — `github.com/coder/websocket`
+
+**Context:** Need a WebSocket library for real-time event streaming.
+
+**Decision:** Use `github.com/coder/websocket` (formerly `nhooyr.io/websocket`).
+
+**Alternatives considered:**
+- `github.com/gorilla/websocket` — archived, unmaintained
+- `golang.org/x/net/websocket` — deprecated, incomplete API
+
+**Consequences:**
+- Active maintenance, proper context support, `io.Reader`/`io.Writer` interface
+- No CGO dependency
+- Works natively with `net/http` middleware
+- Single new dependency added to go.mod
+
+---
+
+## D3: SSE Implementation — Pure stdlib
+
+**Context:** SSE is needed as a fallback for environments without WebSocket support.
+
+**Decision:** Implement SSE as a plain `http.Handler` with `text/event-stream` Content-Type, using `http.Flusher` for chunked delivery.
+
+**Consequences:**
+- No additional dependency
+- Simple implementation (~60 lines)
+- Supports `Last-Event-ID` for reconnection via sequence numbers
+
+---
+
+## D4: JSON-RPC Version — 2.0 strict
+
+**Context:** The design spec (`02-architecture.tex`) mandates JSON-RPC 2.0 for `gert serve`.
+
+**Decision:** Require `"jsonrpc": "2.0"` in all requests. Reject non-conformant requests with error code -32600 (Invalid Request).
+
+**Consequences:**
+- Clean, well-defined wire protocol
+- VS Code extension compatibility (Language Server Protocol uses JSON-RPC 2.0)
+- Standard error codes (-32700 through -32603) for protocol violations
+
+---
+
+## D5: Run Execution Model — Step-by-step (client-driven)
+
+**Context:** Should the server auto-advance steps or require explicit `run.next` calls?
+
+**Decision:** Execution is client-driven. The server does NOT auto-advance. Clients call `run.next` in a loop.
+
+**Rationale:**
+- Matches existing `RunHandle.Next()` interface
+- Preserves human-in-the-loop approval gates
+- Clients wanting auto-execute just loop `run.next` until EOF
+- Future `run.startAuto` can wrap this pattern
+
+**Consequences:**
+- Simple, predictable server-side behavior
+- Client bears responsibility for driving execution
+- No goroutine-per-run auto-advance complexity
+
+---
+
+## D6: Auth — None in Phase 9
+
+**Context:** Should the HTTP server require authentication?
+
+**Decision:** No authentication. CORS allows all origins.
+
+**Rationale:** Phase 9 targets local development. Auth is explicitly out of scope per the design document. Will be added in a future security-hardening phase.
+
+**Consequences:**
+- Fast development, easy testing
+- MUST NOT be exposed to untrusted networks without a reverse proxy
+- Auth middleware hook is prepared but not activated
+
+---
+
+## D7: Run Cleanup — MaxRunAge TTL with GC
+
+**Context:** Completed runs accumulate in memory. How are they cleaned up?
+
+**Decision:** Background GC goroutine runs every 60s, removes completed/failed/cancelled runs older than `MaxRunAge` (default: 1 hour).
+
+**Alternatives considered:**
+- Explicit `run.dispose` RPC method — adds client burden
+- Immediate removal on completion — prevents post-mortem status queries
+
+**Consequences:**
+- Simple, automatic cleanup
+- Clients can query status for up to 1 hour after completion
+- Memory bounded by max concurrent runs + completed runs within TTL window
+
+---
+
+## D8: Event Buffering — 256-slot channel, drop on full
+
+**Context:** Slow WebSocket/SSE clients could back-pressure the engine if event delivery blocks.
+
+**Decision:** Each client connection gets a 256-event buffered channel. On buffer full, events are silently dropped (no backpressure to engine or other clients).
+
+**Rationale:**
+- Matches spec's "Non-blocking emission" principle
+- Authoritative record is JSONL trace file
+- 256 buffer handles typical runs (< 50 steps with sub-events)
+- Dropped-event counter exposed on /health for observability
+
+**Consequences:**
+- Engine never blocks on slow clients
+- Clients missing events must read trace file for full replay
+- Observable via health endpoint metrics
+
+---
+
+# Decision Record: Domain Kit Traceability via Reverse Mapping
+
+**Author:** Ken (Software Architect)  
+**Date:** 2026-04-22  
+**Status:** PROPOSED  
+**Applies to:** GERT v2.0+, all Domain Kits  
+**Related:** Vacation Domain Kit v0, §4.10
+
+---
+
+## Context
+
+Domain Kit compilers lower kit-specific abstractions (e.g., Vacation Kit's `DayFlavor`, `MealSlot`, `ActivityPool`) into core GERT YAML using only primitives (`branch`, `choice`, `cli`, `tool`, `manual`). This is the Clean Kernel Principle in action: the runtime never sees kit concepts.
+
+**Problem:** After lowering, kit-level semantic information is lost. A developer or operator inspecting a trace file sees only core step IDs. They have no way to know:
+- Which kit generated this step
+- Which kit concept this step came from
+- Which source field in the kit YAML maps to this step
+
+This creates a **compiler source map problem** — identical to TypeScript→JavaScript, SASS→CSS, Terraform→CloudFormation.
+
+**Without reverse mapping:**
+- Debugging: Operators manually trace step IDs through lowered runbooks to find kit sources (10+ minutes per incident)
+- Audit: Evidence trails are technically complete but semantically opaque (compliance officers cannot map trace events to domain concepts)
+- Projection: Domain-level dashboards cannot be built from core trace events
+- Replay: Operators must replay "steps 47–103" instead of "Day 2"
+- Multi-kit composition: No provenance when multiple kits contribute to the same runbook
+
+Reverse mapping is not optional for production-grade Domain Kits.
+
+---
+
+## Decision
+
+GERT adopts a **three-layer reverse mapping strategy** for Domain Kits. Each layer builds on the previous; kits choose the layer(s) that match their traceability needs.
+
+### Layer 1 — Step ID Naming Convention (Zero Cost, Works Today)
+
+**Mandatory for all kits.**
+
+Every Domain Kit compiler MUST produce deterministic, structured step IDs encoding the full provenance path:
+
+```
+{kit-prefix}.{concept-kind}.{concept-name}.{sub-element}
+```
+
+**Rules:**
+1. All segments are `kebab-case`
+2. `{kit-prefix}` is the kit's reverse-DNS ID shortened (e.g., `vacation.gert.io/v0` → `vacation`)
+3. `{concept-kind}` matches the kit vocabulary noun (e.g., `day`, `slot`, `activity`, `credits`)
+4. `{concept-name}` is the instance name from kit source
+5. `{sub-element}` is an optional role suffix for sub-steps (e.g., `.branch`, `.check`, `.fallback`)
+6. IDs MUST be unique within the runbook
+7. IDs MUST be stable across re-compilations (deterministic, not random)
+
+**Examples (Vacation Kit):**
+- `vacation.day.2.afternoon-activity`
+- `vacation.day.2.afternoon-activity.weather-branch`
+- `vacation.credits.spa.check`
+- `vacation.slot.dinner.3.reminder`
+
+**Benefit:** Projection tools can parse IDs by splitting on `.` to recover kit provenance. No schema changes required. Works in GERT v2.0 today.
+
+---
+
+### Layer 2 — Compiler-Emitted Source Map (Sidecar File)
+
+**Recommended for production kits.**
+
+The kit compiler MUST emit a `{runbook-name}.sourcemap.yaml` file alongside the lowered runbook.
+
+**Format:**
+```yaml
+version: "1"
+kit: vacation.gert.io/v0
+runbook: stay-floripa
+lowered_at: "2026-04-22T14:33:00Z"
+entries:
+  vacation.day.2.afternoon-activity:
+    kind: DayFlavor
+    name: beach-day
+    slot: afternoon-activity
+    day: 2
+    source_file: templates/beach-day.yaml
+    source_line: 42
+    parent_concept: floripa-5day
+```
+
+**Schema:**
+- `version`: Source map format version (currently `"1"`)
+- `kit`: Fully-qualified kit ID with version
+- `runbook`: Name of the lowered runbook
+- `lowered_at`: ISO8601 timestamp of lowering
+- `entries`: Map of `{step-id → metadata}`
+  - `kind`: Kit concept type
+  - `name`: Instance name from kit source
+  - `source_file`: Relative path to kit source YAML
+  - `source_line`: Line number (optional but recommended)
+  - Additional fields as needed per concept type
+
+**Consumers:**
+- Kit projection layer (domain-level dashboards)
+- `gert replay` (group steps by kit concept)
+- Operator dashboards (enrich step events with kit labels)
+- Kit version compatibility checks
+
+**Benefit:** Rich metadata, source file references, enables offline post-mortem analysis. Standard best practice for production kits.
+
+---
+
+### Layer 3 — Schema Extension (Proposed, Requires GERT v2.1+)
+
+**Optional enhancement for advanced scenarios.**
+
+**Status:** NOT available in GERT v2.0. Proposed for v2.1 or later.
+
+Add a `Meta` field to the core `Step` struct:
+
+```go
+// Step represents a single unit of work in a runbook.
+type Step struct {
+    Name        string            `yaml:"name" json:"name"`
+    Type        string            `yaml:"type" json:"type"`
+    // ... existing fields ...
+    
+    // Meta carries optional kit-level annotations stamped by the lowering compiler.
+    // The core runtime propagates this map unchanged into trace events.
+    Meta        map[string]string `yaml:"meta,omitempty" json:"meta,omitempty"`
+}
+```
+
+**Kit compiler usage:**
+```yaml
+- name: vacation.day.2.afternoon-activity
+  type: branch
+  meta:
+    kit: vacation.gert.io/v0
+    source_kind: DayFlavor
+    source_name: beach-day
+    source_slot: afternoon-activity
+    source_day: "2"
+    source_file: templates/beach-day.yaml
+    source_line: "42"
+```
+
+**Runtime behavior:** The trace writer emits `meta` fields in `step/started` and `step/completed` events:
+
+```jsonl
+{"event":"step/started","step":"vacation.day.2.afternoon-activity","meta":{"kit":"vacation.gert.io/v0","source_kind":"DayFlavor","source_name":"beach-day","source_slot":"afternoon-activity","source_day":"2"},"ts":"..."}
+```
+
+**Benefits:**
+- Self-describing traces (no external source map required)
+- Multi-kit composition (meta.kit disambiguates ownership)
+- Streaming projections (live trace events carry full provenance)
+- Backward compatible (field is optional)
+
+**Tradeoffs:**
+- Increased trace size (~5–10 KB per 200-step runbook)
+- Requires GERT v2.1 release
+
+**Impact assessment:** Adding `Meta map[string]string` is a small, low-risk change:
+- Parser: Already handles unknown YAML fields
+- Runtime: No logic changes (just copy meta to trace events)
+- Trace writer: One-line addition
+- Backward compat: Old runtimes ignore unknown fields; new runtimes handle missing meta gracefully
+
+**Decision:** File as a GERT v2.1 candidate feature. For v2.0, kits rely on Layer 1 + Layer 2.
+
+---
+
+## Kit Traceability Contract (5 Rules)
+
+All GERT Domain Kits MUST satisfy:
+
+1. **Step IDs MUST follow the structured naming convention:**  
+   `{kit-prefix}.{concept-kind}.{concept-name}.{sub-element}`  
+   All segments kebab-case. IDs must be unique and deterministic.
+
+2. **The compiler MUST emit a `{runbook-name}.sourcemap.yaml` sidecar for every lowered runbook.**  
+   Must include: `version`, `kit`, `runbook`, `lowered_at`, and `entries` map.
+
+3. **The source map MUST be deterministic:**  
+   Same kit source → same source map (across re-compilations). No random ordering, no timestamps in entry keys.
+
+4. **The source map MUST version the kit:**  
+   `version` and `kit` fields are required. This enables projection code to detect kit version mismatches.
+
+5. **If Layer 3 (Meta) is available in the target GERT version, the compiler SHOULD populate `meta` fields on every generated step.**  
+   Use the `x-` key prefix for kit-specific metadata not defined in the core schema.
+
+---
+
+## Which Layer to Use When
+
+| Scenario | Recommended Layers | Rationale |
+|---|---|---|
+| Quick debugging | Layer 1 (step ID naming) | Parse step IDs manually or with regex. No external files needed. |
+| Operator dashboard | Layer 1 + Layer 2 (source map) | Dashboard loads source map once, enriches live trace events. |
+| Post-mortem analysis | Layer 2 (source map) | Load trace + source map, produce detailed audit report. |
+| Streaming projection | Layer 3 (meta field) — FUTURE | Trace events are self-describing; no source map lookup required. |
+| Multi-kit composition | Layer 3 (meta field) — FUTURE | `meta.kit` disambiguates which kit owns each step. |
+| Kit compatibility check | Layer 2 (source map versioning) | Compare trace's `kit` version to current kit version. |
+| Offline replay analysis | Layer 1 + Layer 2 | `gert replay` groups steps by kit concept. |
+
+**Decision matrix for kit authors:**
+- **Layer 1 is MANDATORY** — All kits must follow the step ID naming convention. No exceptions.
+- **Layer 2 is RECOMMENDED** — Production kits should emit source maps. Standard best practice.
+- **Layer 3 is OPTIONAL** — Only needed for advanced scenarios. Not available in v2.0.
+
+---
+
+## Consequences
+
+### Positive
+
+1. **Domain Kits become inspectable** — Developers and operators can trace execution back to kit concepts, not just core steps.
+
+2. **Projections are possible** — Kit-specific dashboards and read models can be built by correlating trace events with source maps.
+
+3. **Debugging is fast** — Instead of 10+ minutes manually tracing step IDs, operators look up the source map entry in seconds.
+
+4. **Audit trails are semantic** — Compliance officers can map trace events to domain concepts (e.g., "Which Stay policy triggered this approval gate?").
+
+5. **Multi-kit composition works** — When multiple kits contribute to the same runbook, provenance is unambiguous.
+
+6. **No runtime cost** — Layers 1 and 2 are compile-time artifacts. Layer 3 has minimal trace size impact (~5–10 KB per runbook).
+
+7. **Backward compatible** — Layer 3 is optional. Old GERT runtimes can execute runbooks with `meta` fields (they ignore unknown fields).
+
+### Negative
+
+1. **Compiler complexity** — Kit authors must implement step ID generation and source map emission (~200 LOC). This is mandatory work for production kits.
+
+2. **Trace size increase (Layer 3)** — Inline `meta` fields add 6–10 extra fields per step event. Negligible for most use cases; measurable for high-volume systems.
+
+3. **Source map management** — Operators must keep source maps alongside runbooks. If a source map is lost, Layer 2 benefits are unavailable (but Layer 1 still works).
+
+4. **Layer 3 not available in v2.0** — Advanced scenarios (streaming projections, self-describing traces) require GERT v2.1+.
+
+### Risks
+
+1. **Non-compliance risk** — If a kit does not follow the traceability contract:
+   - Trace events are not projectable → operator dashboards cannot be built
+   - Debugging is manual → incidents take 10x longer
+   - Audit trails are opaque → compliance fails
+
+   **Mitigation:** Make traceability contract a hard requirement for kit certification. Include traceability tests in kit CI.
+
+2. **Determinism failures** — If the compiler's step ID or source map generation is non-deterministic (e.g., uses timestamps or random IDs), projections break.
+
+   **Mitigation:** Require determinism tests in kit CI (compile twice, compare outputs with `diff`).
+
+3. **Multi-kit conflicts** — If two kits use the same `{kit-prefix}`, step IDs collide.
+
+   **Mitigation:** Enforce reverse-DNS naming for kit IDs. Kit registry checks for conflicts.
+
+---
+
+## Validation
+
+Kit maintainers can verify compliance:
+
+### Test 1: Step ID Convention Compliance
+```bash
+gert-kit vacation compile templates/floripa-5day.yaml --output build/
+gert-kit vacation lint build/stay-floripa.yaml --check step-ids
+# Validates all step IDs follow {kit}.{kind}.{name}.{role} convention
+```
+
+### Test 2: Source Map Completeness
+```bash
+# Every step in lowered runbook must have a source map entry
+for step in $(grep -E '^  - name: ' build/stay-floripa.yaml | awk '{print $3}'); do
+    if ! yq ".entries.\"$step\"" build/stay-floripa.sourcemap.yaml > /dev/null 2>&1; then
+        echo "FAIL: Step $step missing from source map"
+        exit 1
+    fi
+done
+echo "PASS: Source map is complete"
+```
+
+### Test 3: Determinism
+```bash
+gert-kit vacation compile templates/floripa-5day.yaml --output build-v1/
+gert-kit vacation compile templates/floripa-5day.yaml --output build-v2/
+diff -u build-v1/stay-floripa.yaml build-v2/stay-floripa.yaml || exit 1
+diff -u build-v1/stay-floripa.sourcemap.yaml build-v2/stay-floripa.sourcemap.yaml || exit 1
+echo "PASS: Compilation is deterministic"
+```
+
+### Test 4: Trace Event Meta Propagation (Layer 3, if available)
+```bash
+gert run build/stay-floripa.yaml --inputs guest_id=test-123
+if ! grep -q '"meta":{' .runbook/runs/*/trace.jsonl; then
+    echo "WARN: Layer 3 not available or not enabled"
+else
+    echo "PASS: Trace events propagate meta field"
+fi
+```
+
+Include these tests in every kit's CI pipeline.
+
+---
+
+## Implementation Plan
+
+### For GERT Core (v2.1)
+
+1. **Add `Meta map[string]string` field to `Step` struct** in `pkg/schema/step.go`
+   - Parse field from YAML (optional, defaults to empty map)
+   - Validate keys use `x-` prefix for kit-specific extensions
+   - Estimated effort: 1 day
+
+2. **Update trace writer to emit `meta` fields** in `step/started`, `step/completed` events
+   - Copy `step.Meta` to trace event envelope
+   - Estimated effort: 1 day
+
+3. **Update parser to retain unknown YAML fields** (already done for extensions, verify for steps)
+   - Estimated effort: 0 days (already supported)
+
+4. **Document Layer 3 in GERT v2.1 spec**
+   - Add §4.10.3 "Step Metadata Extension" to design doc
+   - Estimated effort: 2 days
+
+**Total effort:** 4 days. Low risk, high value.
+
+### For Domain Kit Authors (All Kits)
+
+1. **Implement Layer 1 (step ID naming)**
+   - Deterministic step ID generator following convention
+   - Estimated effort: 1 day, ~50 LOC
+
+2. **Implement Layer 2 (source map emission)**
+   - Emit `{runbook}.sourcemap.yaml` during lowering
+   - Populate entries with kind, name, source_file, source_line
+   - Estimated effort: 2 days, ~150 LOC
+
+3. **Add traceability tests to CI**
+   - 4 tests: step ID compliance, source map completeness, determinism, meta propagation
+   - Estimated effort: 1 day
+
+4. **Implement Layer 3 (optional, once GERT v2.1 available)**
+   - Populate `meta` fields on each step during lowering
+   - Estimated effort: 1 day, ~80 LOC (reuses Layer 2 data)
+
+**Total effort for MVP (Layer 1 + Layer 2):** 4 days. Fits in 2-week kit MVP.
+
+---
+
+## References
+
+- Vacation Domain Kit v0, §4.10 (this decision formalizes the design)
+- GERT v2.0 Clean Kernel Principle (§4.3)
+- Industry precedents:
+  - TypeScript source maps (v3 spec)
+  - SASS source maps (CSS compatibility)
+  - Terraform state to configuration mapping
+  - Kubernetes OwnerReferences (provenance tracking)
+
+---
+
+## Approval
+
+**Proposed by:** Ken (Software Architect)  
+**Review requested from:**
+- Brian (Implementation Lead) — for Layer 3 implementation feasibility
+- Barbara (Integrations) — for operator dashboard use cases
+- John (DSL Design) — for kit compiler integration
+
+**Decision timeline:**
+- 2026-04-22: Decision drafted, filed to inbox
+- 2026-04-23: Review by Brian, Barbara, John
+- 2026-04-24: Finalize decision, move to accepted/
+- GERT v2.1: Implement Layer 3 (pending core team approval)
+
+---
+
+*Decision Record: ken-traceability-reverse-mapping.md*
+
+---
+
+# Vacation Domain Kit — Architectural Decisions
+
+**Author:** Ken (Software Architect)  
+**Date:** 2026-04-22  
+**Context:** Prototype design for gert.vacation Domain Kit (Sections 1, 2, 4, 5, 8)
+
+---
+
+## Key Decisions
+
+### VK-01: Vacation Kit is a Domain Kit, not an extension
+
+**Decision:** The vacation domain is modeled as a Domain Kit (authoring schemas + compiler + projections), with companion extension tools for runtime capabilities (token-gen, ledger, suggest, weather).
+
+**Rationale:** Per §4 architectural boundary, Kits own vocabulary and compile to core; extensions own runtime capabilities. The vacation compiler is a pure YAML→YAML transformation. Tools that perform side effects (token generation, ledger mutations) are extension tools, architecturally separate from the Kit.
+
+**Impact:** Clean separation maintained. Kit can be distributed without tools; tools can be used without Kit (with hand-authored core YAML).
+
+---
+
+### VK-02: Stay Template → parent run, Day → child sub-run
+
+**Decision:** A stay template lowers to a parent run with iterate-based day sub-runs. Each day is an `invoke` step referencing a generated day runbook.
+
+**Rationale:** This maps naturally to GERT's run composition model. Parent run owns the stay lifecycle (credits, QR pass, guest identity). Child sub-runs own day-level concerns (slots, activities, weather). Sub-run isolation means a crashed day replan doesn't corrupt the stay-level state.
+
+---
+
+### VK-03: Credits are runtime state variables, not a dedicated store
+
+**Decision:** Credit balances are stored as GERT runtime state variables (`credits.<category>.balance`) and mutated via a companion `vacation.ledger` tool. No dedicated database or store.
+
+**Rationale:** Local-first constraint — no external infrastructure for MVP. GERT state variables survive process restarts via checkpoints. The ledger tool enforces non-negativity and emits evidence events. A production deployment could swap the tool for one backed by a real ledger, but the Kit's lowered runbooks don't change.
+
+---
+
+### VK-04: QR pass is a signed JWT-like token, issued/revoked by tools
+
+**Decision:** Guest passes are self-contained signed tokens (HMAC-SHA256) containing guest_id, run_id, scopes, and validity window. Issued and revoked by `vacation.token-gen` tool steps. No external token service.
+
+**Rationale:** Local-first. Token is self-validating — any verifier with the shared secret can check it. Maps to GERT's existing JWT infrastructure (Phases 17-18). Physical scanner integration is deployment-specific and deferred.
+
+---
+
+### VK-05: Suggestions are non-blocking human tasks with timeout
+
+**Decision:** The "What now?" pattern lowers to a `tool` step (compute suggestions) + `manual` step with timeout (present to guest). The manual step does NOT gate day progression.
+
+**Rationale:** Guests may not respond. The timeout ensures the day sub-run continues. This uses GERT's human task model correctly: the `manual` step pauses its branch, but other steps (timers, events) in the day sub-run continue independently.
+
+---
+
+### VK-06: Weather replanning is event → branch → child sub-run
+
+**Decision:** Weather changes trigger a state variable update, which is detected by a branch condition in the day sub-run, which spawns a replanning child sub-run.
+
+**Rationale:** This exercises GERT's full event → state → branch → sub-run pipeline without any Kit-specific runtime additions. The replanning sub-run is a standard GERT run with its own evidence and checkpoints.
+
+---
+
+### VK-07: MVP scope is 2 weeks, ~2,850 LOC
+
+**Decision:** Week 1 delivers a single 2-night stay with QR pass and timeline view (~1,510 LOC). Week 2 adds suggestions, operator override, credit ledger, and weather fallback (~1,340 LOC). Multi-guest, real APIs, UI, and payment are deferred.
+
+**Rationale:** Pragmatic. The MVP validates the Kit model end-to-end (authoring → compilation → execution → evidence → projection) without enterprise infrastructure. Every deferred feature can be added without changing the Kit's compilation model.
+
+---
+
+### VK-08: Operator overrides use GERT approval gates directly
+
+**Decision:** Operator overrides lower to approval-gated manual steps with role verification. No custom override mechanism — the Kit uses GERT's governance primitives as-is.
+
+**Rationale:** Governance is GERT's differentiator. The Kit doesn't need to reinvent approval flows; it parameterizes them. Operator roles declared in `meta.governance.roles` are checked by the core runtime. Evidence capture (reason, authorizer) is automatic.
+
+---
+
+## Deferred Decisions (Need Resolution Before v1.0)
+
+- **Activity catalog service** — shared catalog vs. per-template inline definition
+- **Multi-guest composition** — one parent run per guest or one parent run with per-guest sub-runs
+- **Credit interoperability** — can credits from different stays or systems be combined?
+- **Real-time activity capacity** — requires shared state; incompatible with single-run-per-process model
+- **Guest identity federation** — how guest accounts work across stays
+
+---
+
+# Expression Language Syntax Documentation Choices
+
+**Date:** 2026-04-18
+**Agent:** Leslie (LaTeX specialist)
+**Context:** Documenting the expr-lang/expr syntax after migration from Go templates
+
+## Decisions Made
+
+### 1. Two-tier approach to expression documentation
+- **Decision:** Split documentation between conditional expressions (expr) and interpolation (Go templates)
+- **Rationale:** Users need to understand that conditions use infix syntax while command args still use template syntax
+- **Alternatives considered:** Single unified syntax (rejected: would require template-in-expr or expr-in-template complexity)
+
+### 2. Function presentation in table format
+- **Decision:** Used a comparison table showing function names and example usage
+- **Rationale:** More concise than prose; allows quick reference
+- **Alternative:** Full signature table (like Go templates section) - rejected as less readable for expr syntax
+
+### 3. Inline examples in verbatim blocks
+- **Decision:** Showed 6 progressive examples from simple to complex in a single verbatim block
+- **Rationale:** Demonstrates syntax patterns incrementally; easier to scan than minted YAML blocks
+- **Alternative:** Full runbook excerpts for each case (rejected: too verbose for syntax documentation)
+
+### 4. Explicit "no-go" zones for expr
+- **Decision:** Clearly stated that fromYAML/fromJSON are template-only, not available in expr
+- **Rationale:** Prevents confusion about feature availability; sets clear boundary between systems
+- **Alternative:** Silent omission (rejected: users would waste time trying to use these)
+
+### 5. Escaping strategy for LaTeX operators
+- **Decision:** Used 	exttt{\&\&}, 	exttt{||} for operators in running text
+- **Rationale:** Standard LaTeX escaping; ensures proper rendering
+- **Note:** In verbatim/minted blocks, && and || render literally without escape
+
+## Consistency with rest of doc
+- Follows established pattern: prose explanation → table → examples → error behavior
+- Maintains parallel structure with other subsections in schema chapter
+- Preserves existing minted YAML blocks for runbook examples (only changed expression content)
+
+## Recommendation for future
+If expr library adds features (e.g., ternary operator, custom functions), update the function table and add examples. Keep the two-tier distinction clear.
+
+---
+
+# Decision: Complete YAML/Go Syntax Highlighting Coverage
+
+**Date:** 2026-04-20  
+**Author:** leslie (LaTeX specialist)  
+**Status:** Implemented  
+
+## Context
+
+The gert v2 design document uses the `minted` package for syntax highlighting of YAML runbook examples, Go code snippets, and JSON schemas. While `minted` was already configured and most code blocks were converted, a significant number of YAML and Go blocks remained as plain `\begin{verbatim}` environments without syntax highlighting.
+
+This created inconsistency in the document:
+- Some YAML runbook examples had colored syntax highlighting
+- Others appeared as plain monospace text
+- Reader experience was inconsistent
+- Code examples were harder to read without visual structure
+
+## Decision
+
+**Convert all remaining YAML and Go code blocks from `\begin{verbatim}` to `\begin{minted}` for comprehensive syntax highlighting coverage.**
+
+## Approach
+
+### 1. Automated Detection
+Created a Python script to:
+- Scan all section `.tex` files for `\begin{verbatim}` and `\begin{lstlisting}` blocks
+- Analyze block content using regex patterns to identify language:
+  - **YAML blocks:** content matching `name:`, `steps:`, `id:`, `apiVersion:`, `kind:`, `metadata:`, `spec:`, `inputs:`, `outputs:`, `$schema:`, `vars:`, `requires:`, `env:`
+  - **Go blocks:** content matching `func`, `type`, `struct`, `package`, `import`, or struct definition patterns
+- Exclude non-code blocks (shell output, HTTP headers, migration reports, URLs)
+
+### 2. Safe Conversion
+- Applied conversions in reverse line-number order to preserve indices
+- Changed `\begin{verbatim}` → `\begin{minted}{yaml}` or `\begin{minted}{go}` as appropriate
+- Changed `\end{verbatim}` → `\end{minted}`
+- Left all other content unchanged
+
+### 3. Verification
+- Verified no YAML-like blocks remained in verbatim (except legitimate output/logs)
+- Ran full document build to ensure no LaTeX errors
+- Confirmed PDF rendered correctly with all highlighting
+
+## Results
+
+**30 blocks converted** across 9 section files:
+
+| File | YAML | Go | Total |
+|------|------|----|----|
+| `02-architecture.tex` | 0 | 1 | 1 |
+| `03-schema-vnext.tex` | 17 | 0 | 17 |
+| `05-tool-runtime.tex` | 1 | 0 | 1 |
+| `07-security-and-trust.tex` | 0 | 1 | 1 |
+| `10-migration-compatibility.tex` | 4 | 0 | 4 |
+| `11-governance-policy.tex` | 2 | 0 | 2 |
+| `12-evidence-tracing-resumption.tex` | 0 | 1 | 1 |
+| `14-input-provider-framework.tex` | 0 | 1 | 1 |
+| `15-observability-diagnostics.tex` | 1 | 1 | 2 |
+| **Total** | **22** | **8** | **30** |
+
+**Final minted block count:**
+- YAML: 91 blocks
+- Go: 31 blocks
+- JSON: 91 blocks
+- **Total: 213 syntax-highlighted code blocks**
+
+## Build Status
+
+✅ **Build successful**
+- Engine: `latexmk` with `-shell-escape`
+- Output: `build/main.pdf` (325 pages, 1.4MB)
+- No errors or warnings related to minted
+- All syntax highlighting rendering correctly
+
+## Rationale
+
+### Benefits
+1. **Consistency:** All YAML runbook examples now have uniform presentation
+2. **Readability:** Syntax highlighting makes structure immediately visible (keys, values, nesting)
+3. **Professionalism:** Document appearance matches high-quality technical documentation standards
+4. **Maintenance:** Future code examples will use minted by default (established pattern)
+
+### Non-Conversions
+Deliberately kept as `\begin{verbatim}`:
+- Shell command output and error messages (not source code)
+- Migration tool reports (formatted tool output)
+- HTTP headers (protocol text, not code)
+- URLs (plain text references)
+
+These blocks are **output/data**, not **code to be executed**, so syntax highlighting would be misleading.
+
+## Configuration
+
+Minted settings (already in `main.tex`):
+
+```latex
+\usepackage{minted}
+\setminted{
+  fontsize=\small,
+  baselinestretch=1.1,
+  breaklines=true,
+  breakanywhere=false,
+  autogobble=true,
+  ignorelexererrors=true
+}
+\setminted[yaml]{
+  style=friendly,
+  linenos=false,
+  frame=leftline,
+  framesep=6pt,
+  rulecolor=\color{black!25}
+}
+\setminted[go]{
+  style=friendly,
+  linenos=false,
+  frame=leftline,
+  framesep=6pt,
+  rulecolor=\color{black!25}
+}
+```
+
+Build system already has `-shell-escape` flag (required by minted):
+- `scripts/latex.py`: `pdflatex --shell-escape` and `latexmk -shell-escape`
+- `Makefile`: watch target uses `latexmk -shell-escape`
+
+## Future Guidelines
+
+**For new code blocks:**
+1. Use `\begin{minted}{yaml}` for YAML runbook examples
+2. Use `\begin{minted}{go}` for Go code snippets
+3. Use `\begin{minted}{json}` for JSON schemas
+4. Use `\begin{minted}{text}` for blocks containing Go template syntax (`{{`, `}}`)
+5. Use `\begin{verbatim}` only for output/logs/data (not code)
+
+**Template syntax blocks:**
+Any block containing Go template expressions must use `{text}`, not `{yaml}` or `{json}`, to avoid error token highlighting.
+
+## References
+
+- **minted documentation:** https://ctan.org/pkg/minted
+- **Pygments styles:** https://pygments.org/styles/
+- **Previous decision:** `.squad/decisions/inbox/leslie-minted-syntax-highlighting.md` (initial minted setup)
+- **History entry:** `.squad/agents/leslie/history.md` § 2026-04-20
+
+---
+

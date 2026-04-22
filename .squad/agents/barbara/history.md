@@ -1164,3 +1164,35 @@ All checks ran successfully in `/Users/cristianormazabal/Projects/gert/v2`:
 - Status: Phase 20 cleared to proceed
 
 **Report:** `.squad/decisions/inbox/barbara-phase20-preflight.md`
+
+
+## Vacation Domain Kit — Integration Design (2026-04-21)
+
+**Requested by:** Cristian  
+**Output:** `.squad/tmp/barbara-vacation-kit.md`
+
+### Key Integration Decisions
+
+**§6 — Mobile UX Contract:**
+- Guest JWT is long-lived (aligned to stay duration + 4-hour buffer, max 14 days). Mobile browsers don't have reliable session persistence — short-lived tokens create bad UX mid-stay.
+- Token scope is strictly `run:read` + `sse:subscribe`. All writes go through discrete RPC methods (`run.task.resolve`, `run.event.emit`, `run.evidence.attach`) — no direct state mutation.
+- All §6.2 read surfaces map to existing `run.get` projections — no new gert serve RPC methods needed for MVP.
+- Write contract maps entirely to existing primitives (`run.task.resolve`, `run.evidence.attach`, `run.event.emit`).
+- SSE stream reused as-is from Phase 16 implementation. `Last-Event-ID` replay window: 5 minutes (requires small ring buffer addition to gert serve).
+- Offline: deferred writes (confirmations, acknowledgements, assistance) queue locally and replay on reconnect. Upgrades and document uploads are blocked (require live credit validation / connectivity).
+
+**§7 — AI Assistance Layer:**
+- AI is strictly a read-only advisor. AI receives filtered feasible activities (credit-within-budget, slot-compatible) — never sees infeasible options. AI cannot modify run state.
+- 3-second hard timeout with static fallback. AI unavailability never blocks run progression.
+- Suggestion Resolver is the integration point — it assembles input context, calls AI, validates output, and writes ranked list to slot task context.
+- No persistent guest profile for MVP — all history is stay-scoped (derived from current Stay Run events).
+- MVP simplification: AI Ranker can be a plain HTTP call (`POST https://ai.operator-host/rank`). GERT tool registration is the v1 production design.
+- Weather re-rank: filters to `indoor` activities only when rain event fires. Guest confirmations are NOT auto-undone — guest agency is preserved.
+
+**§9 — Deliverables Summary:**
+- No new gert serve RPC methods needed for MVP. All write surfaces map to existing primitives.
+- New Go packages required: QR token provisioning (~200 lines), credit ledger (~150 lines), Suggestion Resolver (~300 lines). Small and well-bounded.
+- Credit ledger is event-sourced (append-only debit records, projection at read time). Concurrency risk is low for MVP (single guest per run), needs advisory lock for multi-device.
+- Top adoption risk: operator authoring complexity. A stay builder UI is the unlock for non-technical operators — deferred to v1 but high priority.
+- Two Kit patterns worth promoting to Kit standard library: advisory human task (suggest + confirm), event-sourced ledger.
+- Design constraint: Kit-specific vocabulary must NOT leak into gert serve. All domain read surfaces must be `run.get` projections, not new Kit-specific RPC methods.

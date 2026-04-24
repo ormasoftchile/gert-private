@@ -534,3 +534,94 @@ Maestro is the **acceptance test layer**: iOS UI → home-api → GERT sidecar �
 ### Note
 
 Cristian has prior Maestro experience. Maestro Studio is the authoring path (record → YAML → commit). No manual YAML writing required to bootstrap the first 5 flows.
+
+---
+
+## Phase 20 — Complete Auth Design (2026-04-25)
+
+### Status: ✅ Design Complete
+
+**Mission:** Design the complete auth layer for the gert-domain-home full-stack (iOS + home-api + gert sidecar + Maestro).
+
+### Decision Summary
+
+**D-Auth-1: Sign in with Apple (primary auth)**
+- Chosen over email/password and magic link.
+- No credential database. No reset flows. Apple handles identity.
+- iOS: `ASAuthorizationAppleIDProvider` → identity token → `POST /auth/apple`.
+- home-api verifies Apple JWT against Apple's JWKS (signature + iss/aud/exp). Not just decoded.
+- On success: upsert `users` table by `apple_sub`, issue home-api session JWT.
+
+**D-Auth-2: home-api JWT (HS256, 24h)**
+- Claims: `sub` (user UUID), `property_id`, `role` (owner | delegate), `routine_ids` (null for owner), `exp`.
+- Secret: `HOME_API_JWT_SECRET`, minimum 32 bytes, validated at startup.
+- Token refresh strategy: re-auth on 401 for v0. Silent refresh deferred to v1.
+- iOS stores token in Keychain (`kSecClassGenericPassword`, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`).
+
+**D-Auth-3: Delegate auth via iMessage deep link**
+- Homeowner creates invite → home-api returns `gertapp://delegate/accept?token=<hex>`.
+- Homeowner shares link manually (iMessage/AirDrop). home-api sends no messages.
+- Delegate taps link → Sign in with Apple → `POST /auth/apple/delegate` with invite token.
+- JWT issued with `role: delegate`, scoped `routine_ids`.
+- Deferred to v1 if family validation is homeowner-only.
+
+**D-Auth-4: Role enforcement middleware**
+- `RequireRole("owner")` on incident creation, routine modification, delegation control.
+- Delegates can read today tab (filtered to routine_ids) and complete steps only.
+
+**D-Auth-5: Service-to-service (home-api → gert serve)**
+- Static pre-signed JWT in `GERT_SERVICE_TOKEN` env var.
+- Claims: `sub: home-api`, `role: service`. Not a user token.
+- home-api injects as `Authorization: Bearer <token>` on all gert RPC calls.
+
+**D-Auth-6: Maestro bypass (staging only)**
+- `X-Test-Token` header accepted by home-api compiled with `testenv` build tag.
+- Issues JWT for seeded test user (`usr_test_homeowner`, `prop_test_primary`).
+- iOS: `#if DEBUG` "Sign In (Test)" button injected `TEST_TOKEN_SECRET` from env.
+- Never compiled into production. Production deployment never sets `TEST_TOKEN_SECRET`.
+
+**D-Auth-7: v0 scope cut**
+- Must have: Sign in with Apple, Keychain storage, JWKS verification, service token, 401→re-auth, X-Test-Token.
+- Defer to v1: silent refresh, delegate invite flow (unless delegation in v0 validation scope), Apple ID credential state check, real-time token revocation.
+
+### New Database Tables
+
+- `users` (apple_sub anchor, role)
+- `delegate_invites` (token, property_id, routine_ids, expires_at, status)
+- `delegation_memberships` (property_id, delegate_user_id, routine_ids, deactivated_at)
+
+### Deliverable
+
+`.squad/decisions/inbox/ken-auth-design.md` — full auth design (12 sections, all layers).
+
+
+---
+
+## Auth Revision — Apple + Google (2026-07-21)
+
+### Status: ✅ Design Written
+
+**Mission:** Revise the Phase 20 Apple-only auth design to support both Sign in with Apple and Sign in with Google as co-equal providers for all principal roles (owner and delegate).
+
+### What Changed
+
+- **Provider abstraction added:** `POST /auth/apple` → `POST /auth/signin { provider, identity_token }`. Both Apple and Google use the same unified endpoint.
+- **users table schema revised:** `apple_sub TEXT` replaced by `provider TEXT CHECK (provider IN ('apple','google'))` + `provider_sub TEXT`, with a unique index on `(provider, provider_sub)`.
+- **Delegate flow made provider-agnostic:** `POST /auth/signin/delegate { provider, identity_token, invite_token }`. Invite tokens carry no provider constraint.
+- **iOS SDK addition:** `GoogleSignIn-iOS` via SPM (`>= 7.0.0`). Two sign-in buttons on the sign-in screen (`signInApple`, `signInGoogle` accessibility identifiers).
+- **Both providers in v0:** Not deferred. Apple and Google are both required for the initial family validation.
+
+### Key Decisions
+
+| Topic | Decision |
+|-------|----------|
+| Verification library | `lestrrat-go/jwx/v2` for both Apple and Google JWKS |
+| Identity key | `(provider, provider_sub)` — email is advisory only |
+| Email merging | NOT in v0. Same email via different providers = different users |
+| Account linking | Deferred to v1 |
+| Role restriction by provider | None — both owners and delegates may use either provider |
+| Silent refresh | Still deferred to v1 |
+
+### Deliverable
+
+`.squad/decisions/inbox/ken-auth-revise.md` — full revised auth design (10 sections).

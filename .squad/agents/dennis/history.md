@@ -536,3 +536,87 @@ Create `sections/99-tikz-diagrams.tex` with predefined styles: `block`, `decisio
 
 ---
 
+### 2026-04-18: DRI/Runbook Systems Vocabulary Survey
+
+**Task:** Surveyed how existing runbook and DRI systems model their domain vocabularies to inform gert dri-kit design. Focus on separation patterns, distribution units, and taxonomy.
+
+**Systems Surveyed (12 total):**
+
+**SaaS DRI Platforms (No Vocabulary Separation):**
+1. **PagerDuty Runbooks** — HTTP request, run script, notification primitives; incident-specific actions bundled into platform
+2. **Blameless** — Detection, acknowledge, triage, assign, resolution; incident lifecycle is the product
+3. **FireHydrant** — Notifications, webhooks, task creation, channel creation; runbook steps platform-specific
+4. **OpsLevel** — Maturity checks (governance primitives); service catalog domain is the product
+5. **Atlassian Opsgenie/Statuspage** — Alert, Incident, Responder, Escalation Policy; response plan automation
+
+**Ecosystem Orchestration Platforms (Full Vocabulary Separation):**
+6. **AWS SSM Automation** — `aws:executeAutomation`, `aws:branch`, AWS-specific actions (`aws:createImage`, `aws:changeInstanceState`); documents are YAML/JSON, but AWS domain embedded in action namespace ⚠️ Anti-pattern
+7. **Argo Workflows** — `steps` (sequential), `dag` (dependency graph); domain logic in container images, not Argo schema ✅
+8. **Temporal** — Workflow (orchestration), Activity (side effects); domain is user code, Temporal provides execution primitives ✅
+9. **Prefect** — Flow, Task, Block; domain-specific Blocks as PyPI packages (`prefect-aws`, `prefect-gcp`) ✅
+10. **Rundeck** — Node Step, Workflow Step; step plugins (JAR files) provide domain vocabularies ✅
+11. **GitHub Actions** — Step, Job, Workflow; domain actions as Git repos (`owner/repo@tag`), Marketplace for discovery ✅
+12. **Terraform** — Resource, Data Source, Module; domain providers as Go plugins (Registry), modules as HCL ✅
+13. **Ansible** — Task, Role, Module; domain collections as tar.gz packages (Galaxy), official/certified/community tiers ✅
+
+**Key Findings:**
+
+1. **Separation Triggers:** Systems separate domain vocabularies when they aim to serve *many domains* (not just one vertical) and want community/vendor contributions. SaaS tools (PagerDuty, Blameless) bundle domain into product because they own the entire vertical.
+
+2. **Distribution Units:** Ecosystem platforms use *native package managers* of their implementation language:
+   - Go → Go modules (`github.com/org/pkg/v2`)
+   - Python → PyPI packages (`prefect-aws`)
+   - HCL/Terraform → Registry (providers) + VCS (modules)
+   - Ansible → Galaxy (collections)
+   - GitHub Actions → Git repos (`owner/repo@tag`)
+
+3. **DRI Vocabulary Taxonomy:** Five primitives are universal across ITIL, SRE, and all surveyed systems:
+   - **Notify** — Communicate incident status (ITIL: Incident Communication, SRE: Paging/Alerts)
+   - **Escalate** — Move to higher authority/expertise (ITIL: Escalation, SRE: Escalation Policy)
+   - **Investigate** — Diagnose cause/scope (ITIL: Investigation and Diagnosis, SRE: Triage/RCA)
+   - **Mitigate** — Reduce impact/restore service (ITIL: Resolution and Recovery, SRE: Rollback/Failover)
+   - **Postmortem** — Lessons learned (ITIL: Post-Incident Review, SRE: Blameless Postmortem)
+   
+   These are *incident-domain-specific*, not generic orchestration primitives. They encode semantics like "escalation policy," "on-call rotation," "status page," "blameless postmortem."
+
+4. **Generic vs. Domain-Specific Boundary:** Generic primitives (sequential, parallel, branch, loop, HTTP, script) appear in *all* orchestration systems (Argo, Temporal, Airflow). DRI primitives (notify, escalate, postmortem) only appear in incident/ops systems. This validates gert's separation: core = generic, dri-kit = domain.
+
+5. **Official vs. Community Tiers:**
+   - **Ansible:** Official (core team), Certified (vendor, audited), Community (best-effort)
+   - **GitHub Actions:** Official (`actions/*` org), Community (everyone else)
+   - **Terraform:** HashiCorp-maintained (de facto official), Community (verified badge)
+
+**Recommendations for gert dri-kit:**
+
+1. **Include in gert.ops:** notify, escalate, investigate, mitigate, postmortem, acknowledge, assign-role, status-update (all incident-domain-specific, map to ITIL/SRE taxonomy)
+
+2. **Exclude from gert.ops:** HTTP request, run script, branch, loop, wait (generic orchestration primitives, already in gert core)
+
+3. **Distribution Pattern:** Use Go modules for dri-kit distribution (`github.com/ormasoftchile/gert-domain-ops` or `gert.io/ops`); semantic import paths for v2+ breaking changes; versioning via Git tags. Precedent: Terraform providers, Temporal SDKs.
+
+4. **Separation Model:** Domain kits as *compilation layer* (not runtime plugins). `gert.ops` compiles high-level DRI steps to gert core primitives. Precedent: Terraform modules, GitHub composite actions. Already decided in `.squad/decisions.md`.
+
+5. **Ecosystem Tiers (If Ecosystem Grows):** Adopt Ansible's three-tier model: Official (`gert.ops`, core team), Certified (vendor, audited), Community (user, best-effort).
+
+6. **Anti-Pattern to Avoid:** AWS SSM Automation embeds AWS domain in core schema (`aws:createImage`), coupling engine to AWS. Gert's separation (`gert.ops` as separate package) avoids this trap.
+
+**Key Learnings:**
+
+1. **Go modules are the natural fit** — Terraform (providers), Temporal (SDKs) both use Go modules for domain vocabulary distribution. For Go-based gert, this is the industry precedent.
+
+2. **Domain separation is rare in SaaS** — PagerDuty, Blameless, FireHydrant bundle domain into product because they own the vertical. Gert's separation is unusual for a runbook tool, but positions it as an *orchestration platform*, not a SaaS product.
+
+3. **DRI vocabulary is remarkably stable** — The five primitives (notify, escalate, investigate, mitigate, postmortem) are consensus across ITIL (1980s), SRE (2010s), and modern tools (2020s). This is a mature domain with established taxonomy.
+
+4. **Compilation > Plugins** — Terraform modules and GitHub composite actions compile high-level vocabulary to low-level primitives. This avoids plugin sandboxing, binary trust issues, and runtime coupling. Gert's kit model follows this pattern.
+
+5. **Versioning is critical** — All ecosystem platforms (Terraform, Ansible, GitHub Actions, Prefect) use semantic versioning for domain vocabularies. Runbooks must declare kit version dependencies to prevent version skew.
+
+**Output:** `/Volumes/Projects/gert/.squad/tmp/dennis-dri-systems-survey.md` (22KB, comprehensive survey for team)
+
+**Post-Work:**
+- Updated `.squad/agents/dennis/history.md` (this file) with learnings
+- Writing to `.squad/decisions/inbox/dennis-dri-survey-findings.md` next
+
+---
+

@@ -1153,3 +1153,44 @@ Three new requirements for `kitruntime`:
 - `Dispatch()` returns structured error on unknown key (not panic)
 - Loader layer (kit input parsing) must validate null nodes before calling `Dispatch()`
 
+
+---
+
+## Learnings — dri-kit Separation Assessment (2026-04-25)
+
+### Context
+Assessed whether the `dri-kit` (Kit-0, `gert.ops` Domain Kit) is ready for repo separation into `github.com/ormasoftchile/gert-domain-dri`.
+
+### Key Facts Confirmed
+
+1. **home kit is fully separated** — `/Volumes/Projects/gert-domain-home/` exists as a standalone Go module with 4 packages (model, loader, compiler, delegation), 24+ tests passing. `domains/` directory was removed from gert monorepo. Module name was already `github.com/ormasoftchile/gert-domain-home` before migration.
+
+2. **dri-kit manual is complete** — `design/dri-kit-manual/` contains 10 chapters, ~3,078 lines. Chapters cover: DRI concepts, schema reference, authoring guide, governance, evidence/tracing, change-request workflow, incident response, migration, reference. Cross-consistency review ✅ PASS. Clean boundary confirmed — no DRI residue in gert-v2 core.
+
+3. **No `specs/gert-domain-dri/`** — Unlike home kit which had `specs/gert-domain-home/schema.json` + `v0.md` before separation, dri-kit has no machine-readable spec directory.
+
+4. **Zero Go implementation** — No `gert.ops` compiler, loader, or model packages exist anywhere in the codebase. There is nothing to put in a repo.
+
+5. **v2.1 deferral no longer applies to the design** — The deferral was about the Kit model concept being unproven. The Kit model is now proven (home kit is the reference implementation). The deferral now only applies to *implementation capacity*.
+
+### Decision
+
+**NOT YET.** Separation is blocked on Go implementation. Recommendation written to `.squad/decisions/inbox/ken-dri-kit-separation.md`.
+
+### Separation Readiness Criteria (7 gates, derived from home kit precedent)
+
+| # | Criterion | dri-kit now |
+|---|-----------|-------------|
+| C1 | Clean boundary (no core residue) | ✅ |
+| C2 | Authoritative spec document | ✅ |
+| C3 | Machine-readable spec (`specs/gert-domain-dri/`) | ❌ |
+| C4 | Go implementation (compiler/loader/model) | ❌ |
+| C5 | Tests passing | ❌ |
+| C6 | Module identity established | ❌ |
+| C7 | No `v2/internal/` dependencies | N/A |
+
+### Next Steps for dri-kit
+1. Leslie/Dennis: create `specs/gert-domain-dri/` from `02-schema-reference.tex`
+2. Brian: implement `domains/dri/` following 4-package home kit pattern
+3. Run integration tests against gert core parser
+4. Extract to standalone repo (mechanical step, 1 day)

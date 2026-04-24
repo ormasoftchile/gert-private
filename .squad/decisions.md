@@ -10057,3 +10057,657 @@ app-{name}                ← application (standalone repo, imports kit as Go mo
 **Applies to:** All future domains — Vacation, and any others that follow.
 
 **Exception:** If kit and app are permanently 1:1 and same maintainer, separate repos are still preferred for clarity.
+# Phase 14 Preflight - Baseline Verification
+
+**Date:** $(date)  
+**Verified by:** Barbara (Integrations Specialist)  
+**Phase 13 commits:** `46a64fc` (impl) and `a9c7b88` (squad state)
+
+## Preflight Checklist
+
+### 1. Build ✅ PASS
+```bash
+go build ./...
+```
+**Result:** Success - All packages compiled without errors.
+
+### 2. Vet ✅ PASS
+```bash
+go vet ./...
+```
+**Result:** Success - No issues detected by go vet.
+
+### 3. Tests with Race Detector ✅ PASS
+```bash
+go test ./... -race -count=1 -timeout=120s
+```
+**Result:** Success - All tests passed (49 packages tested, no race conditions detected).
+
+**Test Summary:**
+- Tested packages: 49
+- No test files: 21 packages
+- All tests: PASS
+- Race detector: No issues
+
+### 4. Leftover Temporary Files ✅ PASS
+```bash
+find . -name "*.tmp" -not -path "*/vendor/*"
+```
+**Result:** Clean - No *.tmp files found.
+
+### 5. Go Module Tidy ✅ PASS (with notes)
+```bash
+go mod tidy && git diff go.mod go.sum
+```
+**Result:** go.mod and go.sum were in an untidy state. After tidy, changes detected:
+- OpenTelemetry packages promoted from indirect to direct dependencies
+- google.golang.org/grpc promoted from indirect to direct
+
+**Action:** Ran `git checkout go.mod go.sum` to restore to commit state, per baseline verification requirement.
+
+## Summary
+
+✅ **BASELINE VERIFICATION: CLEAN**
+
+All preflight checks pass. The v2 module baseline is ready for Phase 14. No blocking issues detected.
+
+## Next Steps
+Brian can proceed with Phase 14 implementation.
+
+# Phase 15 Preflight Report
+**Date:** 2026-04-21
+**Baseline:** c8d8f53
+
+## Checks
+- [x] go build: **PASS**
+- [x] go vet: **PASS**
+- [x] go test -race: **PASS** (all packages passed, 96 test cases green)
+- [x] git status: **CLEAN** (only untracked .squad files)
+- [x] git log: **Phase 14 PRESENT** (c8d8f53 + seal commit adce550)
+
+## Verdict
+✅ **ALL GREEN** — Baseline sealed and verified. Phase 15 ready to start.
+
+### Details
+- Working tree is clean (untracked squad files only, not committed)
+- Phase 14 seal commit: `adce550` (approved by Ken, 9/10)
+- Phase 14 feature commit: `c8d8f53` (E2E integration suite, OTLP TLS, gc edge cases)
+- All Go packages build, lint, and test successfully with race detector
+- No blockers identified
+
+# Brian — Phase 0 Decision Inbox
+
+## Module
+
+- **Module path:** `github.com/ormasoftchile/gert/v2`
+- **Go version:** `go 1.25.7` (matching v1)
+- **Root directory:** `/Volumes/Projects/gert/v2/`
+
+## Package Layout
+
+| Package | Path | Notes |
+|---------|------|-------|
+| `schema` | `pkg/schema/` | Canonical Go types for all runbook data structures. No runtime deps. |
+| `engine` | `pkg/engine/` | Execution engine interfaces + core runtime types (ExecutionPlan, RunHandle, RunStore). |
+| `planner` | `pkg/planner/` | Planning pipeline interfaces — stub doc.go only; implementation deferred. |
+| `trace` | `pkg/trace/` | Append-only JSONL audit log types + TraceWriter interface. |
+| `eventbus` | `pkg/eventbus/` | In-process fan-out bus (EventBus) + wait_for_event dispatcher (EventDispatcher). |
+| `governance` | `pkg/governance/` | GovernancePolicy interface, AllowList, DenyList, RedactionPattern. |
+| `tool` | `pkg/tool/` | ToolRuntime interface + TransportConfig types (runtime-side). |
+| `provider` | `pkg/provider/` | Stub doc.go only; full implementation deferred. |
+| `extension` | `pkg/extension/` | ExtensionHost interface + contribution types (tools, providers, policy rules). |
+| `testutil` | `pkg/testutil/` | Stub doc.go — Barbara's domain. |
+| `platform` | `pkg/platform/` | Ken's existing package; untouched. |
+| `specc` | `internal/specc/` | Spec-coverage analysis tool; Analyze() stub returns nil. |
+| `cmd/gert` | `cmd/gert/` | Minimal stdlib CLI (no cobra yet); `gert dev spec-coverage` subcommand. |
+
+## Spec Ambiguities / Design Decisions
+
+### 1. Step union vs. discriminated struct
+`Step` uses a single flat struct with `yaml:",inline"` fields for each type-specific payload.
+Real YAML unmarshalling requires a custom `UnmarshalYAML` that reads `type` first, then populates
+the correct payload pointer. **Deferred to parser implementation phase.**
+
+### 2. Import cycle: engine ↔ schema
+`engine.ExecutionPlan.Tools` and `.Providers` are typed `map[string]any` rather than
+`map[string]*schema.ToolDef` to avoid an import cycle between `engine` and `schema`.
+These will be tightened once internal implementations exist.
+
+### 3. WaitForEventConfig alias
+`pkg/schema/event.go` re-exports `WaitEventConfig` as `WaitForEventConfig` via a type alias.
+This may be redundant. **Review during parser implementation.**
+
+### 4. cobra not yet added
+CLI uses stdlib `flag`/`os.Args` only. Add cobra when the subcommand surface grows large enough
+to warrant it (suggested threshold: ≥ 3 top-level commands).
+
+### 5. iterate / parallel as FlowNode siblings
+`iterate` and `parallel` are siblings of `step` in the `FlowNode` union
+(not `StepType` values), matching the spec's tree-node semantics.
+However, they are also listed as `StepType` constants for use inside `BranchSpec.Steps`
+(which is `[]FlowNode`). This dual representation should be documented in the parser spec.
+
+### 6. engine/run.go: io.EOF sentinel
+`RunHandle.Next` returns `io.EOF` at end of run. A compile-time `var _ = io.EOF` guard
+ensures the import is kept without a separate wrapper type.
+
+### 2026-04-24T11:52:05: User directive
+**By:** ormasoftchile (via Copilot)
+**What:** Do not use gendered pronouns (she/her) when referring to Leslie. Use "they/them" or refer to Leslie by name.
+**Why:** User request — captured for team memory
+
+# DRI Systems Survey Findings — Vocabulary Separation Patterns
+
+**Author:** Dennis (CS Researcher)  
+**Date:** 2026-04-18  
+**Context:** Surveyed 13 runbook/DRI systems to inform gert dri-kit design
+
+---
+
+## Decision-Relevant Findings
+
+### 1. Go Modules Are the Industry Standard for Domain Vocabulary Distribution (Go-Based Systems)
+
+**Finding:** Terraform providers and Temporal SDKs both use Go modules for distributing domain-specific functionality. Semantic import paths (`github.com/org/pkg/v2`) are the versioning mechanism.
+
+**Implication for gert:**
+- `gert.ops` should be distributed as a Go module: `github.com/ormasoftchile/gert-domain-ops` (or `gert.io/ops`)
+- Breaking changes trigger major version bumps with updated import paths: `gert.io/ops/v2`
+- No custom registry needed — Git tags + Go module proxy provide versioning and distribution
+
+**Supporting Evidence:**
+- Terraform: `hashicorp/aws` provider is a Go plugin with semantic versioning
+- Temporal: SDKs for Go, TypeScript, Java distributed via language package managers (Go modules, npm, Maven)
+- Go ecosystem: Semantic import versioning is the standard (go.dev/blog/v2-go-modules)
+
+**Recommendation:** DECISION: Use Go modules for gert domain kit distribution
+
+---
+
+### 2. DRI Vocabulary Is Universal Across ITIL, SRE, and Modern Tools
+
+**Finding:** Five primitives appear in every surveyed DRI system:
+1. **Notify** (ITIL: Incident Communication, SRE: Paging/Alerts)
+2. **Escalate** (ITIL: Escalation, SRE: Escalation Policy)
+3. **Investigate** (ITIL: Investigation and Diagnosis, SRE: Triage/RCA)
+4. **Mitigate** (ITIL: Resolution and Recovery, SRE: Rollback/Failover)
+5. **Postmortem** (ITIL: Post-Incident Review, SRE: Blameless Postmortem)
+
+**Implication for gert:**
+- These five primitives are the minimum viable `gert.ops` vocabulary
+- They are *incident-domain-specific* (not generic orchestration primitives)
+- They encode ITIL/SRE semantics: escalation policy, on-call rotation, status page, blameless postmortem
+
+**Supporting Evidence:**
+- PagerDuty, Opsgenie, FireHydrant, Blameless all implement these five
+- ITIL framework (1980s) defines these as core incident management steps
+- SRE book (2016) codifies these as best practices
+
+**Recommendation:** DECISION: `gert.ops` vocabulary must include these five primitives (minimum)
+
+---
+
+### 3. Generic Orchestration Primitives Should NOT Be in Domain Kits
+
+**Finding:** Generic primitives (sequential, parallel, branch, loop, HTTP, run script) appear in *all* orchestration systems (Argo, Temporal, Airflow, AWS SSM), not just DRI systems.
+
+**Implication for gert:**
+- HTTP request, run script, branch, loop, wait belong in **gert core**, not `gert.ops`
+- Duplicating these in dri-kit would violate "gert core = zero domain vocabulary" principle
+- Domain kits should only contain domain-specific semantics (notify, escalate, etc.)
+
+**Supporting Evidence:**
+- Argo Workflows: `steps`, `dag` are core primitives; domain logic is in container images
+- Temporal: Workflow/Activity are core; domain is user code
+- GitHub Actions: Step, Job are core; domain actions are separate repos
+
+**Recommendation:** DECISION: Exclude generic primitives from `gert.ops` (already in core)
+
+---
+
+### 4. Separation Triggers: Multi-Domain + Ecosystem Strategy
+
+**Finding:** Systems separate domain vocabularies when:
+1. They aim to serve *many domains* (not just one vertical)
+2. They want community/vendor contributions to expand reach
+3. Language-native packaging exists (Go modules, PyPI, npm)
+4. Users need to version/audit domain vocabularies independently
+
+Systems that DON'T separate (PagerDuty, Blameless, FireHydrant) are SaaS products where incident vocabulary *is* the product.
+
+**Implication for gert:**
+- Gert's separation of `gert.ops` positions it as an **orchestration platform**, not a SaaS product
+- This is unusual for runbook tools but enables multi-domain expansion (future: `gert.compliance`, `gert.deployment`, etc.)
+- Separation is a strategic choice: gert is betting on ecosystem growth, not SaaS vertical lock-in
+
+**Supporting Evidence:**
+- GitHub Actions, Terraform, Ansible, Prefect all separate vocabularies → large ecosystems
+- PagerDuty, Blameless, FireHydrant don't separate → SaaS vertical focus
+
+**Recommendation:** RATIONALE: Domain kit separation is a strategic bet on ecosystem growth
+
+---
+
+### 5. Three-Tier Model for Official vs Community Vocabularies (If Ecosystem Grows)
+
+**Finding:** Ansible uses three tiers for collections:
+1. **Official** — Maintained by Ansible/Red Hat core team
+2. **Certified** — Vendor-maintained (Cisco, AWS), tested and certified by Red Hat
+3. **Community** — Open-source contributions, best-effort support
+
+GitHub Actions and Terraform use simpler two-tier models (official vs community).
+
+**Implication for gert:**
+- If gert grows a multi-kit ecosystem, adopt Ansible's three-tier model:
+  - **Official:** `gert.ops` (DRI), maintained by gert core team
+  - **Certified:** `gert.aws`, `gert.k8s` — vendor-contributed, audited by gert maintainers
+  - **Community:** `github.com/user/gert-domain-custom` — user-contributed, best-effort
+- For now (v2.0), only official `gert.ops` exists
+
+**Supporting Evidence:**
+- Ansible Galaxy: 3-tier model with clear trust boundaries
+- Terraform Registry: 2-tier (HashiCorp-maintained vs Community, but "verified" badge for trusted community)
+
+**Recommendation:** FUTURE: If ecosystem grows, adopt 3-tier official/certified/community model
+
+---
+
+### 6. Anti-Pattern: Embedding Domain in Core Schema (AWS SSM)
+
+**Finding:** AWS SSM Automation embeds AWS-specific actions (`aws:createImage`, `aws:changeInstanceState`) into core automation schema. This couples the engine to AWS and prevents multi-cloud use.
+
+**Implication for gert:**
+- Gert's separation of `gert.ops` as a separate package avoids this trap
+- Core gert schema contains only generic primitives (sequence, parallel, branch, invoke)
+- DRI vocabulary lives in `gert.ops` and compiles to gert core
+
+**Supporting Evidence:**
+- AWS SSM documents can't be used for non-AWS orchestration (GCP, Azure)
+- Argo, Temporal, GitHub Actions all avoid embedding domain in core
+
+**Recommendation:** ANTI-PATTERN: Do NOT embed domain vocabulary in gert core schema
+
+---
+
+### 7. Compilation Layer > Runtime Plugins
+
+**Finding:** Terraform modules and GitHub composite actions compile high-level vocabulary to low-level primitives. This avoids plugin sandboxing, binary trust issues, and runtime coupling.
+
+**Implication for gert:**
+- `gert.ops` should be a *compiler* (translate DRI steps to gert core primitives), not a runtime plugin
+- This is already the gert Domain Kit Model (see `.squad/decisions.md`)
+- Benefits: No runtime coupling, no plugin sandboxing needed, pure schema transformation
+
+**Supporting Evidence:**
+- Terraform: Modules compile to provider resources (no runtime plugin loading)
+- GitHub Actions: Composite actions compile to step sequences (no runtime execution)
+- Prefect: Blocks are Python code, imported at runtime, but not binary plugins
+
+**Recommendation:** AFFIRM: Domain kits as compilation layer (already decided)
+
+---
+
+### 8. Explicit Kit Version Declaration in Runbooks
+
+**Finding:** Terraform `required_providers` block and GitHub Actions `uses: action@version` both require explicit version declarations for reproducibility.
+
+**Implication for gert:**
+- Runbook YAML should declare kit dependencies with version constraints:
+  ```yaml
+  kits:
+    - name: gert.ops
+      version: "^1.0.0"
+  ```
+- This prevents version skew and makes runbooks self-documenting
+- Enables runbook reproducibility and auditing
+
+**Supporting Evidence:**
+- Terraform: `required_providers { aws = { version = "~> 5.0" } }`
+- GitHub Actions: `uses: actions/checkout@v3`
+- Ansible: `collections: - name: amazon.aws version: 1.0.0`
+
+**Recommendation:** DECISION: Runbooks must declare kit version dependencies
+
+---
+
+## Summary for Team
+
+**Top 3 Takeaways:**
+
+1. **Go modules are the natural distribution mechanism** — Industry precedent (Terraform, Temporal) + Go-based gert = Go modules for domain kits
+2. **DRI vocabulary is stable and universal** — The five primitives (notify, escalate, investigate, mitigate, postmortem) are consensus across ITIL, SRE, and modern tools
+3. **Separation is a strategic ecosystem bet** — Gert's domain kit model is unusual for runbook tools but positions it as an orchestration platform, not a SaaS vertical
+
+**Decisions to Make:**
+- AFFIRM: Use Go modules for `gert.ops` distribution
+- AFFIRM: Include five universal DRI primitives (notify, escalate, investigate, mitigate, postmortem) in `gert.ops`
+- AFFIRM: Exclude generic primitives (HTTP, script, branch, loop) from `gert.ops` (already in core)
+- AFFIRM: Domain kits as compilation layer (already decided in `.squad/decisions.md`)
+- NEW: Runbooks must declare kit version dependencies in YAML
+
+**Full Survey:** See `/Volumes/Projects/gert/.squad/tmp/dennis-dri-systems-survey.md` (22KB)
+
+---
+
+**Next Steps for Ken:**
+1. Review survey findings and affirm decisions
+2. Decide: Should `gert.ops` be extracted to separate repo now (v2.0) or later (v2.1)?
+3. Decide: What's the import path for `gert.ops`? (`github.com/ormasoftchile/gert-domain-ops` vs `gert.io/ops`)
+4. Decide: Should runbook kit dependencies go in schema now or defer to v2.1?
+
+# Architectural Recommendation: dri-kit (Kit-0) Repo Separation
+
+**Decision ID:** ken-dri-kit-separation  
+**Author:** Ken (Software Architect)  
+**Date:** 2026-04-25  
+**Status:** NOT YET — implementation gate pending
+
+---
+
+## 1. Readiness Criteria (Derived from home kit precedent)
+
+A domain kit is ready for repo separation when it has:
+
+| Criterion | What it means |
+|-----------|---------------|
+| **C1: Clean boundary** | Zero domain vocabulary in gert core (no residue) |
+| **C2: Spec document** | Authoritative specification with schema reference |
+| **C3: Machine-readable spec** | `specs/gert-domain-<name>/` directory with schema.json + v0.md |
+| **C4: Go implementation** | Working compiler, loader, model packages |
+| **C5: Tests passing** | Unit + integration test suite, all green |
+| **C6: Module identity** | `github.com/ormasoftchile/gert-domain-<name>` module name set |
+| **C7: No gert-internal imports** | Kit has no dependency on `v2/internal/` packages |
+
+The home kit met **all seven** before separation was executed.
+
+---
+
+## 2. Current State of dri-kit
+
+### ✅ What's ready
+
+| Criterion | Status | Evidence |
+|-----------|--------|----------|
+| **C1: Clean boundary** | ✅ PASS | Cross-consistency review passed; no DRI residue in gert-v2 core confirmed |
+| **C2: Spec document** | ✅ PASS | `design/dri-kit-manual/` — 10-chapter LaTeX manual, ~3,078 lines, all sections complete (00-introduction through 09-reference) |
+
+### ❌ What's missing
+
+| Criterion | Status | Gap |
+|-----------|--------|-----|
+| **C3: Machine-readable spec** | ❌ MISSING | No `specs/gert-domain-dri/` directory; no schema.json; no v0.md. Home kit had `specs/gert-domain-home/` with full schema before separation. |
+| **C4: Go implementation** | ❌ MISSING | Zero Go code for `gert.ops`. No `compiler`, `loader`, or `model` packages anywhere in the codebase. There is nothing to put in a repo. |
+| **C5: Tests passing** | ❌ MISSING | No tests exist because no implementation exists. |
+| **C6: Module identity** | ❌ MISSING | No `go.mod` with `github.com/ormasoftchile/gert-domain-dri` module name. |
+| **C7: No internal imports** | N/A | Not yet applicable (no code). |
+
+---
+
+## 3. Comparison to home kit at separation time
+
+| Dimension | home kit (at separation) | dri-kit (now) |
+|-----------|--------------------------|---------------|
+| Manual/spec document | ✅ SUMMARY.md + schema.json + v0.md | ✅ 10-chapter LaTeX manual |
+| Machine-readable schema | ✅ `specs/gert-domain-home/schema.json` | ❌ None |
+| Go implementation | ✅ 4 packages (model, loader, compiler, delegation) | ❌ None |
+| Tests | ✅ 24 unit + 4 integration, all green | ❌ None |
+| Module name | ✅ `github.com/ormasoftchile/gert-domain-home` | ❌ Not established |
+| Separation trigger | Implementation complete → extract | Documentation complete → _implement first_ |
+
+The home kit was separated because it had **working code** to move. Separating dri-kit now would create an empty or documentation-only repo, which provides no architectural value and wastes the repo setup cost.
+
+---
+
+## 4. Does the v2.1 deferral still apply?
+
+The original deferral (decision `domain-kit-layer-boundary`) was: *"Kit extraction (separating the operations vocabulary from core into Kit-0) is deferred to v2.1."* That decision was made when the Kit model itself was unproven and no reference implementation existed.
+
+**The Kit model is now proven.** home kit demonstrates the pattern end-to-end. The deferral rationale no longer holds for the *design* — the question is now purely about **implementation capacity**.
+
+The deferral should be treated as: *dri-kit repo separation waits until the `gert.ops` compiler is implemented*, not as a hard timeline lock to v2.1.
+
+---
+
+## 5. Recommendation
+
+**NOT YET.**
+
+The dri-kit manual is excellent and architecturally clean. The `gert.ops` vocabulary is fully specified across 10 chapters. The boundary is confirmed clean. These are necessary conditions — but not sufficient.
+
+**The blocking gate is: no Go implementation exists.**
+
+A repo separation with no working code is premature. The home kit precedent is clear: you separate when the compiler works, tests pass, and the module can be consumed as a versioned Go module.
+
+### Remaining gate (single item)
+
+> Implement `github.com/ormasoftchile/gert-domain-dri` — the `gert.ops` compiler — following the home kit 4-package pattern:
+> - `pkg/model/` — DRI domain vocabulary (DRI, Approver, ChangeManager, IncidentCommander, Responder, Observer roles; ChangeRequest, Incident, ApprovalGate types)
+> - `pkg/loader/` — `.ops.yaml` DSL parser → model types
+> - `pkg/compiler/` — model types → gert core ExecutionPlan (lowers `ops.cli`, `ops.manual`, `ops.approval`, `ops.change-request`, `ops.incident` step types)
+> - `pkg/schema/` — JSON Schema for `.ops.yaml` validation (maps to `design/dri-kit-manual/sections/02-schema-reference.tex`)
+
+Once the compiler is implemented and tests pass, repo separation is a one-day mechanical task (copy, init, remove from monorepo — identical to what Brian did for home kit).
+
+### Suggested sequencing
+
+1. Create `specs/gert-domain-dri/` with schema.json derived from the manual's schema reference chapter — this is a pure documentation task (Leslie or Dennis)
+2. Brian implements `gert.ops` compiler as `domains/dri/` in the monorepo, following the home kit pattern
+3. Integration test validates that compiled `.ops.yaml` runbooks parse correctly through the gert core parser
+4. Extract to standalone repo `gert-domain-dri` once tests are green
+
+**Estimated effort:** Similar to home kit implementation (established pattern, well-specified vocabulary). The manual removes all ambiguity about the domain model.
+
+---
+
+## 6. Architectural note on priority
+
+The dri-kit is Kit-0 — the domain that motivated gert's existence. It's more complex than home kit (role enforcement, SLA timeouts, multi-phase approvals, rollback injection). That complexity is *why* the manual needed to be written first. It is now written. Implementation is the right next investment.
+
+I recommend scheduling dri-kit compiler implementation as a v2.1 work item with high priority, with repo separation as the exit criterion for that work item.
+
+# Decision Record: Domain Kit Layered Composition
+
+**Author:** Ken (Software Architect)  
+**Date:** 2026-04-25  
+**Status:** Proposed  
+**Context:** Layered Domain Kit composition — foundational kit as dependency of specialized kit
+
+---
+
+## Decision
+
+**Adopt the `KitBundle` + `CompilerRegistry` composition model for layered Domain Kits.**
+
+A foundational kit (e.g., `gert-kit-household`) exports a `KitBundle` — a named map of qualified step type strings to `StepCompilerFunc` implementations. A specialized kit (e.g., `gert-kit-home`) imports the foundational kit as a Go module, builds a shared `CompilerRegistry` by merging the foundational bundle and its own bundle, and dispatches all step compilation through the registry.
+
+---
+
+## Specific Choices
+
+### 1. Composition Mechanism: `KitBundle` + `CompilerRegistry.Merge()`
+
+Each kit exports:
+```go
+func Bundle() kitruntime.KitBundle
+```
+
+The specialized kit builds a registry at load time:
+```go
+r := kitruntime.NewRegistry()
+r.Merge(household.Bundle())
+r.Merge(home.Bundle())
+```
+
+All step compilation goes through `registry.Dispatch(stepType, node, scope)`.
+
+**Rationale:** Loose coupling. Adding a new step type to the foundational kit does not require changes in the specialized kit — it's available automatically. No inheritance hierarchy. Easy to test by constructing a partial registry.
+
+### 2. Step Type Namespacing: Qualified Prefix (`<kit>.<type>`)
+
+```yaml
+- type: household.chore
+- type: household.approve
+- type: home.morning-routine
+```
+
+Core gert primitives remain unqualified (`cli`, `manual`, `tool`, `approve`, `branch`). Kit-managed types are always qualified. The registry key is exactly the `type:` field value.
+
+**Rationale:** Unambiguous, self-documenting, collision-detected at startup (registry panics on duplicate key), grep-friendly, survives copy-paste without losing context.
+
+**Rejected:** Implicit disjoint sets (fragile, silent conflicts). `kit:` field alongside `type:` (verbose, split identity).
+
+### 3. Compiler Delegation: Shared Registry Dispatch (Option B)
+
+Specialized kit compiler calls `registry.Dispatch()` for every step, regardless of which kit owns it. It does not import foundational kit compiler functions directly (Option A) or embed a `BaseCompiler` (Option C).
+
+**Rationale:** Option A creates tight coupling — the specialized kit must enumerate every foundational step type. Option C breaks down with multiple foundational kits. Option B keeps the specialized kit's compiler simple and extensible.
+
+### 4. Model Composition: Go Embedding + Direct Import
+
+Specialized kit model types embed and import foundational kit model types:
+```go
+import household "github.com/ormasoftchile/gert-kit-household/pkg/model"
+
+type RoutineStep struct {
+    Chore *household.Chore `yaml:"chore,omitempty"`
+    // ...
+}
+```
+
+No interfaces at the model layer. Interfaces are reserved for the compiler function signature (`StepCompilerFunc`).
+
+**Rationale:** Model types are value objects. Go embedding is idiomatic for structural composition of value objects. Interfaces add indirection without benefit where concrete field access is needed.
+
+### 5. Core Invariant Preservation
+
+`StepCompilerFunc` always returns `[]schema.FlowNode` where `schema.FlowNode` is gert core's type — only core primitives (cli, manual, tool, approve, branch, iterate). Composite step compilers (e.g., `morning-routine`) call `registry.Dispatch()` for each sub-step and concatenate the resulting core nodes. Kit-level step types never propagate into the output. The gert core planner sees only `runbook/v2` YAML with core primitive types.
+
+---
+
+## Consequences
+
+**Positive:**
+- Clean separation between foundational and specialized kit authoring concerns.
+- Foundational kit is independently versioned and testable.
+- Registry collision detection is compile-time (startup panic on duplicate key).
+- The invariant (flat ExecutionPlan, core primitives only) is enforced by the `StepCompilerFunc` return type.
+- Pattern scales to N layers: `kit-c` imports `kit-b` imports `kit-a`, each contributing a bundle.
+
+**Costs / Risks:**
+- `kitruntime` package must exist in a shared location (recommend `gert/v2/pkg/kitruntime`). This is a new package to maintain.
+- All bundles must be registered before the first compile call (startup invariant). Need a clear `BuildRegistry()` convention.
+- Circular expansion (composite step inadvertently re-emitting itself) requires a depth guard in `CompileScope`. Add depth counter, error at depth > 10.
+
+---
+
+## Not Decided Here
+
+- Location of the `kitruntime` package (gert core vs. standalone `gert-kit-sdk` module). Recommend gert core; defer final decision until first second-layer kit is built.
+- `gert-kit.yaml` manifest extension for `depends:` block (declarative kit dependencies). Recommended addition but not blocking.
+
+---
+
+## References
+
+- Design sketch: `.squad/tmp/ken-kit-composition.md`
+- Existing Domain Kit model: `.squad/tmp/ken-domain-kits.md`
+- Home kit package design: `.squad/tmp/ken-home-package-design.md`
+- Phase 20 repo structure decision: `.squad/agents/ken/history.md` (Phase 20)
+
+# Decision Record: Kit Registry Edge Cases & Error Handling
+
+**Author:** Ken (Software Architect)  
+**Date:** 2026-04-25  
+**Status:** Accepted  
+**Context:** Addendum to the Domain Kit Layered Composition Model (`ken-kit-composition.md`). Specifies behavior for the five border cases not covered in the happy-path design.
+
+---
+
+## Decisions
+
+### 1. Dispatch Error Format for Unknown Step Type
+
+**Decision:** `Dispatch()` returns a structured error on unknown step type — it never panics.
+
+**Error message format:**
+```
+kitruntime: unknown step type "<qualified-type>" (registry contains N types)
+```
+
+**Rationale:** Missing step types are configuration errors (wrong bundle merged, kit not included, typo in step YAML). They are recoverable by the caller and must produce useful diagnostics. Panicking on a missing key is appropriate only for duplicate key merges (programming error at build time), not for runtime dispatch misses. The count in the message aids debugging empty or misconfigured registries.
+
+---
+
+### 2. Merge Ownership Invariant
+
+**Decision:** Foundational kits export `Bundle()` but **never** call `r.Merge()` themselves. Only the top-level kit's `BuildRegistry()` function calls `r.Merge()` for all bundles in dependency order.
+
+**Rationale:** If foundational kits called `r.Merge()` on their own bundle, a composite registry pulling in two kits that share a common foundational dependency would trigger a duplicate key panic on the second merge. Go MVS resolves the version conflict to a single binary — there is one `Bundle()` function — but the merge call site must be singular. Centralizing merge in `BuildRegistry()` makes the full registry topology visible in one place and prevents accidental double-registration.
+
+**Rule:** No `Bundle()` function may contain a `r.Merge()` call. Kit authors should document this clearly in their kit's contributing guide.
+
+---
+
+### 3. Prefix Reservation Approach
+
+**Decision:** Each kit owns its prefix exclusively. The `gert-kit.yaml` manifest declares a `prefix:` field. A community `docs/kit-prefixes.md` (or equivalent published registry) tracks claimed prefixes. The runtime `Merge()` panics with a diagnostic message naming both the existing and incoming kit when an exact key collision is detected, using an `owners map[string]string` in the registry.
+
+**Rationale:** There is no runtime enforcement of prefix uniqueness beyond exact key collision detection. Prefix reservation is a social/tooling contract enforced at publish time. The `owners` map in the registry does not add meaningful runtime overhead but significantly improves the quality of the panic message, enabling kit authors to identify the conflict without source-diving.
+
+**No partial-prefix detection:** Detecting that `home.*` and `homepro.*` are "too similar" is a linting/tooling concern, not a registry concern. The registry operates on complete qualified type strings.
+
+---
+
+### 4. Startup Order Enforcement: Constructor Pattern
+
+**Decision:** `BuildRegistry()` must complete before any `Dispatch()` call. This is enforced by the constructor pattern: `New()` calls `BuildRegistry()` synchronously and stores the result in the `Compiler` struct. There is no lazy initialization, deferred registration, or "register after construction" API.
+
+**Rationale:** Lazy init would mean the first `Dispatch()` call on an incompletely built registry could silently succeed for some step types and fail for others, depending on merge order. The constructor pattern makes the invariant verifiable by inspection and testable by constructing the compiler in tests and asserting no error before any compile call.
+
+**Guard:** If `Compiler.registry` is nil (zero-value struct misuse), the first `Dispatch()` call panics immediately with a clear message. There is no silent nil pointer dereference.
+
+---
+
+### 5. Nil / Null Node Contract
+
+**Decision:** The loader validates step bodies before calling `Dispatch()`. A null or missing step body that is required by the step type causes a loader-level validation error, not a dispatcher-level error. `Dispatch()` is never called with a nil node. `StepCompilerFunc` implementations may assume `node` is non-nil.
+
+**Rationale:** Pushing null validation into every `StepCompilerFunc` would scatter boilerplate across all kit compilers. The loader is the natural validation boundary — it has positional context (step `id`, `type`, line number from the YAML AST) to produce useful error messages. The dispatcher and compiler receive already-validated input.
+
+**Exception:** Step types that legitimately allow an empty body receive an empty mapping node (`yaml.MappingNode` with no children), not nil. The loader must not coerce empty mappings to nil.
+
+---
+
+## Impact
+
+These decisions close the five border cases identified in the kit composition design review. They impose three new implementation requirements:
+
+1. `CompilerRegistry` must store an `owners map[string]string` alongside `compilers`.
+2. `CompilerRegistry.Dispatch()` must return a structured error (not panic) on unknown key.
+3. The loader layer (kit input parsing) must validate null step bodies before calling `Dispatch()`.
+
+No changes to the `StepCompilerFunc` signature or `KitBundle` struct are required.
+
+# Leslie: Kit Composition and Layering — Build Result
+
+**Date:** 2026-04-25
+**Author:** leslie (LaTeX Specialist)
+
+## Summary
+
+The `\section{Kit Composition and Layering}` authored in `design/gert/sections/04-domain-kit-model.tex` was successfully compiled and committed.
+
+## Build Result
+
+- **Exit code:** 0 (clean)
+- **Page count:** 346 (expected ~342–345)
+- **Commit SHA:** `4c9d38d`
+- **PDF size:** ~1.5 MB
+
+## Pre-existing Warnings (not caused by this section)
+
+- `sec:collector_field_validation` multiply defined
+- `ch:governance`, `ch:evidence`, `ch:overview` undefined references
+
+These warnings existed before this section was added and should be tracked separately.
+

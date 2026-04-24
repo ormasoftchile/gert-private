@@ -1066,3 +1066,90 @@ Multi-delegate architecture approved and implemented by Brian. Design decision t
 
 **Verification:** All 7 tests passing, spec compliance confirmed.
 
+---
+
+## Phase 21 — Layered Domain Kit Composition Model (2026-04-25)
+
+### Status: ✅ Design Complete
+
+**Mission:** Design the composition model for layered Domain Kits — can a foundational kit be a Go module dependency of a specialized kit? Answer: yes. Define exactly how.
+
+### Key Decisions
+
+**1. Composition Mechanism: `KitBundle` + `CompilerRegistry`**
+
+Each kit exports a `Bundle()` function returning a named map of qualified step type strings to `StepCompilerFunc`. The specialized kit's `BuildRegistry()` merges all bundles (foundational first, specialized last). All step compilation dispatches through the registry by step type string. No inheritance, no tight coupling.
+
+**2. Step Type Namespacing: Qualified Prefix (`<kit>.<type>`)**
+
+- `household.chore`, `household.approve`, `home.morning-routine`
+- Core gert primitives remain unqualified (`cli`, `manual`, `approve`)
+- Registry key = YAML `type:` field value (no translation)
+- Collision detected at startup (registry panics on duplicate key)
+- Rejected: implicit disjoint sets (fragile), `kit:` field (verbose)
+
+**3. Compiler Delegation: Shared Registry Dispatch (Option B)**
+
+Specialized kit compiler calls `registry.Dispatch(stepType, node, scope)` for every step. Does not enumerate foundational kit step types directly (Option A). Does not embed a `BaseCompiler` (Option C). New foundational step types are available automatically.
+
+**4. Model Composition: Go Embedding + Direct Import**
+
+Specialized kit model types import and embed foundational model types directly. No interface layer at the model level. Interfaces reserved for `StepCompilerFunc`.
+
+**5. Core Invariant Preserved By Type System**
+
+`StepCompilerFunc` return type is `[]schema.FlowNode` — only gert core primitive types. Composite step compilers (e.g., `home.morning-routine`) call `registry.Dispatch()` for each sub-step and concatenate the returned core nodes. Kit-level step types never propagate into output. The gert core planner sees only `runbook/v2` with core primitives.
+
+### Deliverables
+
+1. `.squad/tmp/ken-kit-composition.md` — Full design sketch (composition model, namespacing, compiler delegation, model composition, invariant, worked example with YAML + Go interface sketches)
+2. `.squad/decisions/inbox/ken-kit-composition.md` — ADR with key choices and consequences
+
+### Open Questions (Not Blocking)
+
+- `kitruntime` package location: recommend `gert/v2/pkg/kitruntime` (shared SDK in core)
+- Circular expansion guard: depth counter in `CompileScope`, error at depth > 10
+- `gert-kit.yaml` manifest `depends:` block for declarative kit dependencies (v2.1)
+
+---
+
+## Phase 22 — Kit Registry Border Cases & Error Handling (2026-04-25)
+
+### Status: ✅ Design Complete
+
+**Mission:** Close the five border cases not documented in the Phase 21 kit composition design. Specify exact behaviors for edge conditions in `Dispatch()`, bundle merging, namespace collisions, startup order, and nil step bodies.
+
+### Key Decisions
+
+**1. Unknown Step Type → Structured Error (Not Panic)**
+
+`Dispatch()` returns `fmt.Errorf("kitruntime: unknown step type %q (registry contains %d types)", stepType, len(r.compilers))`. Never panics. The count aids diagnostics.
+
+**2. Merge Ownership Invariant**
+
+Foundational kits export `Bundle()` but never call `r.Merge()` themselves. Only the top-level `BuildRegistry()` calls `r.Merge()` for all bundles. Prevents double-registration when multiple kits share a common dependency.
+
+**3. Prefix Reservation: Social Contract + Panic Diagnostics**
+
+Prefix ownership is declared in `gert-kit.yaml` manifest and tracked in `docs/kit-prefixes.md`. The registry stores an `owners map[string]string` (key → kit name) alongside `compilers`. Duplicate key panic names both the original and incoming kit. No partial-prefix collision detection — that is a linting concern.
+
+**4. Startup Order: Constructor Pattern Enforces BuildRegistry-Before-Dispatch**
+
+`BuildRegistry()` must complete synchronously in `New()` before the `Compiler` is usable. No lazy init. No register-after-construction API. Zero-value `Compiler` with nil registry panics on first `Dispatch()` with a clear message.
+
+**5. Nil Node: Loader Validates, Dispatcher Passes Through**
+
+The input loader validates null/missing step bodies before calling `Dispatch()`. `Dispatch()` and `StepCompilerFunc` contract: `node` is non-nil. Loader error format: `step "<id>" (type "<type>"): body is required but was null`. Legitimate empty-body step types receive an empty mapping node, not nil.
+
+### Deliverables
+
+1. `.squad/tmp/ken-kit-composition.md` — Appended `## 7. Border Cases & Error Handling` with 5 sub-sections, prose + Go snippets
+2. `.squad/decisions/inbox/ken-kit-edge-cases.md` — Decision record covering all 5 border case decisions
+
+### Implementation Impact
+
+Three new requirements for `kitruntime`:
+- `CompilerRegistry` gains `owners map[string]string` for diagnostic panic messages
+- `Dispatch()` returns structured error on unknown key (not panic)
+- Loader layer (kit input parsing) must validate null nodes before calling `Dispatch()`
+

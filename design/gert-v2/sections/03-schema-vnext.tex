@@ -8,16 +8,15 @@
 
 \label{ch:schema}
 
-This chapter is the normative specification for all gert v2 data structures:
+This chapter is the normative specification for all gert data structures:
 runbook documents, tool definitions, and provider definitions.
-It supersedes all v1 schema documentation and defines the contracts that Brian's
+It defines the contracts that Brian's
 parser, Ken's runtime, and the VS~Code extension must implement.
 
 The design philosophy is \emph{minimal core, extensible periphery}: the core
 language fields that the runtime must understand are small, typed, and stable;
-everything else is declared as an extension with an explicit namespace.  Where
-v1 accumulated surface area organically, v2 draws a hard boundary and enforces
-it at parse time.
+everything else is declared as an extension with an explicit namespace.  Gert
+draws a hard boundary and enforces it at parse time.
 
 % ============================================================
 \section{Schema Identity and Versioning}
@@ -28,16 +27,16 @@ it at parse time.
 \label{subsec:apiversion}
 
 Every gert document carries a mandatory \texttt{apiVersion} field that
-identifies both the document kind and the schema version.  The v2 values are:
+identifies both the document kind and the schema version.  The current values are:
 
 \begin{center}
-\begin{tabular}{lll}
+\begin{tabular}{ll}
 \hline
-\textbf{Document kind} & \textbf{v1 value} & \textbf{v2 value} \\
+\textbf{Document kind} & \textbf{apiVersion} \\
 \hline
-Runbook                & \texttt{runbook/v1} & \texttt{runbook/v2} \\
-Tool definition        & \texttt{tool/v0}    & \texttt{tool/v2}   \\
-Provider definition    & \texttt{provider/v0}& \texttt{provider/v2} \\
+Runbook                & \texttt{runbook/v2} \\
+Tool definition        & \texttt{tool/v2}   \\
+Provider definition    & \texttt{provider/v2} \\
 \hline
 \end{tabular}
 \end{center}
@@ -113,77 +112,7 @@ A breaking change is any of:
 Adding new optional fields, adding new enum values, and loosening existing
 constraints are \emph{not} breaking changes.
 
-\subsection{Compatibility Contract: v1 → v2}
-\label{subsec:compatibility-contract}
 
-\begin{center}
-\begin{tabular}{llp{6cm}}
-\hline
-\textbf{v1 field} & \textbf{v2 status} & \textbf{Notes} \\
-\hline
-\texttt{apiVersion: runbook/v0} & Removed & Handled by \texttt{gert migrate} \\
-\texttt{apiVersion: runbook/v1} & Deprecated & Compatibility mode in v2 parser \\
-\texttt{meta.name}              & Promoted  & Becomes top-level \texttt{name} \\
-\texttt{meta.kind}              & Promoted  & Becomes top-level \texttt{kind} \\
-\texttt{meta.description}       & Promoted  & Becomes top-level \texttt{description} \\
-\texttt{meta.vars}              & Retained  & Moved to top-level \texttt{vars} \\
-\texttt{meta.inputs}            & Retained  & Moved to top-level \texttt{inputs} \\
-\texttt{meta.governance}        & Retained  & Moved to top-level \texttt{governance} \\
-\texttt{meta.prose}             & Retained  & Moved to top-level \texttt{prose} \\
-\texttt{meta.defaults}          & Retained  & Moved to top-level \texttt{defaults} \\
-\texttt{imports}                & Retained  & Unchanged \\
-\texttt{tools}                  & Replaced  & Replaced by \texttt{toolRefs} (typed) \\
-\texttt{flow}                   & Retained  & Canonical execution root \\
-\texttt{tree}                   & Removed   & Use \texttt{flow} \\
-\texttt{steps}                  & Removed   & Flat step list was never canonical \\
-\texttt{step.type: collector}   & Renamed   & Split into \texttt{choice}, \texttt{decision}, \texttt{collector} \\
-\texttt{step.type: router}      & Renamed   & Becomes \texttt{type: end} \\
-\texttt{step.type: choice}      & New       & User selects from options; stores result \\
-\texttt{step.type: decision}    & New       & User picks runbook path; routes execution \\
-\texttt{step.type: noop}        & Removed   & Use \texttt{when:} guard on any step \\
-\texttt{step.type: extension}   & Retained  & Unchanged \\
-\texttt{step.with.argv}         & Deprecated& Use \texttt{type: cli} with \texttt{command:} \\
-\texttt{step.assertions}        & Deprecated& Use \texttt{step.type: assert} \\
-\hline
-\end{tabular}
-\end{center}
-
-The v2 parser reads \texttt{runbook/v1} documents in \textbf{compatibility mode}:
-all v1 field paths are accepted and silently normalized to their v2 equivalents
-before validation.  Running \texttt{gert migrate} permanently rewrites the file
-to v2 canonical form.  v2 will not support \texttt{runbook/v0}; documents at
-that version must be migrated to v1 first or directly to v2 via a two-stage
-migration.
-
-\subsection{\texttt{gert migrate} Behavior}
-\label{subsec:migrate}
-
-\begin{minted}{bash}
-# Dry-run preview
-gert migrate --dry-run runbook.yaml
-
-# In-place rewrite
-gert migrate runbook.yaml
-
-# Migrate a whole directory
-gert migrate ./runbooks/
-\end{minted}
-
-Migration rules applied automatically:
-\begin{enumerate}
-  \item Rewrite \texttt{apiVersion} to \texttt{runbook/v2}.
-  \item Add \texttt{\$schema} field.
-  \item Promote \texttt{meta.name}, \texttt{meta.kind}, \texttt{meta.description}
-        to top-level.
-  \item Move remaining \texttt{meta.*} fields to their v2 top-level equivalents.
-  \item Rename \texttt{tree:} to \texttt{flow:}.
-  \item Replace generic \texttt{step.type: manual} from early v2 drafts with
-        three precise types: \texttt{choice}, \texttt{decision}, \texttt{collector}.
-  \item Rename \texttt{step.type: router} → \texttt{end}.
-  \item Rewrite \texttt{tools: [name]} shorthand to \texttt{toolRefs:} typed
-        declarations.
-  \item Add \texttt{id:} to runbook if absent (derived from \texttt{name}).
-\end{enumerate}
 
 % ============================================================
 \section{Core Runbook Fields (v2)}
@@ -193,7 +122,7 @@ Migration rules applied automatically:
 \subsection{Top-Level Field Inventory}
 \label{subsec:field-inventory}
 
-The v2 runbook document has the following top-level fields:
+The runbook document has the following top-level fields:
 
 \begin{center}
 \begin{tabular}{lllp{5.5cm}}
@@ -240,8 +169,7 @@ includes it by id.
 \subsection{toolRefs}
 \label{subsec:toolrefs}
 
-In v1, tools were declared as a flat string array (\texttt{tools: [curl, nslookup]}).
-In v2, \texttt{toolRefs} is a typed array that allows aliasing and explicit path
+\texttt{toolRefs} is a typed array that allows aliasing and explicit path
 overrides:
 
 \begin{minted}{yaml}
@@ -429,7 +357,7 @@ inputs:
 \end{minted}
 
 \paragraph{type field}
-The \texttt{type} field (new in v2) declares the value's type.  Supported values:
+The \texttt{type} field declares the value's type.  Supported values:
 
 \begin{itemize}
   \item \texttt{string} — Default. UTF-8 text.
@@ -440,7 +368,7 @@ The \texttt{type} field (new in v2) declares the value's type.  Supported values
 
 \paragraph{from: binding syntax}
 
-The \texttt{from} field specifies how the value is resolved.  v2 binding
+The \texttt{from} field specifies how the value is resolved.  Binding
 forms:
 
 \begin{center}
@@ -483,17 +411,15 @@ semantic validator checks this.
 \subsection{Expression Language}
 \label{subsec:expressions}
 
-v2 adopts \textbf{expr-lang/expr}~\cite{expr-lang-docs} as the expression language for all
-conditional fields (\texttt{when}, \texttt{condition}, \texttt{until}).  This
-replaces the Go template-based Polish/prefix notation used in v1 with natural,
-Python-like infix expressions.  The decision to migrate from Go templates to
-\texttt{expr} is grounded in three facts:
+Gert uses \textbf{expr-lang/expr}~\cite{expr-lang-docs} as the expression language for all
+conditional fields (\texttt{when}, \texttt{condition}, \texttt{until}), providing
+natural, Python-like infix expressions.  The choice of \texttt{expr} is grounded in three facts:
 \begin{enumerate}
   \item Infix notation (\texttt{a == "x" \&\& b > 1}) is significantly more
         readable and familiar to operators than prefix notation (\texttt{\{\{\ and\ (eq\ .a\ "x")\ (gt\ .b\ 1)\ \}\}}).
   \item \texttt{expr} provides a safe, sandboxed evaluation environment with no
         access to Go internals, improving security posture.
-  \item The migration cost is low: expressions are localized to
+  \item Expressions are localized to
         \texttt{when}/\texttt{condition} fields; shell command interpolation
         (\texttt{args}, \texttt{title}) continues to use Go templates.
 \end{enumerate}

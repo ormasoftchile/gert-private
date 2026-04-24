@@ -565,7 +565,7 @@ type RunHandle interface {
 
 \paragraph{Purpose.} For \texttt{gert serve --http}, events are broadcast to WebSocket clients for real-time UI updates.
 
-\paragraph{Implementation.} The HTTP adapter subscribes to \texttt{RunHandle.Events()} and forwards events to all connected WebSocket clients for the given \texttt{run\_id}. The \texttt{/events} endpoint (existing in v1) is upgraded to WebSocket in v2.
+\paragraph{Implementation.} The HTTP adapter subscribes to \texttt{RunHandle.Events()} and forwards events to all connected WebSocket clients for the given \texttt{run\_id}. The \texttt{/events} endpoint uses WebSocket.
 
 \paragraph{Wire format.} JSON-encoded event envelopes, one per WebSocket message frame.
 

@@ -20,34 +20,24 @@ failures, runbook drift, and uncontrolled blast radius during incidents.
 Gert is designed to solve exactly this problem: a governed, executable, debuggable runbook engine that
 produces full traceability and evidence by construction.
 
-\section{Why v2: What v1 Got Right, and What Constrained It}
+\section{Design Rationale}
 
-Gert v1 validated the core thesis. It delivered governed execution with command allowlists, environment
-variable blocking, output redaction, and per-step approval gates. It captured evidence---text,
-checklists, attachments with SHA256 hashes---and wrote an append-only JSONL trace for every run. It
-provided deterministic replay via recorded scenarios, a full terminal UI (Bubble Tea), a VS~Code
-extension over JSON-RPC~2.0, interactive debugging with a step-through REPL, and a \texttt{gert~test}
-scenario runner. These are production-grade features that must be preserved in v2.
-
-However, v1 accumulated architectural constraints that limit its evolution. The serve layer
-(\texttt{gert serve}) is tightly coupled to the runtime, making it difficult to add new adapters without
-modifying core logic. Schema versioning is brittle: \texttt{runbook/v0} and \texttt{runbook/v1} diverge
-with no formal compatibility contract. The tool and provider subsystems are functional but have no stable
-extension contract, making third-party tool development fragile. There is no saga or compensation pattern
-for rollback on failure, no parallel fan-out execution, no policy-as-code integration, and no
-OpenTelemetry support for distributed tracing---all of which are now industry-standard in comparable
-workflow orchestration systems~\cite{temporal-docs,argo-workflows,prefect-docs}.
-
-These constraints are architectural, not cosmetic. A clean-break v2 is warranted.
+Gert is designed around three hard constraints: governance must be built in (not added on),
+traceability must be complete (every action leaves an immutable audit trail), and the
+component model must be stable (engine, schema, executors, and extensions evolve independently
+under a documented contract). These constraints rule out ad-hoc scripting, general-purpose
+workflow engines, and cloud-execution services as the right foundation. Gert occupies a
+specific niche: a local-first, governed runbook execution engine with a stable component
+boundary and complete observability.
 
 \section{Scope}
 
-\textbf{Gert v2 is:} a local-first, governed runbook execution engine with a stable component
+\textbf{Gert is:} a local-first, governed runbook execution engine with a stable component
 architecture, versioned extension contracts, a first-class governance and policy layer, full traceability
 by construction, and defined adapter interfaces for TUI, VS~Code, and web clients. It ships as a single
 Go binary with an optional out-of-process extension runtime.
 
-\textbf{Gert v2 is not:} a managed cloud execution service, a general-purpose workflow orchestrator, a
+\textbf{Gert is not:} a managed cloud execution service, a general-purpose workflow orchestrator, a
 CI/CD pipeline system, a SOAR platform, or a replacement for systems like Temporal, Argo, or PagerDuty
 Runbook Automation~\cite{temporal-docs,argo-workflows,pagerduty-automation}. It does not provide a central policy server, a shared execution registry, or
 multi-tenant execution isolation.
@@ -79,8 +69,8 @@ multi-tenant execution isolation.
 
 This document is organized as follows. \S\ref{ch:goals} defines measurable goals and explicit
 non-goals, establishing scope boundaries for implementors. \S\ref{ch:architecture} describes the five
-primary components and the dependency rules between them. \S\ref{ch:schema} specifies the v2 runbook
-schema, including versioning strategy, field inventory, and migration path from v1. \S\ref{ch:extension}
+primary components and the dependency rules between them. \S\ref{ch:schema} specifies the runbook
+schema, including versioning strategy and field inventory. \S\ref{ch:extension}
 defines the extension runtime: capability taxonomy, handshake protocol, and trust model.
 \S\ref{ch:tools} specifies the tool runtime: discovery, invocation, transport contracts, and governance
 integration. \S\ref{ch:events} defines the runtime event model: event schema, ordering guarantees,
@@ -92,8 +82,8 @@ resolution criteria.
 
 \section{Success Definition}
 
-Gert v2 is complete when: (1) a v1 runbook can be migrated to v2 schema via \texttt{gert migrate} and
-executed without manual fixup; (2) the TUI, VS~Code extension, and a third-party adapter can all be
+Gert is complete when: (1) a runbook executes end-to-end with governance checks, input resolution,
+tool invocation, and trace emission all functioning correctly; (2) the TUI, VS~Code extension, and a third-party adapter can all be
 built against the published event and API contracts without importing internal packages; (3) the
 governance layer---allowlists, denylists, env blocking, redaction, approval gates---is enforced for
 every execution mode including extension-invoked runs; (4) every execution produces an append-only,

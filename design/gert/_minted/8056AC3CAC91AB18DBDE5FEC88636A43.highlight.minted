@@ -1,0 +1,8 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{household.chore}
+\PYG{+w}{  }\PYG{l+lScalar+lScalarPlain}{...}
+\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{household.approve}
+\PYG{+w}{  }\PYG{l+lScalar+lScalarPlain}{...}
+\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{home.morning\PYGZhy{}routine}
+\PYG{+w}{  }\PYG{l+lScalar+lScalarPlain}{...}
+\end{MintedVerbatim}

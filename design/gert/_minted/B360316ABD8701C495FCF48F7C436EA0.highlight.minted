@@ -1,0 +1,40 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{\PYGZsh{} casa\PYGZhy{}santiago.home.yaml}
+\PYG{n+nt}{apiVersion}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{runbook/v2+home/v1}
+\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{morning\PYGZhy{}routine\PYGZhy{}weekday}
+\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Weekday}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{Morning}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{Routine}
+\PYG{n+nt}{kind}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{reference}
+
+\PYG{n+nt}{vars}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{day}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{monday}
+
+\PYG{n+nt}{flow}\PYG{p}{:}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{home.morning\PYGZhy{}routine}
+\PYG{+w}{    }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{morning\PYGZus{}core}
+\PYG{+w}{    }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Core}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{Morning}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{Tasks}
+\PYG{+w}{    }\PYG{n+nt}{steps}\PYG{p}{:}
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{household.chore}
+\PYG{+w}{        }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{make\PYGZus{}coffee}
+\PYG{+w}{        }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Make}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{coffee}
+\PYG{+w}{        }\PYG{n+nt}{zone}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{kitchen}
+\PYG{+w}{        }\PYG{n+nt}{cadence}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{\PYGZob{}}\PYG{n+nt}{ frequency}\PYG{p}{:}\PYG{+w}{ }\PYG{n+nv}{daily}\PYG{+w}{ }\PYG{p+pIndicator}{\PYGZcb{}}
+
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{household.chore}
+\PYG{+w}{        }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{feed\PYGZus{}pets}
+\PYG{+w}{        }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Feed}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{cats}
+\PYG{+w}{        }\PYG{n+nt}{zone}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{utility}
+\PYG{+w}{        }\PYG{n+nt}{cadence}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{\PYGZob{}}\PYG{n+nt}{ frequency}\PYG{p}{:}\PYG{+w}{ }\PYG{n+nv}{daily}\PYG{+w}{ }\PYG{p+pIndicator}{\PYGZcb{}}
+
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{household.approve}
+\PYG{+w}{        }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{morning\PYGZus{}sign\PYGZus{}off}
+\PYG{+w}{        }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Morning}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{checklist}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{sign\PYGZhy{}off}
+\PYG{+w}{        }\PYG{n+nt}{roles}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{resident}\PYG{p+pIndicator}{]}
+\PYG{+w}{        }\PYG{n+nt}{required}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{1}
+\PYG{+w}{        }\PYG{n+nt}{timeout}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{30m}
+
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{household.notify}
+\PYG{+w}{        }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{done\PYGZus{}notify}
+\PYG{+w}{        }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Notify}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{family}
+\PYG{+w}{        }\PYG{n+nt}{channel}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{push}
+\PYG{+w}{        }\PYG{n+nt}{message}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Morning}\PYG{n+nv}{ }\PYG{l+s}{routine}\PYG{n+nv}{ }\PYG{l+s}{complete}\PYG{l+s}{\PYGZdq{}}
+\end{MintedVerbatim}

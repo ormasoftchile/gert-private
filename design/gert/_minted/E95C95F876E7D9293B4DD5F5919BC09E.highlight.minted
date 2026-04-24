@@ -1,0 +1,9 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{// Option A (rejected)}
+\PYG{k}{switch}\PYG{+w}{ }\PYG{n+nx}{step}\PYG{p}{.}\PYG{n+nx}{Type}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{k}{case}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}household.chore\PYGZdq{}}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nx}{nodes}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{err}\PYG{+w}{ }\PYG{p}{=}\PYG{+w}{ }\PYG{n+nx}{household}\PYG{p}{.}\PYG{n+nx}{CompileChore}\PYG{p}{(}\PYG{n+nx}{ctx}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{node}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{scope}\PYG{p}{)}
+\PYG{k}{case}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}household.approve\PYGZdq{}}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nx}{nodes}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{err}\PYG{+w}{ }\PYG{p}{=}\PYG{+w}{ }\PYG{n+nx}{household}\PYG{p}{.}\PYG{n+nx}{CompileApprove}\PYG{p}{(}\PYG{n+nx}{ctx}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{node}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{scope}\PYG{p}{)}
+\PYG{c+c1}{// ...must list every household type explicitly}
+\end{MintedVerbatim}

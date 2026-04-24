@@ -1,0 +1,10 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{// Option B}
+\PYG{k+kd}{func}\PYG{+w}{ }\PYG{p}{(}\PYG{n+nx}{c}\PYG{+w}{ }\PYG{o}{*}\PYG{n+nx}{HomeCompiler}\PYG{p}{)}\PYG{+w}{ }\PYG{n+nx}{CompileStep}\PYG{p}{(}
+\PYG{+w}{    }\PYG{n+nx}{ctx}\PYG{+w}{   }\PYG{n+nx}{context}\PYG{p}{.}\PYG{n+nx}{Context}\PYG{p}{,}
+\PYG{+w}{    }\PYG{n+nx}{step}\PYG{+w}{  }\PYG{n+nx}{RawStep}\PYG{p}{,}
+\PYG{+w}{    }\PYG{n+nx}{scope}\PYG{+w}{ }\PYG{n+nx}{Scope}\PYG{p}{,}
+\PYG{p}{)}\PYG{+w}{ }\PYG{p}{(}\PYG{p}{[}\PYG{p}{]}\PYG{n+nx}{schema}\PYG{p}{.}\PYG{n+nx}{FlowNode}\PYG{p}{,}\PYG{+w}{ }\PYG{k+kt}{error}\PYG{p}{)}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{k}{return}\PYG{+w}{ }\PYG{n+nx}{c}\PYG{p}{.}\PYG{n+nx}{registry}\PYG{p}{.}\PYG{n+nx}{Dispatch}\PYG{p}{(}\PYG{n+nx}{ctx}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{step}\PYG{p}{.}\PYG{n+nx}{Type}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{step}\PYG{p}{.}\PYG{n+nx}{Body}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{scope}\PYG{p}{)}
+\PYG{p}{\PYGZcb{}}
+\end{MintedVerbatim}

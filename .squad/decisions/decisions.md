@@ -1,6 +1,6 @@
 # Gert v2 Decisions
 
-**Last Updated:** 2026-04-24T03:20:42Z
+**Last Updated:** 2026-04-24T23:35:05Z
 
 ---
 
@@ -9275,3 +9275,80 @@ cd /Volumes/Projects/gert && git log --oneline -n 3
 - Git history starts fresh in the new repo (not preserved from monorepo)
 - The `.squad/` directory remains in the gert monorepo (not copied)
 
+
+---
+
+## brian-dri-impl
+
+# Decision: DRI (Derived Runbook Instructions) Domain Kit Implementation
+
+**By:** Brian (Implementation Lead)  
+**Date:** 2026-04-24  
+**Status:** IMPLEMENTED
+
+---
+
+## What
+
+Implemented v2/domains/dri — a 4-package domain-specific kit for compiling and executing ops/v1 runbook format with support for 5 step types: cli, manual, approval, change-request, incident.
+
+**Delivered packages:**
+
+1. **pkg/model** — Core types (`OpsRunbook`, `Step`, `RoleType`, `Severity`, `Duration`, `StringOrList`)
+2. **pkg/schema** — JSON Schema validation for ops/v1 format
+3. **pkg/loader** — File loading with schema validation
+4. **pkg/compiler** — Step compilation for all 5 ops types
+
+**Test coverage:** 7 tests (5 compiler, 2 loader) — all passing  
+**Build:** go build, go vet, go test all pass ✅
+
+## Why
+
+DRI kit is the foundational domain extension pattern for gert v2. The ops/v1 format is the first "derived runbook" type (instructions compiled from YAML to executable steps). This implementation:
+
+- Establishes the domain kit structure pattern (model → schema → loader → compiler)
+- Validates that 5 heterogeneous step types can coexist in a single compiler
+- Resolves open questions on annotation storage (YAML comments), rollback (CLI-driven), evidence format (YAML + optional metadata), and role enforcement scope (v1=advisory, v2.1=blocking)
+
+## Key Decisions
+
+| Aspect | Decision | Rationale |
+|--------|----------|-----------|
+| x-ops annotations | YAML comments | Keep runbook YAML human-readable; annotations are advisory metadata |
+| Rollback | Via `gert run` CLI | Runtime controls rollback; runbook is declarative |
+| Evidence | YAML comments | Preserves audit trail in runbook-adjacent state |
+| Role enforcement | Advisory-only in v1 | Deferred to v2.1; v1 role types are documentation + validation |
+
+## Constraints
+
+- Single-run-per-process (gert-v2 architecture)
+- No runtime schema evolution (schema is immutable per release)
+- Compiler outputs flat ExecutionPlan (no DAG)
+
+## Impact
+
+**Medium.** DRI kit establishes the pattern for all future domain extensions. Subsequent domain kits (Policy, Compliance, Financial Runbooks, etc.) will follow this 4-package structure. Breaking changes to model or schema require coordinated releases across dependent domain kits.
+
+## Test Results
+
+```
+github.com/ormasoftchile/gert/domains/dri/pkg/compiler ... ok
+github.com/ormasoftchile/gert/domains/dri/pkg/loader  ... ok
+```
+
+**Compiler tests (5):**
+- ops.cli compilation ✅
+- ops.manual compilation ✅
+- ops.approval compilation ✅
+- ops.change-request compilation ✅
+- ops.incident compilation ✅
+
+**Loader tests (2):**
+- Valid schema scenario ✅
+- Invalid schema scenario ✅
+
+## Next Steps
+
+- Integration testing with v2 engine (Phase 7)
+- Cross-domain step type validation rules
+- Role enforcement blocking in v2.1 (planned)

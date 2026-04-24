@@ -1,0 +1,25 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{// gert\PYGZhy{}kit\PYGZhy{}household/pkg/model/types.go}
+\PYG{k+kd}{type}\PYG{+w}{ }\PYG{n+nx}{Chore}\PYG{+w}{ }\PYG{k+kd}{struct}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{n+nx}{ID}\PYG{+w}{          }\PYG{k+kt}{string}\PYG{+w}{  }\PYG{l+s}{`yaml:\PYGZdq{}id\PYGZdq{}`}
+\PYG{+w}{    }\PYG{n+nx}{Label}\PYG{+w}{       }\PYG{k+kt}{string}\PYG{+w}{  }\PYG{l+s}{`yaml:\PYGZdq{}label\PYGZdq{}`}
+\PYG{+w}{    }\PYG{n+nx}{Description}\PYG{+w}{ }\PYG{k+kt}{string}\PYG{+w}{  }\PYG{l+s}{`yaml:\PYGZdq{}description\PYGZdq{}`}
+\PYG{+w}{    }\PYG{n+nx}{Zone}\PYG{+w}{        }\PYG{k+kt}{string}\PYG{+w}{  }\PYG{l+s}{`yaml:\PYGZdq{}zone\PYGZdq{}`}
+\PYG{+w}{    }\PYG{n+nx}{Frequency}\PYG{+w}{   }\PYG{n+nx}{Cadence}\PYG{+w}{ }\PYG{l+s}{`yaml:\PYGZdq{}cadence\PYGZdq{}`}
+\PYG{+w}{    }\PYG{n+nx}{Assignee}\PYG{+w}{    }\PYG{k+kt}{string}\PYG{+w}{  }\PYG{l+s}{`yaml:\PYGZdq{}assignee,omitempty\PYGZdq{}`}
+\PYG{p}{\PYGZcb{}}
+
+\PYG{c+c1}{// gert\PYGZhy{}kit\PYGZhy{}home/pkg/model/types.go}
+\PYG{k+kn}{import}\PYG{+w}{ }\PYG{n+nx}{household}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}github.com/ormasoftchile/gert\PYGZhy{}kit\PYGZhy{}household/pkg/model\PYGZdq{}}
+
+\PYG{k+kd}{type}\PYG{+w}{ }\PYG{n+nx}{MorningRoutine}\PYG{+w}{ }\PYG{k+kd}{struct}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{n+nx}{ID}\PYG{+w}{    }\PYG{k+kt}{string}\PYG{+w}{        }\PYG{l+s}{`yaml:\PYGZdq{}id\PYGZdq{}`}
+\PYG{+w}{    }\PYG{n+nx}{Label}\PYG{+w}{ }\PYG{k+kt}{string}\PYG{+w}{        }\PYG{l+s}{`yaml:\PYGZdq{}label\PYGZdq{}`}
+\PYG{+w}{    }\PYG{n+nx}{Steps}\PYG{+w}{ }\PYG{p}{[}\PYG{p}{]}\PYG{n+nx}{RoutineStep}\PYG{+w}{ }\PYG{l+s}{`yaml:\PYGZdq{}steps\PYGZdq{}`}
+\PYG{p}{\PYGZcb{}}
+
+\PYG{k+kd}{type}\PYG{+w}{ }\PYG{n+nx}{RoutineStep}\PYG{+w}{ }\PYG{k+kd}{struct}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{n+nx}{Type}\PYG{+w}{  }\PYG{k+kt}{string}\PYG{+w}{           }\PYG{l+s}{`yaml:\PYGZdq{}type\PYGZdq{}`}\PYG{+w}{  }\PYG{c+c1}{// \PYGZdq{}chore\PYGZdq{} | \PYGZdq{}approve\PYGZdq{} | \PYGZdq{}notify\PYGZdq{}}
+\PYG{+w}{    }\PYG{n+nx}{Chore}\PYG{+w}{ }\PYG{o}{*}\PYG{n+nx}{household}\PYG{p}{.}\PYG{n+nx}{Chore}\PYG{+w}{ }\PYG{l+s}{`yaml:\PYGZdq{}chore,omitempty\PYGZdq{}`}
+\PYG{p}{\PYGZcb{}}
+\end{MintedVerbatim}

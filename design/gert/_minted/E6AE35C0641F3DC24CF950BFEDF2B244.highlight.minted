@@ -1,0 +1,9 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{// gert\PYGZhy{}kit\PYGZhy{}home/pkg/compiler/registry.go}
+\PYG{k+kd}{func}\PYG{+w}{ }\PYG{n+nx}{BuildRegistry}\PYG{p}{(}\PYG{p}{)}\PYG{+w}{ }\PYG{o}{*}\PYG{n+nx}{kitruntime}\PYG{p}{.}\PYG{n+nx}{CompilerRegistry}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
+\PYG{+w}{    }\PYG{n+nx}{r}\PYG{+w}{ }\PYG{o}{:=}\PYG{+w}{ }\PYG{n+nx}{kitruntime}\PYG{p}{.}\PYG{n+nx}{NewRegistry}\PYG{p}{(}\PYG{p}{)}
+\PYG{+w}{    }\PYG{n+nx}{r}\PYG{p}{.}\PYG{n+nx}{Merge}\PYG{p}{(}\PYG{n+nx}{household}\PYG{p}{.}\PYG{n+nx}{Bundle}\PYG{p}{(}\PYG{p}{)}\PYG{p}{)}\PYG{+w}{ }\PYG{c+c1}{// foundational kit contributes its compilers}
+\PYG{+w}{    }\PYG{n+nx}{r}\PYG{p}{.}\PYG{n+nx}{Merge}\PYG{p}{(}\PYG{n+nx}{homeBundle}\PYG{p}{(}\PYG{p}{)}\PYG{p}{)}\PYG{+w}{       }\PYG{c+c1}{// specialised kit adds its own}
+\PYG{+w}{    }\PYG{k}{return}\PYG{+w}{ }\PYG{n+nx}{r}
+\PYG{p}{\PYGZcb{}}
+\end{MintedVerbatim}

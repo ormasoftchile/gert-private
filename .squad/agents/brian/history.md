@@ -499,3 +499,88 @@ Multi-delegate feature fully implemented, tested (7 tests), and committed to mai
 
 **Phase 6 Status:** ✅ Complete — Home Domain Kit successfully migrated to standalone repository
 
+
+---
+
+## Phase 7: DRI Domain Kit (2026-04-24)
+
+**Status:** ✅ Complete
+
+### Deliverables
+
+Implemented v2/domains/dri — 4-package skeleton for ops/v1 format compilation and execution:
+
+1. **pkg/model** (2 files)
+   - `OpsRunbook`, `Step`, `RoleType`, `Severity`, `Duration`, `StringOrList`
+   - Role type definitions (advisory-only enforcement in v1)
+
+2. **pkg/schema** (1 file)
+   - Embedded JSON Schema for ops/v1 format
+   - Two-phase validation (structural + semantic)
+
+3. **pkg/loader** (2 files)
+   - `LoadFile()` with schema validation
+   - Multi-error aggregation
+
+4. **pkg/compiler** (8 files)
+   - Support for 5 step types: `ops.cli`, `ops.manual`, `ops.approval`, `ops.change-request`, `ops.incident`
+   - Evidence capture as YAML comments
+   - Rollback via `gert run` CLI (not in runbook)
+   - x-ops annotations as YAML comments
+
+### Test Coverage
+
+**7 tests — all passing ✅**
+
+- **Compiler tests (5)**: One per step type
+  - `TestCompile_OpsCliStep`
+  - `TestCompile_OpsManualStep`
+  - `TestCompile_OpsApprovalStep`
+  - `TestCompile_OpsChangeRequestStep`
+  - `TestCompile_OpsIncidentStep`
+
+- **Loader tests (2)**:
+  - `TestLoadFile_ValidSchema`
+  - `TestLoadFile_InvalidSchema`
+
+### Build Results
+
+```
+go build   ✅
+go vet     ✅
+go test    ✅
+```
+
+### Open Questions Resolved
+
+1. **x-ops annotations** → YAML comments (advisory metadata)
+2. **Rollback mechanism** → Via `gert run` CLI (runtime-driven)
+3. **Evidence storage** → YAML comments with optional structured metadata
+4. **Role enforcement** → Advisory-only in v1; blocking deferred to v2.1
+
+### Architecture Notes
+
+- **Compiler outputs flat ExecutionPlan** (no DAG; consistent with gert v2 design)
+- **Single-run-per-process** (no concurrency in v1)
+- **Schema is immutable** per release (no runtime evolution)
+
+### Pattern Established
+
+DRI kit establishes the domain extension pattern for gert v2:
+
+```
+domain-kit/
+├── pkg/model/       # Type definitions
+├── pkg/schema/      # Format validation
+├── pkg/loader/      # File I/O + validation
+├── pkg/compiler/    # Step compilation
+└── *_test.go        # Unit tests
+```
+
+This pattern will be replicated for subsequent domain kits (Policy, Compliance, Financial, etc.).
+
+### Next Phase Preparation
+
+- Integration tests with v2 engine (Phase 8)
+- Cross-domain step type validation
+- Role enforcement blocking in v2.1 planning

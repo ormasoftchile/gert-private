@@ -1,11 +1,21 @@
-squad(scribe): ux-enhancement-sprint session — orchestration logs, session log, decisions merge
+docs(scribe): merge ken-dri-kit-vocab decision record
 
-- Orchestration logs for Kurapika, Gon, Killua, Hisoka (ux-enhancement-sprint)
-- Session log: 2026-03-18-ux-enhancement-sprint.md
-- Created decisions/decisions.md — merged 5 inbox entries (D-001 through D-005):
-  - coordinator-editor-ux-directives (user directives)
-  - gon-chain-visualization (invoke chain model)
-  - gon-n8n-logicapps-research (feature research)
-  - gon-yaml-comment-preservation (deep-merge serialization)
-  - kurapika-drag-reorder-same-parent (same-parent constraint)
-- Moved merged inbox files to .squad/tmp/
+Ken's vocabulary specification for `domains/dri/` resolves Dennis's
+13-system survey (8 incident-lifecycle concepts) into the DRI Kit Manual's
+5 step types through compositional design:
+
+- ops.cli, ops.manual, ops.approval, ops.change-request, ops.incident
+- Kit namespace: ops/v1, Go module: github.com/ormasoftchile/gert-domain-dri
+- Compilation model: kit types → core primitives (cli, manual, branch)
+- Annotation passthrough via x-ops-* for DRI context
+- 4-package pattern mirrors home kit (model, loader, compiler, schema)
+
+Decisions D1–D8 finalized. 7 open questions flagged for Brian's
+implementation phase.
+
+- Orchestration log: .squad/orchestration-log/2026-04-24T23:16:02Z-ken.md
+- Session log: .squad/log/2026-04-24T23:16:02Z-dri-kit-spec.md
+- Vocab spec: .squad/tmp/ken-dri-kit-vocab-spec.md (43 KB)
+- Merged inbox: .squad/decisions.md
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>

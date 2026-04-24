@@ -1,0 +1,46 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{c+c1}{\PYGZsh{} gert\PYGZhy{}kit.yaml — Domain Kit Manifest}
+\PYG{n+nt}{apiVersion}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{kit/v1}
+
+\PYG{n+nt}{meta}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{gert.workflow}\PYG{+w}{                }\PYG{c+c1}{\PYGZsh{} Reverse\PYGZhy{}DNS namespaced identifier}
+\PYG{+w}{  }\PYG{n+nt}{version}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{1.0.0}\PYG{l+s}{\PYGZdq{}}\PYG{+w}{                   }\PYG{c+c1}{\PYGZsh{} Semver}
+\PYG{+w}{  }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Workflow}\PYG{n+nv}{ }\PYG{l+s}{automation}\PYG{n+nv}{ }\PYG{l+s}{authoring}\PYG{n+nv}{ }\PYG{l+s}{kit}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{  }\PYG{n+nt}{author}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Gert}\PYG{n+nv}{ }\PYG{l+s}{Project}\PYG{n+nv}{ }\PYG{l+s}{\PYGZlt{}gert@ormasoft.dev\PYGZgt{}}\PYG{l+s}{\PYGZdq{}}
+
+\PYG{n+nt}{compatibility}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{gert\PYGZhy{}core}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{\PYGZgt{}=2.0.0}\PYG{n+nv}{ }\PYG{l+s}{\PYGZlt{}3.0.0}\PYG{l+s}{\PYGZdq{}}\PYG{+w}{       }\PYG{c+c1}{\PYGZsh{} Minimum gert core version (semver range)}
+
+\PYG{n+nt}{schema}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{apiVersion\PYGZhy{}suffix}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{workflow/v1}\PYG{l+s}{\PYGZdq{}}\PYG{+w}{   }\PYG{c+c1}{\PYGZsh{} Runbooks authored with this Kit use}
+\PYG{+w}{                                     }\PYG{c+c1}{\PYGZsh{} apiVersion: runbook/v2+workflow/v1}
+\PYG{+w}{  }\PYG{n+nt}{json\PYGZhy{}schema}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{./schemas/workflow\PYGZhy{}v1.json}\PYG{l+s}{\PYGZdq{}}\PYG{+w}{  }\PYG{c+c1}{\PYGZsh{} Kit\PYGZhy{}specific JSON Schema overlay}
+
+\PYG{n+nt}{compiler}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{executable}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{./bin/gert\PYGZhy{}kit\PYGZhy{}workflow}\PYG{l+s}{\PYGZdq{}}\PYG{+w}{   }\PYG{c+c1}{\PYGZsh{} Kit compiler binary}
+\PYG{+w}{  }\PYG{n+nt}{args}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{compile}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{]}
+\PYG{+w}{  }\PYG{n+nt}{input\PYGZhy{}format}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{yaml}\PYG{+w}{                 }\PYG{c+c1}{\PYGZsh{} Kit YAML in, core YAML out}
+\PYG{+w}{  }\PYG{n+nt}{output\PYGZhy{}format}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{yaml}
+
+\PYG{n+nt}{step\PYGZhy{}types}\PYG{p}{:}\PYG{+w}{                          }\PYG{c+c1}{\PYGZsh{} Domain\PYGZhy{}specific step types this Kit defines}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{approval\PYGZhy{}request}
+\PYG{+w}{    }\PYG{n+nt}{lowers\PYGZhy{}to}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{manual}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{tool}\PYG{p+pIndicator}{]}\PYG{+w}{        }\PYG{c+c1}{\PYGZsh{} Core types this compiles into}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{cleanup}
+\PYG{+w}{    }\PYG{n+nt}{lowers\PYGZhy{}to}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{cli}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{branch}\PYG{p+pIndicator}{]}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{select\PYGZhy{}priority}
+\PYG{+w}{    }\PYG{n+nt}{lowers\PYGZhy{}to}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{manual}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{branch}\PYG{p+pIndicator}{]}
+
+\PYG{n+nt}{validators}\PYG{p}{:}\PYG{+w}{                          }\PYG{c+c1}{\PYGZsh{} Domain\PYGZhy{}specific validation rules}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{workflow/cleanup\PYGZhy{}follows\PYGZhy{}provision}
+\PYG{+w}{    }\PYG{n+nt}{phase}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{plan}\PYG{+w}{                      }\PYG{c+c1}{\PYGZsh{} parse | plan}
+\PYG{+w}{    }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Every}\PYG{n+nv}{ }\PYG{l+s}{provision}\PYG{n+nv}{ }\PYG{l+s}{step}\PYG{n+nv}{ }\PYG{l+s}{must}\PYG{n+nv}{ }\PYG{l+s}{be}\PYG{n+nv}{ }\PYG{l+s}{followed}\PYG{n+nv}{ }\PYG{l+s}{by}\PYG{n+nv}{ }\PYG{l+s}{a}\PYG{n+nv}{ }\PYG{l+s}{cleanup}\PYG{n+nv}{ }\PYG{l+s}{step}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{workflow/owner\PYGZhy{}required}
+\PYG{+w}{    }\PYG{n+nt}{phase}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{parse}
+\PYG{+w}{    }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Every}\PYG{n+nv}{ }\PYG{l+s}{workflow}\PYG{n+nv}{ }\PYG{l+s}{runbook}\PYG{n+nv}{ }\PYG{l+s}{must}\PYG{n+nv}{ }\PYG{l+s}{declare}\PYG{n+nv}{ }\PYG{l+s}{an}\PYG{n+nv}{ }\PYG{l+s}{owner}\PYG{n+nv}{ }\PYG{l+s}{in}\PYG{n+nv}{ }\PYG{l+s}{meta.roles}\PYG{l+s}{\PYGZdq{}}
+
+\PYG{n+nt}{projections}\PYG{p}{:}\PYG{+w}{                         }\PYG{c+c1}{\PYGZsh{} Read models over trace data}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{workflow/audit\PYGZhy{}log}
+\PYG{+w}{    }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Workflow}\PYG{n+nv}{ }\PYG{l+s}{timeline}\PYG{n+nv}{ }\PYG{l+s}{derived}\PYG{n+nv}{ }\PYG{l+s}{from}\PYG{n+nv}{ }\PYG{l+s}{trace}\PYG{n+nv}{ }\PYG{l+s}{events}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{workflow/evidence\PYGZhy{}summary}
+\PYG{+w}{    }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Audit\PYGZhy{}ready}\PYG{n+nv}{ }\PYG{l+s}{evidence}\PYG{n+nv}{ }\PYG{l+s}{summary}\PYG{n+nv}{ }\PYG{l+s}{grouped}\PYG{n+nv}{ }\PYG{l+s}{by}\PYG{n+nv}{ }\PYG{l+s}{governance}\PYG{n+nv}{ }\PYG{l+s}{primitive}\PYG{l+s}{\PYGZdq{}}
+\end{MintedVerbatim}

@@ -1,10 +1,10 @@
 \begin{MintedVerbatim}[commandchars=\\\{\}]
 \PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{step}\PYG{p}{:}
-\PYG{+w}{    }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{collect\PYGZus{}incident\PYGZus{}details}
+\PYG{+w}{    }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{collect\PYGZus{}request\PYGZus{}details}
 \PYG{+w}{    }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{collector}
-\PYG{+w}{    }\PYG{n+nt}{title}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Incident}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{Triage}
+\PYG{+w}{    }\PYG{n+nt}{title}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Request}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{Details}
 \PYG{+w}{    }\PYG{n+nt}{prompt}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{|}
-\PYG{+w}{      }\PYG{n+no}{Complete the incident triage form.}
+\PYG{+w}{      }\PYG{n+no}{Complete the request details form.}
 \PYG{+w}{    }\PYG{n+nt}{fields}\PYG{p}{:}
 \PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{severity}
 \PYG{+w}{        }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{select}

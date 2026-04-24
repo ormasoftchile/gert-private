@@ -1,0 +1,20 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{step}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{priority\PYGZus{}decision}
+\PYG{+w}{    }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{decision}
+\PYG{+w}{    }\PYG{n+nt}{title}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Choose}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{workflow}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{path}
+\PYG{+w}{    }\PYG{n+nt}{prompt}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{|}
+\PYG{+w}{      }\PYG{n+no}{Based on the impact level and stakeholder requirements, which}
+\PYG{+w}{      }\PYG{n+no}{path should we take?}
+\PYG{+w}{    }\PYG{n+nt}{routes}\PYG{p}{:}
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Standard}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{procedure}
+\PYG{+w}{        }\PYG{n+nt}{runbook}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{workflow\PYGZhy{}standard\PYGZhy{}procedure}
+\PYG{+w}{        }\PYG{n+nt}{hint}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Impact}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{\PYGZlt{}}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{5\PYGZpc{},}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{no}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{stakeholder}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{escalations}
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Emergency}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{cleanup}
+\PYG{+w}{        }\PYG{n+nt}{runbook}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{workflow\PYGZhy{}emergency\PYGZhy{}cleanup}
+\PYG{+w}{        }\PYG{n+nt}{hint}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Impact}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{\PYGZgt{}}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{10\PYGZpc{}}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{or}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{critical}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{stakeholder}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{concern}
+\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Escalate}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{for}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{review}
+\PYG{+w}{        }\PYG{n+nt}{goto}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{escalate\PYGZus{}for\PYGZus{}review}
+\PYG{+w}{        }\PYG{n+nt}{hint}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Unclear}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{priority;}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{needs}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{senior}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{review}
+\PYG{+w}{    }\PYG{n+nt}{variable}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{chosen\PYGZus{}path}
+\end{MintedVerbatim}

@@ -2,7 +2,7 @@
 \PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{step}\PYG{p}{:}
 \PYG{+w}{    }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{resolved}
 \PYG{+w}{    }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{end}
-\PYG{+w}{    }\PYG{n+nt}{title}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Incident}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{resolved}
+\PYG{+w}{    }\PYG{n+nt}{title}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{Workflow}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{complete}
 \PYG{+w}{    }\PYG{n+nt}{outcome}\PYG{p}{:}
 \PYG{+w}{      }\PYG{n+nt}{category}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{resolved}\PYG{+w}{       }\PYG{c+c1}{\PYGZsh{} resolved | escalated | no\PYGZus{}action | needs\PYGZus{}rca}
 \PYG{+w}{      }\PYG{n+nt}{code}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{dns\PYGZus{}healthy}

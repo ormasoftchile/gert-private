@@ -3,11 +3,11 @@
 \PYG{+w}{  }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{collector}
 \PYG{+w}{  }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Deploy}\PYG{n+nv}{ }\PYG{l+s}{credentials}\PYG{l+s}{\PYGZdq{}}
 \PYG{+w}{  }\PYG{n+nt}{fields}\PYG{p}{:}
-\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{deploy\PYGZus{}user}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{operation\PYGZus{}user}
 \PYG{+w}{      }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{text}
 \PYG{+w}{      }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Service}\PYG{n+nv}{ }\PYG{l+s}{account}\PYG{n+nv}{ }\PYG{l+s}{username}\PYG{l+s}{\PYGZdq{}}
 \PYG{+w}{      }\PYG{n+nt}{required}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{true}
-\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{deploy\PYGZus{}token}
+\PYG{+w}{    }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{operation\PYGZus{}token}
 \PYG{+w}{      }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{text}
 \PYG{+w}{      }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Deploy}\PYG{n+nv}{ }\PYG{l+s}{token}\PYG{l+s}{\PYGZdq{}}
 \PYG{+w}{      }\PYG{n+nt}{required}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{true}

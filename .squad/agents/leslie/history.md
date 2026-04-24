@@ -878,3 +878,37 @@ This is re-input every time a new style is needed (lazy, per-environment), so an
 - ken-dri-decoupling: Approved (major) — validates Leslie's refactoring rationale
 
 **Pending:** Ken's cross-consistency review (ken-review) to ensure Leslie's refactored sections align with new domain kit frameworks.
+
+### 2026-04-24 — Removed v1/v2 versioning language from design doc
+
+**Task:** Cristian requested that the design doc be cleaned of all language treating gert as "v2 of something" — migration from v1, backward compatibility, v1/v2 comparisons. The document should read as if gert always existed in this form.
+
+**Files changed:**
+
+**`sections/00-overview.tex`**
+- Replaced the "Why v2: What v1 Got Right, and What Constrained It" section (19 lines) with a 6-line "Design Rationale" section stating gert's three hard constraints (governance, traceability, stable component model)
+- Changed "Gert v2 is:" → "Gert is:" and "Gert v2 is not:" → "Gert is not:"
+- Removed "and migration path from v1" from the Document Roadmap description of ch:schema
+- Replaced success criterion "(1) a v1 runbook can be migrated to v2 schema via `gert migrate` and executed without manual fixup" with "(1) a runbook executes end-to-end with governance checks, input resolution, tool invocation, and trace emission all functioning correctly"
+
+**`sections/03-schema-vnext.tex`**
+- Removed "It supersedes all v1 schema documentation and" from the chapter intro
+- Changed "Where v1 accumulated surface area organically, v2 draws a hard boundary" → "Gert draws a hard boundary"
+- Replaced the 3-column apiVersion table (document kind, v1 value, v2 value) with a clean 2-column table (document kind, apiVersion)
+- Removed the entire "Compatibility Contract: v1 → v2" subsection (40 lines including the v1→v2 field mapping table and parser compatibility mode description)
+- Removed the entire "gert migrate Behavior" subsection (30 lines including bash examples and 9-step migration rules list)
+- Changed "The v2 runbook document" → "The runbook document"
+- Changed "In v1, tools were declared as a flat string array. In v2, toolRefs is..." → "toolRefs is a typed array..."
+- Removed "(new in v2)" from the type field paragraph
+- Changed "v2 binding forms:" → "Binding forms:"
+- Rewrote the Expression Language subsection to remove "replaces the Go template-based Polish/prefix notation used in v1" — now says "Gert uses expr-lang/expr... providing natural, Python-like infix expressions"
+
+**`sections/07-runtime-events.tex`**
+- Changed "The /events endpoint (existing in v1) is upgraded to WebSocket in v2." → "The /events endpoint uses WebSocket."
+
+**`sections/15-input-provider-framework.tex`**
+- Changed "A decision step (also known as router in v1) presents the..." → "A decision step presents the..."
+
+**Build result:** CLEAN — 334 pages, 0 hard LaTeX errors. Only citation/reference warnings (pre-existing, resolved by bibtex on full multi-pass build).
+
+**Principle applied:** Schema version identifiers (`apiVersion: runbook/v2`, `$schema` URLs, `tool/v2`, `provider/v2`) were left untouched — those are schema version strings, not gert version labels. Contract versioning (semver) in `14-adapter-contracts.tex` was also left untouched.

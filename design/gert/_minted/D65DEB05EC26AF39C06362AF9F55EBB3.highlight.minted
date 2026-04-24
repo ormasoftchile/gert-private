@@ -15,7 +15,7 @@
 \PYG{+w}{  }\PYG{n+nt}{change\PYGZhy{}id}\PYG{p}{:}
 \PYG{+w}{    }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{string}
 \PYG{+w}{    }\PYG{n+nt}{pattern}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{\PYGZca{}CHG\PYGZhy{}[0\PYGZhy{}9]\PYGZob{}8\PYGZcb{}\PYGZhy{}[0\PYGZhy{}9]\PYGZob{}3\PYGZcb{}\PYGZdl{}}\PYG{l+s}{\PYGZdq{}}
-\PYG{+w}{  }\PYG{n+nt}{rollback\PYGZhy{}id}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{cleanup\PYGZhy{}id}\PYG{p}{:}
 \PYG{+w}{    }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{string}
 
 \PYG{n+nt}{applies\PYGZhy{}to}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{runbook}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{step}\PYG{p+pIndicator}{]}

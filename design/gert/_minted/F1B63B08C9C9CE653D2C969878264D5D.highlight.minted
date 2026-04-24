@@ -1,0 +1,7 @@
+\begin{MintedVerbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{meta}\PYG{p}{:}
+\PYG{+w}{  }\PYG{n+nt}{governance}\PYG{p}{:}
+\PYG{+w}{    }\PYG{n+nt}{requires\PYGZus{}role}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{responder}\PYG{l+s}{\PYGZdq{}}
+\PYG{+w}{    }\PYG{c+c1}{\PYGZsh{} or: requires\PYGZus{}any\PYGZus{}role: [\PYGZdq{}approver\PYGZdq{}, \PYGZdq{}responder\PYGZdq{}]}
+\PYG{+w}{    }\PYG{c+c1}{\PYGZsh{} or: requires\PYGZus{}all\PYGZus{}roles: [\PYGZdq{}approver\PYGZdq{}, \PYGZdq{}reviewer\PYGZdq{}]}
+\end{MintedVerbatim}

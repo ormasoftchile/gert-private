@@ -955,3 +955,18 @@ All 10 chapters of the **DRI Domain Kit Manual** (`design/dri-kit-manual/`) are 
 
 - `.squad/tmp/ken-vacation-kit.md` — Full design (sections 1, 2, 4, 5, 8)
 - `.squad/decisions/inbox/ken-vacation-kit.md` — 8 architectural decisions + deferred decisions
+
+---
+
+### 2026-04-22 — Gap Remediation: Step.Meta and Kit Certification Formal Decisions
+
+**Context:** Code review identified two design gaps that needed formal decision tracking:
+1. Step.Meta v2.1 proposal (Kit Traceability Layer 3) was fully designed in `.squad/tmp/vacation-domain-kit-v0.md` but lacked a formal decision record
+2. Kit certification process was referenced in §4.10 and decision VK-01 but had no defined scope or owner
+
+**Actions taken:**
+- Gap 1 filed: Step.Meta v2.1 decision is now formally tracked in `.squad/decisions/inbox/ken-step-meta-v21-proposal.md`
+- Gap 3 filed: Kit certification is now a named v2.1 design item with scope defined in `.squad/decisions/inbox/ken-kit-certification-tracking.md`
+- Both decisions are in the inbox for Scribe to merge
+
+**Impact:** Prevents design work from being lost between v2.0 ship and v2.1 planning. Kit certification scope is now explicit, reducing risk of colliding step ID prefixes in multi-kit scenarios.

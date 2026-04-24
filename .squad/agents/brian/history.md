@@ -803,3 +803,49 @@ Ken approved Brian's Phase 17 deliverables with 9/10 score:
 ### Test Results: `go test ./... -race -count=1` — all packages green ✅
 
 ### Deviations: None
+
+## Learnings — Phase 20 (2026-04-22)
+
+### sourcemap.yaml Go Package Design (Kit Traceability Layer 2)
+
+**Context:** The Vacation Domain Kit prototype (commit `0d2c5e3`) specifies a `sourcemap.yaml` sidecar file for Kit Traceability Layer 2. This file maps compiled step IDs back to their kit source (kind, name, source file, source line). The format was defined only in prose and YAML examples — no formal Go struct, no JSON Schema, no lint tooling.
+
+**Task:** Fix Gap 2 by designing a formal Go package to support sourcemap.yaml.
+
+**Deliverable:** Design sketch at `.squad/tmp/brian-sourcemap-struct.md`
+
+**Key Design Elements:**
+
+1. **Package Location:** `v2/pkg/kit/sourcemap/` (new package under kit tooling)
+
+2. **Core Types:**
+   - `SourceMap` — Root struct with fields: version, kit, runbook, lowered_at, entries
+   - `Entry` — Per-step metadata: kind, name, source_file, source_line, plus concept-specific fields (slot, day, role, field, time_window, parent_concept, parent_step)
+   - `ValidationError` — Field path + message + severity (error/warning)
+
+3. **Key Functions:**
+   - `Load(path string) (*SourceMap, error)` — Parse YAML file using `gopkg.in/yaml.v3`
+   - `Validate(sm *SourceMap) []ValidationError` — Enforce the 5-rule Kit Traceability Contract
+   - `validateStepID(stepID, kitPrefix string) error` — Check step ID naming convention
+
+4. **Validation Rules (from §4.10.4 Kit Traceability Contract):**
+   - Rule 1: Step IDs follow `{kit-prefix}.{kind}.{name}.{sub}` convention
+   - Rule 2: Required fields present (version, kit, runbook, lowered_at, entries)
+   - Rule 3: Determinism (verified via test, not runtime)
+   - Rule 4: Version and kit ID are valid
+   - Rule 5: Step.Meta (runbook-level, not sourcemap scope)
+
+5. **CLI Integration:**
+   ```bash
+   gert-kit vacation lint build/stay-floripa.sourcemap.yaml --check schema
+   ```
+   - Reports validation errors with field paths, severity, and messages
+   - Exits non-zero if any errors (warnings OK)
+
+6. **Implementation Scope:** ~200 lines Go + ~150 lines tests, deliverable in v2.1
+
+**Decision Filed:** `.squad/decisions/inbox/brian-sourcemap-go-struct.md`
+
+**Learning:** Kit artifacts (sidecars like sourcemap.yaml) need formal Go types even if they're not part of core GERT schema. This enables mechanical verification of kit compliance contracts. Without a struct, kits can claim compliance without enforcement. Using `gopkg.in/yaml.v3` tags for YAML serialization aligns with existing v2 parser conventions.
+
+**Next Steps:** Implementation deferred to v2.1 milestone (same timeline as Step.Meta support).

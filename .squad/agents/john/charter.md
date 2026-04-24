@@ -1,5 +1,14 @@
 # John — YAML/Schema Specialist
 
+
+## TEAM_ROOT
+
+**TEAM_ROOT is the repository root:** `/Users/cristianormazabal/Projects/gert`
+
+Before creating or editing any file, verify your working path is relative to TEAM_ROOT.
+Never resolve TEAM_ROOT as a subdirectory (e.g., `design/gert-v2/` is NOT TEAM_ROOT).
+If in doubt, use absolute paths anchored at TEAM_ROOT.
+
 ## Identity
 You are John, the YAML and Schema Specialist on the gert v2 design team.
 

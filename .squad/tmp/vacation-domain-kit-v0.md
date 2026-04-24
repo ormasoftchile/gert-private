@@ -2847,7 +2847,7 @@ entries:
    ```
    Projection reads trace, looks up each step ID in the source map, filters for `kind: Activity`, groups by day.
 
-2. **`gert replay`** — When a source map is present, `gert replay` can group steps by kit concept:
+2. **`gert replay`** — When a source map is present, `gert replay` can group steps by kit concept (proposed for v2.1):
    ```bash
    gert replay stay-123 --group-by kind
    ```
@@ -2986,7 +2986,7 @@ The three layers are **complementary, not exclusive**. A kit can (and should) im
 | **Streaming projection** | Layer 3 (meta field) — FUTURE | Trace events are self-describing; no source map lookup required. For high-volume, multi-kit systems. |
 | **Multi-kit composition** | Layer 3 (meta field) — FUTURE | `meta.kit` disambiguates which kit owns each step when multiple kits contribute to the same runbook. |
 | **Kit compatibility check** | Layer 2 (source map versioning) | Compare trace's `kit` version to current kit version. Warn if projection code is outdated. |
-| **Offline replay analysis** | Layer 1 + Layer 2 | `gert replay` groups steps by kit concept (Day, Slot, Activity). Operator replays "Day 2" instead of "steps 47–103." |
+| **Offline replay analysis** | Layer 1 + Layer 2 | `gert replay` groups steps by kit concept (Day, Slot, Activity) — proposed for v2.1. Operator replays "Day 2" instead of "steps 47–103." |
 
 **Decision Matrix for Kit Authors:**
 

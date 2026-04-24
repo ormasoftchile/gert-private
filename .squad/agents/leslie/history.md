@@ -89,6 +89,25 @@ design/dri-kit-manual/
 
 **Key lesson:** `scripts/latex.py` must always pass `env=_env_with_pypath()` to `subprocess.run` so the pypath override propagates into pdflatex's shell-escape subprocess chain.
 
+### 2026-04-22 — Qualified --group-by flag as v2.1 feature in vacation kit docs
+
+**Task:** Fix Gap 4 — the vacation domain kit documentation referenced `gert replay --group-by` as if it were currently available, but this flag does not exist in v2.0.
+
+**What I did:**
+- Searched all LaTeX files in `design/` directories for references to `--group-by` or grouping functionality
+- Found no occurrences in the compiled LaTeX design documents (gert-v2, domain-kit-guide, dri-kit-manual)
+- Found 2 occurrences in `.squad/tmp/vacation-domain-kit-v0.md`:
+  1. Line 2850: Example command showing `gert replay stay-123 --group-by kind`
+  2. Line 2989: Table row describing offline replay analysis with grouping
+- Added "(proposed for v2.1)" qualifier to both occurrences
+
+**Files changed:**
+- `.squad/tmp/vacation-domain-kit-v0.md` — 2 edits to qualify the --group-by flag as proposed for v2.1
+
+**Why this matters:** The vacation domain kit is example documentation that demonstrates best practices. If it shows CLI flags that don't exist, readers will be confused when they try to use them. This qualifier sets proper expectations and documents the roadmap clearly.
+
+**Key lesson:** When referencing CLI features in documentation, always verify they exist in the current release. Future features should be clearly marked with version qualifiers.
+
 ### 2026-04-19 — Mass minted Conversion + 3 New Diagrams (321 pages, CLEAN)
 
 **Task:** Convert all YAML/Go/JSON verbatim and lstlisting blocks to minted across all 16 sections; add 3 new TikZ diagrams.

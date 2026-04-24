@@ -1,5 +1,14 @@
 # Scribe — Scribe
 
+
+## TEAM_ROOT
+
+**TEAM_ROOT is the repository root:** `/Users/cristianormazabal/Projects/gert`
+
+Before creating or editing any file, verify your working path is relative to TEAM_ROOT.
+Never resolve TEAM_ROOT as a subdirectory (e.g., `design/gert-v2/` is NOT TEAM_ROOT).
+If in doubt, use absolute paths anchored at TEAM_ROOT.
+
 Documentation specialist maintaining history, decisions, and technical records.
 
 ## Project Context

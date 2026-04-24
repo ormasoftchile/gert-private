@@ -917,3 +917,133 @@ Created `domains/home/` module with:
 
 **Status:** ✓ Complete — v0 scaffold functional, all validations passing.
 
+
+## Learnings — Phase 2: Home Domain Compiler (2024-04-23)
+
+### Compiler Package Implementation
+
+Implemented the full compiler package for `gert-domain-home` at `domains/home/pkg/compiler/`.
+
+**Output Strategy: YAML bytes (Option B)**
+
+Chose to produce YAML bytes rather than importing v2/pkg/schema Go types. This provides a clean module boundary without complex dependencies or replace directives.
+
+**Files Created:**
+- `pkg/compiler/compiler.go` (515 lines) — core compiler implementation
+- `pkg/compiler/compiler_test.go` (363 lines) — comprehensive test suite
+
+**Test Results:**
+```
+$ cd domains/home && go test ./...
+ok  github.com/ormasoftchile/gert-domain-home/pkg/compiler  0.180s
+```
+
+All 10 tests pass clean:
+1. `TestCompileRoutine_Simple` — 14-day routine with photo evidence
+2. `TestCompileRoutine_Seasonal` — seasonal cadence picks valid interval for current season
+3. `TestCompileIncidentTemplate` — 4-step incident with dependencies and evidence
+4. `TestCompileDelegation` — zone + routine assignments, date parsing
+5. `TestCompileProperty` — end-to-end: load casa-santiago.home.yaml, compile all
+6. `TestDetermineSeason` — season calculation correctness
+7. `TestBuildEvidenceFields` — evidence type mapping to collector fields
+
+### Lowering Semantics Implemented
+
+**Routines → Timer-backed runbooks:**
+- Run ID: `{property_id}.routine.{routine_id}`
+- Kind: `reference`
+- Flow: single `collector` step with evidence fields
+- Cadence resolution: simple intervals direct; seasonal picks for current season
+- Evidence mapping: none→boolean, note→text, photo→image, checklist→text
+
+**Incident Templates → Ad-hoc runbooks:**
+- Run ID: `{property_id}.incident.{template_id}`
+- Kind: `mitigation`
+- Flow: one step per template step (collector for human_task, decision for branching)
+- Dependencies: recorded in step metadata (GERT v2 flow ordering implicit)
+
+**Delegation → Policy Definition:**
+- Policy ID: `{property_id}.delegation`
+- Active window: parsed from YYYY-MM-DD to time.Time
+- Assigned routines: resolved from direct + zone assignments
+- Example: zone assignment "pool" expands to all routines in pool zone
+
+### Key Design Decisions
+
+**1. Collector Steps for Human Tasks**
+
+GERT v2 `collector` type with typed fields maps cleanly to home domain evidence requirements. Each evidence type becomes a collector field:
+- Photo → image field
+- Note → multiline text field
+- None → boolean "completed" checkbox
+- Checklist → text field (future: proper checklist type when GERT adds it)
+
+**2. Season Calculation at Compile Time**
+
+Seasonal routines pick interval for *current* season when compiled. Runtime timer uses fixed interval until recompilation.
+
+Limitation: Season doesn't adjust dynamically. Future enhancement would use GERT timer policy with OPA evaluation (deferred to GERT v2.1).
+
+**3. YAML Structure via map[string]interface{}**
+
+Runbook structure built as nested maps, marshaled to YAML via yaml.v3. Clean, readable, avoids struct tag complexity for one-off generation.
+
+### Loader Enhancement
+
+Updated `pkg/loader/loader.go` with `LoadAndCompile(path string)` convenience function:
+- Derives property ID from filename (strips `.home.yaml`)
+- Returns `*model.PropertyFile` for direct compiler usage
+- Future: can return `*compiler.CompiledProperty` when integration needed
+
+### Go Idioms Applied
+
+**Pointer receivers:** All compiler methods use `*Compiler` even though struct is nearly stateless (just PropertyID field).
+
+**Error wrapping:** Consistent `fmt.Errorf(...: %w)` for error context chains.
+
+**Range by index:** `for i := range slice` avoids copies, enables safe pointer passing to methods.
+
+**Type assertions:** Metadata map extraction via `runbook["metadata"].(map[string]string)` for mutation.
+
+### Testing Patterns
+
+**Table-driven:** `TestDetermineSeason` uses test case slices for date→season mapping.
+
+**Inline vs loader fixtures:** Small tests construct model inline; `TestCompileProperty` loads real casa-santiago.home.yaml via loader.
+
+**YAML validation:** `strings.Contains()` checks for structure (fast, readable, sufficient for compiler output).
+
+### Cross-Agent Integration Points
+
+**For Ken (Architect):**
+- Compiler implements Section 4 lowering semantics from `specs/gert-domain-home/v0.md`
+- YAML output matches GERT v2 schema (apiVersion: gert.sh/v2, id, name, kind, flow)
+- Ready for runtime integration when timer/evidence APIs stabilize
+
+**For John (Schema Designer):**
+- Compiler produces valid GERT v2 runbook YAML
+- Uses collector steps with typed fields (text, boolean, image)
+- Decision steps with routes for incident branching
+- Metadata extensibility for domain context (zone, asset, interval)
+
+**For Dennis (UX/Research):**
+- Compiled runbooks are human-readable YAML (debuggable)
+- Evidence prompts preserved from domain model → collector field labels
+- Seasonal cadence uses simple date math (no calendar UI complexity)
+
+### File Manifest
+
+```
+domains/home/pkg/compiler/
+├── compiler.go       — 515 lines (core implementation)
+└── compiler_test.go  — 363 lines (10 tests, all passing)
+```
+
+Total: ~900 lines (compiler + tests)
+
+### Status
+
+✅ Phase 2 complete. Compiler package functional, tested, ready for runtime integration.
+
+Next: Phase 3 (runtime integration, CLI tool, or mobile API) — awaiting team decision.
+

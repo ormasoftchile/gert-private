@@ -1223,3 +1223,115 @@ Seasonal cadence requires GERT to pass runtime context (current date, timezone) 
 - `.squad/tmp/ken-home-domain-spec.md` (62KB, 10 sections, comprehensive architecture)
 - `.squad/decisions/inbox/ken-home-domain-kit.md` (decision record, to be reviewed)
 
+
+---
+
+## 2026-04-24 — Compiler Interface Contract Design (gert-domain-home)
+
+**Action:** Design the compiler interface contract for gert-domain-home → GERT v2 core  
+**Requestor:** Cristian  
+**Scope:** Compiler boundary, output strategy, function signatures, go.mod dependencies
+
+### Task Overview
+
+Designed the compiler package for `domains/home/pkg/compiler/` that transforms domain model types into GERT v2 runbook YAML documents. The compiler is the bridge between domain-specific models (`Property`, `Routine`, `IncidentTemplate`, `Delegation`) and GERT core execution primitives.
+
+### Key Decisions
+
+**D-HOME-06: Compiler produces YAML, not Go structs (Option B)**
+
+**Rationale:**
+- Clean boundary: domain module is independent of GERT v2 Go types
+- Resilient to GERT schema changes (no recompilation required)
+- Idiomatic testing via golden file comparison
+- GERT's parser is designed for YAML ingestion
+- Prevents tight coupling between domain and v2 internals
+
+**Alternatives rejected:**
+- Option A (Go structs): Heavy dependency, tight coupling, breaking changes painful
+- Option C (IR): No intermediate representation exists in GERT v2
+
+**D-HOME-07: No v2 dependency in domains/home/go.mod**
+
+The `domains/home` module only requires `gopkg.in/yaml.v3` for YAML marshaling. Components that consume the compiler AND invoke GERT (e.g., scheduler daemon) add the v2 dependency themselves.
+
+**D-HOME-08: Compiler functions return (string, error)**
+
+Four core functions:
+```go
+CompileRoutine(ctx, prop, routine) (string, error)
+CompileIncidentTemplate(ctx, prop, template) (string, error)
+CompileDelegation(ctx, prop, delegation) (string, error)
+CompileProperty(ctx, prop) (*Catalog, error)
+```
+
+Output is YAML string ready for `parser.ParseBytes()`.
+
+### GERT v2 Core Inventory (Verified)
+
+Audited v2/pkg to identify available types:
+
+**Available:**
+- `schema.Runbook` — Top-level runbook document
+- `schema.Step` + 14 step types (cli, tool, collector, choice, decision, branch, iterate, parallel, approve, assert, compensate, wait_for_event, end)
+- `engine.ExecutionPlan` — Planner output, engine input
+- `engine.RunHandle` — Runtime control surface
+- `parser.Parser` — YAML ingestion layer
+- `planner.Planner` — Include resolution, tool lookup
+- `governance.GovernancePolicy` — Policy enforcement interface
+
+**Not available (domain must implement):**
+- Timer/cron scheduling
+- Delegation/permission tracking
+- Notification system
+- Inventory/stock tracking
+
+### Compilation Examples Designed
+
+**Routine → Runbook:**
+- `kind: composable` (reusable workflows)
+- Single `collector` step with evidence capture
+- Scheduling metadata in `metadata.*` (consumed by scheduler, not GERT runtime)
+
+**Incident Template → Runbook:**
+- `kind: mitigation` (reactive workflows)
+- Domain `human_task` → GERT `collector` step
+- Domain `decision` → GERT `decision` step with `goto` routing
+- Domain `depends_on` → GERT `when` conditionals
+
+**Delegation → Governance Policy:**
+- NOT a runbook — governance config overlay
+- `permissions.can_*` → `governance.rules[].action` (allow/deny/require-approval)
+- Active window checked by scheduler before merging policy
+- `metadata.*` holds contact info for notifications
+
+### Validation Strategy
+
+1. **Compiler unit tests:** Golden file comparison + structural validation
+2. **Integration tests:** Compiled YAML → parser.ParseBytes() acceptance
+3. **E2E tests:** Compile → Parse → Plan → Execute (dry-run mode)
+
+### Next Steps
+
+| Step | Owner | Deliverable |
+|------|-------|-------------|
+| 1. Review contract | Ken | Approve or request changes |
+| 2. Implement CompileRoutine | Brian | `pkg/compiler/routine.go` + tests |
+| 3. Implement CompileIncidentTemplate | Brian | `pkg/compiler/incident.go` + tests |
+| 4. Implement CompileDelegation | Brian | `pkg/compiler/delegation.go` + tests |
+| 5. Implement CompileProperty | Brian | `pkg/compiler/property.go` + tests |
+| 6. Integration test module | Barbara | `tests/integration/` with v2 dep |
+| 7. E2E test | Barbara | Full pipeline test |
+
+### Open Questions
+
+1. Should compiler embed `$schema` URL? (schema.go doesn't declare constant)
+2. Should GERT reserve `metadata.domain` namespace for domain compilers?
+3. Should GERT docs include canonical evidence type mapping table?
+4. How should scheduler merge delegation policy into runbook governance?
+5. What format for `Catalog` output? (JSON manifest, YAML, directory structure?)
+
+**Output files:**
+- `.squad/tmp/ken-compiler-contract.md` (30KB, comprehensive design)
+- `.squad/decisions/inbox/ken-compiler-output-strategy.md` (decision record)
+

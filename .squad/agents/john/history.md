@@ -512,3 +512,133 @@ defer delete(pc.seen, inclPath)
 ```
 
 New diamond-dependency test passes. All 14 tests pass. True cycle detection unchanged. Ready for Phase 3.
+
+---
+
+## 2026-04-21 — gert-domain-home v0 DSL Specification
+
+**Requested by:** Cristian  
+**Output:** `.squad/tmp/john-home-domain-dsl.md` (33KB, 700+ lines)
+
+Designed the complete authoring model (Section 3) for the **gert-domain-home** domain kit — a YAML-based DSL for household maintenance orchestration.
+
+### Design Context
+
+GERT's domain kit architecture allows specialized DSLs to compile to core GERT execution primitives. The home domain kit targets non-technical homeowners managing property maintenance, routines, and incident response.
+
+### DSL Sections Authored
+
+**3.1 Property Definition** — Root container declaring property name and zones (spatial partitions)
+- Zones are structured objects (id/label/description/metadata), not inline strings
+- Forward-compatible metadata extension point for v1 (area, indoor/outdoor classification)
+
+**3.2 Asset Definition** — Physical things tracked for maintenance (appliances, vehicles, fixtures)
+- Each asset belongs to exactly one zone
+- Optional installation/warranty dates for future notification triggers
+- Metadata extension point for model/serial/purchase price (v1)
+
+**3.3 Recurring Routines** — Scheduled maintenance tasks
+- Two cadence models: fixed interval (`every: 7d`) or seasonal (`summer: 7d, winter: 21d`)
+- Seasonal cadence resolves at runtime using hemisphere + astronomical season boundaries
+- Evidence requirement: none/note/photo/checklist
+- Optional executor hint (v1: enforcement) and notification rules (remind/escalate)
+- Scope: zone, asset, or property-wide
+
+**3.4 Incident Templates** — Reactive repair run structures
+- Step types: human_task, decision, parallel
+- Explicit dependency ordering via `depends_on` (implicit = declaration order)
+- Triggering: from YAML run file, mobile app, or scheduled run (v1)
+- Steps share parent variable scope (no isolated I/O)
+
+**3.5 Consumables** — Replacement-tracked items (filters, batteries, chemicals)
+- v0 schema defined but execution deferred to v1
+- Tracks replacement cadence and last-replaced date
+- Optional stock tracking (current quantity + reorder threshold)
+- Can trigger a routine when replacement is due
+
+**3.6 Delegation / Away Mode** — Temporary assignment to delegate
+- Time-bounded delegation window (from/to dates)
+- Assigns routines by explicit ID or by zone (all routines in zone)
+- Permissions: can_report_incidents, can_modify_routines, can_view_history
+- Notification routing: remind delegate, notify owner on completion/overdue
+- Delegate contact (E.164 phone + optional email)
+
+**3.7 Full Property File Example** — "Casa Santiago" capstone example
+- 4 zones, 3 assets, 4 routines (1 seasonal), 2 incident templates, 1 consumable, 1 delegation
+- Realistic 7-day trip delegation scenario
+- 180+ lines of production-quality YAML
+
+### Key Design Decisions
+
+1. **Readability first**: Non-technical homeowners should understand the structure
+   - Zones are structured objects, not opaque strings (future-proof)
+   - Evidence is explicit enum (none/note/photo/checklist), not boolean
+   - Duration format is compact (`7d`, `3M`) not verbose ISO 8601
+
+2. **Deterministic compilation**: Each DSL construct maps to GERT primitives
+   - Routines → scheduled runs with single `type: human_task` step
+   - Incident templates → run templates with step tree
+   - Delegation → access control rules + notification routing overrides
+
+3. **Forward compatibility**: v0 fields establish extension points
+   - Metadata blocks on zones/assets for future structured data
+   - Evidence.prompt allows custom prompts (v1: templates)
+   - Executor.role is a hint in v0, becomes enforced RBAC in v1
+   - Consumables defined but not enforced until v1
+
+4. **Convention alignment**: Consistent with GERT v2 schema patterns
+   - kebab-case IDs (pool_pump, lawn_mow)
+   - ISO 8601 dates (YYYY-MM-DD)
+   - Duration notation matches GERT core (`7d`, `2w`, `3M`, `1y`)
+   - Step types map to GERT step types (human_task → manual, decision → branch)
+
+### Compilation Semantics (Normative)
+
+**Routines → Scheduled Runs:**
+- Schedule rule (cron-like for fixed, calendar-based for seasonal)
+- Run template with single step (type: manual with evidence config)
+- Notification rules as engine-level triggers
+
+**Incident Templates → Run Templates:**
+- Step tree with dependencies (depends_on → GERT execution graph)
+- Step type mapping: human_task → manual, decision → branch, parallel → parallel
+- Evidence requirements attached to step config
+
+**Delegation → Access Control + Notifications:**
+- Access control rule grants delegate read/write on assigned runs
+- Notification routing override redirects to delegate contact
+- Attribution metadata tags submissions with delegate ID
+
+### v1 Extension Points Reserved
+
+Deferred features with schema extension points:
+1. Asset metadata standardization (model/serial/warranty_url)
+2. Routine executor enforcement (role becomes required with RBAC)
+3. Consumable inventory tracking (stock becomes operational)
+4. Seasonal cadence customization (override hemisphere or custom boundaries)
+5. Incident template versioning (iterate templates)
+6. Multi-delegate assignment (disjoint routine sets)
+7. Per-routine delegation permission overrides
+
+### Schema Versioning
+
+All `.home.yaml` files will include `apiVersion: home/v0`. When v1 ships, compiler supports both in compatibility mode with `gert migrate` to rewrite.
+
+### Learnings
+
+- **Domain kits are DSL compilers**: The home domain kit is NOT a GERT runtime extension — it's a compiler from home-domain YAML to core GERT primitives. This clarifies the architecture: domain kits sit *above* GERT, not inside it.
+
+- **Seasonal scheduling is runtime-evaluated**: Seasonal cadence (`summer: 7d`) requires runtime to know current date, property hemisphere, and astronomical season boundaries. This is a calendar-aware schedule rule, not a static cron expression.
+
+- **Evidence types should be explicit enums**: Using `none/note/photo/checklist` is clearer than boolean flags (`photo: true, note: false`). It's self-documenting and allows future extension (e.g., `video` or `signature`).
+
+- **Delegation is time-bounded access control + notification routing**: It's NOT role-based access control (delegate doesn't have a persistent role). It's a temporary override with automatic expiration and explicit permission grants.
+
+- **Incident templates define structure, not instances**: The template is the *class*, the triggered incident is the *instance*. The runtime instantiates the template steps into a run when the user triggers an incident.
+
+- **v0 consumables are tracked but not enforced**: Defining the schema in v0 establishes the data model, but reminders are informational only. v1 enforcement requires blocking logic (prevent routine completion without consumable replacement).
+
+**Implications for v2 schema:**
+- Domain kits may need a `domain:` top-level field in GERT runbooks to declare which kit compiled them (for reverse-engineering and debugging)
+- Calendar-aware scheduling (seasonal cadence) might be useful in core GERT, not just domain kits
+- Evidence types (photo/note/checklist) could be promoted to core GERT manual/collector step types

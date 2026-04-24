@@ -970,3 +970,128 @@ All 10 chapters of the **DRI Domain Kit Manual** (`design/dri-kit-manual/`) are 
 - Both decisions are in the inbox for Scribe to merge
 
 **Impact:** Prevents design work from being lost between v2.0 ship and v2.1 planning. Kit certification scope is now explicit, reducing risk of colliding step ID prefixes in multi-kit scenarios.
+
+---
+
+## 2026-04-21 — gert-domain-home v0 Architecture
+
+**Action:** Authored architectural specification for gert-domain-home v0  
+**Requestor:** Cristian  
+**Output:** `.squad/tmp/ken-home-domain-spec.md`
+
+### Context
+
+First non-enterprise GERT domain kit. Validates domain kit compilation model: authoring DSL → GERT core primitives, no runtime reimplementation.
+
+### Domain Purpose
+
+Home management kit for household maintenance. Three core scenarios:
+1. **Recurring maintenance** — pool care, lawn mowing, plant watering with seasonal cadence
+2. **Reactive incidents** — broken hinge, leak, pump failure → diagnose → buy → fix → verify
+3. **Delegation / away mode** — owner travels, delegate gets simplified task view, time-bounded authority
+
+### Architectural Decisions
+
+**1. Domain Kit Compilation Model**  
+Home concepts (routine, incident, delegation, zone, asset) compile to GERT primitives:
+- routine → timer-backed durable run with human task + evidence
+- cadence → timer policy (simple interval in v0, seasonal rules in v1 with OPA)
+- incident → ad-hoc run (no timer, user-triggered)
+- repair run → sub-run with 4 sequential human task steps
+- delegation → time-bounded policy (routes tasks to delegate during absence window)
+- away mode → projection (filters property run graph to delegate-scoped tasks)
+- evidence → GERT evidence primitive (photo/note attachment)
+
+**2. Mobile-First UX**  
+Calm, practical mobile app. No dashboards, no KPIs. Today tab answers "what do I do today?"  
+Four tabs: Today (landing), Property (zones/assets), Tasks (repair runs), History (evidence gallery)
+
+**3. Delegation Model**  
+Temporary authority transfer with:
+- Date-bounded activation (start_date to end_date)
+- Scoped task filter (delegate sees ONLY assigned tasks)
+- Simplified executor view (Today tab only, no property config access)
+- Evidence accountability (owner reviews completion photos on return)
+
+**4. v0 Scope**  
+Minimum useful set:
+- 2–3 routines with simple cadence (no seasonal rules)
+- 1 repair run template (4 steps: diagnose, buy, fix, verify)
+- Delegation with simplified delegate view
+- Today tab only (no Property/Tasks/History in v0)
+- Photo + note evidence (no GPS)
+- Manual YAML authoring (no mobile routine editor)
+
+Deferred to v1:
+- Seasonal cadence rules (requires OPA, GERT v2.1)
+- AI hints (weather-aware suggestions)
+- Consumable tracking (auto-routine creation)
+- Full mobile app tabs (Property/Tasks/History)
+- Reminder notifications (requires timer + notification policy)
+
+### Why This Validates GERT v2
+
+Tests 7 core GERT primitives:
+1. **Recurring orchestration** — simplest timer-backed run use case
+2. **Long-running runs** — repair runs span days/weeks, validates resumability
+3. **Projections** — Today tab and away mode both rely on fast filtering (<100ms)
+4. **Delegation** — time-bounded policy with automatic expiration
+5. **Timers** — seasonal cadence (v1) tests variable-interval policies
+6. **Reactive incidents** — ad-hoc runs with no predefined schedule
+7. **Domain kits** — thin DSL compiling to GERT core, zero runtime reimplementation
+
+### Success Criteria
+
+v0 proves:
+- Domain kit compilation works (routine.yaml → valid ExecutionPlan)
+- Timer-backed runs work (no drift, correct cadence reset)
+- Delegation works (time-bounded routing, auto-expiration, evidence review)
+- Evidence capture works (photo/note persist, retrievable)
+- Reactive incidents work (user-reported → multi-step repair run)
+- Mobile app usable by non-technical users (<1 min per task)
+
+Validation: 14-day daily use by 2 non-technical users, track completion rate (target >90%), evidence rate (>70%), bugs (<5 blocking), NPS (7+/10).
+
+### Key Learnings
+
+1. **Home domain is NOT a toy** — it's the hardest GERT validation. Daily use surfaces timer drift, projection staleness, policy bugs immediately. Enterprise workflows (monthly approvals) hide these bugs for months.
+
+2. **Delegation is a critical primitive** — time-bounded role transfer with scoped permissions is a general pattern (not just home). Validates GERT policy model for time-windowed routing.
+
+3. **Projections need <100ms performance** — mobile apps demand fast refresh. If projection query takes >500ms at 100 tasks, Today tab UX fails. This is a hard GERT requirement surfaced by Home domain.
+
+4. **Evidence is proof, not documentation** — photo of mowed lawn is legal-grade proof task was done. Evidence primitive must be immutable, SHA256-hashed, append-only. Home domain makes this concrete (not just enterprise audit trail).
+
+5. **Calm UX requires smart projections** — "what to do today" is a projection, not a raw query. GERT must support projection-as-first-class-primitive, not just "query run state and filter client-side."
+
+6. **v0 scope discipline is critical** — deferring seasonal rules, AI hints, consumable tracking keeps v0 buildable in 6 weeks. Trying to build all features at once would delay validation by 6 months.
+
+### Architectural Risks Identified
+
+**Risk 1: Timer drift**  
+If timer reset uses `last_wakeup + interval` instead of `last_completion + interval`, routines drift over time (7-day cadence becomes 8 days after 10 iterations). GERT must use completion-time-based reset.
+
+**Risk 2: Projection staleness**  
+If Today tab projection is cached and not invalidated on task status change, user marks task complete but it still appears in list. GERT needs SSE or polling-based projection updates.
+
+**Risk 3: Delegation policy composition**  
+If multiple delegations overlap (two delegates for same period), which policy wins? v0 assumes no overlap, but GERT must define precedence (last-created wins? highest-priority wins? error on conflict?).
+
+**Risk 4: Evidence upload failures**  
+If photo upload fails (network down), does task completion roll back? Or task completes but evidence queued? v0 assumes always-online (rolls back on failure). v1 needs offline queue.
+
+**Risk 5: Seasonal rule complexity**  
+Seasonal cadence requires GERT to pass runtime context (current date, timezone) to policy evaluator. This is NOT designed in GERT v2.0. OPA integration required for v1.
+
+### Decisions Recorded
+
+- **D-HOME-01:** Adopt gert-domain-home as first official consumer domain kit
+- **D-HOME-02:** Home kit compiles to GERT primitives, no runtime reimplementation
+- **D-HOME-03:** v0 scope limited to simple cadence, 1 repair run, delegation, Today tab only
+- **D-HOME-04:** Seasonal rules, AI hints, consumable tracking deferred to v1 (GERT v2.1 dependency)
+- **D-HOME-05:** Mobile app targets non-technical users (no YAML editing, no runbook jargon)
+
+**Output files:**
+- `.squad/tmp/ken-home-domain-spec.md` (62KB, 10 sections, comprehensive architecture)
+- `.squad/decisions/inbox/ken-home-domain-kit.md` (decision record, to be reviewed)
+

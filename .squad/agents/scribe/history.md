@@ -56,3 +56,10 @@ Initial setup complete.
 - **Part B (E2E parallelization):** t.Parallel() on all 11 E2E tests; safe via t.TempDir() isolation
 - **Tests:** All pass under -race -count=3
 - **Next:** Phase 20 queue TBD from Ken's Phase 19 review
+
+## Auth Design Merge
+
+- **Date:** 2026-04-25
+- **Action:** Merged Ken's auth layer design (`ken-auth-design.md`) into `decisions.md` as "Auth Layer Design — gert-domain-home Full-Stack"
+- **Source:** `.squad/decisions/inbox/ken-auth-design.md` (deleted after merge)
+- **Summary:** Sign in with Apple (owner + delegate), home-api JWT (HS256, 24h), delegate invite flow (v1), GERT_SERVICE_TOKEN for gert serve, X-Test-Token Maestro bypass (testenv build tag only), v0 security constraints and DB schema additions.

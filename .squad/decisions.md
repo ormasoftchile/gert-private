@@ -9647,3 +9647,108 @@ struct HomeApp: App {
 
 **Apple Developer account lead time:** Account approval can take 24–48 hours. Start enrollment immediately if not already enrolled.
 
+
+---
+
+# Auth Layer Design — gert-domain-home Full-Stack
+
+**Date:** 2026-04-25
+**Source:** Ken (ken-auth-design agent)
+**Status:** PROPOSED
+**Scope:** `apps/home-ios/` + `apps/home-api/` + `gert serve` sidecar + Maestro test flows
+
+---
+
+## Summary
+
+### Principal Taxonomy
+
+Four principals interact with the system, each with distinct identity, trust level, and auth mechanism:
+
+| Principal | Identity Source | Trust Level | Auth Mechanism |
+|-----------|----------------|-------------|----------------|
+| Homeowner | Apple ID | Highest | Sign in with Apple → home-api JWT |
+| Family delegate | Apple ID | Scoped | Sign in with Apple → home-api JWT (`role: delegate`) |
+| home-api → gert serve | Static env secret | Machine | Static bearer token (GERT_SERVICE_TOKEN) |
+| Maestro test runner | Seeded test user | Debug-only | X-Test-Token header (testenv build tag only) |
+
+### Sign in with Apple
+
+**Decision:** Sign in with Apple exclusively. No email/password, no magic link.
+
+- iOS-native TestFlight → App Store distribution; Apple's guidelines strongly favour Sign in with Apple.
+- No password database, credential store, reset flows, or phishing surface.
+- All family validators are iOS users with Apple IDs.
+- Avoids email infrastructure (SES/SendGrid) and a second channel to maintain.
+
+**Flow:** iOS calls `ASAuthorizationAppleIDProvider` → receives a short-lived Apple identity token (~5 min) → POSTs it to `POST /auth/apple` → home-api fetches Apple JWKS, verifies signature + `iss`/`aud`/`exp`/`sub` claims → upserts `users` table → returns a home-api session JWT → iOS stores it in Keychain.
+
+**Library:** `golang-jwt/jwt` + manual JWKS fetch, or `lestrrat-go/jwx`. Never decode without verifying.
+
+### home-api JWT (HS256, 24h)
+
+After Apple verification, home-api issues its own session token decoupling the iOS app from Apple's token lifetime.
+
+- **Algorithm:** HS256 (`HOME_API_JWT_SECRET`, min 32 bytes, never in source)
+- **Expiry:** 24 hours (short window for lost-device scenarios; re-auth via FaceID is near-instantaneous)
+- **Claims:** `sub` (internal UUID), `property_id`, `role` (`owner`|`delegate`), `routine_ids` (null for owner; scoped array for delegate)
+- **Refresh (v0):** Re-auth on 401 — no silent refresh. iOS shows sign-in screen; user taps Sign in with Apple.
+- **Keychain storage:** `kSecClassGenericPassword`, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`. Never in `UserDefaults` or iCloud-synced stores.
+
+### Delegate Auth (Deferred to v1 unless delegation validation is in v0 scope)
+
+1. Homeowner invites delegate → home-api creates `delegate_invites` record with 48h expiry + scoped `routine_ids`.
+2. home-api returns deep link: `gertapp://delegate/accept?token=<hex>`. Shared via iMessage/AirDrop — no third-party messaging infra.
+3. Delegate taps link, installs app if needed, performs Sign in with Apple on their own Apple ID.
+4. App calls `POST /auth/apple/delegate { identity_token, invite_token }` → home-api verifies Apple token + invite → issues JWT with `role: delegate`, `routine_ids: [...]`.
+5. Role enforcement: `RequireRole` middleware on every protected endpoint; delegate cannot create incidents, modify routines, or manage delegation.
+6. Deactivation: homeowner calls `POST /delegation/deactivate`; existing delegate JWTs expire naturally within 24h (acceptable for v0).
+
+### GERT Service Token (home-api → gert serve)
+
+- `home-api` holds a pre-signed HS256 JWT (`GERT_SERVICE_TOKEN`) signed with the same secret as `gert serve --auth-jwt-secret` (`GERT_JWT_SECRET`).
+- Token claims: `sub: home-api`, `role: service`, `aud: gert-serve`.
+- Static for v0 (rotation requires container redeploy). v1: Azure Managed Identity or short-lived rotated tokens.
+- User JWTs are never forwarded to gert serve — clean service boundary.
+
+### Maestro Auth Bypass (X-Test-Token, testenv build tag only)
+
+Maestro cannot automate Sign in with Apple (Apple UI is sandboxed).
+
+- home-api compiled with `//go:build testenv` accepts `X-Test-Token` header matching `TEST_TOKEN_SECRET` env var.
+- On match: injects seeded test user claims (`usr_test_homeowner`, `prop_test_primary`, `role: owner`) and skips Apple verification.
+- `testenv` build tag is never used in production. `TEST_TOKEN_SECRET` is never set in production Container Apps.
+- iOS: `#if DEBUG` button "Sign In (Test)" stripped by compiler in Release builds.
+
+### v0 Scope
+
+**Must have:** Sign in with Apple (owner), Keychain JWT storage, home-api JWT (24h HS256), Apple JWKS verification, GERT_SERVICE_TOKEN, 401 → re-auth flow, X-Test-Token for Maestro.
+
+**Deferred to v1:** Delegate invite flow, silent token refresh, real-time delegation revocation, Apple ID credential state check.
+
+### Security Constraints
+
+| Constraint | Enforcement |
+|------------|-------------|
+| JWT secret ≥ 32 bytes | home-api startup `log.Fatal` check |
+| HTTPS everywhere | Azure Container Apps TLS termination |
+| No tokens in logs | Never log `Authorization` header; Gin logger omits headers |
+| Apple token verified against JWKS | Not just decoded |
+| Keychain only on iOS | Enforced in `HomeAPIClient` |
+| X-Test-Token never in production | `testenv` build tag + no env var in prod |
+| Service token ≠ user token | Separate `GERT_SERVICE_TOKEN`; never derived from user claims |
+
+### Database Schema Additions
+
+Three new tables: `users` (Apple identity anchor, `apple_sub` as stable key), `delegate_invites` (48h expiry, scoped `routine_ids`), `delegation_memberships` (activated/deactivated lifecycle).
+
+### Implementation Order
+
+1. `users` migration + Apple JWKS verifier + `/auth/apple` endpoint
+2. JWT middleware on all protected routes
+3. Service token client for gert serve
+4. iOS: Keychain service + Sign in with Apple flow + AppState wiring
+5. iOS: 401 interceptor → sign-out flow
+6. X-Test-Token bypass (staging only, testenv build tag)
+7. Maestro sign-in flow using test token
+8. Delegate invite + accept endpoints (if delegation is in v0 validation scope)

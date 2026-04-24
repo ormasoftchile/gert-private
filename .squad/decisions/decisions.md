@@ -8835,3 +8835,308 @@ Updated text:
 ✅ Step execution order will be documented as sequential top-to-bottom
 
 Ready for v0.1.0 release.
+
+---
+
+## iOS UI Testing — Maestro
+
+**Date:** 2026-04-24  
+**Author:** Ken (Software Architect), Cristian (User Directive)  
+**Status:** ACCEPTED  
+**Requested by:** Cristian
+
+**User Directive:** Use Maestro for iOS UI testing and remote UI validation in gert-domain-home app. Cristian has prior experience with Maestro.
+
+---
+
+### Decision
+
+**Adopt Maestro as the primary UI testing tool for `apps/home-ios/`.** YAML-based flows live in `apps/home-ios/.maestro/`, organized by feature. Maestro replaces XCUITest (which is not used in v0). XCTest unit tests remain optional for pure logic (no UI dependency).
+
+---
+
+### 1. Maestro Overview
+
+Maestro (mobile.dev) drives native iOS UI via YAML flow files. It communicates with the app over the iOS Accessibility layer — no Xcode test target, no test host process. Flows run against iOS Simulator or real device. Key properties relevant here:
+
+- **No recompile on flow change** — flows are YAML, edited outside Xcode
+- **Maestro Studio** — interactive browser session for flow recording and live inspection
+- **Maestro Cloud** — hosted test runners; also works on self-hosted macOS CI
+- **Assertions** — `assertVisible`, `assertNotVisible`, `waitForAnimationToEnd`, `tapOn`, `inputText`
+- **No framework coupling** — works with SwiftUI `accessibilityIdentifier` labels unchanged
+
+---
+
+### 2. Repository Layout
+
+```
+apps/home-ios/
+  .maestro/
+    _config.yaml              ← appId, env defaults
+    today/
+      load-today-tasks.yaml
+      complete-task.yaml
+      add-evidence.yaml
+    delegation/
+      activate-delegation.yaml
+      delegate-view.yaml
+    incidents/
+      report-incident.yaml
+```
+
+**`_config.yaml`** (Maestro project config):
+```yaml
+appId: com.ormasoft.gert-home
+env:
+  API_BASE_URL: ${API_BASE_URL:-http://localhost:8080}
+```
+
+The `appId` must match the bundle identifier in `HomeApp.xcodeproj`.
+
+---
+
+### 3. v0 Flows — Critical Path (5 flows)
+
+These 5 flows cover the 14-day family validation critical path in priority order:
+
+#### Flow 1: `today/load-today-tasks.yaml`
+**Validates:** Today tab loads, API response renders tasks.
+```yaml
+appId: com.ormasoft.gert-home
+---
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "Today"
+- assertVisible:
+    id: "today-task-list"
+- assertNotVisible: "Error"
+```
+
+#### Flow 2: `today/complete-task.yaml`
+**Validates:** Tap task row → mark complete → confirmation state shown.
+```yaml
+appId: com.ormasoft.gert-home
+---
+- launchApp
+- waitForAnimationToEnd
+- tapOn:
+    id: "task-row-0"
+- tapOn:
+    id: "complete-button"
+- assertVisible:
+    id: "task-completed-indicator"
+```
+
+#### Flow 3: `today/add-evidence.yaml`
+**Validates:** Evidence capture flow — photo attach, upload optimistic UI.
+```yaml
+appId: com.ormasoft.gert-home
+---
+- launchApp
+- tapOn:
+    id: "task-row-0"
+- tapOn:
+    id: "add-evidence-button"
+- assertVisible: "Photo Library"
+- tapOn:
+    id: "evidence-thumbnail"   # after selection
+- assertVisible:
+    id: "evidence-upload-indicator"
+```
+
+#### Flow 4: `delegation/activate-delegation.yaml`
+**Validates:** Delegation tab → activate delegation → delegate user shown.
+```yaml
+appId: com.ormasoft.gert-home
+---
+- launchApp
+- tapOn:
+    id: "tab-delegation"
+- tapOn:
+    id: "activate-delegation-button"
+- assertVisible:
+    id: "delegation-active-indicator"
+```
+
+#### Flow 5: `incidents/report-incident.yaml`
+**Validates:** Incident report creation → confirmation shown.
+```yaml
+appId: com.ormasoft.gert-home
+---
+- launchApp
+- tapOn:
+    id: "tab-incidents"
+- tapOn:
+    id: "report-incident-button"
+- inputText: "Water leak in bathroom"
+- tapOn:
+    id: "submit-incident-button"
+- assertVisible:
+    id: "incident-submitted-confirmation"
+```
+
+**SwiftUI obligation:** Every interactive element that a Maestro flow references must carry an `accessibilityIdentifier`. Add these in SwiftUI views:
+```swift
+List(tasks) { task in
+    TaskRowView(task: task)
+        .accessibilityIdentifier("task-row-\(task.index)")
+}
+```
+This is good practice regardless of Maestro (VoiceOver also uses it).
+
+---
+
+### 4. Running Maestro
+
+#### 4a. Local (developer machine)
+
+```bash
+# Install
+brew install maestro
+
+# Run single flow against booted iOS Simulator
+cd apps/home-ios
+maestro test .maestro/today/load-today-tasks.yaml
+
+# Run all flows
+maestro test .maestro/
+
+# Interactive recording session
+maestro studio
+```
+
+`maestro studio` opens a browser UI. The developer interacts with the simulator; Maestro records taps and asserts into a YAML flow. **This is the authoring tool for v0** — Cristian records flows with studio, commits the YAML.
+
+#### 4b. CI — GitHub Actions
+
+Two options evaluated:
+
+| Option | Pros | Cons |
+|--------|------|------|
+| **Maestro Cloud** | Zero infra, parallel devices | Costs per run; flows leave local env |
+| **Self-hosted macOS runner** | Free, simulator local | Requires dedicated Mac (or Mac CI service) |
+| **`macos-latest` hosted runner** | Free minutes, Apple silicon | Simulator setup slow (~3–4 min); GitHub hosted macOS minutes are 10× cost multiplier |
+
+**v0 decision: Maestro Cloud for CI.**
+
+Rationale: For a 14-day family validation with low run frequency, Maestro Cloud's free tier (250 runs/month) is sufficient. No infra to manage. Self-hosted runner is the v1 upgrade path once run frequency justifies it.
+
+**GitHub Actions job (`.github/workflows/ios-ui-tests.yml`):**
+```yaml
+name: iOS UI Tests (Maestro)
+on:
+  push:
+    paths:
+      - 'apps/home-ios/**'
+      - 'apps/home-api/**'
+
+jobs:
+  maestro-cloud:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Maestro Cloud
+        uses: mobile-dev-inc/action-maestro-cloud@v1
+        with:
+          api-key: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
+          app-file: apps/home-ios/build/HomeApp.ipa
+          workspace: apps/home-ios/.maestro
+          env: |
+            API_BASE_URL=${{ vars.STAGING_API_URL }}
+```
+
+The IPA is produced by a prior Xcode build step (or Xcode Cloud artifact). Maestro Cloud uploads the IPA, runs it on their hosted simulators, and returns pass/fail with video.
+
+**Alternative (no Maestro Cloud):** Use `macos-latest` runner + `xcrun simctl boot` + `maestro test`. Works but adds ~5 min for simulator boot and image download on every run.
+
+---
+
+### 5. Maestro + home-api Test Data
+
+**The flows need the backend running.** Two options:
+
+| Option | Description | v0 fit |
+|--------|-------------|--------|
+| Local `home-api` | `go run ./cmd/home-api` on developer machine; flows point at `localhost:8080` | ✅ Best for local dev |
+| Staging Azure Container App | Flows point at `https://home-api.staging.azurecontainerapps.io` | ✅ Best for CI |
+
+**v0 decision: dual-target via env var.**
+
+- `_config.yaml` defaults `API_BASE_URL` to `localhost:8080`
+- CI overrides via `API_BASE_URL=${{ vars.STAGING_API_URL }}`
+- No mocking, no WireMock — flows exercise the real API
+
+This validates the full stack (iOS → home-api → GERT → PostgreSQL) which is exactly the goal of the 14-day family validation. A staging environment must be available before CI Maestro runs are meaningful.
+
+**Seed data requirement:** Staging must have a seeded property with tasks for the flows to find real data. Add a `make seed-staging` target to `apps/home-api/Makefile` that inserts deterministic test fixtures.
+
+---
+
+### 6. Integration with Broader Test Strategy
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   Test Strategy Layers                   │
+├─────────────────┬───────────────────────────────────────┤
+│ Layer           │ Tool / Location                        │
+├─────────────────┼───────────────────────────────────────┤
+│ Go unit         │ domains/home: go test (34 passing ✅)   │
+│ Go integration  │ domains/home: go test -tags integration │
+│ home-api unit   │ apps/home-api: go test (to be written) │
+│ home-api int.   │ apps/home-api: go test -tags integration│
+│ iOS unit logic  │ XCTest (optional, pure business logic) │
+│ iOS UI flows    │ Maestro — .maestro/ YAML (PRIMARY) ✅   │
+└─────────────────┴───────────────────────────────────────┘
+```
+
+**What Maestro adds that nothing else covers:**
+- Real rendering validation (SwiftUI layout, list population)
+- Cross-layer integration: iOS app → home-api → GERT sidecar → PostgreSQL
+- Evidence capture flow (camera picker → upload → backend confirmation)
+- Delegation state visible in UI
+- Regression safety for UI changes without XCUITest investment
+
+**What Maestro does NOT replace:**
+- Go unit tests for domain logic (fast, no network)
+- home-api integration tests for API contract
+- XCTest unit tests for Swift business logic (if any grow complex enough to warrant it)
+
+**Maestro is the acceptance test layer.** If all 5 flows pass, the 14-day family validation has a green signal.
+
+---
+
+### 7. Stack Delta
+
+Only the testing row of the tech stack changes:
+
+| Layer | Before | After |
+|-------|--------|-------|
+| iOS UI Testing | (none planned) | **Maestro** — YAML flows in `apps/home-ios/.maestro/` |
+| iOS Unit Testing | XCTest (optional) | XCTest (optional, pure logic only) |
+| Go testing | go test + integration tag | unchanged |
+| CI — iOS UI | (none) | Maestro Cloud (free tier, 250 runs/month) |
+
+---
+
+### Consequences
+
+**Positive:**
+- ✅ No Xcode test target overhead — flows are YAML committed alongside app code
+- ✅ Cristian's existing Maestro experience = faster authoring
+- ✅ Maestro Studio enables flow recording without manual YAML writing
+- ✅ Full-stack validation for the 14-day family validation window
+- ✅ CI gate via Maestro Cloud blocks regressions before TestFlight distribute
+
+**Risks / Mitigations:**
+- ⚠️ `accessibilityIdentifier` discipline required — mitigated by making it a code review gate
+- ⚠️ Staging env must be seeded before CI flows are meaningful — mitigated by `make seed-staging`
+- ⚠️ Maestro Cloud free tier (250 runs/month) — sufficient for v0; upgrade if exceeded
+
+---
+
+### References
+
+- iOS architecture: Ken phase 18 history (D2a–D2e decisions)
+- Test strategy baseline: `.squad/decisions/d-14-phase14-e2e-suite-design.md`
+

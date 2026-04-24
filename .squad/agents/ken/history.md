@@ -491,3 +491,46 @@ D2 (React Native + Expo) is dropped. Replaced with D2-revised (Swift 5.9 + Swift
 
 - All validators must be on iOS 17+. Android users excluded from v0 test.
 - Apple Developer account enrollment: 24–48hr approval window. Start now.
+
+---
+
+## Phase 19 — Maestro iOS UI Testing Integration (2026-04-24)
+
+### Status: ✅ Decision Written
+
+Designed Maestro integration for `apps/home-ios/` as the primary UI testing layer for the 14-day family validation.
+
+### Decision
+
+Adopted Maestro (mobile.dev) as the primary iOS UI testing tool. YAML flows live in `apps/home-ios/.maestro/` organized by feature (today/, delegation/, incidents/). No XCUITest. No Xcode test target required.
+
+### Key Choices
+
+| Topic | Decision |
+|-------|----------|
+| Flow authoring | Maestro Studio (interactive recording) |
+| Local run | `maestro test .maestro/` against iOS Simulator |
+| CI | Maestro Cloud free tier (250 runs/month) via GitHub Actions |
+| Backend for flows | Staging Azure Container App (env var `API_BASE_URL`) |
+| Seed data | `make seed-staging` in home-api |
+| accessibilityIdentifier | Required on all interactive SwiftUI elements |
+
+### v0 Flows (5 critical path)
+
+1. `today/load-today-tasks.yaml` — Today tab loads, tasks render
+2. `today/complete-task.yaml` — Task mark-complete flow
+3. `today/add-evidence.yaml` — Evidence photo attach + upload
+4. `delegation/activate-delegation.yaml` — Delegation activation
+5. `incidents/report-incident.yaml` — Incident report creation
+
+### Test Strategy Position
+
+Maestro is the **acceptance test layer**: iOS UI → home-api → GERT sidecar → PostgreSQL. Complements (not replaces) Go unit/integration tests. If all 5 flows pass, the family validation has a green signal.
+
+### Deliverable
+
+`.squad/decisions/inbox/ken-maestro.md` — full decision record written.
+
+### Note
+
+Cristian has prior Maestro experience. Maestro Studio is the authoring path (record → YAML → commit). No manual YAML writing required to bootstrap the first 5 flows.

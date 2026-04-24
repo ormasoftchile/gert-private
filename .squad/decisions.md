@@ -9203,3 +9203,219 @@ When building domain kit compilers that target v2 runbook schema:
 **Root cause:** v2 schema design prioritizes runtime type safety (discriminated union via inline specs) over YAML library compatibility.
 
 **Trade-off accepted:** Custom parser complexity in exchange for type-safe step handling.
+
+---
+
+## Full-Stack Architecture — gert-domain-home App
+
+### Overview (Ken — Architect)
+
+gert-domain-home transitions from working components (domain kit compiler + GERT v2 runtime) to a production application. The architecture separates concerns cleanly: React Native mobile frontend → Go home-api backend → GERT v2 sidecar orchestrator → PostgreSQL app state + GERT workflow state.
+
+### D1: Backend = Go HTTP service (home-api)
+
+**Decision:** A dedicated Go service (`apps/home-api/`) bridges mobile app to GERT v2 and domain kit. It does NOT embed GERT v2 — it calls GERT v2 as a sidecar.
+
+**Rationale:**
+- Team expertise in Go; same language as domain kit and GERT
+- Domain kit's `compiler.Compiler` is a Go library — calling from Go is trivial
+- Keeps boundary clean: GERT stays pure orchestration engine, home-api stays domain-aware
+- GERT's `run.start` RPC requires a `runbookPath` (file on disk) — home-api writes compiled YAML to GERT's run directory before calling start
+- Avoids embedding GERT internals (would require forking or violating `internal/` boundaries)
+
+**Rejected alternatives:**
+- Embed GERT v2: violates `internal/` boundary, makes GERT deployment harder
+- Use GERT serve as sole backend: GERT has no concept of "property", "user", "delegation window" — those belong in home-api
+
+### D2: Frontend = React Native (mobile-first)
+
+**Decision:** React Native for iOS/Android. TypeScript. Expo for build tooling.
+
+**Rationale:**
+- Spec explicitly describes a 4-tab mobile app with camera, push notifications, offline cache
+- Team knows TypeScript; React Native shares that expertise
+- Single codebase for iOS + Android (critical for small team)
+- Expo simplifies camera, push notifications, and OTA updates
+- React Native + Expo is pragmatic for team with existing TypeScript web dev expertise
+
+**Rejected alternatives:**
+- Flutter: Team doesn't know Dart, adds language overhead
+- React Web only: Spec specifies mobile-first; camera/photo evidence is first-class feature requiring native APIs
+- Both web + native simultaneously: Out of scope for v0
+
+**Research Update (Dennis):** PWA (React web) may be faster to v0 iteration than React Native, but React Native offers better long-term UX for camera integration and offline capability. Go with React Native + Expo as planned; use browser Dev Tools for initial prototyping friction reduction.
+
+### D3: GERT v2 as sidecar, not embedded
+
+**Decision:** `gert serve` runs as separate process. home-api calls it via HTTP JSON-RPC at `http://localhost:7778/rpc`.
+
+**Rationale:**
+- Clean separation: GERT doesn't know about "routines" or "properties"
+- GERT v2 can be upgraded independently of home-api
+- `gert serve` already has auth (JWT), rate limiting, SSE streaming — no need to reinvent
+- On Azure: both run as containers in same Container App Environment on same VNet — sidecar is effectively free in latency
+
+**Consequence:** home-api must write compiled runbook YAML to shared volume before calling `run.start`. GERT and home-api share volume mount (`/data/runbooks/`).
+
+### D4: Storage split — PostgreSQL for app state, GERT for workflow state
+
+**Decision:** home-api owns PostgreSQL database for user/property/delegation state. GERT v2 owns all workflow state (run status, evidence, trace JSONL).
+
+**App DB owns:**
+- `users` (user accounts, auth tokens)
+- `properties` (property config, zones, assets)
+- `routines` (definition-level metadata; cadence, zone, asset refs)
+- `delegation_windows` (who is delegating to whom, date range)
+- `run_registry` (mapping: routine_id → gert_run_id, to correlate app concepts with GERT runs)
+
+**GERT owns:**
+- Run status (active/completed/waiting)
+- Step completion events
+- Evidence payloads (files, notes)
+- Trace JSONL (audit log)
+
+**Rationale:** GERT is not a relational database. It does not support queries like "all routines due today for property X." home-api maintains projection layer.
+
+### D5: Auth = JWT issued by home-api, passed through to GERT
+
+**Decision:** home-api issues JWTs. Mobile app sends JWT in every request. home-api forwards same JWT (or service JWT) to `gert serve` via `Authorization: Bearer`.
+
+**For v0:** Static bearer token between home-api and GERT (shared secret, not user JWT). User auth handled exclusively at home-api boundary.
+
+**For v1:** Per-user JWT forwarded to GERT so `run.actor` is actual user ID, enabling per-user audit trails.
+
+### D6: Today-tab projection owned by home-api, not GERT
+
+**Decision:** home-api computes "tasks due today" by combining:
+1. `run_registry` (which GERT run corresponds to which routine)
+2. `run.list` RPC to GERT (get run status for active runs)
+3. Business logic (is this run's next_wakeup today? is this run waiting for human task completion?)
+
+**Rationale:** GERT has no concept of "due date" or "today." Projection is domain-level concern. home-api owns it.
+
+**Consequence:** home-api polls GERT for run status on Today tab load. Poll cadence: on-demand (request-time), no background sync in v0. Cache TTL: 30 seconds in memory.
+
+### D7: Compiled runbooks live in shared volume
+
+**Decision:** When home-api compiles a `property.yaml`, it writes resulting YAML files to shared volume at `/data/runbooks/{property_id}/{runbook_id}.yaml`. GERT reads from same volume.
+
+**For v0:** Property YAML is hardcoded (one property per deployment). Compilation happens at startup.
+
+**For v1:** Admin API to upload/update `property.yaml`, triggering recompile + hot-reload.
+
+### D8: Monorepo placement
+
+**Decision:** New components live under `apps/` in existing monorepo:
+```
+apps/
+  home-api/         ← Go service (new)
+  home-mobile/      ← React Native app (new)
+```
+Shared Go code (compiler, model) stays in `domains/home/`. GERT runtime stays in `v2/`. No cross-module dependencies from `apps/` to `v2/internal/`.
+
+### D9: v0 Deployment target = Azure Container Apps
+
+**Decision:** Azure Container Apps with two containers per app:
+- `home-api` container (Go binary)
+- `gert` container (gert serve binary)
+- Shared Azure Files volume for runbook YAML
+
+**Database:** Azure Database for PostgreSQL (flexible server, smallest SKU for v0)  
+**Auth:** Azure Container Registry for images  
+**Mobile:** Expo EAS Build + OTA for distribution (TestFlight/internal track for v0)
+
+### D10: API Architecture = REST + OpenAPI with TypeScript Codegen
+
+**Decision:** Go REST API (Gin or Echo) exposes OpenAPI 3.0 spec. TypeScript frontend auto-generates types via `openapi-typescript` tool.
+
+**Rationale (Dennis — Research):**
+- OpenAPI is universally understood, eliminates type-sync bugs between Go and TypeScript
+- Single source of truth: API schema
+- No GraphQL overhead for v0 scope
+- `openapi-typescript` generates fully typed types for React app
+
+**Example Endpoints (for gert-domain-home):**
+```
+GET /api/today?user_id={id}         // → TodayView (routines + incidents due today)
+GET /api/routines                    // → List routines
+POST /api/routines/{id}/complete     // → Mark routine done + upload evidence
+GET /api/incidents/{id}              // → Get repair run state
+POST /api/incidents/{id}/step/complete // → Advance repair run
+GET /api/history?user_id={id}&month=Apr // → Evidence + history
+```
+
+### D11: Real-Time State Sync = SSE for active workflows, polling fallback
+
+**Decision:** Mobile app opens HTTP SSE (Server-Sent Events) connection to `/api/workflow/{id}/stream` for active repair runs. Falls back to polling `/api/today` on-demand for routine checks.
+
+**Rationale (Dennis — Research):**
+- SSE is lightweight push without persistent socket overhead
+- Works over HTTP/2, no infrastructure (no Firebase/APNs complexity for v0)
+- Browser-native, works automatically on mobile browsers
+- When user backgrounds app, re-open SSE on resume
+
+**For v0:** SSE acceptable for active repairs (multi-step, long-lived). No background push notifications required.
+
+**For v1+:** Add Firebase Cloud Messaging / APNs for high-priority incidents (e.g., "Pool pump failure detected!").
+
+### D12: UX Patterns — Steal from Market Leaders
+
+**Tody's Adaptive Task Frequency:**
+- Routines adjust cadence based on completion patterns and external conditions (e.g., water plants during heat wave)
+- Incident templates can suggest early routines based on conditions
+- Design schema to support it in v0, implement in v1+
+
+**OurHome's Frictionless Delegation:**
+- Owner assigns task to family member in 2 taps, no complex role definitions
+- Delegated person sees only assigned tasks in their Today tab
+- Matches gert spec's Away Mode requirement
+
+**Centriq's Evidence-First Design:**
+- Photo capture with minimal clicks, rich metadata (asset ID, date, location)
+- Photo immediately associated with task (no separate "upload" dialog)
+- SHA256 hash computed server-side for audit trail
+
+**Todoist's Calm Completion Feedback:**
+- Task marked complete → gentle checkmark animation → task slides out/fades
+- Next: show next upcoming task or "All done" state
+- No celebratory confetti, no gamification score increment
+- Tone: Reminders (calm), not Gamification (childish)
+
+**Temporal.io's Deterministic Replay:**
+- Repair run had 4 steps, but step 3 failed → can replay with same inputs
+- Design run state to be replayable; log all step inputs
+- Not required for v0, but foundational for debugging
+
+### D13: What to Avoid — Anti-Patterns
+
+1. **Over-Engineering Push Notifications in v0:** Don't build Firebase + APNs + cloud functions. SSE is sufficient.
+2. **Complex Role-Based Access Control at Launch:** Design simple binary (Owner = full access, Delegate = scoped tasks only), not permission trees.
+3. **Reactive Incidents Without Step Tracking:** Model as multi-step repair run (Diagnose → Buy → Fix → Verify), track evidence per step.
+4. **Trying to Replicate All of HomeZada's Features:** Don't add finances, project timelines, contractor management, insurance docs. Focus on 2 flows: recurring routines + reactive incidents.
+5. **Direct Client-Side Integration with Multiple Sources:** Use BFF pattern — Go API exposes `/today` that internally queries workflow engine, not multi-token client complexity.
+6. **Dashboard Overload:** Today tab shows only today's tasks, nothing more. Avoid analytic panels and multi-column dashboards.
+
+### Consequences
+
+**Positive:**
+- Clean layer separation: mobile → home-api → GERT (no leaky abstractions)
+- GERT v2 is exercised through its real API (validates the serve API under real load)
+- Domain kit compiler is used as designed (no bypass)
+- Go on both backend layers means shared tooling, familiar language for team
+
+**Risks:**
+- Shared volume on Azure adds operational complexity (but Azure Files is mature)
+- home-api must correctly maintain `run_registry` (consistency between app DB and GERT state is an eventual consistency problem)
+- React Native + Expo adds unfamiliar build tooling if team has only done web React
+
+**Mitigations:**
+- `run_registry` is append-only; corruption is detectable by cross-referencing GERT `run.list`
+- Expo Go for development removes most build complexity during v0
+- Ken recommends pairing senior team member with Expo-unfamiliar engineer during initial v0 sprint
+
+### Timeline Estimate (Dennis — Research)
+
+- Backend API + OpenAPI spec: 2–3 weeks
+- Frontend (React Native + Expo): 3–4 weeks
+- Integration + testing: 2 weeks
+- **Total: ~7–8 weeks** (faster than Temporal.io path or full React Native + push infrastructure)

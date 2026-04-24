@@ -486,3 +486,53 @@ Create `sections/99-tikz-diagrams.tex` with predefined styles: `block`, `decisio
 
 ---
 
+## 2026-04-21: Fullstack Architecture Research for gert-domain-home v0
+
+**Research Scope:** Comparable home management apps, mobile-first workflow patterns, durable workflow + mobile state sync, React Native vs. PWA trade-offs, Go backend + TypeScript frontend patterns.
+
+**Research Questions Answered:**
+
+1. **Comparable home apps (Centriq, HomeZada, OurHome, Tody, Brightly):**
+   - Key finding: Tody's adaptive task frequency, OurHome's frictionless delegation, and Centriq's evidence-first photo capture are the most relevant patterns for gert-domain-home.
+   - What to steal: Adaptive cadence, 2-tap photo, calm completion UX, modular tab navigation.
+   - What to avoid: Dashboard overload (HomeZada), rigid calendrical recurrence, gamification, single-user bias.
+
+2. **Mobile-first workflow apps (Todoist, Linear, OpsGenie):**
+   - Key pattern: Provider Module architecture. Each task source (routines, incidents) normalized to unified Task model, then aggregated.
+   - Delegation: Scoped projections (delegates see only their tasks), reassignment via service-specific APIs.
+   - For gert: Routines and Incidents are two data providers. Backend BFF exposes `/today?user_id=` endpoint merging both.
+
+3. **Durable workflow + mobile state patterns (Temporal.io, Azure Durable Functions):**
+   - Three patterns identified: Polling (simple but high latency), Server-Sent Events/SSE (recommended for v0), Push Notifications (defer to v1+).
+   - **Recommendation: Use SSE for active repair runs, polling for background, push notifications for v1+.**
+   - Why: SSE is lighter-weight than push services, works over HTTP/2, no third-party infrastructure needed for v0.
+
+4. **React Native vs. PWA:**
+   - **Recommendation: Start with PWA for v0.**
+   - Reason: Spec calls for calm UX; PWA iteration is 2–3x faster than React Native. Photo capture via `<input type="file" capture>` works. Animation requirements are low. v1+ can migrate to React Native for background notifications + native integration.
+   - Trade-off: iOS background notifications limited with PWA; trade-off acceptable for v0.
+
+5. **Go backend + TypeScript frontend:**
+   - **Recommendation: REST API + OpenAPI codegen (not GraphQL, not tRPC).**
+   - Why: REST is simple in Go (net/http, Gin, Echo). OpenAPI spec auto-generates TS types via openapi-typescript tool. Zero manual type definitions. Single source of truth.
+   - Alternative (GraphQL): Only if multiple clients with different data needs; overkill for v0.
+
+**Final Stack Recommendation for v0:**
+- Backend: Go + Gin/Echo + OpenAPI + PostgreSQL
+- Frontend: PWA (React + TypeScript) with React Query + SSE
+- API: REST with auto-generated TS types
+- Real-time: SSE for active workflows, polling fallback
+- Deployment: Cloud Run / ECS
+
+**Estimated v0 timeline:** ~7–8 weeks (vs. 10–12 weeks with React Native + push infrastructure).
+
+**Research Brief Output:** `.squad/decisions/inbox/dennis-fullstack-research.md` (comprehensive, 16KB, ready for Ken's review).
+
+**Key Deliverables:**
+- "What to steal" section (5 best practices from comparable apps + workflow platforms)
+- "What to avoid" section (5 anti-patterns)
+- Detailed stack recommendation with architecture diagrams
+- Outstanding questions for Ken (push notifications scope, AI suggestions timing, property schema flexibility)
+
+---
+

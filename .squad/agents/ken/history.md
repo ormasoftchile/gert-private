@@ -373,3 +373,59 @@ None — compiler output exactly matches v2 schema expectations. (Inline specs a
 
 Schema design prioritizes runtime type safety (discriminated unions via inline specs) over YAML library compatibility. This is a known trade-off, not a bug.
 
+
+---
+
+## Phase 5 — Full-Stack Architecture for gert-domain-home App (2025-01-27)
+
+### Status: ✅ Architecture Proposal Complete
+
+**Mission:** Design the full-stack architecture to go from the existing domain kit (`domains/home/`) and GERT v2 runtime to a working, deployable application.
+
+### Key Architectural Decisions
+
+1. **Backend: Go HTTP service (`apps/home-api/`)** — bridges mobile app to GERT v2 and domain kit. Runs alongside GERT as a sidecar. Does NOT embed GERT internals.
+
+2. **Frontend: React Native (TypeScript + Expo)** — mobile-first per spec §6. Single codebase iOS/Android. Camera + push notifications as first-class features.
+
+3. **GERT v2 as sidecar** — `gert serve` runs as a separate process/container. home-api calls it via JSON-RPC at `/rpc`. Compiled runbook YAML written to shared volume before `run.start`.
+
+4. **Storage split** — PostgreSQL (home-api owns: users, properties, routines, delegation, run_registry). GERT owns: run state, evidence, trace JSONL.
+
+5. **JWT auth at home-api boundary** — static service token to GERT in v0; per-user JWT forwarding in v1.
+
+6. **Today-tab projection owned by home-api** — combines `run_registry` + GERT `run.list` RPC + domain business logic. Poll on request, 30s cache.
+
+7. **Shared volume for compiled runbooks** — `/data/runbooks/{property_id}/{runbook_id}.yaml` mounted to both home-api and gert containers.
+
+8. **Monorepo: `apps/home-api/` + `apps/home-mobile/`** — new apps under `apps/`; domain kit stays in `domains/home/`; GERT stays in `v2/`.
+
+9. **Azure Container Apps** — two containers per stack (home-api + gert), Azure Files shared volume, Azure PostgreSQL flexible server, Expo EAS for mobile distribution.
+
+### Critical Integration Insight
+
+`gert serve`'s `run.start` RPC takes a `runbookPath` (file path on disk), not YAML bytes. This means:
+- home-api must write compiled YAML to the shared volume BEFORE calling `run.start`
+- The shared volume is the integration boundary between compiler output and GERT runtime
+- This is the key operational constraint that shapes the whole deployment model
+
+### Deliverables
+
+- `.squad/decisions/inbox/ken-fullstack-arch.md` — 9 architecture decisions with rationale and consequences
+- Full architecture proposal (see conversation output)
+
+### v0 Prototype Scope
+
+**Must exist:**
+- home-api with: property load, routine compilation+submission, Today projection, incident trigger, delegation activation, run history query
+- React Native Today tab only (task list, mark complete, photo/note evidence)
+- gert serve running as sidecar
+- PostgreSQL for app state
+- Azure Container Apps deployment
+
+**Can be cut:**
+- Property/Tasks/History tabs (defer to v1)
+- Push notifications (defer to v1)
+- Seasonal cadence (defer to v1/GERT v2.1)
+- Offline evidence queue (defer to v1)
+- Per-user JWT forwarding to GERT (static service token in v0)

@@ -10711,3 +10711,122 @@ The `\section{Kit Composition and Layering}` authored in `design/gert/sections/0
 
 These warnings existed before this section was added and should be tracked separately.
 
+# Decision Record: DRI Kit Vocabulary and Compilation Model
+
+**Decision ID:** ken-dri-kit-vocab
+**Author:** Ken (Software Architect)
+**Date:** 2026-07-21
+**Status:** APPROVED
+**Input:** Dennis DRI Systems Survey (13 systems), DRI Kit Manual (10 chapters), home kit reference pattern
+
+---
+
+## Context
+
+Dennis delivered a comprehensive survey of 13 runbook/DRI systems, recommending 8 incident-lifecycle primitives for the `gert.ops` kit: notify, escalate, investigate, mitigate, postmortem, acknowledge, assign-role, status-update. The DRI Kit Manual (already authored) specifies 5 step types: `ops.cli`, `ops.manual`, `ops.approval`, `ops.change-request`, `ops.incident`. Before Brian implements `domains/dri/`, these must be reconciled into a sharp vocabulary spec.
+
+---
+
+## Decisions
+
+### D1: Kit Name and Namespace
+
+**Kit YAML identifier:** `ops/v1` (declared in `kit:` field)
+**Namespace prefix:** `ops.*` (all step types: `ops.cli`, `ops.manual`, etc.)
+**Go module:** `github.com/ormasoftchile/gert-domain-dri` (monorepo phase: `github.com/ormasoftchile/gert/domains/dri`)
+
+**Rationale:** `ops/v1` is already established in the DRI Kit Manual. The Go module uses `dri` (the accountability model name) while the YAML-facing name uses `ops` (the user-facing brand). This mirrors the home kit pattern where the Go module is `gert-domain-home` but the DSL files are `.home.yaml`.
+
+### D2: Five Step Types (Not Eight)
+
+**Adopted:** `ops.cli`, `ops.manual`, `ops.approval`, `ops.change-request`, `ops.incident`
+
+**Rejected from Dennis's list:** `ops.notify`, `ops.escalate`, `ops.investigate`, `ops.mitigate`, `ops.postmortem`, `ops.acknowledge`, `ops.assign-role`, `ops.status-update`
+
+**Rationale:** Dennis's 8 primitives are incident-lifecycle *concepts*, not step types. The DRI Kit Manual already resolves how these concepts appear in runbooks through composition:
+- Notify → compiler side-effect during approval/incident lowering
+- Escalate → `ops.approval.on_timeout: escalate` + SLA timeouts
+- Investigate → `ops.manual` with `requires_role: responder`
+- Mitigate → `ops.cli` or `ops.manual` inside `ops.incident`
+- Postmortem → outside runbook scope (evidence bundle is the PIR artifact)
+- Acknowledge → IC takeover in `ops.incident`
+- Assign-role → `meta.roles` declaration
+- Status-update → `ops.manual` with attestation evidence
+
+Adding 8 thin wrapper types that compile to the same 2-3 core primitives would create vocabulary bloat without semantic value. The 5 types are compositional — complex patterns emerge from nesting, not from type proliferation.
+
+### D3: Compilation Targets
+
+| Kit Step Type | Compiles To (Core) | Expansion |
+|--------------|-------------------|-----------|
+| `ops.cli` | `cli` | 1:1 mapping + governance annotations |
+| `ops.manual` | `manual` | 1:1 mapping + role/evidence annotations |
+| `ops.approval` | `manual` + optional `branch` | Approval gate with timeout/escalation |
+| `ops.change-request` | Sequence: `manual` → children → `manual` → `branch` | Pre-approval, execution, sign-off, rollback |
+| `ops.incident` | Sequence: `manual` → children → `manual` | Declaration, response steps, resolution |
+
+All kit step types compile to core primitives. The runtime never sees `ops.*` types.
+
+### D4: Annotation Passthrough via `x-ops-*`
+
+Kit-specific semantics (roles, approvers, evidence specs, severity) are carried through the compiled YAML as `x-ops-*` namespaced annotations. This allows:
+- Trace events to carry DRI context for audit/projection
+- Future runtime extensions to enforce role gates
+- No modifications to core schema
+
+### D5: Single-Kit Declaration for v1
+
+Runbooks declare `kit: ops/v1` (not a `kits:` array). Multi-kit composition is deferred to v2.1+. The loader interface should be designed to accommodate future `kits:` array without breaking changes.
+
+### D6: Model as Flat Struct (Not Discriminated Union)
+
+The `Step` model type uses a single struct with optional fields, not separate structs per step type. This matches the v2 core pattern and keeps the loader simple. The compiler validates field combinations per type.
+
+### D7: Evidence Types (Three)
+
+`ops.evidence.screenshot`, `ops.evidence.command-output`, `ops.evidence.attestation` — as specified in the manual. No additional evidence types.
+
+### D8: Follow Home Kit 4-Package Pattern
+
+```
+pkg/model/    — domain types
+pkg/loader/   — .ops.yaml → model types
+pkg/compiler/ — model → core YAML
+pkg/schema/   — JSON Schema validation
+```
+
+---
+
+## Alternatives Considered
+
+**8-step vocabulary (Dennis's full list):** Rejected. Creates thin wrappers without semantic value. Compositional approach (5 types) is more powerful and matches industry precedent (Terraform's few-types-rich-composition model).
+
+**Discriminated union model (separate Go types per step):** Rejected. Adds complexity in the loader without benefit. Compiler already validates field combinations.
+
+**Multi-kit declaration in v1:** Rejected. Premature for a kit that has zero consumers. Single-kit path is simpler to implement and test.
+
+---
+
+## Consequences
+
+**Positive:**
+- ✅ Brian has a complete implementation brief with Go types, schema rules, and compiler logic
+- ✅ Vocabulary aligned with the already-authored 10-chapter DRI Kit Manual
+- ✅ Dennis's survey findings are honored (all 8 concepts are handled, just not as separate types)
+- ✅ Pattern mirrors proven home kit architecture
+- ✅ Compilation targets use only core primitives (clean kernel preserved)
+
+**Risks:**
+- ⚠️ `x-ops-*` annotations require core schema to support arbitrary `x-*` fields (Brian must verify)
+- ⚠️ Role enforcement is advisory in v1 (trace-only, no runtime block)
+- ⚠️ Rollback invocation uses shell-out to `gert run` (pragmatic but not elegant)
+
+---
+
+## References
+
+- DRI Kit Manual: `design/dri-kit-manual/`
+- Dennis's Survey: `.squad/tmp/dennis-dri-systems-survey.md`
+- Vocabulary Spec: `.squad/tmp/ken-dri-kit-vocab-spec.md`
+- Home Kit Reference: `specs/gert-domain-home/SUMMARY.md`
+- Kit Separation Assessment: Decision `ken-dri-kit-separation` in `.squad/decisions.md`

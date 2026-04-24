@@ -1194,3 +1194,29 @@ Assessed whether the `dri-kit` (Kit-0, `gert.ops` Domain Kit) is ready for repo 
 2. Brian: implement `domains/dri/` following 4-package home kit pattern
 3. Run integration tests against gert core parser
 4. Extract to standalone repo (mechanical step, 1 day)
+
+---
+
+## Learnings
+
+### DRI Kit Vocabulary Spec (2026-07-21)
+
+**Task:** Synthesize Dennis's 13-system DRI survey into a sharp vocabulary spec that Brian can implement against.
+
+**Key Learnings:**
+
+1. **Lifecycle concepts ≠ step types.** Dennis's survey identified 8 incident-lifecycle primitives (notify, escalate, investigate, etc.). The DRI Kit Manual already resolved these into 5 compositional step types. The insight: research identifies *what needs to happen*, but architecture decides *how it's modeled*. Flattening every concept into a step type creates vocabulary bloat without semantic value.
+
+2. **Compositional beats enumerative.** The 5 step types (`ops.cli`, `ops.manual`, `ops.approval`, `ops.change-request`, `ops.incident`) handle all 8 of Dennis's concepts through nesting and composition. This mirrors Terraform's pattern (few resource types, rich composition) vs AWS SSM's pattern (many action types, shallow composition). Fewer types = smaller schema surface = easier to validate.
+
+3. **The manual IS the spec.** The 10-chapter DRI Kit Manual was the authoritative source, not Dennis's survey. The survey was input to the manual's design. My job was to make the manual's design implementable, not to redesign it based on survey data.
+
+4. **`x-ops-*` annotations are the key integration pattern.** Kit-specific semantics (roles, evidence, severity) must survive compilation into core YAML. The `x-*` namespace annotation pattern carries kit context through core without modifying core schema. This is analogous to HTTP `X-` headers (now deprecated in HTTP, but the pattern is sound for YAML annotations).
+
+5. **Wrapper steps are the hard compilation target.** `ops.change-request` and `ops.incident` expand into sequences of 3-4+ core steps with conditional branches. These are the only non-trivial compiler functions — the other 3 types are near-1:1 mappings. Brian should start with `ops.cli` and `ops.manual` (easy wins), then tackle the wrappers.
+
+6. **Open questions need explicit flagging.** The spec surfaces 7 open questions for Brian (annotation mechanism, rollback invocation, evidence mapping, role enforcement, duration parsing, file discovery, test strategy). Without these, Brian would hit blockers mid-implementation and need architectural guidance. Flagging them upfront saves round-trips.
+
+**Deliverables:**
+- `.squad/tmp/ken-dri-kit-vocab-spec.md` — ~43KB, Brian's implementation brief
+- `.squad/decisions/inbox/ken-dri-kit-vocab.md` — Decision record (8 decisions)

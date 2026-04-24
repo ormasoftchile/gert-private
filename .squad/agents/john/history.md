@@ -722,3 +722,133 @@ The schema enforces syntactic correctness. Runtime compilation must perform:
 - Metadata objects are free-form in v0 (standardized in v1)
 
 This schema can be used with standard JSON Schema validators (ajv-cli, Go jsonschema library) to validate `.home.yaml` files before compilation.
+
+---
+
+## 2026-04-25 — Phase 4 Option 5: Apartment Minimal Example Property
+
+**Requested by:** Cristian  
+**Completed:** apartment-minimal.home.yaml created, validated, committed (9ac0a0f)
+
+Created a second example `.home.yaml` property file to prove the authoring model handles minimal configurations gracefully. Contrasts with the complex casa-santiago.home.yaml house.
+
+**Property design:** Apartment 4B — small city apartment
+- 3 zones: kitchen, living_room, bathroom (no pool, lawn, or garden)
+- 1 asset: AC unit filter cartridge
+- 2 routines: simple quarterly filter replacement + monthly bathroom deep clean
+- 1 incident template: plumbing issue with decision branching (DIY vs. professional)
+- 1 consumable: AC filter cartridge with stock tracking
+- NO delegation block (proves optional)
+
+**Validation:**
+- YAML passes JSON Schema validation against `specs/gert-domain-home/schema.json`
+- `go run ./cmd/home-validate` compiles successfully
+- Generates 2 routine references (replace_ac_filter, deep_clean_bathroom)
+- Generates 1 incident mitigation template (plumbing_issue)
+- All YAML field names match model.go YAML tags (snake_case)
+- Duration notation correct (90d, 30d)
+
+**Schema gap observations (no blockers):**
+1. Schema allows both routine.zone and routine.asset as optional simultaneously — should enforce XOR at compile time (documented as known limitation)
+2. Decision step choice.next_step currently optional — incident template requires explicit step routing for clarity
+3. No explicit order enforcement in incident steps — dependency graph order unclear if multiple steps depend on same predecessor
+
+**Authoring model assessment:**
+✅ YAML is intuitive and reads naturally  
+✅ Field names self-document (no lookup needed)  
+✅ Duration notation compact and unambiguous  
+✅ Evidence prompts are clear and specific  
+✅ Decision branching with depends_on provides good clarity for multi-path incidents
+
+The minimal example validates the core authoring experience without complexity noise. Both casa-santiago.home.yaml (complex property) and apartment-minimal.home.yaml (minimal property) now demonstrate graceful handling of the full spectrum of configurations.
+
+---
+
+## Phase 4: Apartment Minimal Example Property (2026-04-24)
+
+**Status:** ✅ Complete
+
+**Mission:** Create a minimal .home.yaml example property to validate authoring model at opposite end of complexity spectrum from casa-santiago.
+
+### Artifact Created
+
+**File:** `domains/home/examples/apartment-minimal.home.yaml`
+
+**Property:** Apartment 4B (urban, limited space)
+- 3 zones: kitchen, living_room, bathroom
+- 1 asset: AC filter
+- 2 routines: filter replacement, bathroom cleaning
+- 1 incident template: plumbing decision tree
+- 1 consumable: AC filter cartridge
+- NO delegation (proves it's optional)
+
+**Validation:** ✅ Passes schema, compiles cleanly
+
+### Authoring Model Assessment
+
+#### What Works Well ✅
+
+1. Field naming — all snake_case, self-documenting
+2. YAML structure — natural hierarchy (property → zones → assets → routines → incidents)
+3. Duration notation — compact `90d`, `30d` is intuitive
+4. Evidence capture — prompts specific and actionable
+5. Decision trees — `depends_on` + `next_step` make workflows explicit
+6. Optional fields — delegation, executor, notifications appropriately optional
+7. Minimal configurations — apartment example proves model handles simplicity well
+
+#### Schema Gaps Identified (v1 Enhancement Candidates) 🔧
+
+1. **Routine Scope Ambiguity (Minor)**
+   - Issue: Routine can have optional `zone` and optional `asset` simultaneously
+   - Gap: Semantic requirement is exactly ONE scope (zone XOR asset XOR property-wide)
+   - JSON Schema cannot enforce XOR across independent fields
+   - Recommendation: Add runtime validation; consider schema enhancement
+
+2. **Decision Step Routing Clarity (Medium)**
+   - Issue: `incident_step.choice.next_step` is optional, but workflow requires explicit routing
+   - Gap: Schema doesn't enforce that decision steps have routable choices
+   - Question: If choice lacks `next_step`, does execution continue or stall?
+   - Recommendation: Add schema constraint: `type: decision` → all choices MUST have `next_step`
+
+3. **Incident Step Dependency Order (Low)**
+   - Issue: Schema allows arbitrary `depends_on` lists with no ordering enforcement
+   - Gap: Execution is DAG-based, but YAML order affects readability
+   - Authors may be confused if steps appear after their dependents
+   - Recommendation: Best practice docs: "Write incident steps in topological order"
+
+### Validation & Compilation
+
+```bash
+cd domains/home
+go run ./cmd/home-validate examples/apartment-minimal.home.yaml ✅
+```
+
+Output: Valid GERT runbook YAML, cleanly compiled
+
+### Decisions Generated
+
+1. **Apartment example validates minimal authoring model**
+2. **Three schema gaps identified for v1 enhancement prioritization**
+3. **Optional fields (delegation) work correctly**
+
+### Learnings
+
+1. Minimal authoring is achievable — not all properties need full complexity
+2. Optional fields work as designed — flexibility is correct
+3. Schema is sound with 3 minor gaps — all addressable in v1 enhancement
+4. Topological ordering matters for readability (execution is DAG-based)
+
+### Model Scaling
+
+The authoring model now demonstrates range from simple to complex:
+- **Minimal:** apartment-minimal.home.yaml
+- **Complex:** casa-santiago.home.yaml
+
+Both validate successfully, confirming model flexibility.
+
+### Next Steps
+
+1. Promote 3 schema gaps to decisions.md "Schema Enhancements" section
+2. Team sync to prioritize gap fixes before v1 release
+3. Use apartment example in authoring documentation as "minimal property" guide
+

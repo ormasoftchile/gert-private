@@ -142,6 +142,86 @@ PASS ok  0.200s
 
 ---
 
+## Phase 4 — Three Test Suites (2026-04-24)
+
+### Deliverables
+
+1. **Seasonal Cadence Tests** — `domains/home/pkg/compiler/seasonal_test.go`
+   - 6 test functions covering seasonal interval selection
+   - Added `CompileRoutineAt(r, now)` method for time-injected compilation
+   - Tests all four seasons (summer, winter, spring, autumn)
+   - Tests fallback to `every:` when no `seasonal:` block
+   - Tests edge case of ONLY `seasonal:` with no `every:`
+   - All tests passing ✅
+
+2. **Delegation Runtime Tests** — `domains/home/pkg/delegation/policy_test.go`
+   - 14 test functions for delegation policy runtime behavior
+   - `IsAwayModeActive()`: 6 tests (within/before/after window, boundaries, nil)
+   - `RoutineIsAssignedToDelegate()`: 4 tests (found/not found/empty/nil)
+   - `GetDelegateForRoutine()`: 4 tests (found/not assigned/not active/nil)
+   - All tests passing ✅
+
+3. **CLI Integration Test** — `domains/home/cmd/home-validate/main_test.go`
+   - 1 integration test with `//go:build integration` tag
+   - Builds and runs `home-validate` binary with `casa-santiago.home.yaml`
+   - Validates YAML structure (not golden file comparison)
+   - Parses each YAML document to ensure validity
+   - Asserts basic sanity (length > 100 bytes, contains id field)
+   - All tests passing ✅
+
+### Implementation Details
+
+**Time Injection for Seasonal Tests:**
+- Refactored `CompileRoutine()` to call `CompileRoutineAt(prop, r, time.Now())`
+- Added `CompileRoutineAt(prop, r, now)` for deterministic seasonal testing
+- Created `resolveIntervalAt(cadence, now)` to support time injection
+- Existing `resolveInterval()` now delegates to `resolveIntervalAt(cadence, time.Now())`
+- This preserves backward compatibility while enabling testability
+
+**Delegation Test Design:**
+- Tests use fixed dates (e.g., 2025-04-25 to 2025-05-02) for reproducibility
+- Boundary tests validate inclusive [from, to] window semantics
+- Validates that `model.Delegation.IsAwayModeActive(now)` is used correctly
+- Tests confirm nil-safety across all functions
+
+**CLI Test Design:**
+- Uses `os/exec` to run compiled binary (subprocess pattern)
+- Separates stdout (YAML) from stderr (summary) for validation
+- Structural validation instead of golden file comparison (less brittle)
+- Validates YAML syntax with `gopkg.in/yaml.v3`
+- Uses `extractYAMLDocuments()` helper to split multi-doc output
+
+### Test Results
+
+```
+cd domains/home && go test ./...
+✅ pkg/compiler (12 tests: 6 new + 6 existing)
+✅ pkg/delegation (14 tests: all new)
+
+cd domains/home && go test -tags integration ./...
+✅ domains/home (3 integration tests: existing)
+✅ cmd/home-validate (1 integration test: new)
+✅ pkg/compiler (12 tests)
+✅ pkg/delegation (14 tests)
+```
+
+**Total new test count: 21 tests**
+- Seasonal cadence: 6 tests
+- Delegation policy: 14 tests
+- CLI end-to-end: 1 test
+
+### Learnings
+
+1. **Time injection is essential for seasonal logic testing** — Without it, tests are non-deterministic and tied to current date
+2. **Delegation policy boundary semantics** — Window is inclusive on both ends (from ≤ now ≤ to)
+3. **Integration test patterns** — Subprocess execution with `os/exec` is idiomatic for CLI testing
+4. **YAML validation strategies** — Structural validation (parse + assert fields) > golden files for compiler output
+5. **Test organization** — Domain tests at package level, integration tests with build tags
+
+**Phase 4 Status:** ✅ Complete
+
+---
+
 ## Open Questions & Future Work
 
 1. Should full E2E tests live in v2 repo?
@@ -156,3 +236,54 @@ PASS ok  0.200s
 - `v2/cmd/gert` — CLI tool
 - `domains/home/` — gert-domain-home compiler + tests
 - `.squad/decisions.md` — All decisions (Phase 1–3)
+
+---
+
+## Phase 4: Domains/Home Test Coverage (2026-04-24)
+
+**Status:** ✅ Complete — 21 tests green
+
+**Mission:** Write comprehensive test suites for domains/home compiler to validate correctness.
+
+### Deliverables
+
+1. **Seasonal Cadence Tests (6 tests)**
+   - Added time-injection variant `CompileRoutineAt(prop, routine, now)` to eliminate time-dependent flakiness
+   - Tests: Summer (7d), Winter (21d), Spring (14d), Autumn (7d), boundary conditions
+   - Pattern established for future time-dependent testing
+
+2. **Delegation Policy Tests (14 tests)**
+   - `IsAwayModeActive()` — away window validation with time-injection
+   - `RoutineIsAssignedToDelegate()` — routine-to-delegate mapping
+   - `GetDelegateForRoutine()` — integration of both checks
+   - Coverage: happy path, boundary conditions, edge cases
+
+3. **CLI Integration Test (1 test)**
+   - End-to-end: `home-validate casa-santiago.home.yaml → GERT YAML`
+   - Structural YAML validation (parse + assert properties)
+   - Not golden-file based (more resilient to compiler improvements)
+
+### Decisions Generated
+
+1. **Time Injection Pattern for Seasonal Cadence Testing** — Deterministic, idiomatic Go approach
+2. **Structural YAML Validation over Golden Files** — Maintainable, clearer test failures
+3. **Delegation Policy Function Signatures (Observation)** — Asymmetry is intentional; documented future enhancement path
+
+### Technical Patterns
+
+- Time injection method signature: `func (c *Compiler) CompileRoutineAt(prop, routine, now)`
+- Structural validation: parse YAML → check field presence → validate structure
+- Integration tests use `//go:build integration` tag (not run by default)
+
+### Quality
+
+- All 21 tests green ✅
+- Follows existing test patterns in codebase
+- Zero breaking changes to public API
+
+### Next Phase
+
+- Ken: v2 schema roundtrip validation (with documented constraint)
+- John: Minimal example property
+- Team: Merge Phase 4 decisions, address schema gaps in v1 enhancement
+

@@ -1,6 +1,6 @@
 # Gert v2 Decisions
 
-**Last Updated:** 2026-04-19T21:09:46Z
+**Last Updated:** 2026-04-24T03:20:42Z
 
 ---
 
@@ -6677,3 +6677,1945 @@ Phase 20 is sealed. Ready for Scribe commit.
 5. **Edge routing** — Added `borderRadius: 8` to smooth-step path, increased ELK edge-node spacing from 20→30 to prevent edges clipping through nodes.
 6. **Handle visibility** — Hidden React Flow handle dots on all nodes for cleaner appearance.
 7. **Start/End/Decision/Join node CSS** — Added proper dark-themed styling for each node type.
+
+
+---
+
+## Inbox Merged Decisions (2026-04-24T03:19:43Z)
+
+**Scribe merge:** 17 decisions from `.squad/decisions/inbox/` consolidated below.
+
+---
+
+### barbara-phase18-preflight.md
+
+# Phase 18 Preflight Report
+**Date:** 2026-04-21
+**Baseline:** 933cb57
+
+## Checks
+- [x] go build: **PASS**
+- [x] go vet: **PASS**
+- [x] go test -race: **PASS** (34 packages, 0 failures)
+- [x] git status: **CLEAN** (working tree clean, 19 commits ahead of origin)
+- [x] git log: **PHASE 17 PRESENT** (f9c43c9 seals Phase 17; 933cb57 confirms baseline)
+
+## Verdict
+**ALL GREEN** ✓
+
+Phase 17 is properly sealed and all verification checks pass. Baseline is stable and ready for Phase 18 work to begin.
+
+---
+
+### barbara-phase19-preflight.md
+
+# Phase 19 Preflight Report
+**Date:** 2026-04-21
+**Baseline:** 66c4676 (HEAD) | Phase 18 sealed commit: 24d863e
+
+## Checks
+- [x] go build: **PASS**
+- [x] go vet: **PASS**
+- [x] go test -race: **PASS** (all 28 packages with tests passed)
+- [x] git status: **CLEAN** (working tree has untracked .squad metadata files, not blocking)
+- [x] git log: **PHASE 18 PRESENT** (66c4676 is seal commit, 24d863e verified in history)
+
+## Details
+- **Build:** Successful, no errors or warnings
+- **Vet:** All packages pass static analysis
+- **Tests:** 28 test packages executed with race detector, 100% pass rate (67.5s total)
+- **Git:** On main branch, ahead by 22 commits from origin, working tree reflects expected squad metadata edits
+
+## Verdict
+**✅ ALL GREEN**
+
+Phase 19 is clear to proceed. Baseline is stable and ready for development.
+
+---
+
+### barbara-phase20-preflight.md
+
+# Phase 20 Preflight Report
+**Date:** 2025-01-17  
+**Baseline:** c0f9189
+
+## Checks
+- [x] go build: **PASS** — No errors, clean build
+- [x] go vet: **PASS** — No issues found
+- [x] go test -race: **PASS** — All 35 packages with tests passed (9 packages have no test files)
+- [x] git status: **CLEAN** — Working tree is clean (tracked files only: .squad/agents/scribe/history.md, .squad/identity/now.md)
+- [x] git log: **PHASE 19 PRESENT** — Commit c0f9189 confirmed; HEAD is 75055b8 (Phase 19 sealed)
+
+## Verdict
+**✅ ALL GREEN — READY FOR PHASE 20**
+
+Baseline is solid. No blockers detected. Brian is cleared to begin Phase 20.
+
+---
+
+### brian-sourcemap-go-struct.md
+
+### 2026-04-22: Go struct for sourcemap.yaml (Kit Traceability Layer 2)
+
+**By:** Brian (Go Programmer)
+
+**What:** Define `v2/pkg/kit/sourcemap/` package with SourceMap struct (yaml-tagged), Load(), and Validate() functions. Validate() enforces the 5-rule Kit Traceability Contract. Used by kit compiler to emit the sidecar and by `gert-kit lint` to verify compliance.
+
+**Why:** sourcemap.yaml format was informal prose — needs a Go struct as the canonical schema definition so kits cannot claim compliance without mechanical verification.
+
+**Status:** Design sketch complete. Implementation deferred to v2.1 (same milestone as Step.Meta).
+
+---
+
+## Design Details
+
+**Package:** `v2/pkg/kit/sourcemap/`
+
+**Key Types:**
+- `SourceMap` — Root structure with version, kit, runbook, lowered_at, entries
+- `Entry` — Per-step metadata with kind, name, source_file, source_line, and concept-specific fields
+- `ValidationError` — Field path + message + severity (error/warning)
+
+**Key Functions:**
+- `Load(path string) (*SourceMap, error)` — Parse YAML file
+- `Validate(sm *SourceMap) []ValidationError` — Enforce 5 contract rules
+- `validateStepID(stepID, kitPrefix string) error` — Check step ID naming convention
+
+**Contract Rules Enforced:**
+1. Step IDs follow `{kit-prefix}.{kind}.{name}.{sub}` convention
+2. Required fields: version, kit, runbook, lowered_at, entries
+3. Determinism (verified via test, not runtime validation)
+4. Version and kit ID are valid
+5. (Step.Meta is runbook-level, not sourcemap scope)
+
+**CLI Integration:**
+```bash
+gert-kit vacation lint build/stay-floripa.sourcemap.yaml --check schema
+```
+
+**Implementation Scope:** ~200 lines Go + ~150 lines tests
+
+**See:** `.squad/tmp/brian-sourcemap-struct.md` for full design sketch
+
+---
+
+### ken-doc-review-verdict.md
+
+# Decision: Three-Document Corpus Review — APPROVED
+
+**Date:** 2026-04-19  
+**Decider:** Ken (Software Architect)  
+**Context:** Cross-consistency review of gert-v2 Design Document (3 refactored sections), Domain Kit Development Guide (9 sections), and DRI Domain Kit Manual (10 sections)
+
+---
+
+## Decision
+
+The three-document corpus is **APPROVED** for publication and forward reference.
+
+---
+
+## Rationale
+
+### What Was Reviewed
+
+1. **gert v2 Design Document** — Refactored sections:
+   - `04-domain-kit-model.tex` (499 lines)
+   - `03-schema-vnext.tex` (3,117 lines)
+   - `12-governance-policy.tex` (544 lines)
+
+2. **Domain Kit Development Guide** — All 9 sections (00-introduction through 08-reference)
+
+3. **DRI Domain Kit Manual** — All 10 sections (00-introduction through 09-reference)
+
+### Review Criteria
+
+Four consistency checks were performed:
+
+- **A) No DRI residue in gert-v2 core** — ✅ PASS  
+  Only one appropriate forward reference to `gert.ops` as an external Kit. No DRI role names, no incident response vocabulary, no Kit-Zero terminology in the gert core schema.
+
+- **B) Correct forward references** — ✅ PASS  
+  All three documents correctly cross-reference each other. No orphaned references, no missing links.
+
+- **C) Terminology consistency** — ✅ PASS  
+  Canonical terms ("Domain Kit," "lowering," "gert core") used consistently. DRI role names use consistent casing and hyphenation.
+
+- **D) Content gaps or orphaned content** — ✅ PASS  
+  No content gaps. The three documents form a coherent, self-contained corpus.
+
+### Key Findings
+
+1. **Separation of concerns is clean.**  
+   gert core = zero domain vocabulary. The DRI vocabulary lives exclusively in the `gert.ops` Domain Kit Manual.
+
+2. **Cross-references are correct and complete.**  
+   The DRI Manual references both the gert v2 Design Document and the Domain Kit Guide as prerequisites. The Domain Kit Guide references the gert v2 Design Document for core concepts. No circular dependencies.
+
+3. **Terminology is consistent.**  
+   All three documents use the same canonical terms for Domain Kits, lowering, and gert core concepts.
+
+4. **No substantive revisions required.**  
+   All issues found were minor (none). The corpus is ready for publication.
+
+---
+
+## Principle Established
+
+### gert core = zero domain vocabulary; domain kits = separate documents
+
+This review establishes the following architectural principle:
+
+**The gert v2 core schema contains only domain-agnostic execution primitives.** Domain-specific vocabularies (DRI roles, incident response workflows, change management semantics) live in **separately-distributed Domain Kits** with **separate documentation**.
+
+This principle ensures:
+- **Kernel stability:** The gert core schema does not change when new domains are added.
+- **Domain extensibility:** New domains can be added via Kits without contaminating the core.
+- **Documentation clarity:** Core concepts (gert v2 Design Document), Kit development (Domain Kit Guide), and domain-specific usage (DRI Manual) are documented separately.
+
+---
+
+## State of the Three-Document Corpus
+
+### gert v2 Design Document (3 refactored sections)
+
+**Status:** Refactored sections are consistent with the Domain Kit model.
+
+**Key content:**
+- §03 Schema vNext — Core runbook schema (domain-agnostic)
+- §04 Domain Kit Model — Architectural rationale for Kits, forward references to Domain Kit Guide and DRI Manual
+- §12 Governance and Policy — Core governance primitives (no domain-specific policy)
+
+**Forward references:**
+- → Domain Kit Development Guide (for Kit implementation)
+- → DRI Domain Kit Manual (as an example Kit)
+
+### Domain Kit Development Guide (9 sections)
+
+**Status:** Complete and ready for use.
+
+**Key content:**
+- How to build a Domain Kit (schema, compiler, validators, projections)
+- Example Kit: `gert.compliance` (domain-agnostic)
+- No DRI-specific content
+
+**Prerequisites:**
+- ← gert v2 Design Document (for core concepts)
+
+### DRI Domain Kit Manual (10 sections)
+
+**Status:** Complete and ready for use.
+
+**Key content:**
+- DRI accountability model
+- `gert.ops` Kit schema and step types
+- Change request and incident response workflows
+
+**Prerequisites:**
+- ← gert v2 Design Document (for core concepts)
+- ← Domain Kit Development Guide (for Kit development)
+
+---
+
+## Next Steps
+
+1. ✅ **Publish the three-document corpus** as the authoritative gert v2 documentation.
+
+2. **Enforce the principle** in all future design work:
+   - No domain-specific vocabulary in gert core.
+   - Domain vocabularies go in Kits with separate documentation.
+
+3. **Update the team README** to reflect the three-document structure and the principle established.
+
+---
+
+## Conclusion
+
+The three-document corpus is **architecturally sound** and **ready for publication**. The principle of "gert core = zero domain vocabulary; domain kits = separate documents" is correctly implemented and should be enforced in all future design decisions.
+
+---
+
+**Signed:**  
+Ken, Software Architect  
+2026-04-19
+
+---
+
+### ken-home-domain-kit.md
+
+# Decision: Adopt gert-domain-home as First Consumer Domain Kit
+
+**Date:** 2024-04-21  
+**Decider:** Ken (Software Architect)  
+**Status:** Proposed  
+**Context:** gert v2 design, domain kit validation strategy
+
+---
+
+## Decision
+
+Adopt **gert-domain-home** as the first official non-enterprise GERT domain kit, to be built as a v0 prototype validating the domain kit compilation model.
+
+---
+
+## Rationale
+
+### 1. Pattern Coverage
+
+Home management exercises all three core GERT patterns in one domain:
+- **Recurring** — maintenance routines with timer-backed runs, seasonal cadence awareness
+- **Reactive** — ad-hoc incident runs triggered by user reports, no predefined schedule
+- **Delegation** — time-bounded policy routing with scoped projections for simplified executor views
+
+This validates GERT's runtime primitives more thoroughly than a single-pattern enterprise domain (e.g., pure approval workflows or deployment pipelines).
+
+### 2. Real Daily Use
+
+Unlike enterprise domains requiring multi-person coordination, home management is:
+- **Personal** — one owner, optional family delegates (simple authority model)
+- **Daily** — tasks occur weekly, not quarterly (frequent runtime exercising)
+- **Tangible** — mowed lawn, cleaned pool, fixed hinge provide immediate visible proof
+
+Daily mobile app usage will surface UX friction and runtime assumptions invisible in less-frequent enterprise scenarios.
+
+### 3. Mobile Companion Design
+
+The home domain demands a calm, practical mobile app (not a web dashboard). This forces GERT's projection and policy systems toward simplicity:
+- Projection must be fast enough for mobile refresh latency (<100ms target)
+- Event schema must be compact enough for mobile SSE streaming
+- Evidence capture must work with offline photo upload queuing (v1)
+
+### 4. Non-Technical User Validation
+
+Home domain targets non-technical users (homeowners, not engineers). This validates:
+- Domain kit abstractions are intuitive (no YAML exposure, no "run" jargon)
+- Mobile UX is calm and practical (no dashboards, no KPIs, just "what to do today")
+- Evidence capture is friction-free (photo → tap → done, <30 seconds)
+
+Success: A non-technical user can complete daily tasks for 30 days without requesting help.
+
+### 5. Architectural Stress Testing
+
+Home domain surfaces critical GERT issues early:
+- **Timer drift** — if reset logic is wrong, 7-day cadence becomes 8 days after 10 iterations
+- **Projection staleness** — if Today tab doesn't update on task completion, user loses trust
+- **Policy bugs** — if delegation doesn't expire at end_date, delegate keeps getting tasks after owner returns
+- **Evidence failures** — if photo upload fails silently, proof of completion is lost
+
+Enterprise workflows (monthly approvals, quarterly releases) hide these bugs for months. Home domain exposes them in days.
+
+---
+
+## Consequences
+
+### Positive
+
+1. **Validates domain kit model** — proves thin DSL can compile to GERT primitives with zero runtime reimplementation
+2. **Drives projection performance** — <100ms mobile requirement forces GERT to optimize read-side queries
+3. **Tests time-bounded policies** — delegation validates automatic policy expiration (no manual cleanup)
+4. **Proves evidence primitive** — photo/note attachment makes GERT evidence concrete (not just enterprise audit trail)
+5. **Real-world feedback** — daily use by 2+ non-technical users in v0 validation phase
+
+### Negative
+
+1. **Seasonal rules require OPA** — v0 defers seasonal cadence to v1 (blocked on GERT v2.1 OPA integration)
+2. **Dynamic routine creation not designed** — consumable tracking (auto-create replacement routine) requires template-based run instantiation, not yet in GERT
+3. **Offline photo upload deferred** — v0 assumes always-online, queued upload needs v1 (adds mobile complexity)
+
+### Mitigations
+
+- **v0 scope discipline** — defer seasonal rules, AI hints, consumable tracking to v1 (keeps v0 buildable in 6 weeks)
+- **OPA integration in parallel** — GERT v2.1 adds policy-as-code while Home v0 validates simple cadence
+- **Offline queue in v1** — v0 prototype proves model with always-online assumption, v1 adds production resilience
+
+---
+
+## Alternatives Considered
+
+### Alt 1: Enterprise Approval Workflow Kit
+
+**Pros:** Directly validates governance primitives (approval gates, redaction, audit trail)  
+**Cons:** Low-frequency usage (approvals are monthly/quarterly), hides timer/projection bugs, no non-technical user validation
+
+**Why rejected:** Doesn't stress GERT runtime as thoroughly as daily home usage.
+
+### Alt 2: E-Commerce Order Fulfillment Kit
+
+**Pros:** Multi-step workflows (order → pick → pack → ship), external integrations (payment, shipping APIs)  
+**Cons:** Requires payment provider stubbing, complex error handling (payment failures, shipping delays), no personal daily use
+
+**Why rejected:** Too much incidental complexity (payment/shipping integrations) obscures GERT primitive validation.
+
+### Alt 3: Personal Finance Budget Tracker Kit
+
+**Pros:** Daily data entry, non-technical users, mobile-first  
+**Cons:** Mostly data collection (not orchestration), minimal timer usage, no delegation pattern
+
+**Why rejected:** Doesn't validate durable-run orchestration (GERT's core value). Could be built with a database + cron jobs.
+
+---
+
+## Implementation Plan
+
+### v0 Scope (6 weeks)
+
+**Included:**
+- Property + zones + assets (data model)
+- 2–3 recurring routines with simple cadence (pool check every 3d, lawn mowing every 7d)
+- 1 repair run template (diagnose → buy → fix → verify)
+- Delegation with date-bounded policy + simplified delegate view
+- Mobile Today tab (task list, evidence capture, push notifications)
+- Evidence: photo + note (no GPS)
+
+**Deferred to v1:**
+- Seasonal cadence rules (requires OPA)
+- AI hints (weather-aware suggestions)
+- Consumable tracking (auto-routine creation)
+- Property/Tasks/History tabs (Today tab proves model)
+- Reminder notifications (requires timer + notification policy)
+- Offline evidence upload queue
+
+### Success Criteria
+
+v0 is successful if:
+1. Domain kit compilation works (routine.yaml → valid GERT ExecutionPlan)
+2. Timer-backed runs work (no drift, correct cadence reset)
+3. Delegation works (time-bounded routing, auto-expiration, evidence review)
+4. Evidence capture works (photo/note persist in GERT evidence log)
+5. Reactive incidents work (user-reported → multi-step repair run completes)
+6. Mobile app usable (non-technical user completes daily tasks <1 min per task)
+
+**Validation method:** 14-day daily use by 2 non-technical users  
+**Metrics:** Completion rate >90%, evidence rate >70%, bugs <5 blocking, NPS 7+/10
+
+### Timeline
+
+- **Weeks 1–2:** Backend (property/routine/incident models, GERT compiler for Home DSL)
+- **Weeks 3–4:** Mobile app (Today tab, evidence capture, delegation UI)
+- **Week 5:** Integration testing (routine cadence, delegation expiration, repair run)
+- **Week 6:** User validation (14-day usage by non-technical users, collect feedback)
+
+---
+
+## Review Status
+
+- [ ] Reviewed by Brian (Implementation Lead)
+- [ ] Reviewed by Barbara (Integration)
+- [ ] Reviewed by Leslie (Documentation)
+- [ ] Approved by Cristian (Team Lead)
+
+---
+
+## Related Decisions
+
+- **Phase 1 Decision 3:** Extension isolation via JSON-RPC (domain kits use same isolation model)
+- **Phase 2 Decision:** Flat ExecutionPlan (domain compilers generate linear plans, not DAGs)
+- **Phase 11 Decision:** Evidence as append-only log (Home domain uses GERT evidence primitive)
+- **Future:** OPA integration for policy-as-code (GERT v2.1, enables seasonal cadence in Home v1)
+
+---
+
+## Appendix: Domain Concepts → GERT Primitives Mapping
+
+| Home Concept | GERT Primitive | Notes |
+|--------------|----------------|-------|
+| routine | Timer-backed durable run | Run never completes, yields after each execution |
+| cadence (simple) | Timer policy (fixed interval) | `next_wakeup = last_completion + N days` |
+| cadence (seasonal) | Timer policy (date-aware) | Requires OPA, deferred to v1 |
+| maintenance task | Human task step | With evidence requirement |
+| incident | Ad-hoc run | User-triggered, no timer |
+| repair run | Sub-run (child of incident) | 4 sequential human task steps |
+| delegation | Time-bounded policy | Routes tasks to delegate during absence window |
+| away mode | Projection | Filters run graph to delegate-scoped tasks |
+| evidence | GERT evidence primitive | Photo/note attachment, SHA256-hashed, immutable |
+| zone | Metadata (run tags) | Filtering/grouping only, no runtime semantics |
+| asset | Metadata (run tags) | Same as zone |
+| executor | Human task assigned_to field | Owner, delegate, or contractor |
+
+---
+
+## Sign-off
+
+**Ken (Architect):** ✅ Approved  
+**Date:** 2024-04-21  
+**Next step:** Review by team, Brian to begin v0 implementation design
+
+---
+
+### ken-home-pkg-layout.md
+
+# Decision: gert-domain-home Package Structure
+
+**Decision ID:** D-HOME-01  
+**Date:** 2024-04-24  
+**Author:** Ken (Software Architect)  
+**Status:** APPROVED  
+**Context:** Package layout for gert-domain-home v0 domain kit
+
+---
+
+## Decision
+
+gert-domain-home will be structured as a **separate Go module** at `domains/home/` with a 4-package architecture: `model`, `loader`, `compiler`, `delegation`.
+
+---
+
+## Rationale
+
+### 1. Module Placement: `domains/home/` (separate module, not `v2/pkg/domains/home/`)
+
+**Why separate module:**
+- **Architectural boundary** — Domain kits are compilation layers over GERT runtime, not part of core. Separate module enforces dependency direction: kit depends ON v2, never reverse.
+- **Independent versioning** — While v0 lives in monorepo, structure enables future extraction to `github.com/ormasoftchile/gert-domain-home` without refactoring.
+- **go.work integration** — Repo already uses workspace for multi-module coordination (`./ext/*` modules). Adding `./domains/home` is consistent.
+- **Monorepo benefits retained** — Using `replace` in go.work, home kit references local v2 during development without publishing intermediate versions.
+
+**Alternative rejected:** `v2/pkg/domains/home/` would blur core/kit boundary and couple domain kit versioning to runtime versioning.
+
+---
+
+### 2. Package Structure: 4 Core Packages
+
+**pkg/model/** — Pure domain vocabulary (Property, Zone, Routine, Incident, Delegation)  
+- No GERT types — household concepts only
+- Loader outputs these types, compiler consumes them
+- Exported types: Property, Zone, Asset, Routine, Cadence, Incident, Delegation, Executor, Task, Evidence
+
+**pkg/loader/** — YAML DSL parser (`.home.yaml` → model types)  
+- Validates zone ID uniqueness, cadence rules (simple only in v0)
+- Rejects v1-only features (seasonal cadence, consumables)
+- Interface: `PropertyLoader.Load(ctx, io.Reader) (*model.Property, error)`
+
+**pkg/compiler/** — Domain model → GERT execution graph  
+- Routine → timer-backed run + human task
+- Incident → ad-hoc run + repair sub-run (4 sequential steps)
+- Cadence → timer interval (simple: every_n_days * 86400 seconds)
+- Interface: `DomainCompiler.CompileProperty(ctx, *Property) (*engine.ExecutionPlan, error)`
+- **Only package that imports GERT types** (engine, schema, evidence)
+
+**pkg/delegation/** — Away mode + delegate routing logic  
+- DelegationPolicy: evaluate time window + scoped tasks filter
+- TaskFilter: delegate-visible projection
+- No GERT imports — operates on model types only
+
+**Why 4 packages (not monolithic):**
+- Separation of concerns: parsing ≠ compilation ≠ domain modeling ≠ policy evaluation
+- Compiler is the only GERT-aware package — others are pure domain logic
+- Testability: loader tests parse golden files, compiler tests use model fixtures, delegation tests use time-bounded scenarios
+
+**Why no `internal/`:**
+- v0 simplicity — all packages are public API for this kit
+- Future v1 may add internal helpers, but v0 has no need
+
+---
+
+### 3. GERT Dependency Isolation
+
+**Architectural invariant:** Only `pkg/compiler/` imports GERT runtime types.
+
+**Dependency graph:**
+```
+pkg/model        → (no imports)
+pkg/loader       → pkg/model, gopkg.in/yaml.v3
+pkg/delegation   → pkg/model
+pkg/compiler     → pkg/model, v2/pkg/engine, v2/pkg/schema, v2/pkg/evidence
+```
+
+**Why this matters:**
+- Domain model (`pkg/model`) is pure business logic — no GERT leakage
+- Loader can be tested without GERT runtime (just YAML → model validation)
+- Compiler is the single boundary where domain vocabulary lowers to GERT primitives
+- This proves the **compilation model**: domain kits are thin translation layers, not runtime reimplementations
+
+---
+
+### 4. go.work Integration
+
+Added `./domains/home` to workspace:
+```
+use (
+    .
+    ./ext/debug
+    ./ext/diagram
+    ./ext/mcp
+    ./ext/render
+    ./ext/serve
+    ./ext/tui
+    ./v2
+    ./domains/home   # ← NEW
+)
+```
+
+**Effect:**
+- IDE recognizes home kit as part of workspace
+- `go test ./...` from repo root runs home kit tests
+- `go work sync` keeps dependencies aligned
+- No need to publish v2 during development
+
+---
+
+## Key Interfaces
+
+### PropertyLoader (pkg/loader)
+```go
+type PropertyLoader interface {
+    Load(ctx context.Context, r io.Reader) (*model.Property, error)
+}
+```
+
+### DomainCompiler (pkg/compiler)
+```go
+type DomainCompiler interface {
+    CompileProperty(ctx context.Context, p *model.Property) (*engine.ExecutionPlan, error)
+    CompileIncident(ctx context.Context, inc *model.Incident) (*engine.ExecutionPlan, error)
+}
+```
+
+### DelegationPolicy (pkg/delegation)
+```go
+type DelegationPolicy interface {
+    ShouldDelegate(ctx context.Context, d *model.Delegation, taskName string, now time.Time) bool
+    GetDelegateExecutorID(ctx context.Context, d *model.Delegation, taskName string, now time.Time) string
+}
+```
+
+---
+
+## Implementation Order (4 Phases)
+
+**Phase 1 (Week 1):** Model + Loader  
+- Scaffold `domains/home/` with go.mod
+- Implement `pkg/model/` (all domain types)
+- Implement `pkg/loader/` (YAML parser + validation)
+- Build `cmd/home-validate/` CLI
+- Parse `testdata/property-simple.yaml` successfully
+
+**Phase 2 (Week 2):** Compiler  
+- Implement `pkg/compiler/` (routine → run, incident → repair)
+- Wire GERT v2 dependencies
+- Test: compile simple routine → verify ExecutionPlan structure
+
+**Phase 3 (Week 3):** Delegation  
+- Implement `pkg/delegation/` (routing + projection)
+- Test: time-bounded delegation, task filtering
+
+**Phase 4 (Week 4):** Integration (hand off to Barbara)  
+- E2E test: load → compile → execute with v2 runtime
+- Verify: timer wakes → task created → evidence attached → timer resets
+
+---
+
+## Open Design Questions (for Brian)
+
+Before Phase 2 implementation, verify GERT v2 runtime capabilities:
+
+1. **Timer reset support** — Does `v2/pkg/schema.TimerStep` support dynamic next_wakeup recalculation on completion? (Required for cadence rules)
+
+2. **Sub-run support** — Does `v2/pkg/engine.ExecutionPlan` support parent-child run relationships? (Required for incident → repair sub-run lowering)
+
+3. **Evidence API** — How does evidence attach to a human task step? At step level or run level? Review `v2/pkg/evidence/evidence.go`.
+
+---
+
+## Success Criteria
+
+This decision is successful if:
+
+1. **Brian can scaffold Phase 1 in 1 day** — directory structure, go.mod, model types, loader stub
+2. **Loader parses spec example** — `testdata/property-full.yaml` (from spec §3.7) loads without errors
+3. **Compiler generates valid ExecutionPlan** — Barbara's integration test executes a routine end-to-end
+4. **No GERT leakage** — `pkg/model`, `pkg/loader`, `pkg/delegation` import zero GERT packages
+
+**Strategic validation:** This proves the **domain kit compilation model** — thin authoring DSL compiles to GERT primitives with zero runtime reimplementation. If successful, future kits (manufacturing, deployment, compliance) follow the same pattern.
+
+---
+
+## Related Documents
+
+- **Spec:** `specs/gert-domain-home/v0.md` (domain concepts, DSL, lowering semantics)
+- **Design:** `.squad/tmp/ken-home-package-design.md` (full 22KB design document)
+- **Implementation:** Brian (Phases 1-3), Barbara (Phase 4 integration)
+
+---
+
+**Status:** APPROVED — Ready for Brian to begin Phase 1 scaffolding.
+
+---
+
+### ken-kit-certification-tracking.md
+
+### 2026-04-22: Tracking — Kit Certification process (v2.1 design item)
+**By:** Ken (Software Architect)
+**What:** The §4.10 Kit Traceability Contract and decision VK-01 both reference "kit certification" as a hard requirement for traceability compliance. No process, registry, or tooling exists yet. This is a tracked v2.1 design item — not blocking v2.0, but must be designed before the first production kit ships.
+**Scope:** (1) Kit registry with reverse-DNS naming enforcement to prevent prefix collisions. (2) `gert-kit validate` certification subcommand that runs the 5-rule traceability contract. (3) Kit registry lookup during engine startup to validate installed kits.
+**Owner:** Ken (design), Brian (Go implementation of registry lookup).
+**Why:** Without a registry, two kits could claim the same step ID prefix, producing untraceable merged traces. This must not be left implicit.
+
+---
+
+### ken-phase18-design.md
+
+# Ken — Phase 18 Design Decisions
+
+**Date:** 2026-04-21  
+**Author:** Ken (Staff Architect)  
+**Phase:** 18
+
+---
+
+## Decisions
+
+### D-18-01: JWT Signature Algorithm
+
+**Decision:** JWT signature verification uses HMAC-SHA256 only.
+
+**Rationale:**
+- HS256 is symmetric — same key signs and verifies, simple for single-server deployment
+- No RSA (RS256/RS512) or ECDSA (ES256) to avoid key management complexity
+- HMAC-SHA256 is cryptographically strong and widely supported
+- Future Phase can add RS256 for multi-server / external issuer scenarios
+
+**Alternatives considered:**
+- RS256: Asymmetric keys enable external token issuers but add key management overhead
+- `alg:none`: REJECTED — this is the vulnerability we're fixing
+
+---
+
+### D-18-02: Mutual Exclusivity of Auth Modes
+
+**Decision:** `--auth-token` and `--auth-jwt-secret` are mutually exclusive.
+
+**Rationale:**
+- Clear mental model: one auth mode per server
+- Avoids ambiguity when both are set
+- Explicit error at startup if misconfigured
+- Token parameter semantics change between modes (opaque vs. structured)
+
+**Implementation:** `serve.go` validates at flag parse time.
+
+---
+
+### D-18-03: Fail-Secure Behavior
+
+**Decision:** When using plain bearer token mode (`--auth-token`), reject any token that looks like a JWT.
+
+**Rationale:**
+- Prevents silent acceptance of unverified JWTs
+- Forces operators to explicitly choose JWT mode
+- Attack vector: attacker sends forged JWT to plain token endpoint; if we just compared bytes, it would fail anyway, but the error message helps operators realize they're misconfigured
+- Clear error message: "Unauthorized: JWT tokens require --auth-jwt-secret"
+
+**Trade-off:** Legitimate use of three-dot-separated plain tokens is blocked. This is acceptable — such tokens are rare and can be reformatted.
+
+---
+
+### D-18-04: Minimum Secret Length
+
+**Decision:** JWT secret must be at least 32 bytes (256 bits).
+
+**Rationale:**
+- HMAC-SHA256 produces 256-bit output; keys shorter than 256 bits weaken security
+- Industry standard minimum for HS256
+- Explicit validation at startup prevents weak secrets
+
+**Error message:** "serve: --auth-jwt-secret must be at least 32 bytes (256 bits) for security"
+
+---
+
+### D-18-05: run.delete Safety Invariant
+
+**Decision:** `run.delete` RPC refuses to delete runs with status "running".
+
+**Rationale:**
+- Consistency with `gert gc` command behavior
+- Deleting a running run could corrupt state or leave orphan processes
+- Clear error code (-32001) and message for clients
+
+**Allowed statuses for deletion:** completed, failed, cancelled, pending
+
+---
+
+## Scope Decisions
+
+### NBI-17-02: Token Rotation — DEFERRED
+
+**Rationale:** Short token expiry (`--auth-token-expiry`) provides rotation semantics without blocklist complexity. In-memory blocklist would:
+- Grow unboundedly without TTL
+- Clear on restart (inconsistent with external services)
+- Add map synchronization overhead
+
+**Recommendation:** Address token rotation via external OAuth2/OIDC in Phase 19+.
+
+### NBI-16-03: E2E Parallelization — DEFERRED
+
+**Rationale:** Requires audit of shared state across all E2E tests (temp dirs, ports, run store). Low priority relative to security fix. Scope for dedicated parallelization phase.
+
+### NBI-17-04: Rate Limiting — DEFERRED
+
+**Rationale:** Important for production but lower priority than authentication bypass fix. Can be added in Phase 19 with proper token bucket / sliding window design.
+
+---
+
+## Security Assessment
+
+### Threat Model
+
+**Attacker capability:** Network access to `gert serve` endpoint.
+
+**Pre-Phase 18 (vulnerable):**
+1. Attacker observes JWT format in use
+2. Attacker crafts JWT with `alg:none`, valid `exp`, arbitrary claims
+3. Attacker authenticates to server
+4. **Impact:** Complete authentication bypass
+
+**Post-Phase 18 (mitigated):**
+1. Attacker must know the 256-bit HMAC secret to forge valid signature
+2. `alg:none` explicitly rejected
+3. Wrong algorithm explicitly rejected
+4. Short expiry limits window for stolen tokens
+
+**Residual risks:**
+- Secret exposure (environment variable logging, etc.)
+- Token theft before expiry
+- Addressed by: OAuth2/OIDC in future phase, secret rotation procedures in docs
+
+---
+
+## Breaking Changes
+
+### JWT Token Format
+
+**Before (Phase 17):**
+- `--auth-token` accepts any string, including JWT-formatted tokens
+- JWT tokens validated only for `exp` and `iat` claims
+- Signature not verified
+
+**After (Phase 18):**
+- `--auth-token` accepts only non-JWT strings (fail-secure)
+- JWT tokens require `--auth-jwt-secret` flag
+- Signature verified with HMAC-SHA256
+- `alg` must be "HS256"
+
+### Migration
+
+```bash
+# Before (Phase 17) — INSECURE
+gert serve --auth-token "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3MTQ0MDAwMDB9."
+
+# After (Phase 18) — Option 1: Plain token
+gert serve --auth-token "my-secure-random-token"
+
+# After (Phase 18) — Option 2: Signed JWT
+export JWT_SECRET=$(openssl rand -base64 32)
+gert serve --auth-jwt-secret "$JWT_SECRET" --auth-token-expiry 24h
+# Clients must generate JWTs signed with $JWT_SECRET
+```
+
+---
+
+*Ken, Staff Architect — 2026-04-21*
+
+---
+
+### ken-phase18-review.md
+
+# Ken — Phase 18 Review
+**Date:** 2026-04-21
+**Reviewer:** Ken
+**Verdict:** APPROVED
+
+## Summary
+
+Brian's Phase 18 implementation correctly addresses the critical JWT signature verification vulnerability (NBI-17-01), adds the `run.delete` RPC for CRUD completion, and applies the `WaitForSubscriber` pattern to eliminate the WebSocket timing flake. All tests pass with `-race`, and the security-critical code follows best practices.
+
+## Security Verification (Part A)
+
+### ✅ Signature verification is first, THEN claims
+**Lines 194-229 in middleware.go:** `verifyJWT` correctly:
+1. Parses the header and checks `alg == HS256` (line 211)
+2. Computes HMAC-SHA256 signature (lines 216-218)
+3. Compares with `hmac.Equal` (line 225)
+4. ONLY THEN validates time claims via `validateJWTExpiry` (line 229)
+
+Order is correct. An attacker cannot bypass signature verification by manipulating claims.
+
+### ✅ `hmac.Equal` used for constant-time comparison
+**Line 225:** `if !hmac.Equal(expectedSig, providedSig) {...}` — correct. This is the proper function for comparing HMAC digests in constant time, preventing timing attacks.
+
+### ✅ `looksLikeJWT` called in plain-bearer mode
+**Lines 168-173:** When `jwtSecret == nil` (plain bearer mode), `looksLikeJWT(provided)` is called. If true, returns 401 Unauthorized. This is the fail-secure invariant.
+
+**Line 187-189:** `looksLikeJWT` requires **non-empty** third segment, which means alg:none tokens with empty signatures (ending in `header.payload.`) return false and don't trigger fail-secure — but they also fail constant-time comparison with plain token. Net effect: still rejected.
+
+### ✅ Mutual exclusivity enforced
+**Lines 40-43 in cmd/gert/serve.go:** `--auth-token` and `--auth-jwt-secret` both set → `exitValidation`. Correct.
+
+### ✅ 32-byte minimum enforced
+**Lines 53-56 in cmd/gert/serve.go:** `len(jwtSecretBytes) < 32` → error. Correct. 256-bit minimum for HMAC-SHA256.
+
+### ✅ HS256 is the only accepted algorithm
+**Line 211 in middleware.go:** `if hdr.Alg != "HS256" { return fmt.Errorf("unsupported algorithm: %s", hdr.Alg) }` — correct. RS256, ES256, none, or any other algorithm → 401.
+
+### ✅ `alg:none` attack blocked
+**TestBearerAuth_JWTWrongAlgorithm** verifies this. When `alg:none` JWT is submitted to JWT mode, the algorithm check rejects it before signature verification. Combined with the fail-secure invariant in plain mode, this attack vector is fully closed.
+
+### Minor observation (not blocking)
+The `crypto/subtle` import is present but only `hmac.Equal` is used for signature comparison. `subtle.ConstantTimeCompare` is used for plain bearer token comparison (line 175), which is appropriate.
+
+## Part B — run.delete RPC
+
+### ✅ Safety invariant enforced
+**Lines 648-661:** Checks in-memory registry for running status.
+**Lines 683-691:** Double-checks persisted state for running status (handles server crash scenario).
+
+Both guards use `rpcRunDeleteRunning` error code. This is defense-in-depth.
+
+### ✅ Test coverage
+4 tests cover: success, running guard, not found, missing runID. All use correct error codes.
+
+## Part C — WS Timing Flake Fix
+
+**Lines 76-80 in ws_test.go:** `WaitForSubscriber` called with 2-second timeout before `Broadcast`. Pattern matches Phase 17 SSE fix exactly. Correct.
+
+## Deviations
+
+### Deviation 1: Error code -32020 instead of -32001/-32002 (ACCEPTED)
+Design specified `-32001` for running guard and `-32002` for not found. Brian correctly identified that:
+- `-32001` conflicts with `rpcRunbookParseErr`
+- `-32002` conflicts with `rpcRunbookInvalid`
+
+Brian's solution:
+- Use `-32020` for `rpcRunDeleteRunning` (new code, documented in constants)
+- Reuse existing `-32010` (`rpcRunNotFound`) for not found
+
+**Verdict:** Acceptable. Error codes are properly grouped (-320xx for run-related errors) and documented. No semantic confusion.
+
+### Deviation 2: `validateJWTExpiry` not renamed (ACCEPTED)
+Design suggested renaming to `validateJWTTimeClaims`. Brian kept existing name but correctly delegates from `verifyJWT`. Function behavior is unchanged; name is slightly less precise but not misleading.
+
+**Verdict:** Trivial. No action required.
+
+## Next Phase Items (NBI queue)
+
+No new items discovered during this review. Phase 18 is self-contained.
+
+## Verdict
+
+**APPROVED**
+
+Brian's implementation is security-sound, well-tested, and follows the design with sensible deviations. The JWT signature verification correctly addresses NBI-17-01. The error code deviation is justified and properly documented. All 9 new tests pass, and the complete test suite passes with `-race`.
+
+Phase 18 is ready for merge.
+
+---
+
+### ken-phase19-design.md
+
+# Decision Inbox: Phase 19 Design Decisions
+
+**By:** Ken (Staff Architect)  
+**Date:** 2026-04-21  
+**Status:** APPROVED (architectural authority)
+
+---
+
+## Decision 1: NBI-17-02 Token Rotation/Revocation — WONT_FIX
+
+### What
+
+Close NBI-17-02 (token rotation/revocation mechanism) as WONT_FIX. No in-memory token blocklist will be implemented.
+
+### Context
+
+Phase 18 delivered JWT signature verification with HMAC-SHA256 (`--auth-jwt-secret`) and token expiry validation (`--auth-token-expiry`). The question was whether to add an RPC method `auth.revoke` with an in-memory blocklist to enable explicit token revocation without server restart.
+
+### Decision
+
+**WONT_FIX** — Token revocation via blocklist is not implemented.
+
+### Rationale
+
+1. **Marginal security benefit:** With recommended 5-15 minute token expiry, the window between compromise detection and natural token death is small. Blocklist only helps if operators detect compromise faster than tokens expire, which is rare.
+
+2. **Operational complexity:** In-memory blocklist clears on restart (defeating the purpose). Persistent blocklist requires shared state for distributed deployments. This crosses the "thin adapter" boundary of `gert serve`.
+
+3. **Better alternatives exist:**
+   - Short expiry (5-15 min) limits exposure window
+   - Secret rotation via `--auth-jwt-secret` change invalidates ALL tokens
+   - External identity providers (Keycloak, Auth0) handle revocation properly
+
+4. **Architectural principle:** `gert serve` is an API adapter, not an identity provider. Adding stateful auth management crosses layer boundaries.
+
+### Consequences
+
+- If fine-grained token revocation is required, deploy behind an identity-aware proxy (OAuth2 Proxy, Keycloak, etc.)
+- Document recommended deployment: short expiry + proxy for production
+- No additional code or configuration complexity in `gert serve`
+
+---
+
+## Decision 2: Rate Limiting Implementation
+
+### What
+
+Add per-IP rate limiting to `gert serve` via `--rate-limit N` flag using `golang.org/x/time/rate` token bucket algorithm.
+
+### Design
+
+- **Algorithm:** Token bucket per IP, burst = 2×limit
+- **Scope:** `/rpc`, `/ws`, `/events` (connection establishment)
+- **Exempt:** `/health` (monitoring must not be rate-limited)
+- **Memory cap:** 10,000 IP entries with LRU eviction
+- **Cleanup:** 5-minute TTL for inactive entries
+
+### Rationale
+
+1. Production hardening against DoS and runaway clients
+2. Simple implementation (~200 LOC) with stdlib dependency
+3. Per-IP isolation prevents one client from affecting others
+4. Burst allowance (2×limit) handles legitimate traffic spikes
+
+### Trade-offs
+
+- X-Forwarded-For trusted by default (appropriate for proxied deployments, spoofable if exposed directly)
+- No distributed state (each `gert serve` instance has independent limits)
+
+### Consequences
+
+- New flag: `--rate-limit N` (default: 0 = disabled)
+- New field: `ServerConfig.RateLimit`
+- New middleware: `newRateLimitMiddleware`
+- Adds `golang.org/x/time/rate` as dependency (already in stdlib extensions)
+
+---
+
+## Decision 3: E2E Test Parallelization is Safe
+
+### What
+
+Enable `t.Parallel()` on all 12 E2E tests in `v2/internal/e2e/e2e_test.go`.
+
+### Analysis
+
+Reviewed `E2EHarness` implementation:
+- `t.TempDir()` creates per-test isolated directory
+- `RunDir`, `TraceDir`, `Store` are all under that temp directory
+- No shared mutable state between tests
+- No HTTP servers (port allocation) in E2E tests
+
+### Decision
+
+No harness changes required. Simply add `t.Parallel()` to each test function.
+
+### Consequences
+
+- Expected 3-4× speedup in E2E test suite
+- Validates isolation assumptions with `-race -count=5`
+- Closes NBI-16-03 (carried forward from Phase 16)
+
+---
+
+## Phase 19 Scope Summary
+
+| Part | Item | Effort |
+|------|------|--------|
+| A | Rate limiting (`--rate-limit`) | 1.5 days |
+| B | E2E parallelization (`t.Parallel()`) | 0.5 days |
+| — | NBI-17-02 WONT_FIX decision | 0 days (this document) |
+
+**Total:** 2 Brian-days
+
+---
+
+### ken-phase19-review.md
+
+# Ken — Phase 19 Review
+
+**Date:** 2026-04-21  
+**Reviewer:** Ken (Staff Architect)  
+**Phase:** 19  
+**Verdict:** ✅ APPROVED
+
+---
+
+## Summary
+
+Brian's Phase 19 implementation delivers rate limiting (Part A) and E2E test parallelization (Part B) exactly as specified. The implementation is concurrency-safe, follows design constraints, and passes all tests under `-race -count=1`. Both the rate limiter and the E2E parallelization are production-ready.
+
+**Test verification:**
+```
+go test ./... -race -count=1 -timeout=180s
+# All 43 packages pass, no race conditions detected
+```
+
+---
+
+## Part A Findings — Rate Limiting
+
+### Concurrency Analysis ✅
+
+| Checkpoint | Status | Notes |
+|------------|--------|-------|
+| `sync.Mutex` protects map on all reads/writes | ✅ PASS | Lines 59-60: `l.mu.Lock()` / `defer l.mu.Unlock()` in `Allow()` |
+| `cleanupLoop` goroutine leak check | ⚠️ NOTE | Fire-and-forget; acceptable for long-lived server process |
+| `evictOldest` called while lock held | ✅ PASS | Called inside `Allow()` which already holds the lock |
+| `evictOldest` O(n) complexity acceptable | ✅ PASS | 10k max entries; O(n) scan at 10k is ~microseconds |
+| `extractIP` handles malformed XFF | ✅ PASS | `strings.Split` returns at least [""], empty check prevents panic |
+| `/health` exempt from rate limiting | ✅ PASS | Line 31: `if r.URL.Path == "/health"` early return |
+| Middleware order CORS → RateLimit → Auth | ✅ PASS | Lines 33-34 in middleware.go |
+| `burst = 2*limit` correctly set | ✅ PASS | Line 24: `burst: limit * 2` |
+
+### Code Review: `ratelimit.go`
+
+**Structure:**
+- `ipLimiters` type with `sync.Mutex`, map, limit, burst, maxSize — clean encapsulation
+- `rateLimiterEntry` holds limiter + lastSeen for TTL tracking
+- `Allow()` creates new limiter on-demand, enforces cap via `evictOldest()`
+- `cleanupLoop()` runs every 60s, evicts entries older than 5 minutes
+- `extractIP()` correctly prefers X-Forwarded-For (first IP) over RemoteAddr
+
+**Note on cleanupLoop:** The goroutine started at line 27 (`go limiters.cleanupLoop()`) runs forever. This is intentional and acceptable — `gert serve` is a long-lived process. If we needed graceful shutdown, we'd pass a `context.Context`, but that's overkill for this use case.
+
+**Note on X-Forwarded-For trust:** As documented in the design, trusting XFF is appropriate when deployed behind a reverse proxy. Direct internet exposure allows header spoofing to bypass rate limiting. This is a documented known limitation, not a bug.
+
+### Test Coverage: 7 tests ✅
+
+| Test | Scenario Verified |
+|------|-------------------|
+| `TestRateLimit_Disabled` | limit=0 passes all requests |
+| `TestRateLimit_BelowLimit` | Within limit passes |
+| `TestRateLimit_ExceedsLimit` | 3rd request with limit=1, burst=2 → 429 |
+| `TestRateLimit_BurstAllowed` | 6 burst requests pass, 7th → 429 |
+| `TestRateLimit_HealthExempt` | /health never rate-limited |
+| `TestRateLimit_PerIP` | Different IPs have independent buckets |
+| `TestRateLimit_XForwardedFor` | XFF header used for IP extraction |
+
+All tests have `t.Parallel()` ✅
+
+### Configuration Wiring ✅
+
+- `ServerConfig.RateLimit int` added in `pkg/serve/serve.go` (line 74)
+- `--rate-limit` flag wired in `cmd/gert/serve.go` (line 32)
+- Middleware wired correctly in `middleware.go` (line 33)
+- `golang.org/x/time v0.15.0` added as indirect dependency in `go.mod` (line 29)
+
+---
+
+## Part B Findings — E2E Parallelization
+
+### Parallelization Safety ✅
+
+| Checkpoint | Status | Notes |
+|------------|--------|-------|
+| `t.Parallel()` first statement in each test | ✅ PASS | All 11 tests verified |
+| No shared mutable global state | ✅ PASS | Each test creates fresh harness, dirs, store |
+| `t.TempDir()` used (not `os.MkdirTemp`) | ✅ PASS | Line 69 in helpers_test.go |
+| Tests pass with race detector | ✅ PASS | `go test -race` clean |
+
+### Tests Parallelized
+
+All 11 E2E tests in `v2/internal/e2e/e2e_test.go`:
+1. `TestE2E_SimpleEcho`
+2. `TestE2E_VarInterpolation`
+3. `TestE2E_BranchTrue`
+4. `TestE2E_BranchFalse`
+5. `TestE2E_IterateAll`
+6. `TestE2E_IterateEarlyExit`
+7. `TestE2E_ManualSkip`
+8. `TestE2E_TracePersistence`
+9. `TestE2E_ResumeFromCheckpoint`
+10. `TestE2E_ToolStep`
+11. `TestE2E_CancelMidRun`
+
+**Note on count:** Design listed 12 tests but the file has 11 — this is correct. The design count was approximate based on grep output.
+
+### Harness Isolation Verified
+
+From `helpers_test.go`:
+- Line 69: `workDir := t.TempDir()` — per-test isolated directory
+- Lines 70-71: `runDir` and `traceDir` under `workDir`
+- Line 58: `Store` is per-harness instance
+- No global state mutations in any test
+
+---
+
+## Deviations
+
+| Area | Design Spec | Implementation | Verdict |
+|------|-------------|----------------|---------|
+| Test count | 12 E2E tests | 11 E2E tests | ✅ ACCEPTED (design was approximate) |
+| Ratelimit file | middleware.go | ratelimit.go (separate file) | ✅ ACCEPTED (better organization) |
+| Test file | middleware_test.go | ratelimit_test.go (separate file) | ✅ ACCEPTED (matches ratelimit.go) |
+
+All deviations are organizational improvements, not functional changes.
+
+---
+
+## Phase 20 NBI Queue
+
+**Carry-forwards from earlier phases:**
+- ~~NBI-17-02 Token rotation~~ — **CLOSED as WONT_FIX** per design decision D-19-01
+- ~~NBI-17-04 Rate limiting~~ — **DONE** (Part A)
+- ~~NBI-16-03 E2E parallelization~~ — **DONE** (Part B)
+
+**New items identified:**
+- None. Phase 19 completes all three NBI items it addressed.
+
+**Potential future work (no immediate action):**
+- `--trust-proxy-headers` flag to explicitly enable/disable X-Forwarded-For trust
+- Rate limit metrics export (Prometheus endpoint)
+
+---
+
+## Verdict + Reasoning
+
+**APPROVED** ✅
+
+Brian's implementation is correct, complete, and safe:
+
+1. **Concurrency safety:** The rate limiter uses proper mutex protection on all map operations. No data races possible.
+
+2. **Algorithm correctness:** Token bucket with `burst = 2*limit` matches design. Memory cap and TTL cleanup prevent unbounded growth.
+
+3. **Security posture maintained:** Rate limiting protects against DoS; /health remains accessible for monitoring. Auth flow unchanged.
+
+4. **Test quality:** All 7 rate limit tests are meaningful scenarios. All E2E tests parallelized correctly with race detector clean.
+
+5. **Zero regressions:** Full test suite (43 packages) passes under `-race -count=1`.
+
+**Phase 19 is sealed. Ready for Scribe commit.**
+
+---
+
+### ken-phase20-design.md
+
+# Ken — Phase 20 Design (RE-SCOPED): API Completeness, Multiple CORS Origins, Proxy Trust Flag
+
+**Date:** 2026-04-21 (original) — **RE-SCOPED 2026-04-21**
+**Author:** Ken (Staff Architect)  
+**Implementor:** Brian  
+**Phase:** 20
+
+> **CORRECTION NOTICE:** The original Phase 20 design included `run.delete` (Part A) and a WebSocket timing
+> flake fix (Part C), both of which were already shipped in Phase 18 (commit 24d863e). This file is the
+> corrected, re-scoped design containing only genuinely new work.
+
+---
+
+## Overview
+
+Phase 19 sealed rate limiting and E2E parallelization. After reading the actual codebase state, the
+following items from the original design are confirmed **already done**:
+
+- `run.delete` RPC — `handleRunDelete` at `v2/internal/serve/rpc.go:635`, dispatch at line 105, error
+  constant `rpcRunDeleteRunning = -32020` at line 37, safety invariant enforced.
+- WebSocket timing flake fix — `WaitForSubscriber` applied at `v2/internal/serve/ws_test.go:78`.
+
+Phase 20 (re-scoped) contains **three genuinely new parts**:
+
+1. **Part A (ANCHOR):** API completeness — `completedAt` surfacing + `run.get` godoc + testdata fixtures
+2. **Part B:** Multiple CORS origins — make `--cors-origin` a repeatable flag
+3. **Part C:** `--trust-proxy-headers` security flag — XFF trust must be explicit opt-in
+
+**Phase budget:** 1.5 Brian-days
+
+
+---
+
+## NBI Queue Analysis (Corrected)
+
+| NBI ID | Item | Status | Disposition |
+|--------|------|--------|-------------|
+| NBI-17-02 | Token rotation/revocation | **CLOSED** (Phase 19) | WONT_FIX — short expiry sufficient |
+| NBI-17-04 | Rate limiting | **CLOSED** (Phase 19) | ✅ DONE |
+| NBI-16-03 | E2E test parallelization | **CLOSED** (Phase 19) | ✅ DONE |
+| NBI-17-03 | run.delete RPC | **CLOSED** (Phase 18, 24d863e) | ✅ DONE — handleRunDelete at rpc.go:635 |
+| NBI-17-05 | WS timing flake fix | **CLOSED** (Phase 18, 24d863e) | ✅ DONE — WaitForSubscriber at ws_test.go:78 |
+| NBI-16-05 | run.list/run.get API schema docs | OPEN (partial) | ✅ IN SCOPE Part A — run.get godoc missing; completedAt gap |
+| NBI-16-07 | CompletedAt for persisted runs | OPEN | ✅ IN SCOPE Part A — serve-layer gap |
+| NBI-16-06 | Multiple CORS origins | OPEN | ✅ IN SCOPE Part B — reclassified from DEFER |
+| NBI-16-01 | SSE test sync fix | **CLOSED** (Phase 17) | ✅ DONE via WaitForSubscriber |
+| NBI-18-01 | OAuth2/OIDC | OPEN | DEFER — external auth is v2.1 |
+
+**Assessment:** The data-plane (run.delete, WS flake) is fully clean. Three meaningful gaps remain:
+completedAt is saved to disk but not returned by the API for persisted runs; the CORS flag doesn't
+support multiple origins; the rate limiter trusts X-Forwarded-For unconditionally (security risk).
+
+---
+
+## Part A — API Completeness: `completedAt` Surfacing + `run.get` Godoc + Fixtures (NBI-16-05, NBI-16-07)
+
+### What's Missing (confirmed by reading the code)
+
+1. **`handleRunGet` has no godoc.** `handleRunList` at `rpc.go:372–387` has a full schema comment.
+   `handleRunGet` at `rpc.go:442` has none.
+
+2. **`completedAt` is absent from persisted `run.get` responses.** For active registry entries,
+   `handleRunGet` correctly emits `completedAt` when `entry.CompletedAt` is non-zero (line 479–481).
+   For persisted runs loaded via `store.LoadState`, the result map at lines 489–500 **never** includes
+   `completedAt` — even though `engine.RunState.CompletedAt` is populated by `SaveState` (via
+   `json.Marshal(state)`) at the time the run completes.
+
+3. **`completedAt` is absent from all `run.list` responses.** Neither the active-run block (lines
+   393–410) nor the persisted-run block (lines 419–431) includes `completedAt`.
+
+4. **No testdata fixtures exist.** `v2/testdata/` directory does not exist. There are no example
+   request/response JSON files to document the wire contract.
+
+### Deliverables
+
+#### A1 — Add godoc to `handleRunGet` (`v2/internal/serve/rpc.go:442`)
+
+Insert the following comment immediately before `func (s *Server) handleRunGet(...)`:
+
+```go
+// handleRunGet returns the full state of a single run by ID.
+//
+// Params:
+//   {"runID": string}
+//
+// Response schema (active run):
+//
+//{
+//  "runID":            string,   // Unique run identifier
+//  "state":            string,   // "pending"|"running"|"paused"|"completed"|"failed"|"cancelled"
+//  "runbookPath":      string,   // Path to runbook file
+//  "startedAt":        string,   // RFC3339Nano timestamp
+//  "currentStep":      string,   // ID of the step currently executing (empty if none)
+//  "currentStepIndex": number,   // 0-based index into plan.steps (-1 before first step)
+//  "vars":             object,   // Runtime variable map (string→string)
+//  "completedAt":      string,   // RFC3339Nano; present only when state is terminal
+//  "source":           string    // "active"
+//}
+//
+// Response schema (persisted run):
+//
+//{
+//  "runID":            string,
+//  "state":            string,
+//  "runbookPath":      string,
+//  "startedAt":        string,
+//  "currentStep":      string,
+//  "currentStepIndex": number,
+//  "vars":             object,
+//  "completedAt":      string,   // RFC3339Nano; present when terminal and timestamp was recorded
+//  "source":           string    // "persisted"
+//}
+//
+// Error: -32602 (Invalid params) if runID is missing.
+// Error: -32010 (Run not found) if no active or persisted run matches runID.
+```
+
+#### A2 — Fix `handleRunGet` persisted path to include `completedAt`
+
+**File:** `v2/internal/serve/rpc.go`  
+**Location:** The `if s.store != nil` block starting at line 486.
+
+Current code (lines 489–500):
+```go
+result := map[string]any{
+    "runID":            runState.RunID,
+    "state":            string(runState.Status),
+    "runbookPath":      runState.RunbookPath,
+    "startedAt":        runState.StartedAt.Format(time.RFC3339Nano),
+    "currentStep":      runState.CurrentStep,
+    "currentStepIndex": runState.CurrentStepIndex,
+    "vars":             runState.Vars,
+    "source":           "persisted",
+}
+```
+
+Replace with:
+```go
+result := map[string]any{
+    "runID":            runState.RunID,
+    "state":            string(runState.Status),
+    "runbookPath":      runState.RunbookPath,
+    "startedAt":        runState.StartedAt.Format(time.RFC3339Nano),
+    "currentStep":      runState.CurrentStep,
+    "currentStepIndex": runState.CurrentStepIndex,
+    "vars":             runState.Vars,
+    "source":           "persisted",
+}
+if !runState.CompletedAt.IsZero() {
+    result["completedAt"] = runState.CompletedAt.Format(time.RFC3339Nano)
+}
+```
+
+#### A3 — Fix `handleRunList` to include `completedAt`
+
+**File:** `v2/internal/serve/rpc.go`
+
+**Active-run block** (around line 404): Add `completedAt` when `entry.CompletedAt` is non-zero.
+
+```go
+item := map[string]any{
+    "runID":       entry.ID,
+    "state":       string(state),
+    "runbookPath": entry.RunbookPath,
+    "startedAt":   startedAt.Format(time.RFC3339Nano),
+    "source":      "active",
+}
+if !entry.CompletedAt.IsZero() {
+    item["completedAt"] = entry.CompletedAt.Format(time.RFC3339Nano)
+}
+response = append(response, item)
+```
+
+**Persisted-run block** (around line 423): Add `completedAt` from `RunState.CompletedAt`.
+
+```go
+item := map[string]any{
+    "runID":       run.RunID,
+    "state":       string(run.Status),
+    "runbookPath": run.RunbookPath,
+    "startedAt":   run.StartedAt.Format(time.RFC3339Nano),
+    "source":      "persisted",
+}
+if !run.CompletedAt.IsZero() {
+    item["completedAt"] = run.CompletedAt.Format(time.RFC3339Nano)
+}
+response = append(response, item)
+```
+
+#### A4 — Testdata Fixtures
+
+Create `v2/internal/serve/testdata/` with example request/response pairs documenting the wire API.
+
+**`v2/internal/serve/testdata/run.list.response.json`** — example with one active and one persisted run:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": [
+    {
+      "runID": "r-active-001",
+      "state": "running",
+      "runbookPath": "runbooks/deploy.yaml",
+      "startedAt": "2026-04-21T10:00:00.000000000Z",
+      "source": "active"
+    },
+    {
+      "runID": "r-done-002",
+      "state": "completed",
+      "runbookPath": "runbooks/check.yaml",
+      "startedAt": "2026-04-20T09:00:00.000000000Z",
+      "completedAt": "2026-04-20T09:05:32.000000000Z",
+      "source": "persisted"
+    }
+  ]
+}
+```
+
+**`v2/internal/serve/testdata/run.get.active.response.json`**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "runID": "r-active-001",
+    "state": "running",
+    "runbookPath": "runbooks/deploy.yaml",
+    "startedAt": "2026-04-21T10:00:00.000000000Z",
+    "currentStep": "step-deploy",
+    "currentStepIndex": 2,
+    "vars": {"env": "prod", "region": "us-east-1"},
+    "source": "active"
+  }
+}
+```
+
+**`v2/internal/serve/testdata/run.get.persisted.response.json`**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "runID": "r-done-002",
+    "state": "completed",
+    "runbookPath": "runbooks/check.yaml",
+    "startedAt": "2026-04-20T09:00:00.000000000Z",
+    "completedAt": "2026-04-20T09:05:32.000000000Z",
+    "currentStep": "step-verify",
+    "currentStepIndex": 3,
+    "vars": {"env": "prod"},
+    "source": "persisted"
+  }
+}
+```
+
+**`v2/internal/serve/testdata/run.get.error.not_found.json`**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {"code": -32010, "message": "Run not found"}
+}
+```
+
+### Tests
+
+Add to `v2/internal/serve/rpc_test.go`:
+
+1. **TestRPC_RunGet_Persisted_CompletedAt** — save a completed RunState with non-zero CompletedAt,
+   call `run.get`, assert `completedAt` is present in the response.
+2. **TestRPC_RunList_CompletedAt_ActiveRun** — complete a run (set `entry.CompletedAt`), call
+   `run.list`, assert `completedAt` is present in that item.
+3. **TestRPC_RunList_CompletedAt_PersistedRun** — save a completed RunState with non-zero
+   CompletedAt, call `run.list`, assert `completedAt` appears.
+
+**Estimated:** 30 LOC implementation changes, 60 LOC tests, 4 fixture files.
+
+---
+
+## Part B — Multiple CORS Origins (NBI-16-06)
+
+### Current State
+
+`v2/cmd/gert/serve.go` line 27:
+```go
+corsOrigin := fs.String("cors-origin", "", "Allowed CORS origin (empty = allow all)")
+```
+
+This is a single-string flag. To allow multiple origins, the operator must pick one. The
+`ServerConfig.AllowedOrigins` is already `[]string` — the gap is purely in the CLI flag parsing.
+
+### Design
+
+Replace the single string with a custom `repeatedFlag` type implementing `flag.Value`, allowing
+`--cors-origin` to be specified multiple times:
+
+```
+gert serve --cors-origin https://app.example.com --cors-origin https://staging.example.com
+```
+
+**File:** `v2/cmd/gert/serve.go`
+
+```go
+// repeatedStringFlag implements flag.Value for a repeatable string flag.
+type repeatedStringFlag []string
+
+func (f *repeatedStringFlag) String() string { return strings.Join(*f, ",") }
+func (f *repeatedStringFlag) Set(v string) error {
+    *f = append(*f, v)
+    return nil
+}
+
+// In runServe:
+var corsOrigins repeatedStringFlag
+fs.Var(&corsOrigins, "cors-origin", "Allowed CORS origin; may be repeated (empty = allow all)")
+
+// Replace the single corsOrigin check:
+cfg := servepkg.ServerConfig{
+    ...
+    AllowedOrigins: []string(corsOrigins),
+    ...
+}
+```
+
+### Behaviour
+
+- Zero `--cors-origin` flags: `AllowedOrigins` is nil → wildcard `*` in CORS middleware (existing
+  behaviour).
+- One or more `--cors-origin` flags: `AllowedOrigins` is populated with all provided values.
+- The CORS middleware in `v2/internal/serve/middleware.go` already iterates `AllowedOrigins`, so no
+  middleware changes are needed.
+
+### Tests
+
+Add to `v2/internal/serve/middleware_test.go` (or a new `cors_test.go`):
+
+1. **TestCORS_MultipleOrigins_Allowed** — configure two allowed origins; each gets reflected back in
+   `Access-Control-Allow-Origin`.
+2. **TestCORS_MultipleOrigins_Rejected** — third origin not in list → no CORS headers.
+3. **TestCORS_SingleOrigin_BackwardCompat** — single origin still works.
+
+Add a CLI flag test in `v2/cmd/gert/serve_test.go` (or the existing flag test file):
+
+4. **TestServeFlags_CorsOrigin_Repeatable** — parse `--cors-origin A --cors-origin B`, assert
+   `AllowedOrigins == ["A","B"]`.
+
+**Estimated:** 25 LOC implementation, 50 LOC tests.
+
+---
+
+## Part C — `--trust-proxy-headers` Security Flag
+
+### Problem
+
+`v2/internal/serve/ratelimit.go` (the `extractIP` function) unconditionally reads
+`X-Forwarded-For`:
+
+```go
+if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+    if ip := strings.Split(xff, ",")[0]; ip != "" {
+        return strings.TrimSpace(ip)
+    }
+}
+host, _, _ := net.SplitHostPort(r.RemoteAddr)
+return host
+```
+
+This means **any client can forge their IP** by sending a fake `X-Forwarded-For: 1.2.3.4` header,
+bypassing per-IP rate limiting entirely. Trusting proxy headers is only safe when `gert serve` is
+running behind a known reverse proxy (nginx, Caddy, etc.).
+
+This was noted in Phase 19 (D-19-02) but not acted on. It is a correctness bug for any public
+deployment: rate limiting has zero effect if an attacker forges XFF.
+
+### Design
+
+#### C1 — Add `TrustProxyHeaders bool` to `ServerConfig`
+
+**File:** `v2/pkg/serve/serve.go`
+
+```go
+// TrustProxyHeaders controls whether X-Forwarded-For and X-Real-IP headers are trusted
+// for IP extraction in the rate-limit middleware.
+// Enable ONLY when gert serve is deployed behind a trusted reverse proxy (nginx, Caddy, etc.).
+// When false (default), rate limiting uses RemoteAddr exclusively.
+// WARNING: enabling this on a directly-internet-facing server allows IP spoofing.
+TrustProxyHeaders bool
+```
+
+#### C2 — Thread `TrustProxyHeaders` through to the rate-limit middleware
+
+**File:** `v2/internal/serve/ratelimit.go`
+
+Change `newRateLimitMiddleware` to accept the flag:
+
+```go
+func newRateLimitMiddleware(limit int, trustProxyHeaders bool) func(http.Handler) http.Handler {
+    ...
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            ip := extractIP(r, trustProxyHeaders)
+            ...
+        })
+    }
+}
+
+func extractIP(r *http.Request, trustProxy bool) string {
+    if trustProxy {
+        if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+            if ip := strings.Split(xff, ",")[0]; ip != "" {
+                return strings.TrimSpace(ip)
+            }
+        }
+    }
+    host, _, _ := net.SplitHostPort(r.RemoteAddr)
+    return host
+}
+```
+
+**File:** `v2/internal/serve/server.go` — pass `cfg.TrustProxyHeaders` when constructing middleware.
+
+#### C3 — Add `--trust-proxy-headers` flag to CLI
+
+**File:** `v2/cmd/gert/serve.go`
+
+```go
+trustProxyHeaders := fs.Bool("trust-proxy-headers", false,
+    "Trust X-Forwarded-For for rate-limit IP extraction (only safe behind a reverse proxy)")
+```
+
+Wire into `ServerConfig.TrustProxyHeaders`.
+
+### Tests
+
+Update `v2/internal/serve/ratelimit_test.go`:
+
+1. **TestRateLimit_XFF_Ignored_WhenTrustDisabled** — send `X-Forwarded-For: 1.2.3.4`, confirm rate
+   limiting uses `RemoteAddr` not the forged IP (i.e., requests from different XFF but same
+   RemoteAddr are bucketed together).
+2. **TestRateLimit_XFF_Trusted_WhenTrustEnabled** — same setup with `trustProxyHeaders=true`,
+   confirm XFF is used (existing behaviour).
+3. Existing `TestRateLimit_XFF` test must be updated to pass `trustProxyHeaders=true` explicitly.
+
+**Estimated:** 25 LOC implementation, 40 LOC tests.
+
+---
+
+## Summary
+
+| Part | NBI | Files Touched | LOC | Effort |
+|------|-----|---------------|-----|--------|
+| A — completedAt + godoc + fixtures | NBI-16-05, NBI-16-07 | `rpc.go`, `rpc_test.go`, 4 new fixture files | ~90 | 0.5 day |
+| B — Multiple CORS origins | NBI-16-06 | `serve.go` (cmd), `middleware_test.go` | ~75 | 0.4 day |
+| C — Trust-proxy flag | — | `serve.go` (pkg), `ratelimit.go`, `server.go`, `serve.go` (cmd), `ratelimit_test.go` | ~65 | 0.5 day |
+| **Total** | | **7 files** | **~230** | **~1.4 days** |
+
+## Verification Commands
+
+```bash
+# After implementation:
+cd v2
+go build ./...
+go test ./internal/serve/... -race -count=1
+go test ./cmd/gert/... -race -count=1
+
+# Confirm completedAt appears for a real persisted run:
+# 1. Start a run, let it complete
+# 2. curl -s -X POST http://localhost:7778/rpc \
+#      -d '{"jsonrpc":"2.0","id":1,"method":"run.get","params":{"runID":"<id>"}}' | jq .result.completedAt
+
+# Confirm multiple origins:
+# gert serve --cors-origin https://a.example.com --cors-origin https://b.example.com &
+# curl -H "Origin: https://a.example.com" -I http://localhost:7778/health
+# # Should see: Access-Control-Allow-Origin: https://a.example.com
+
+# Confirm trust-proxy-headers default is off:
+# gert serve &
+# curl -H "X-Forwarded-For: 1.1.1.1" http://localhost:7778/health  # should use actual RemoteAddr
+```
+
+---
+
+### ken-phase20-review.md
+
+# Ken — Phase 20 Review
+
+**Date:** 2026-04-21  
+**Reviewer:** Ken (Staff Architect)  
+**Phase:** 20  
+**Verdict:** ✅ APPROVED
+
+---
+
+## Summary
+
+Brian's Phase 20 implementation correctly addresses all three parts of the re-scoped design: `completedAt` is now surfaced in all four RPC response paths, `--cors-origin` is properly repeatable via a custom `flag.Value` type, and XFF trust is fully gated behind `--trust-proxy-headers` (default off). The DEVIATION on `CompletedAt` in `RunState` (Brian added it to the pkg contract rather than assuming it existed) is a net improvement — the field was already on `Run` (internal) and the `State()` method in `engine.go` correctly maps it to `RunState.CompletedAt`.
+
+**Test verification:**
+```
+?   	github.com/ormasoftchile/gert/v2/cmd/extensions/hello-ext	[no test files]
+ok  	github.com/ormasoftchile/gert/v2/cmd/gert	1.576s
+ok  	github.com/ormasoftchile/gert/v2/cmd/serve	1.795s
+ok  	github.com/ormasoftchile/gert/v2/cmd/tools/echo	2.686s
+ok  	github.com/ormasoftchile/gert/v2/cmd/tools/fail	2.817s
+ok  	github.com/ormasoftchile/gert/v2/cmd/tools/json-emitter	2.951s
+ok  	github.com/ormasoftchile/gert/v2/cmd/tools/jsonrpc-server	3.022s
+?   	github.com/ormasoftchile/gert/v2/cmd/tools/mcp-server	[no test files]
+ok  	github.com/ormasoftchile/gert/v2/cmd/tools/slow	4.379s
+ok  	github.com/ormasoftchile/gert/v2/cmd/tools/stub	3.417s
+ok  	github.com/ormasoftchile/gert/v2/internal/adapter	1.807s
+ok  	github.com/ormasoftchile/gert/v2/internal/e2e	2.461s
+ok  	github.com/ormasoftchile/gert/v2/internal/engine	1.429s
+ok  	github.com/ormasoftchile/gert/v2/internal/eventbus	1.590s
+ok  	github.com/ormasoftchile/gert/v2/internal/evidence	1.543s
+ok  	github.com/ormasoftchile/gert/v2/internal/executor	1.615s
+ok  	github.com/ormasoftchile/gert/v2/internal/expr	1.558s
+ok  	github.com/ormasoftchile/gert/v2/internal/extension	2.349s
+ok  	github.com/ormasoftchile/gert/v2/internal/governance	1.190s
+ok  	github.com/ormasoftchile/gert/v2/internal/input	1.199s
+ok  	github.com/ormasoftchile/gert/v2/internal/parser	2.162s
+ok  	github.com/ormasoftchile/gert/v2/internal/planner	1.457s
+ok  	github.com/ormasoftchile/gert/v2/internal/replay	1.634s
+ok  	github.com/ormasoftchile/gert/v2/internal/resume	1.592s
+ok  	github.com/ormasoftchile/gert/v2/internal/runstore	1.629s
+ok  	github.com/ormasoftchile/gert/v2/internal/serve	1.638s
+?   	github.com/ormasoftchile/gert/v2/internal/specc	[no test files]
+ok  	github.com/ormasoftchile/gert/v2/internal/tool	4.779s
+ok  	github.com/ormasoftchile/gert/v2/internal/trace	1.250s
+?   	github.com/ormasoftchile/gert/v2/pkg/engine	[no test files]
+?   	github.com/ormasoftchile/gert/v2/pkg/eventbus	[no test files]
+ok  	github.com/ormasoftchile/gert/v2/pkg/evidence	1.300s
+?   	github.com/ormasoftchile/gert/v2/pkg/expr	[no test files]
+?   	github.com/ormasoftchile/gert/v2/pkg/extension	[no test files]
+?   	github.com/ormasoftchile/gert/v2/pkg/governance	[no test files]
+?   	github.com/ormasoftchile/gert/v2/pkg/input	[no test files]
+ok  	github.com/ormasoftchile/gert/v2/pkg/otel	1.292s
+ok  	github.com/ormasoftchile/gert/v2/pkg/otel/adapter	6.735s
+?   	github.com/ormasoftchile/gert/v2/pkg/parser	[no test files]
+?   	github.com/ormasoftchile/gert/v2/pkg/planner	[no test files]
+ok  	github.com/ormasoftchile/gert/v2/pkg/platform	1.193s
+?   	github.com/ormasoftchile/gert/v2/pkg/provider	[no test files]
+?   	github.com/ormasoftchile/gert/v2/pkg/schema	[no test files]
+?   	github.com/ormasoftchile/gert/v2/pkg/serve	[no test files]
+ok  	github.com/ormasoftchile/gert/v2/pkg/testutil	1.447s
+?   	github.com/ormasoftchile/gert/v2/pkg/tool	[no test files]
+?   	github.com/ormasoftchile/gert/v2/pkg/trace	[no test files]
+?   	github.com/ormasoftchile/gert/v2/schemas	[no test files]
+
+go build ./... → exit 0 (clean)
+go test ./... -race -count=1 -timeout=180s → all ok
+```
+
+---
+
+## Part A Findings — completedAt + godoc + fixtures
+
+### A1 — `RunState.CompletedAt` (DEVIATION)
+
+**✅ Correct.** `pkg/engine/run.go` adds `CompletedAt time.Time` to `RunState` with a clear godoc comment: *"Zero value until Status is completed/failed/cancelled."* The internal `Run` struct already had `CompletedAt`; this brings the public contract into alignment. `runHandle.State()` at `engine.go:1209` maps `h.run.CompletedAt` directly. `h.run.CompletedAt` is set in all terminal-state handlers (confirmed at lines 129, 255, 805, 829, 1178, 1387 of engine.go). `SaveState` is called with `h.State()` (engine.go:554–555), so `CompletedAt` flows through `json.Marshal` to disk. ✅
+
+### A2 — `handleRunGet` godoc
+
+**✅ Correct.** Full schema comment inserted above `func (s *Server) handleRunGet(...)` at `rpc.go:450–485`. Matches the design's prescribed format exactly, with both active and persisted schemas and all error codes documented.
+
+### A3 — `handleRunGet` persisted path
+
+**✅ Correct.** `rpc.go:543–545` adds `completedAt` to the result map when `runState.CompletedAt` is non-zero. The pattern `if !runState.CompletedAt.IsZero() { result["completedAt"] = ... }` matches the design spec exactly.
+
+### A4 — `handleRunGet` active path
+
+**✅ Not broken.** Pre-existing code at `rpc.go:523–525` already guarded by `entry.CompletedAt` non-zero check. `entry.CompletedAt` is populated by `server.go:190` and `server.go:232` in the run goroutine, and by `rpc.go:255,324` in the cancel/delete paths. Production flow is complete.
+
+### A5 — `handleRunList` both paths
+
+**✅ Correct.** Active path at `rpc.go:411–413` and persisted path at `rpc.go:434–436` both use the `if !x.CompletedAt.IsZero()` guard pattern. Both branches verified by dedicated tests.
+
+### A6 — Tests
+
+**✅ Deterministic and meaningful.** All three tests:
+- **`TestRPC_RunGet_Persisted_CompletedAt`** — saves a `RunState` with `CompletedAt = 2026-04-20T09:05:32Z`, calls `run.get`, asserts the exact timestamp appears in the response and `source == "persisted"`.
+- **`TestRPC_RunList_CompletedAt_ActiveRun`** — starts a run, injects `CompletedAt` via `WithEntry`, calls `run.list`, asserts the timestamp for the active run entry.
+- **`TestRPC_RunList_CompletedAt_PersistedRun`** — saves a `RunState` with `CompletedAt`, calls `run.list`, asserts the timestamp in the persisted entry.
+
+All use `t.Parallel()`, specific UTC timestamps, and exact-match assertions. These are not happy-path noops.
+
+### A7 — Fixtures
+
+**✅ Wire-format accurate.** All four JSON files:
+- `run.list.response.json` — active run without `completedAt`, persisted run with it. ✅
+- `run.get.active.response.json` — no `completedAt` (running state). ✅
+- `run.get.persisted.response.json` — `completedAt` present, matches the timestamp format used in production (`time.RFC3339Nano`). ✅
+- `run.get.error.not_found.json` — error code `-32010` matches `rpcRunNotFound`. ✅
+
+### Minor nit (non-blocking)
+
+`handleRunList`'s existing godoc schema comment (lines 376–384) does not mention `completedAt` even though the field is now included in responses. This is stale documentation. Queued as **NBI-20-01**.
+
+---
+
+## Part B Findings — Multiple CORS Origins
+
+### B1 — `repeatedStringFlag`
+
+**✅ Correct.**
+- `String()` returns `strings.Join(*f, ",")` — satisfies `flag.Value` interface; correct for `flag.PrintDefaults` display.
+- `Set(v string)` appends unconditionally — correct; each invocation of `--cors-origin` appends one value.
+- Zero-flag case: `var corsOrigins repeatedStringFlag` initializes to nil. `[]string(corsOrigins)` returns nil (verified via runtime check). `AllowedOrigins: nil` → `len(originSet) == 0` → wildcard CORS → existing behaviour preserved. ✅
+
+### B2 — CORS middleware
+
+**✅ Pre-existing and correct.** `newCORSMiddleware` in `middleware.go:112–133` already builds a set from `allowedOrigins` and reflects the matched origin back. No middleware changes were required and none were made.
+
+### B3 — Tests
+
+**✅ All three tests meaningful.**
+- `TestCORS_MultipleOrigins_Allowed` — iterates both allowed origins, asserts `Access-Control-Allow-Origin` equals the request origin for each. ✅
+- `TestCORS_MultipleOrigins_Rejected` — third origin gets no `Access-Control-Allow-Origin` header. ✅
+- `TestCORS_SingleOrigin_BackwardCompat` — single-origin list still works. ✅
+- `TestServeFlags_CorsOrigin_Repeatable` — calls `Set()` twice, casts to `[]string`, asserts len==2 and correct values. Tests the flag type directly, not via `os.Args` parsing, which is the right level for a unit test. ✅
+
+---
+
+## Part C Findings — --trust-proxy-headers
+
+### C1 — Security correctness
+
+**✅ Correct.** `extractIP` at `ratelimit.go:104–114`:
+```go
+func extractIP(r *http.Request, trustProxy bool) string {
+    if trustProxy {
+        if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+            if ip := strings.Split(xff, ",")[0]; ip != "" {
+                return strings.TrimSpace(ip)
+            }
+        }
+    }
+    host, _, _ := net.SplitHostPort(r.RemoteAddr)
+    return host
+}
+```
+With `trustProxy=false` (default), XFF is never read. With `trustProxy=true`, the leftmost IP in the `X-Forwarded-For` chain is used — standard proxy convention. ✅
+
+### C2 — Signature change — no missed callers
+
+**✅ Complete.** Grepped all `.go` files for `newRateLimitMiddleware` and `extractIP`:
+- Production callers: `middleware.go:33` (the only site) — passes `s.cfg.TrustProxyHeaders`. ✅
+- `extractIP` has exactly one production callsite: inside `newRateLimitMiddleware`. ✅
+- Test callers all updated to pass the boolean explicitly. ✅
+
+### C3 — Threading
+
+**✅ Correct end-to-end.** `pkg/serve/serve.go:81` defines `TrustProxyHeaders bool` with the required WARNING godoc. `cmd/gert/serve.go:44–45` defines `--trust-proxy-headers` with `default=false`. `cfg.TrustProxyHeaders = *trustProxyHeaders` at `serve.go:117`. `middleware.go:33` passes it to `newRateLimitMiddleware`. ✅
+
+### C4 — Tests
+
+**✅ Meaningful.** `TestRateLimit_XFF_Ignored_WhenTrustDisabled`:
+- Two requests from `10.0.0.1` with forged XFF `1.2.3.4` exhaust the bucket.
+- Third request from same `RemoteAddr` but different forged XFF `9.9.9.9` → 429. This proves the bypass is prevented: changing XFF doesn't escape rate limiting.
+- Fourth request from genuinely different `10.0.0.2` → 200. ✅
+
+`TestRateLimit_XFF_Trusted_WhenTrustEnabled` validates the positive case: XFF IP is used for bucketing, not RemoteAddr. ✅
+
+---
+
+## Deviations
+
+| ID | File | Design said | Brian did | Verdict |
+|----|------|-------------|-----------|---------|
+| D-20-01 | `v2/pkg/engine/run.go` | Design assumed `CompletedAt` already existed on `RunState` | Added `CompletedAt time.Time` to `RunState` (it only existed on internal `Run`) | ✅ **Better** — public contract is now complete |
+
+---
+
+## Phase 21 NBI Queue
+
+| NBI ID | Item | Source |
+|--------|------|--------|
+| NBI-20-01 | Update `handleRunList` godoc schema comment to include `completedAt` field | D-20 minor doc gap |
+| NBI-18-01 | OAuth2/OIDC | Carried from Phase 19 |
+
+---
+
+## Verdict + Reasoning
+
+**✅ APPROVED.**
+
+All three parts are functionally correct and complete. The `completedAt` field is properly threaded from the internal `Run` struct through `State()` → `SaveState` → disk → `LoadState` → all four RPC response paths. The `repeatedStringFlag` implementation preserves the nil/wildcard CORS behaviour for the zero-flag case (verified by runtime test). The XFF security fix is airtight: the default is `false`, the flag must be explicitly opted in, the guard is at the extraction point (not in middleware), and the test proves the bypass is impossible. All 31 packages pass `-race -count=1`.
+
+Phase 20 is sealed. Ready for Scribe commit.
+
+---
+
+### ken-step-meta-v21-proposal.md
+
+### 2026-04-22: ADR — Step.Meta field for kit provenance (v2.1)
+**By:** Ken (Software Architect)
+**What:** Add `Meta map[string]string` to the Step struct in `pkg/schema/runbook.go`. The Domain Kit compiler stamps inline provenance keys at compile time (e.g., `kit.name`, `kit.step.id`, `kit.step.kind`). The runtime propagates these fields into trace events at execution time, enabling self-describing traces for streaming and multi-kit scenarios.
+**Impact:** Backward-compatible optional field — old runtimes ignore unknown fields. No new core runtime concepts required. Implementation deferred to v2.1.
+**Status:** Approved for v2.1 — Brian to implement when v2.1 planning begins.
+**Files:** `v2/pkg/schema/runbook.go` (Step struct), `v2/internal/engine/engine.go` (trace event propagation), kit compiler (stamp at compile time).
+**Why:** Matured from informal tmp note to formal tracked decision. Prevents the design from being lost before v2.1 planning starts.
+
+---
+
+### leslie-group-by-qualified.md
+
+### 2026-04-22: Doc fix — qualify gert replay --group-by as v2.1
+**By:** Leslie (LaTeX Specialist)
+**What:** All references to `gert replay --group-by` in the design docs now carry a "(proposed for v2.1)" qualifier. The flag does not exist in v2.0.
+**Files changed:** 
+- `.squad/tmp/vacation-domain-kit-v0.md` (2 occurrences updated on lines 2850 and 2989)
+**Why:** Prevents user-expectation drift from docs referencing non-existent CLI flags.
+
+---
+
+### raphael-v2-renderer-visual-fixes.md
+
+### 2026-04-17T16:00:00Z: v2 renderer visual fix — dark theme + node sizing + state colors
+**By:** Raphael (Graph/Shared Dev)
+**What:** Fixed multiple visual issues with the v2 renderer that made it look broken compared to v1.
+**Why:** v2 renderer was visually broken — white background, overlapping running indicator, edges routing through nodes, no state colors.
+
+**Changes:**
+1. **Dark theme adoption** — Set `colorMode="dark"` on ReactFlow, passed `'dark'` theme to GraphIsland in runbookRunner.ts, and force-overrode all React Flow CSS custom variables (`--xy-*`) to dark values.
+2. **Node sizing** — Increased step nodes from 180×40 to 280×56 (closer to v1's 320×60), start from 32×32 to 48×48, end from 120×40 to 160×48, decision from 40×40 to 56×56.
+3. **Running indicator** — Replaced CSS-only border spinner with proper flex layout (icon + text side by side), preventing the diagonal text overlap.
+4. **State color borders** — Made running/passed/failed state borders thicker (2px) with stronger box-shadow glows.
+5. **Edge routing** — Added `borderRadius: 8` to smooth-step path, increased ELK edge-node spacing from 20→30 to prevent edges clipping through nodes.
+6. **Handle visibility** — Hidden React Flow handle dots on all nodes for cleaner appearance.
+7. **Start/End/Decision/Join node CSS** — Added proper dark-themed styling for each node type.
+

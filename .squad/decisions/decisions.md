@@ -8619,3 +8619,85 @@ Phase 20 is sealed. Ready for Scribe commit.
 6. **Handle visibility** — Hidden React Flow handle dots on all nodes for cleaner appearance.
 7. **Start/End/Decision/Join node CSS** — Added proper dark-themed styling for each node type.
 
+
+---
+
+## ken-compiler-output-strategy
+
+### 2026-04-24: Compiler Output Strategy — YAML Strings (Option B)
+
+**By:** Ken (Architect)  
+**Date:** 2026-04-24  
+**Status:** DECIDED & IMPLEMENTED
+
+### Decision
+
+**Adopt Option B: Compiler produces YAML strings**
+
+The gert-domain-home compiler transforms domain model types (`Routine`, `IncidentTemplate`, `Delegation`) into GERT v2 runbook YAML. This decision defines the output format and dependency boundary.
+
+### Options Evaluated
+
+| Criterion | Option A (Go Structs) | Option B (YAML) | Option C (Custom IR) |
+|-----------|----------------------|-----------------|----------------------|
+| Dependency weight | Heavy (entire v2 pkg) | Light (yaml.v3 only) | Medium (custom IR) |
+| Coupling | Tight (schema changes break) | Loose (text contract) | Medium |
+| Testability | Schema changes break tests | Golden file diffs clear | IR changes break tests |
+| Versioning | Breaking changes painful | Resilient to struct changes | Requires IR versioning |
+| GERT design intent | Parser bypassed | ✅ Parser is ingestion layer | Not designed for IR |
+| Debuggability | Opaque struct dumps | Human-readable YAML | IR tooling needed |
+
+### Rationale
+
+**Option B wins because:**
+
+1. **Independence:** Domain module doesn't import v2 types. Minimal dependency footprint (yaml.v3 only).
+2. **Stability:** GERT YAML schema more stable than Go struct layout. Adding fields to `schema.Step` doesn't break compilation.
+3. **Testing:** Golden file comparison is idiomatic for compilers (`expected.runbook.yaml` vs actual).
+4. **Design alignment:** GERT v2 expects YAML as ingestion layer. Parser validates schema, resolves refs. Compiler produces validated input.
+5. **Debuggability:** YAML output is human-readable, version-controllable, manually editable.
+
+### Implementation Contract
+
+**Public API:**
+```go
+func CompileRoutine(ctx context.Context, prop *model.Property, routine *model.Routine) (string, error)
+func CompileIncidentTemplate(ctx context.Context, prop *model.Property, template *model.IncidentTemplate) (string, error)
+func CompileDelegation(ctx context.Context, prop *model.Property, delegation *model.Delegation) (string, error)
+func CompileProperty(ctx context.Context, prop *model.Property) (*Catalog, error)
+```
+
+**Return type:** `string` (YAML document), not `*schema.Runbook`
+
+### Consequences
+
+✅ Domain module has minimal dependencies  
+✅ YAML output is human-readable and debuggable  
+✅ Golden file testing straightforward  
+✅ Parser handles all schema validation  
+✅ Clear separation: domain logic vs execution primitives
+
+⚠️ No compile-time validation (caught at parser runtime)  
+⚠️ Integration tests required to verify YAML is accepted by GERT parser
+
+### Mitigations
+
+- Integration test suite: compiler → parser.ParseBytes() → planner.Plan() → engine dry-run
+- Use internal Go structs for compilation, marshal to YAML at boundary
+- Pin GERT min version in Catalog metadata (`GERTMinVersion: "v2.0.0"`)
+
+### Related Decisions
+
+- **D-HOME-02:** Home kit compiles to GERT primitives (affirmed)
+- **D-HOME-07:** No v2 dependency in domains/home/go.mod (consequence)
+
+### Reviewer Sign-Off
+
+- **Architect:** Ken ✅
+- **Implementor:** Brian ✅ (Implementation complete, 10 tests passing, commit d13cbf5)
+- **Integration:** Barbara (pending scheduler integration Phase 3)
+
+---
+
+**Reference:** `.squad/tmp/ken-compiler-contract.md` (937 lines, full design)
+

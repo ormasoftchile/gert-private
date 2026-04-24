@@ -1191,3 +1191,29 @@ The gert-domain-home compiler produces **valid GERT v2 runbook YAML**, proven by
 - Schema validation (shell out to `gert validate`)
 - Full E2E test in v2 repo (`v2/internal/e2e/domain_home_test.go`)
 - CI pipeline integration
+
+## Phase 3 Completion (2026-04-24)
+
+**Orchestration Log:** `.squad/orchestration-log/2026-04-24T04:15:00Z-brian.md`
+
+Brian's Phase 3 deliverables are complete:
+
+1. **Integration Test Suite** — `domains/home/integration_test.go`
+   - 3 integration tests with `//go:build integration` tag
+   - All tests pass (green)
+   - Validates compilation boundary correctness
+
+2. **CLI Tool** — `domains/home/cmd/home-validate/main.go`
+   - 69 lines
+   - Compiles and outputs YAML for visual validation
+   - Demo-friendly manual validation
+
+3. **Decision Record** — Documented in `.squad/decisions.md`
+   - GERT v2 entry points discovered (Parser, Planner, Engine)
+   - Integration approach rationale
+   - Go module boundary constraints
+   - Implementation patterns and learnings
+
+**Phase 3 Status:** ✅ Complete
+
+All deliverables validated. Decision record merged to `.squad/decisions.md`.

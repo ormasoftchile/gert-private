@@ -10027,3 +10027,33 @@ delegation:
 
 **Approval:** ✅ Ken (Architect)  
 **Next step:** Brian implements per checklist in design doc
+### 2026-04-24: Domain Kit + App Repository Pattern
+
+**By:** Ken (Architect) — confirmed by Cristian
+**What:** Established the canonical three-layer repo pattern for all GERT domains and apps.
+
+**Pattern:**
+```
+gert                      ← core engine (stays in this repo)
+gert-domain-{name}        ← domain kit (standalone repo per domain)
+app-{name}                ← application (standalone repo, imports kit as Go module)
+```
+
+**Rule:** One repo per domain kit. Apps import kits as versioned Go modules.
+
+**Rationale:**
+- Versioning independence — kit and app evolve at different paces
+- Ownership clarity — domain expert owns the kit; product/UI team owns the app
+- Reusability — kit is consumable by any future tool, not locked to one app
+- Clean dependency direction: app → domain kit → gert core (no cycles)
+
+**Migration action:**
+- Move `domains/home/` out of the `gert` repo
+- Create `github.com/ormasoftchile/gert-domain-home` as a standalone repo
+- Tag `v0.1.0`
+- Future `app-home` repo imports the kit as a versioned Go module
+- `gert` repo should contain core engine only
+
+**Applies to:** All future domains — Vacation, and any others that follow.
+
+**Exception:** If kit and app are permanently 1:1 and same maintainer, separate repos are still preferred for clarity.

@@ -502,6 +502,130 @@ Designed Maestro integration for `apps/home-ios/` as the primary UI testing laye
 
 ### Decision
 
+[See `.squad/decisions/inbox/ken-maestro.md` for full details]
+
+---
+
+## Phase 20 — Repository Structure Pattern for Domain Kits & Apps (2026-04-25)
+
+### Status: ✅ Architecture Recommendation Delivered
+
+**Mission:** Establish canonical repository pattern for domain kits and apps. User (Cristian) building Home App and wants pattern that scales to all future domains (Vacation, etc).
+
+### The Question
+
+Current state:
+- `gert` repo contains core runtime (`v2/`) + Home Domain Kit (`domains/home/`)
+- Home Kit compiles `.home.yaml` → GERT runbook YAML
+- Cristian building Home App (mobile app, consumer of kit)
+
+Should domain kits live:
+- A) In app repo (kit + app together)?
+- B) Standalone repo (kit separate, app imports as Go module)?
+- C) All in gert monorepo?
+
+### Recommendation: Option B (Separate Repos)
+
+**Canonical pattern:**
+```
+github.com/ormasoftchile/gert                → Core engine
+github.com/ormasoftchile/gert-domain-{name}  → Domain kit (standalone)
+github.com/ormasoftchile/app-{name}          → Application (imports kit)
+```
+
+**For Home:**
+```
+gert                     → Core engine (stays as-is)
+gert-domain-home         → Home kit (move from domains/home/)
+app-home                 → Home app (new repo, imports kit)
+```
+
+### Rationale
+
+1. **Versioning independence** — Kits evolve on semantic model cadence; apps on product/UX cadence. Tight coupling forces lockstep.
+
+2. **Reusability signal** — Even if kit has one consumer today, standalone repo future-proofs for:
+   - Admin dashboards
+   - CLI tools
+   - Third-party integrations
+
+3. **Ownership clarity** — Kit maintainer (domain expert) ≠ app maintainer (product team). Separate repos enforce this.
+
+4. **Clean dependency flow:**
+   ```
+   app-home → gert-domain-home → (optional gert types)
+   app-home → gert (runtime, for validation/execution)
+   ```
+
+5. **Developer experience** — App devs version-lock kit (`go get gert-domain-home@v1.2.3`). Kit changes don't break app until explicit upgrade.
+
+### Migration Plan: domains/home/
+
+**Action:** Move to standalone `gert-domain-home` repo
+
+**Steps:**
+1. Create new repo `gert-domain-home`
+2. `git mv domains/home/* → gert-domain-home/`
+3. Update module path: `module github.com/ormasoftchile/gert-domain-home`
+4. Tag `v0.1.0`
+5. In `gert` repo:
+   - Delete `domains/home/` (or add deprecation README)
+   - Update docs to point to new repo
+6. In `app-home`:
+   - `go get github.com/ormasoftchile/gert-domain-home@v0.1.0`
+
+**Why move it:** 
+- `gert` repo is for core engine, not domain-specific extensions
+- Establishes clean pattern from the start
+- Reduces "is this core or extension?" confusion
+
+### The Rule (Apply to All Future Domains)
+
+> **One repo per domain kit. Each app repo imports the kit as a versioned Go module.**
+
+**Example (Vacation domain):**
+1. Build `gert-domain-vacation` (compiler for `.vacation.yaml`)
+2. Build `app-vacation` (mobile app)
+3. Kit lives standalone; app depends on kit
+
+**Exception:** If kit and app are 1:1, permanently coupled, same maintainer — even then, prefer separation for clarity.
+
+### Consequences
+
+**Positive:**
+- ✅ Scales to N domains without bloat
+- ✅ Clear ownership boundaries
+- ✅ Independent versioning
+- ✅ Reusability future-proofed
+
+**Costs:**
+- Multiple repos to manage (mitigated by clear pattern)
+- Kit changes require versioned release + app upgrade (feature, not bug)
+
+### Three-Layer Model (Summary)
+
+**Layer 1: GERT Core** (`gert`)
+- Runtime engine (parser, planner, execution)
+- Shared infrastructure
+- Core team ownership
+
+**Layer 2: Domain Kit** (`gert-domain-{name}`)
+- Semantic compiler (domain YAML → GERT runbook)
+- Domain-specific abstractions
+- Domain expert ownership
+
+**Layer 3: Application** (`app-{name}`)
+- UI/UX runtime wiring
+- Imports domain kit as Go module
+- Product team ownership
+
+### Decision Authority
+
+Ken (Architect) — establishing canonical pattern per charter
+
+### Files Modified
+
+- This file (`history.md`)
 
 ---
 

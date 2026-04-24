@@ -9801,3 +9801,229 @@ Invite token is provider-agnostic (bearer token). It is single-use; a second red
 | `TEST_TOKEN_SECRET` | X-Test-Token bypass | Unchanged |
 
 JWKS URLs are hardcoded constants in each provider struct — no env var needed.
+# ADR: Multi-Delegate Support for Home Domain Kit
+
+**Date:** 2026-04-24  
+**Author:** Ken (Software Architect)  
+**Status:** Proposed  
+**Requested by:** Cristian
+
+---
+
+## Context
+
+The Home Domain Kit currently supports a single `delegation:` block, allowing one delegate to receive task assignments during owner absence ("away mode"). Real-world use case identified: households need to distribute tasks across multiple people simultaneously (e.g., son handles garage, daughter handles garden).
+
+**Current limitation:**
+```yaml
+delegation:  # Single delegate only
+  delegate:
+    name: Carlos
+  assigns:
+    - zone: pool
+```
+
+**Required capability:** Multiple concurrent delegates with different task assignments and overlapping time windows.
+
+---
+
+## Decision
+
+### 1. Add `delegations:` Field (Plural)
+
+Introduce new top-level field in `.home.yaml`:
+
+```yaml
+delegations:  # Plural: list of delegation configs
+  - delegate:
+      name: Son
+      contact: "+1 555 0100"
+    active:
+      from: 2025-04-25
+      to: 2025-05-02
+    assigns:
+      - routine: trash_day
+      - zone: garage
+    permissions:
+      can_report_incidents: true
+  
+  - delegate:
+      name: Daughter
+      contact: "+1 555 0101"
+    active:
+      from: 2025-04-25
+      to: 2025-05-02
+    assigns:
+      - zone: garden
+```
+
+**Model change:**
+```go
+type PropertyFile struct {
+    // ... existing fields ...
+    Delegation  *Delegation   `yaml:"delegation,omitempty"`   // DEPRECATED
+    Delegations []Delegation  `yaml:"delegations,omitempty"`  // NEW
+}
+```
+
+### 2. Conflict Resolution Rule: Last-Wins
+
+**Problem:** Two delegations assign the same routine.
+
+**Solution:** Use deterministic array ordering — **last delegation in the list wins**.
+
+**Rationale:**
+- Simple to implement (single-pass map building)
+- Predictable (user sees order in YAML)
+- Common YAML convention (ConfigMaps, values files)
+- No need for explicit `priority` field
+
+**Behavior:**
+```yaml
+delegations:
+  - delegate: {name: Son}
+    assigns:
+      - routine: trash_day
+  - delegate: {name: Daughter}
+    assigns:
+      - routine: trash_day  # Overwrites Son's assignment
+```
+Result: `trash_day` → Daughter (last wins)
+
+### 3. Compiler Output: Multiple PolicyDefinitions
+
+Current:
+```go
+CompiledProperty{
+    Delegation: &PolicyDefinition{ID: "prop.delegation"}
+}
+```
+
+New:
+```go
+CompiledProperty{
+    Delegations: []*PolicyDefinition{
+        {ID: "prop.delegation.0", DelegateName: "Son"},
+        {ID: "prop.delegation.1", DelegateName: "Daughter"},
+    }
+}
+```
+
+Each delegation becomes an independent policy with indexed ID.
+
+### 4. Backward Compatibility: Keep `delegation:` as Sugar
+
+**Decision:** Retain `delegation:` (singular) indefinitely as syntactic sugar for single-delegate case.
+
+**Justification:**
+- 90% of households have one delegate at a time
+- Cleaner UX: `delegation:` vs. `delegations: [...]`
+- No runtime cost (loader normalizes internally)
+- Mutual exclusion enforced: error if BOTH fields present
+
+**Normalization (in loader):**
+```go
+if prop.Delegation != nil {
+    if len(prop.Delegations) > 0 {
+        return error("cannot use both 'delegation' and 'delegations'")
+    }
+    prop.Delegations = []Delegation{*prop.Delegation}
+}
+```
+
+---
+
+## Consequences
+
+### Positive
+
+1. **Enables real-world use case:** Multi-person task distribution
+2. **Minimal model impact:** Reuses existing `Delegation` struct
+3. **Clean compiler output:** Each delegation = one `PolicyDefinition`
+4. **Backward compatible:** Existing `.home.yaml` files work unchanged
+5. **Deterministic conflicts:** No hidden priority logic
+
+### Negative
+
+1. **Conflict detection cost:** No validation errors for overlapping assignments (silent overwrite)
+2. **Documentation burden:** Must explain last-wins rule clearly
+3. **Runtime complexity:** GERT runtime must handle multiple active policies
+
+### Neutral
+
+1. **Migration path exists:** Users can gradually move from `delegation:` to `delegations:`
+2. **Testing surface area grows:** 6 new unit tests + 1 integration test required
+
+---
+
+## Alternatives Considered
+
+### Alternative 1: Error on Conflict
+
+**Approach:** Reject YAML if two delegations assign the same routine.
+
+**Rejected because:**
+- Zone assignments legitimately overlap (e.g., `zone: garage` + `routine: garage_sweep`)
+- Pre-flight conflict detection requires complex analysis
+- Last-wins is simpler and sufficient
+
+### Alternative 2: Explicit Priority Field
+
+**Approach:**
+```yaml
+delegation:
+  priority: 100
+  delegate: {name: Son}
+```
+
+**Rejected because:**
+- Adds unnecessary complexity
+- Array ordering is more intuitive (visual precedence in file)
+- No use case for non-sequential priority values
+
+### Alternative 3: Remove `delegation:` Immediately
+
+**Approach:** Force all users to migrate to `delegations:` in v0.2.
+
+**Rejected because:**
+- Breaks existing files unnecessarily
+- Single-delegate case is common (90% use)
+- Syntactic sugar improves UX at zero runtime cost
+
+---
+
+## Implementation Notes
+
+**Files to change:**
+- `domains/home/pkg/model/model.go` — add `Delegations` field
+- `domains/home/pkg/compiler/compiler.go` — loop over delegations, index policy IDs
+- `specs/gert-domain-home/SUMMARY.md` — update §3 Pattern 6, §4.3, §7
+
+**Validation rules:**
+1. Mutual exclusion: error if `delegation` AND `delegations` both present
+2. Referential integrity: validate `routine:` / `zone:` IDs exist (already implemented)
+3. Time window: ensure `from ≤ to` (already implemented)
+
+**Testing strategy:**
+- 6 new unit tests (conflict resolution, indexing, backward compat)
+- 1 integration test (multi-delegate compilation)
+- Golden file: `testdata/multi-delegate.home.yaml`
+
+---
+
+## Decision Record
+
+**We adopt:**
+- `delegations:` field (plural array)
+- Last-wins conflict resolution (array order)
+- Multiple `PolicyDefinition` outputs (indexed IDs)
+- Backward compat via `delegation:` syntactic sugar
+
+**Implementation owner:** Brian  
+**Review owner:** Ken  
+**Delivery target:** Home Domain Kit v0.2
+
+---
+
+**Approval:** ✅ Ken (Architect)  
+**Next step:** Brian implements per checklist in design doc

@@ -1,0 +1,46 @@
+MULTI-DELEGATE DESIGN — QUICK REFERENCE
+========================================
+
+REQUEST: "I need delegation to many" — multiple delegates, different tasks
+
+SOLUTION: Add delegations: (plural) field
+
+EXAMPLE:
+--------
+delegations:
+  - delegate: {name: Son}
+    assigns: [routine: trash_day, zone: garage]
+  - delegate: {name: Daughter}
+    assigns: [zone: garden]
+
+KEY DECISIONS:
+--------------
+1. YAML DSL: delegations: (plural array) — each item = full delegation config
+2. Model: Add Delegations []Delegation to PropertyFile
+3. Conflict rule: LAST-WINS (array order)
+4. Compiler: Each delegation → separate PolicyDefinition with indexed ID
+5. Backward compat: Keep delegation: (singular) as syntactic sugar
+
+CONFLICT RESOLUTION:
+--------------------
+If two delegations assign same routine → LAST in array WINS
+Why: Simple, deterministic, debuggable
+
+COMPILER OUTPUT:
+----------------
+Before: Delegation: &PolicyDefinition{ID: "prop.delegation"}
+After:  Delegations: []*PolicyDefinition{
+          {ID: "prop.delegation.0", ...},
+          {ID: "prop.delegation.1", ...}
+        }
+
+FILES TO UPDATE:
+----------------
+- model.go: Add Delegations field
+- compiler.go: Loop over delegations, index policy IDs
+- SUMMARY.md: §3 Pattern 6, §4.3, §7 status
+
+IMPLEMENTATION CHECKLIST: See .squad/tmp/ken-multi-delegate-design.md §12
+
+Full design: .squad/tmp/ken-multi-delegate-design.md (24KB, 13 sections)
+Decision record: .squad/decisions/inbox/ken-multi-delegate.md

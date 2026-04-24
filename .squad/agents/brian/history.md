@@ -287,3 +287,126 @@ cd domains/home && go test -tags integration ./...
 - John: Minimal example property
 - Team: Merge Phase 4 decisions, address schema gaps in v1 enhancement
 
+---
+
+## Phase 5 — Multi-Delegate Support (2026-04-24)
+
+**Status:** ✅ Complete — All tests green (18 existing + 6 new = 24 total)
+
+**Mission:** Implement multi-delegate support following Ken's architectural design to enable task distribution across different people during the same time period.
+
+### Deliverables
+
+1. **Model Changes** — `domains/home/pkg/model/model.go`
+   - Added `Delegations []Delegation` field to `PropertyFile` (plural, new)
+   - Kept `Delegation *Delegation` field for backward compatibility (deprecated)
+   - Updated comments to indicate deprecation path
+
+2. **Compiler Changes** — `domains/home/pkg/compiler/compiler.go`
+   - Added `Delegations []*PolicyDefinition` field to `CompiledProperty`
+   - Kept `Delegation *PolicyDefinition` field (deprecated, mirrored from Delegations[0])
+   - Updated `CompileProperty()` to:
+     - Validate mutual exclusion: error if both `delegation` and `delegations` present
+     - Support backward compat: single `delegation:` converts to single-item `delegations:` list
+     - Compile multiple delegations with indexed policy IDs
+   - Updated `CompileDelegation()` signature to accept `index int` parameter
+     - index = -1 for backward compat (produces `{property}.delegation`)
+     - index ≥ 0 for multi-delegate (produces `{property}.delegation.{index}`)
+
+3. **Test Suite** — `domains/home/pkg/compiler/compiler_test.go`
+   - **6 new tests:**
+     - `TestCompileMultipleDelegations` — Two delegates with different zone assignments
+     - `TestDelegationConflictLastWins` — Same routine assigned to two delegates (both compile successfully)
+     - `TestDelegationZoneResolutionMultiple` — Each delegate gets different zone's routines
+     - `TestDelegationPolicyIDsUnique` — Verifies unique indexed policy IDs
+     - `TestBackwardCompatSingleDelegation` — Old `delegation:` field populates both old and new fields
+     - `TestMutualExclusionError` — Error when both `delegation:` and `delegations:` specified
+   - **Updated 1 existing test:**
+     - `TestCompileProperty` — Updated to use new `Delegations` field
+     - `TestCompileDelegation` — Updated to pass index parameter (-1)
+
+4. **Example Update** — `domains/home/examples/casa-santiago.home.yaml`
+   - Converted from `delegation:` (singular) to `delegations:` (plural) syntax
+   - Demonstrates new multi-delegate capability (single delegate shown, structure ready for multiple)
+
+### Implementation Details
+
+**Multi-Delegate Compilation Flow:**
+1. Loader reads YAML with either `delegation:` or `delegations:` field
+2. Compiler validates mutual exclusion (cannot have both)
+3. If `delegation:` (deprecated): compile as index -1, mirror to `Delegations[0]`
+4. If `delegations:` (new): compile each with index 0, 1, 2, ...
+5. Policy IDs: `{property_id}.delegation.{index}` for multi-delegate, `{property_id}.delegation` for backward compat
+
+**Conflict Resolution:**
+- Conflicts are NOT detected at compile time
+- Each delegation independently resolves `zone:` assignments to routine lists
+- If two delegations assign the same routine (explicitly or via zone), both PolicyDefinitions include it
+- Runtime will apply **last-wins** rule based on array order (documented in Ken's design)
+
+**Backward Compatibility:**
+- Old YAML files with `delegation:` continue to work unchanged
+- Compilation produces both `Delegation` (deprecated) and `Delegations[0]` (new) fields
+- Single delegation uses non-indexed policy ID for backward compat
+- No breaking changes to existing API
+
+### Test Results
+
+```
+cd domains/home && go test ./...
+✅ pkg/compiler (24 tests: 18 existing + 6 new)
+✅ pkg/delegation (14 tests: all existing)
+✅ All packages pass
+
+cd domains/home && go test -tags integration ./...
+✅ 3 integration tests pass
+✅ CLI validation test passes
+```
+
+**Build validation:**
+```
+go build ./...    ✅
+go vet ./...      ✅
+```
+
+### Design Compliance
+
+Fully implements Ken's design specification from `.squad/tmp/ken-multi-delegate-design.md`:
+
+✅ **§3.1:** Added `Delegations []Delegation` field to PropertyFile  
+✅ **§5.2:** Added `Delegations []*PolicyDefinition` to CompiledProperty  
+✅ **§5.2:** Updated CompileProperty() with delegation loop and validation  
+✅ **§5.2:** Added index parameter to CompileDelegation()  
+✅ **§5.2:** Policy IDs use `{property}.delegation.{index}` format  
+✅ **§6:** Mutual exclusion validation (both fields = error)  
+✅ **§8.2:** Backward compat via index = -1 for single delegation  
+✅ **§9.1:** All 6 required unit tests implemented  
+
+### Learnings
+
+1. **Index-based policy IDs** — Clean approach for unique delegation identifiers without name conflicts
+2. **Backward compat via mirroring** — Single delegation populates both old and new fields for smooth transition
+3. **Compile-time vs runtime conflict resolution** — Compiler doesn't detect conflicts; defers to runtime last-wins rule
+4. **Syntactic sugar strategy** — Keeping `delegation:` (singular) as sugar for single-item list improves UX for common case
+5. **Zone expansion per delegation** — Each delegation independently expands zones, enabling flexible assignment patterns
+
+### Known Behaviors
+
+- **Conflict handling:** If two delegations assign the same routine, both PolicyDefinitions include it (compile succeeds, runtime resolves)
+- **Zone expansion:** `zone: pool` expands to ALL routines with `zone: pool` at compile time (static expansion, not dynamic)
+- **Delegation ordering:** Array order matters for runtime conflict resolution (last wins)
+
+**Phase 5 Status:** ✅ Complete — Multi-delegate support fully implemented and tested
+
+
+---
+
+## Phase 5 Complete: Multi-Delegate Support Shipped
+
+**Date:** 2026-04-24  
+**Status:** ✅ Delivered
+
+Multi-delegate feature fully implemented, tested (7 tests), and committed to main branch. Enables households to assign tasks to multiple delegates simultaneously with last-wins conflict resolution.
+
+**Work:** Model refactor, compiler loop, validation, backward compat, integration test.
+

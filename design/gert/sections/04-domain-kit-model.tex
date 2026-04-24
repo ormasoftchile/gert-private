@@ -451,6 +451,583 @@ For detailed Kit implementation guides, see the \emph{Domain Kit Development
 Guide} (separate document).
 
 % ============================================================
+\section{Kit Composition and Layering}
+\label{sec:kit-composition}
+% ============================================================
+
+A specialised Domain Kit may depend on a foundational Domain Kit.  The
+composition mechanism is a shared \texttt{CompilerRegistry} that each kit
+populates at process start-up.  The output invariant---a flat gert core
+\texttt{ExecutionPlan}---is never broken regardless of how many Kit layers are
+involved, because every step compiler at every layer ultimately emits
+\texttt{[]schema.FlowNode} using only core primitive types.
+
+% ------------------------------------------------------------
+\subsection{The Composition Model}
+\label{subsec:kit-composition-model}
+% ------------------------------------------------------------
+
+\subsubsection{What a Kit Exposes}
+
+A foundational kit exposes three integration surfaces:
+
+\begin{enumerate}
+  \item \textbf{Model types.}  Domain value objects (\texttt{Task},
+    \texttt{Person}, \texttt{Approval}, \texttt{Chore}) as plain Go structs
+    with YAML tags and validation constraints.  These are the ``nouns'' of the
+    domain vocabulary.
+
+  \item \textbf{Step compiler functions.}  One \texttt{StepCompilerFunc}
+    implementation per step type.  A step compiler accepts a raw
+    \texttt{*yaml.Node} (the step body as authored) and returns
+    \texttt{([]schema.FlowNode, error)}.  The returned nodes are core gert
+    primitives only.
+
+  \item \textbf{A \texttt{KitBundle}.}  A named collection of
+    (step-type~$\to$~compiler-function) pairs ready to be merged into a
+    \texttt{CompilerRegistry}.  This is the integration surface for downstream
+    kits.
+\end{enumerate}
+
+The shared infrastructure types live in
+\texttt{gert/v2/pkg/kitruntime}:
+
+\begin{minted}{go}
+// StepCompilerFunc compiles one Kit-level step into core FlowNodes.
+type StepCompilerFunc func(
+    ctx   context.Context,
+    node  *yaml.Node,
+    scope CompileScope,
+) ([]schema.FlowNode, error)
+
+// CompileScope carries read-only context available during compilation.
+type CompileScope struct {
+    Vars       map[string]string
+    Governance *schema.GovernanceConfig
+    KitMeta    KitMeta
+    Registry   *CompilerRegistry
+}
+
+// KitBundle is what a foundational kit exports.
+type KitBundle struct {
+    Name      string
+    Version   string
+    Compilers map[string]StepCompilerFunc // key: qualified type, e.g. "household.chore"
+}
+
+// CompilerRegistry holds all registered step compilers, keyed by qualified type.
+type CompilerRegistry struct {
+    compilers map[string]StepCompilerFunc
+    owners    map[string]string // step key -> kit name, for diagnostics
+}
+
+func NewRegistry() *CompilerRegistry { ... }
+
+// Merge adds all compilers from a KitBundle into the registry.
+// Panics on duplicate key — collision is a programming error.
+func (r *CompilerRegistry) Merge(b KitBundle) { ... }
+
+// Dispatch looks up and calls the compiler for a given qualified step type.
+func (r *CompilerRegistry) Dispatch(
+    ctx      context.Context,
+    stepType string,
+    node     *yaml.Node,
+    scope    CompileScope,
+) ([]schema.FlowNode, error) { ... }
+\end{minted}
+
+\subsubsection{How the Specialised Kit References the Foundational Kit}
+
+The specialised kit (\texttt{gert-kit-home}) imports the foundational kit
+(\texttt{gert-kit-household}) as a normal Go module dependency:
+
+\begin{minted}{go}
+// gert-kit-home/go.mod
+module github.com/ormasoftchile/gert-kit-home
+
+require (
+    github.com/ormasoftchile/gert-kit-household v0.3.0
+    github.com/ormasoftchile/gert/v2             v2.1.0
+)
+\end{minted}
+
+At start-up the specialised kit builds its registry by merging the foundational
+kit's bundle and then adding its own compilers:
+
+\begin{minted}{go}
+// gert-kit-home/pkg/compiler/registry.go
+func BuildRegistry() *kitruntime.CompilerRegistry {
+    r := kitruntime.NewRegistry()
+    r.Merge(household.Bundle()) // foundational kit contributes its compilers
+    r.Merge(homeBundle())       // specialised kit adds its own
+    return r
+}
+\end{minted}
+
+\texttt{household.Bundle()} is the exported integration surface of
+\texttt{gert-kit-household}:
+
+\begin{minted}{go}
+// gert-kit-household/pkg/compiler/bundle.go
+func Bundle() kitruntime.KitBundle {
+    return kitruntime.KitBundle{
+        Name:    "household",
+        Version: "0.3.0",
+        Compilers: map[string]kitruntime.StepCompilerFunc{
+            "household.chore":   compileChore,
+            "household.approve": compileApprove,
+            "household.notify":  compileNotify,
+        },
+    }
+}
+\end{minted}
+
+\subsubsection{Composition Phases}
+
+\begin{description}
+  \item[Go module dependency — build time.]  The type system enforces the
+    contract.  A signature change in \texttt{household.Bundle()} is a compile
+    error in \texttt{gert-kit-home}.
+
+  \item[Registry merge --- load time.]  When the kit compiler process starts
+    (or when a test calls \texttt{BuildRegistry()}), the registry is assembled.
+    Step type dispatch is resolved at this point.
+
+  \item[Step lowering --- authoring-compile time.]  When the kit compiler
+    processes a \texttt{.home.yaml} input, it runs step compilers from the
+    registry.  This ``compile time'' precedes gert runtime execution.
+\end{description}
+
+% ------------------------------------------------------------
+\subsection{Step Type Namespacing}
+\label{subsec:kit-step-namespacing}
+% ------------------------------------------------------------
+
+\textbf{Decision: prefixed step types.}  Format: \texttt{<kit-name>.<step-type>}.
+
+\begin{minted}{yaml}
+- type: household.chore
+  ...
+- type: household.approve
+  ...
+- type: home.morning-routine
+  ...
+\end{minted}
+
+Two alternatives were considered and rejected:
+
+\begin{description}
+  \item[Implicit disjoint sets (rejected).]  Bare type names rely on kit authors
+    never colliding.  With two kits in scope, \texttt{approve} could silently
+    mean either \texttt{household.approve} or \texttt{core.approve}.  The
+    \texttt{Merge()} panic catches exact key matches, but the convention breaks
+    down in a public kit ecosystem.
+
+  \item[\texttt{kit:} field (rejected).]  Splitting identity across two YAML
+    fields (\texttt{kit: household}, \texttt{type: chore}) makes single-field
+    lookups ambiguous.  The prefix form \texttt{household.chore} is
+    self-contained and survives copy-paste.
+\end{description}
+
+The prefix form wins on four grounds: (1) a single \texttt{type:} field carries
+full identity; (2) the registry key is the YAML \texttt{type} value, so no
+translation is needed at dispatch; (3) domain context is visible in every
+runbook listing; (4) collisions are caught at start-up via \texttt{Merge()}.
+
+\paragraph{Core step types are unqualified.}  The gert core step types
+(\texttt{cli}, \texttt{manual}, \texttt{tool}, \texttt{approve},
+\texttt{branch}, \texttt{iterate}) are not managed by any Kit and remain
+unqualified.  The rule is unambiguous: unqualified~= core primitive;
+qualified~= Kit-authored.
+
+% ------------------------------------------------------------
+\subsection{Compiler Delegation}
+\label{subsec:kit-compiler-delegation}
+% ------------------------------------------------------------
+
+\textbf{Decision: Option~B --- shared \texttt{CompilerRegistry} with dispatch
+by step type.}
+
+\paragraph{Option A: direct function calls (rejected).}
+
+The specialised kit would enumerate every foundational step type it might
+encounter:
+
+\begin{minted}{go}
+// Option A (rejected)
+switch step.Type {
+case "household.chore":
+    nodes, err = household.CompileChore(ctx, node, scope)
+case "household.approve":
+    nodes, err = household.CompileApprove(ctx, node, scope)
+// ...must list every household type explicitly
+\end{minted}
+
+This tightly couples the specialised kit to the foundational kit's internal
+type inventory.  Any new step type added to \texttt{household} requires a
+corresponding \texttt{case} in \texttt{home}.
+
+\paragraph{Option C: \texttt{BaseCompiler} embedding (rejected).}
+
+\begin{minted}{go}
+// Option C (rejected)
+type HomeCompiler struct {
+    household.BaseCompiler // embedding
+}
+\end{minted}
+
+Go embedding works for single inheritance but breaks down when a specialised
+kit depends on multiple foundational kits.  It also makes the foundational
+compiler hard to replace with a test double.
+
+\paragraph{Option B: shared registry dispatch (adopted).}
+
+The \texttt{CompilerRegistry} is a simple map with a dispatch function.  Each
+kit contributes its entries at start-up.  The specialised kit's compiler calls
+\texttt{registry.Dispatch(stepType,~...)} for every step, regardless of which
+kit owns it:
+
+\begin{minted}{go}
+// Option B
+func (c *HomeCompiler) CompileStep(
+    ctx   context.Context,
+    step  RawStep,
+    scope Scope,
+) ([]schema.FlowNode, error) {
+    return c.registry.Dispatch(ctx, step.Type, step.Body, scope)
+}
+\end{minted}
+
+New step types added to the foundational kit are automatically available: the
+specialised kit calls \texttt{r.Merge(household.Bundle())} and receives them
+all.
+
+\textit{Trade-off acknowledged:} all bundles must be merged before the first
+\texttt{Dispatch()} call.  This is a start-up invariant enforced by making
+\texttt{BuildRegistry()} a required, non-lazy setup step.
+
+% ------------------------------------------------------------
+\subsection{Model Composition}
+\label{subsec:kit-model-composition}
+% ------------------------------------------------------------
+
+\textbf{Decision: Go embedding for model types, plus direct import of
+foundational types.}
+
+Kit model types are \emph{value objects}---data carriers, not behaviour objects.
+Go embedding is the idiomatic way to extend value types without losing type
+safety.  Interfaces add indirection without benefit at the model layer; they
+are reserved for the compiler functions (\texttt{StepCompilerFunc}), not the
+data types.
+
+\begin{minted}{go}
+// gert-kit-household/pkg/model/types.go
+type Chore struct {
+    ID          string  `yaml:"id"`
+    Label       string  `yaml:"label"`
+    Description string  `yaml:"description"`
+    Zone        string  `yaml:"zone"`
+    Frequency   Cadence `yaml:"cadence"`
+    Assignee    string  `yaml:"assignee,omitempty"`
+}
+
+// gert-kit-home/pkg/model/types.go
+import household "github.com/ormasoftchile/gert-kit-household/pkg/model"
+
+type MorningRoutine struct {
+    ID    string        `yaml:"id"`
+    Label string        `yaml:"label"`
+    Steps []RoutineStep `yaml:"steps"`
+}
+
+type RoutineStep struct {
+    Type  string           `yaml:"type"`  // "chore" | "approve" | "notify"
+    Chore *household.Chore `yaml:"chore,omitempty"`
+}
+\end{minted}
+
+% ------------------------------------------------------------
+\subsection{The ExecutionPlan Invariant}
+\label{subsec:kit-invariant}
+% ------------------------------------------------------------
+
+\textbf{Invariant:} regardless of how many Kit layers are involved, the output
+of the full compilation chain is always a flat gert core
+\texttt{ExecutionPlan}.  Kit-specific step types never reach the gert runtime.
+
+The invariant is enforced at three levels:
+
+\begin{enumerate}
+  \item \textbf{Type signature.}  \texttt{StepCompilerFunc} returns
+    \texttt{[]schema.FlowNode}.  \texttt{schema.FlowNode} is the core union
+    type; it has no Kit-level variant.  The type system prevents Kit-level
+    nodes from being returned.
+
+  \item \textbf{Composite expansion.}  When \texttt{home.morning-routine}
+    compiles, it does not emit \texttt{household.chore} as a
+    \texttt{FlowNode}.  It calls
+    \texttt{registry.Dispatch("household.chore",~...)} for each sub-step and
+    concatenates the resulting core nodes:
+
+\begin{minted}{go}
+func compileMorningRoutine(
+    ctx   context.Context,
+    node  *yaml.Node,
+    scope kitruntime.CompileScope,
+) ([]schema.FlowNode, error) {
+    var routine model.MorningRoutine
+    if err := node.Decode(&routine); err != nil {
+        return nil, err
+    }
+    var allNodes []schema.FlowNode
+    for _, step := range routine.Steps {
+        nodes, err := scope.Registry.Dispatch(
+            ctx, step.QualifiedType(), step.Body, scope,
+        )
+        if err != nil {
+            return nil, fmt.Errorf(
+                "home.morning-routine step %s: %w", step.ID, err,
+            )
+        }
+        allNodes = append(allNodes, nodes...)
+    }
+    return allNodes, nil // flat list of core nodes only
+}
+\end{minted}
+
+  \item \textbf{Core planner boundary.}  The gert core planner accepts only
+    \texttt{runbook/v2} YAML.  Kit YAML is a pre-processing artefact that
+    never enters the planner.
+\end{enumerate}
+
+% ------------------------------------------------------------
+\subsection{Worked Example: Household and Home Kits}
+\label{subsec:kit-worked-example}
+% ------------------------------------------------------------
+
+\textbf{Kits in scope.}
+\texttt{gert-kit-household} (foundational) defines \texttt{household.chore},
+\texttt{household.approve}, and \texttt{household.notify}.
+\texttt{gert-kit-home} (specialised) imports \texttt{household} and adds
+\texttt{home.morning-routine} as a composite step type.
+
+\subsubsection{Home Runbook Source (Kit YAML)}
+
+\begin{minted}{yaml}
+# casa-santiago.home.yaml
+apiVersion: runbook/v2+home/v1
+id: morning-routine-weekday
+name: Weekday Morning Routine
+kind: reference
+
+vars:
+  day: monday
+
+flow:
+  - type: home.morning-routine
+    id: morning_core
+    label: Core Morning Tasks
+    steps:
+      - type: household.chore
+        id: make_coffee
+        label: Make coffee
+        zone: kitchen
+        cadence: { frequency: daily }
+
+      - type: household.chore
+        id: feed_pets
+        label: Feed cats
+        zone: utility
+        cadence: { frequency: daily }
+
+      - type: household.approve
+        id: morning_sign_off
+        label: Morning checklist sign-off
+        roles: [resident]
+        required: 1
+        timeout: 30m
+
+      - type: household.notify
+        id: done_notify
+        label: Notify family
+        channel: push
+        message: "Morning routine complete"
+\end{minted}
+
+\subsubsection{Compiled Output (Core \texttt{runbook/v2} YAML)}
+
+After compilation by \texttt{gert-kit-home}, no Kit types remain:
+
+\begin{minted}{yaml}
+# Compiled output — no kit types remain
+apiVersion: runbook/v2
+id: morning-routine-weekday
+name: Weekday Morning Routine
+kind: reference
+
+flow:
+  - type: manual              # household.chore -> manual step
+    id: make_coffee
+    title: Make coffee
+    subtitle: "[kitchen] daily"
+
+  - type: manual
+    id: feed_pets
+    title: Feed cats
+    subtitle: "[utility] daily"
+
+  - type: approve             # household.approve -> approve gate
+    id: morning_sign_off
+    title: Morning checklist sign-off
+    roles: [resident]
+    required: 1
+    timeout: 30m
+
+  - type: tool                # household.notify -> tool step
+    id: done_notify
+    title: Notify family
+    tool: notify
+    action: push
+    args:
+      message: Morning routine complete
+\end{minted}
+
+\subsubsection{Go Interface Sketch}
+
+\begin{minted}{go}
+// --- gert-kit-household/pkg/compiler/bundle.go ---
+
+func Bundle() kitruntime.KitBundle {
+    return kitruntime.KitBundle{
+        Name:    "household",
+        Version: "0.3.0",
+        Compilers: map[string]kitruntime.StepCompilerFunc{
+            "household.chore":   compileChore,
+            "household.approve": compileApprove,
+            "household.notify":  compileNotify,
+        },
+    }
+}
+
+func compileChore(
+    ctx   context.Context,
+    node  *yaml.Node,
+    scope kitruntime.CompileScope,
+) ([]schema.FlowNode, error) {
+    var chore model.Chore
+    if err := node.Decode(&chore); err != nil {
+        return nil, fmt.Errorf("household.chore: %w", err)
+    }
+    step := schema.Step{
+        ID:       chore.ID,
+        Type:     schema.StepTypeManual,
+        Title:    chore.Label,
+        Subtitle: fmt.Sprintf("[%s] %s", chore.Zone, chore.Frequency.Human()),
+    }
+    return []schema.FlowNode{{Step: &step}}, nil
+}
+
+// compileApprove and compileNotify follow the same pattern.
+
+
+// --- gert-kit-home/pkg/compiler/registry.go ---
+
+func BuildRegistry() *kitruntime.CompilerRegistry {
+    r := kitruntime.NewRegistry()
+    r.Merge(household.Bundle()) // foundational kit
+    r.Merge(homeBundle())       // specialised kit
+    return r
+}
+
+func homeBundle() kitruntime.KitBundle {
+    return kitruntime.KitBundle{
+        Name:    "home",
+        Version: "0.1.0",
+        Compilers: map[string]kitruntime.StepCompilerFunc{
+            "home.morning-routine": compileMorningRoutine,
+        },
+    }
+}
+
+
+// --- gert-kit-home/pkg/compiler/compiler.go ---
+
+type Compiler struct {
+    registry *kitruntime.CompilerRegistry
+}
+
+func New() *Compiler {
+    return &Compiler{registry: BuildRegistry()}
+}
+
+// Compile transforms a .home.yaml document into a core runbook/v2 document.
+func (c *Compiler) Compile(ctx context.Context, input []byte) ([]byte, error) {
+    // 1. Parse input as Home Kit AST.
+    // 2. For each flow step, call c.registry.Dispatch(stepType, node, scope).
+    // 3. Assemble schema.Runbook with the returned []schema.FlowNode.
+    // 4. Marshal to YAML and return (valid runbook/v2 YAML).
+}
+\end{minted}
+
+% ------------------------------------------------------------
+\subsection{Border Cases and Error Handling}
+\label{subsec:kit-border-cases}
+% ------------------------------------------------------------
+
+\begin{table}[ht]
+\centering
+\caption{Kit composition border cases}
+\label{tab:kit-border-cases}
+\small
+\begin{tabular}{p{0.20\linewidth}p{0.25\linewidth}p{0.45\linewidth}}
+\toprule
+\textbf{Scenario} & \textbf{Specified behaviour} & \textbf{Invariant / guard} \\
+\midrule
+Unknown step type at dispatch &
+  \texttt{Dispatch()} returns a structured error; never panics. &
+  Error message includes the unknown type name and the registry size:
+  \texttt{kitruntime: unknown step type "X" (registry contains N types)}.
+  Count aids diagnosis when the registry was built with the wrong bundles. \\
+\midrule
+Version conflict between kits &
+  Go MVS resolves the module conflict before the binary is built---exactly
+  one \texttt{Bundle()} exists in the final binary.  If the same key is merged
+  twice, \texttt{Merge()} panics. &
+  \textit{Merge ownership invariant:} a foundational kit exports
+  \texttt{Bundle()} but never calls \texttt{r.Merge()} itself.  Only the
+  top-level \texttt{BuildRegistry()} site calls \texttt{Merge()}, ensuring
+  each bundle is merged exactly once. \\
+\midrule
+Overlapping prefixes / namespace collision &
+  An exact key collision causes a start-up panic (programming error).
+  Substring overlap is not detected at runtime; it is a documentation problem. &
+  \textit{Prefix reservation invariant:} each kit owns its prefix exclusively.
+  The \texttt{gert-kit.yaml} manifest must declare a \texttt{prefix:} field.
+  The \texttt{Merge()} panic names both the existing owner and the incoming
+  bundle for immediate diagnosis. \\
+\midrule
+Partial registration / startup order &
+  If a bundle is not merged before \texttt{Dispatch()} is called, the
+  ``unknown step type'' error from \S\ref{subsec:kit-border-cases} propagates
+  with no silent fallback. &
+  \textit{Startup order invariant:} \texttt{BuildRegistry()} must complete and
+  return a fully-populated registry before any \texttt{Dispatch()} call is
+  possible.  The constructor pattern (\texttt{New()~=~\&Compiler\{registry:
+  BuildRegistry()\}}) enforces this. \\
+\midrule
+Nil or empty step body &
+  The kit's input loader rejects null step bodies before calling
+  \texttt{Dispatch()}.  \texttt{StepCompilerFunc} implementations may assume
+  \texttt{node} is non-nil. &
+  \texttt{Dispatch()} passes \texttt{node} to the compiler unchanged; it does
+  not inject a synthetic node.  The loader is the validation boundary: \\
+  & &
+  \texttt{if node == nil \{\ return nil,\ fmt.Errorf("step \%q:\ body required but null",\ id)\ \}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ============================================================
 \section{Non-Goals}
 \label{sec:kit-nongoals}
 % ============================================================

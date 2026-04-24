@@ -163,6 +163,121 @@ Brian's integration test deliverables for gert-domain-home compiler are complete
 
 ---
 
+## Phase 4 — v2 Runbook Roundtrip Schema Conformance (2025-04-24)
+
+### Status: ✅ Investigation Complete
+
+Attempted to implement a roundtrip test that validates compiler output against the actual v2 schema types (`v2/pkg/schema.Runbook`). Discovered critical schema design constraint that prevents direct YAML unmarshaling.
+
+### Deliverable
+
+**Decision Record:** `.squad/decisions/inbox/ken-phase4-roundtrip.md`
+
+### Key Finding: v2 Schema Inline Spec Design
+
+**Discovery:** The v2 schema uses `yaml:",inline"` tags for step type-specific specs, which creates an incompatibility with standard `yaml.Unmarshal()`.
+
+**Root Cause:**
+```go
+// v2/pkg/schema/step.go
+type Step struct {
+    ID    string   `yaml:"id"`
+    Type  StepType `yaml:"type"`
+    // ...
+    CollectorSpec *CollectorSpec `yaml:",inline"`  // ← Inline
+    ChoiceSpec    *ChoiceSpec    `yaml:",inline"`  // ← Inline
+    DecisionSpec  *DecisionSpec  `yaml:",inline"`  // ← Inline
+}
+
+type CollectorSpec struct {
+    Prompt string           `yaml:"prompt"`  // ← Conflicts when inlined
+    Fields []CollectorField `yaml:"fields"`
+}
+```
+
+Multiple inline specs have overlapping field names (`prompt`, `variable`, etc.). When `yaml.v3` encounters this, it panics:
+
+```
+panic: duplicated key 'prompt' in struct schema.Step
+```
+
+### v2 Parser Custom Unmarshal Logic
+
+The v2 parser (`v2/internal/parser/unmarshal.go`) has **custom unmarshal logic** to handle this:
+
+1. Decodes top-level runbook fields (excluding `flow`)
+2. Extracts `flow` as raw `yaml.Node`
+3. Custom `parseFlowNodes()` type-dispatches steps based on `type` field
+4. Constructs `schema.Step` with only the appropriate spec populated
+
+**Critical constraint:** This custom parser is in `v2/internal/parser` — **not accessible** from `domains/home`.
+
+### Importability Assessment
+
+| Package | Status | Reason |
+|---------|--------|--------|
+| `v2/pkg/schema` | ✅ Importable | Public package, well-structured |
+| `v2/pkg/parser` (interface) | ✅ Importable | Public interface defined |
+| `v2/internal/parser` (impl) | ❌ Not importable | Internal package |
+| Parser factory | ❌ Not available | No public `New()` in `v2/pkg/` |
+
+### Validation Coverage Comparison
+
+| Validation Aspect | Phase 3 (map) | Phase 4 (attempted) | v2 Parser |
+|------------------|---------------|---------------------|-----------|
+| YAML syntax | ✅ | ✅ | ✅ |
+| Structure (fields exist) | ✅ | ✅ | ✅ |
+| Type correctness | ⚠️ Weak | ❌ Blocked | ✅ Full |
+| JSON Schema rules | ❌ | ❌ | ✅ |
+| Semantic validation | ❌ | ❌ | ✅ |
+
+### Decision: Keep Map-Based Validation
+
+**Chosen approach:** Continue using Phase 3 map-based structural validation
+
+**Rationale:**
+1. Compiler's responsibility is **boundary correctness** (YAML syntax + structure) ✅
+2. GERT engine's responsibility is **execution validation** (parser + planner) ✅
+3. No access to internal parser — workaround would violate architecture
+4. Map-based validation proves 90% of what the compiler controls
+
+**Consequences:**
+- ✅ Integration tests prove compilation works
+- ✅ Clear separation of concerns (compiler vs. runtime)
+- ✅ Fast tests (no parser/engine overhead)
+- ⚠️ Cannot validate full schema conformance at compile time
+- ⚠️ Semantic validation requires downstream v2 Parser
+
+### Recommendations
+
+**Immediate (v2.0):**
+- Keep Phase 3 map-based validation as primary test boundary
+- Document schema constraint in decision record
+- Accept validation gap (full validation requires internal parser)
+
+**Future (v2.1+):**
+- Option 1: Export Parser factory (`v2/pkg/parser.New()` public constructor)
+- Option 2: Create E2E test in v2 repo (`v2/internal/e2e/domain_home_test.go`)
+- Option 3: Use CLI validation (`gert validate compiled.yaml`)
+
+### Learnings
+
+1. **v2 schema design trade-off:** Custom parser complexity in exchange for type-safe step handling
+2. **Inline spec limitation:** `yaml:",inline"` with overlapping fields requires custom unmarshal
+3. **Module boundaries:** `internal/` packages are architecture enforcement — cannot be bypassed
+4. **Pragmatic testing:** Test the boundary you control; trust downstream validation
+5. **Parser is mandatory:** Cannot work with `schema.Runbook` types directly via `yaml.Unmarshal`
+
+### Files Modified
+
+- `.squad/decisions/inbox/ken-phase4-roundtrip.md` — Complete investigation and decision record
+
+### No Code Changes
+
+Attempted to create `domains/home/roundtrip_test.go` but removed it after discovering the schema constraint. No lasting code changes — existing Phase 3 tests remain unchanged and continue to pass.
+
+---
+
 ## Architecture Checkpoints
 
 **Locked (high confidence):**

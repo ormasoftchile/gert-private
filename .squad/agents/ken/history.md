@@ -429,3 +429,65 @@ Schema design prioritizes runtime type safety (discriminated unions via inline s
 - Seasonal cadence (defer to v1/GERT v2.1)
 - Offline evidence queue (defer to v1)
 - Per-user JWT forwarding to GERT (static service token in v0)
+
+---
+
+## Phase 5b — iOS Native Revision (2026-04-24)
+
+### Status: ✅ Architecture Revision Complete
+
+**Mission:** Revise mobile layer from React Native to native iOS (Swift/SwiftUI). User directive: no React, no React Native, iOS-native only.
+
+### Override
+
+D2 (React Native + Expo) is dropped. Replaced with D2-revised (Swift 5.9 + SwiftUI, iOS 17+).
+
+### Key Decisions
+
+**D2-revised: iOS Native Stack**
+- Swift 5.9 + SwiftUI, **minimum iOS 17** (SwiftData + @Observable macro)
+- `apps/home-ios/` in monorepo, independent of `go.work` — Xcode manages it entirely
+- Xcode project structure under `Sources/HomeApp/Features/{Today,TaskDetail,Delegation}`
+
+**D2a: home-api Client — URLSession + Codable**
+- Zero dependencies. Hand-rolled ~200-line `HomeAPIClient` for v0.
+- Codable structs in `Models/` mirror OpenAPI schema names (easy migration to `swift-openapi-generator` later)
+- AsyncHTTPClient, Alamofire, and OpenAPI generator all rejected for v0 (overkill / setup friction)
+
+**D2b: Today Tab**
+- `@Observable TodayViewModel` + `TodayView` as `List`
+- Pull-to-refresh, tap to expand, swipe to complete. Calm, minimal.
+
+**D2c: Evidence Capture**
+- v0: `PhotosUI.PhotosPicker` → JPEG data → multipart POST to home-api
+- v1: Custom `AVFoundation` camera view (deferred)
+
+**D2d: State Management**
+- `@Observable` view models per tab. `@Observable AppState` at root for auth token + selected property.
+- No TCA, no Redux-like pattern.
+
+**D2e: Distribution**
+- TestFlight (internal testers, ≤100, no App Store review)
+- Requires: Apple Developer Program ($99/yr), App Store Connect app record, manual Xcode archive
+- Xcode Cloud deferred to v1
+
+### Architecture Delta Summary
+
+| Aspect | Dropped | Adopted |
+|--------|---------|---------|
+| Mobile framework | React Native + TypeScript | Swift + SwiftUI |
+| Build tooling | Expo EAS | Xcode manual archive |
+| API client | openapi-typescript | URLSession + Codable |
+| Distribution | Expo/App Store | TestFlight |
+| Android | Yes | **No (permanently dropped)** |
+
+**Unchanged:** Go home-api, PostgreSQL, GERT sidecar, Azure Container Apps, JWT auth, Today-tab projection, shared volume, OpenAPI spec.
+
+### Deliverable
+
+- `.squad/decisions/inbox/ken-ios-revision.md` — Full decision record
+
+### Risk Logged
+
+- All validators must be on iOS 17+. Android users excluded from v0 test.
+- Apple Developer account enrollment: 24–48hr approval window. Start now.

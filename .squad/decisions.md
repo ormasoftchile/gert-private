@@ -9419,3 +9419,231 @@ GET /api/history?user_id={id}&month=Apr // → Evidence + history
 - Frontend (React Native + Expo): 3–4 weeks
 - Integration + testing: 2 weeks
 - **Total: ~7–8 weeks** (faster than Temporal.io path or full React Native + push infrastructure)
+
+---
+
+## Mobile Stack Override — Native iOS
+
+### 2026-04-24: User Directive — Native iOS Only
+
+**By:** Cristian (via Copilot)  
+**Status:** Directive (non-negotiable)
+
+The mobile frontend for gert-domain-home MUST be native iOS (Swift/SwiftUI). No React, no React Native, no web app, no PWA. iOS-native only.
+
+**Rationale:** User preference — strong dislike of React. Native iOS is the sole acceptable stack for this project.
+
+---
+
+### iOS Revision — Native Swift/SwiftUI Mobile Layer
+
+**Author:** Ken (Architect)  
+**Date:** 2026-04-24  
+**Supersedes:** D2 from `ken-fullstack-arch.md` (React Native → Swift/SwiftUI)  
+**Status:** Accepted (User directive, non-negotiable)
+
+#### Override
+
+**React Native + Expo is dropped entirely.** The mobile frontend is native iOS using Swift and SwiftUI. This is a user directive, not a trade-off decision.
+
+#### D2-revised: iOS Native Stack
+
+**Decision:** Swift 5.9 + SwiftUI. Minimum deployment target: **iOS 17**.
+
+**Why iOS 17:**
+- `@Observable` macro (replaces `ObservableObject`/`@Published` boilerplate cleanly)
+- SwiftData for local caching (simpler than CoreData for v0 offline evidence queue)
+- Structured concurrency (`async/await`) is stable and idiomatic at iOS 17
+- `PhotosUI.PhotosPicker` + `AVFoundation` camera APIs are mature
+- Family member validators are likely on iOS 17+ (released Sept 2023)
+
+**Project structure (`apps/home-ios/`):**
+```
+apps/
+  home-ios/
+    HomeApp.xcodeproj        ← or Package.swift if SPM-first
+    Sources/
+      HomeApp/
+        App/                 ← @main, AppDelegate if needed
+        Features/
+          Today/             ← TodayView, TodayViewModel
+          TaskDetail/        ← TaskDetailView, EvidenceCapture
+          Delegation/        ← DelegationView
+        Services/
+          HomeAPIClient.swift
+          EvidenceUploader.swift
+        Models/              ← Codable structs (mirrors home-api OpenAPI types)
+        Persistence/         ← SwiftData models (offline queue only)
+      HomeAppTests/
+      HomeAppUITests/
+    HomeApp.xcworkspace      ← if CocoaPods needed (avoid if possible)
+```
+
+**Monorepo placement:** `apps/home-ios/` lives alongside `apps/home-api/`. It has no relationship to `go.work` — Go tooling ignores it entirely. Xcode manages the Swift project independently. No cross-language build coupling in v0.
+
+#### D2a: home-api Client — URLSession + Codable
+
+**Decision:** Hand-rolled `HomeAPIClient` using `URLSession` + `Codable`. No third-party networking library.
+
+**Options considered:**
+
+| Option | Pros | Cons |
+|--------|------|------|
+| URLSession + Codable | Zero deps, stdlib only, full control | Boilerplate for error handling |
+| Alamofire | Less boilerplate, interceptors | Adds SPM dep, overkill for v0 |
+| OpenAPI-generated Swift client | Type-safe, auto-syncs with spec | Generator setup, generated code churn |
+| AsyncHTTPClient | Non-blocking | Server-side lib, not for iOS |
+
+**Rationale:** home-api surface for v0 is small (~8 endpoints). A typed Swift client of ~200 lines beats generator toolchain friction in v0. If the API grows past 20 endpoints, revisit `swift-openapi-generator` (Apple's official tool, now stable).
+
+**Pattern:**
+```swift
+struct HomeAPIClient {
+    let baseURL: URL
+    let session: URLSession
+    var authToken: String
+
+    func todayTasks(propertyID: String) async throws -> [TaskItem] {
+        let req = request(path: "/properties/\(propertyID)/today", method: "GET")
+        let (data, _) = try await session.data(for: req)
+        return try JSONDecoder.iso8601.decode([TaskItem].self, from: data)
+    }
+
+    func uploadEvidence(_ photo: Data, taskID: String, runID: String) async throws {
+        // multipart/form-data POST
+    }
+}
+```
+
+All Codable structs in `Models/` mirror the home-api OpenAPI types. Types are hand-written for v0, named identically to the OpenAPI schema objects so migration to generated client is mechanical later.
+
+#### D2b: Today Tab Architecture
+
+**Decision:** Single `TodayView` backed by `TodayViewModel` (`@Observable`).
+
+```swift
+@Observable
+final class TodayViewModel {
+    var tasks: [TaskItem] = []
+    var state: LoadState = .idle
+    private let api: HomeAPIClient
+
+    func load(propertyID: String) async { ... }
+    func markComplete(taskID: String, runID: String) async { ... }
+    func triggerIncident(taskID: String) async { ... }
+}
+```
+
+`TodayView` is a `List` over `tasks`, each row is a `TaskRowView`. No complex state machine. Pull-to-refresh calls `load()`. Design principle: **calm, low-cognitive-load** — one list, tap to expand, swipe to complete.
+
+#### D2c: Evidence Capture
+
+**Decision:** `PhotosUI.PhotosPicker` for library selection + `AVFoundation` custom camera for in-app capture.
+
+**v0 approach (PhotosPicker only, simpler):**
+1. User taps "Add Photo" on task detail
+2. `PhotosPicker` sheet opens (native iOS photo picker, no permissions required for library access in this mode)
+3. Selected `PhotosPickerItem` → `loadTransferable(type: Data.self)` → JPEG data
+4. `EvidenceUploader.upload(data:taskID:runID:)` → multipart POST to `home-api/runs/{runID}/steps/{stepID}/evidence`
+5. Optimistic UI: show thumbnail immediately, upload in background
+
+**v1 enhancement:** Custom `AVFoundation` camera view for in-app capture (requires `NSCameraUsageDescription`). Deferred — PhotosPicker covers v0 validation.
+
+**Upload format:**
+```
+POST /runs/{runID}/steps/{stepID}/evidence
+Content-Type: multipart/form-data
+Body: field "photo" = JPEG bytes
+      field "mime_type" = "image/jpeg"
+      field "caption" = optional string
+```
+home-api receives, stores to Azure Blob, writes evidence event to GERT JSONL.
+
+#### D2d: State Management
+
+**Decision:** `@Observable` view models. No external store framework (no TCA, no Redux-like pattern).
+
+**Rationale:** The app is intentionally simple. A global store adds indirection with no benefit at this scale. Each tab owns its view model. Shared state (auth token, selected property) lives in an `@Observable AppState` held at root and injected via environment:
+
+```swift
+@main
+struct HomeApp: App {
+    @State private var appState = AppState()
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .environment(appState)
+        }
+    }
+}
+```
+
+`AppState` holds `authToken`, `selectedPropertyID`, and `currentUser`. All other state is local to its tab's view model.
+
+#### D2e: Distribution — TestFlight
+
+**What's needed for v0 validation (14-day family test):**
+1. **Apple Developer Program membership** — $99/year. Required for TestFlight distribution. Must be enrolled before first archive.
+2. **App Store Connect app record** — create the app entry (bundle ID: `com.ormasoft.gert-home` or similar).
+3. **Distribution certificate + provisioning profile** — Xcode manages automatically with "Automatically manage signing" enabled.
+4. **Archive + upload** — Xcode → Product → Archive → Distribute App → App Store Connect → upload. TestFlight processes (~15 min).
+5. **Testers** — add family members by email in App Store Connect → TestFlight → Internal Testing group (up to 100 testers, no review required for internal).
+
+**Xcode Cloud vs manual:** Use **manual archive** for v0. Xcode Cloud is valuable for CI but adds setup cost not worth it at this stage. One developer archives locally and uploads. Move to Xcode Cloud when team scales or release cadence increases.
+
+**No Mac-in-the-cloud needed:** The developer's Mac runs Xcode. Azure is backend only.
+
+#### Architecture Delta (What Changes vs. Previous Proposal)
+
+##### Unchanged
+- Go `home-api` backend (all 9 D1/D3–D9 decisions)
+- PostgreSQL for app state
+- GERT v2 sidecar model
+- Shared volume for compiled runbooks
+- JWT auth at home-api boundary
+- Azure Container Apps deployment
+- Today-tab projection owned by home-api
+- OpenAPI spec on home-api (still generated, still canonical)
+- `apps/` monorepo structure
+
+##### Changed
+
+| Aspect | Previous | Revised |
+|--------|----------|---------|
+| Mobile framework | React Native + TypeScript | Swift 5.9 + SwiftUI |
+| Build tooling | Expo EAS | Xcode (manual archive → TestFlight) |
+| API client | `openapi-typescript` generated TS types | Hand-rolled `URLSession + Codable` structs |
+| State management | React Context / Zustand (TBD) | `@Observable` view models |
+| Camera | Expo Camera | `PhotosUI.PhotosPicker` → v1: AVFoundation |
+| Distribution | Expo EAS / App Store | TestFlight (internal) → App Store |
+| Dependencies | Node.js ecosystem (npm) | None (stdlib only in v0) |
+| Dev environment | Node.js + Expo CLI | Xcode 15+ on macOS |
+| Android support | Yes (React Native) | **No — iOS only** (explicit override) |
+
+##### Implications for home-api
+
+- **No change to API surface.** home-api's REST endpoints are identical. Swift client consumes same JSON.
+- **CORS headers can be dropped** — Swift URLSession does not enforce CORS. (home-api may still serve a web dashboard later — keep CORS config but it's not needed for Swift client.)
+- **Multipart evidence upload endpoint** must be implemented on home-api regardless of client.
+
+#### v0 Prototype Scope (Revised)
+
+**Must exist:**
+- `apps/home-ios/`: TodayView, TaskDetailView, EvidenceCapture (PhotosPicker), HomeAPIClient
+- `apps/home-api/`: unchanged from original proposal
+- TestFlight distribution to ≤5 family member testers
+- iOS 17+ required from testers
+
+**Cut from v0 (same as original):**
+- Property/Tasks/History tabs
+- Push notifications (APNs requires additional Apple setup)
+- Offline evidence queue (SwiftData stub exists, not wired)
+- Custom AVFoundation camera
+- Android (permanently dropped, not deferred)
+
+#### Risk
+
+**Single platform:** Android users cannot participate in validation. If a family validator uses Android, they're excluded from v0. Mitigation: confirm all validators use iOS 17+ before committing to TestFlight approach.
+
+**Apple Developer account lead time:** Account approval can take 24–48 hours. Start enrollment immediately if not already enrolled.
+

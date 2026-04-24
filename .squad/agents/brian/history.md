@@ -849,3 +849,71 @@ Ken approved Brian's Phase 17 deliverables with 9/10 score:
 **Learning:** Kit artifacts (sidecars like sourcemap.yaml) need formal Go types even if they're not part of core GERT schema. This enables mechanical verification of kit compliance contracts. Without a struct, kits can claim compliance without enforcement. Using `gopkg.in/yaml.v3` tags for YAML serialization aligns with existing v2 parser conventions.
 
 **Next Steps:** Implementation deferred to v2.1 milestone (same timeline as Step.Meta support).
+
+---
+
+## 2025-01-26 — gert-domain-home v0 Scaffold
+
+**Task:** Scaffold the Go source files for `gert-domain-home` v0.
+
+**Context:**
+- Read v0 spec (`specs/gert-domain-home/v0.md`)
+- Read DSL spec (`.squad/tmp/john-home-domain-dsl.md`)
+- Reviewed existing v2 module structure
+
+**Implementation:**
+
+Created `domains/home/` module with:
+
+1. **Module setup:**
+   - `go.mod` — module `github.com/ormasoftchile/gert-domain-home`, Go 1.23
+   - Only dependency: `gopkg.in/yaml.v3` (no v2 core imports to avoid circular deps)
+   - Added to `go.work`
+
+2. **pkg/model package:**
+   - `duration.go` — custom Duration type with YAML marshaling, parsing "7d"/"2w"/"3M"/"1y"
+   - `model.go` — all domain structs (Property, Zone, Asset, Routine, Cadence, SeasonalSchedule, Evidence, IncidentTemplate, IncidentStep, Consumable, Delegation, etc.)
+   - All YAML tags match DSL field names (snake_case)
+   - Doc comments on all exported types and fields
+
+3. **pkg/loader package:**
+   - `loader.go` — Load(path) and LoadBytes(data) with comprehensive validation
+   - Validates: required fields, unique IDs, reference integrity, cadence constraints, delegation rules
+   - Clear error messages with field paths
+
+4. **pkg/delegation package:**
+   - `policy.go` — away mode policy functions (IsAwayModeActive, RoutineIsAssignedToDelegate, GetDelegateForRoutine)
+
+5. **examples/casa-santiago.home.yaml:**
+   - Full example property file with 5 zones, 3 assets, 5 routines, 2 incident templates, 2 consumables, delegation
+   - Validated: loads successfully with all validations passing
+
+**Design Decisions:**
+
+- **Zero values are valid:** Invalid states caught by validation, not construction
+- **Pointer vs value semantics:** Pointers for optional structs, values for required/slices
+- **Validation in loader, not model:** Model types stay simple and testable
+- **No global state:** All functions pure or explicit parameters
+- **Error messages include context:** "routine pool_clean: cadence.every or cadence.seasonal is required"
+
+**Deferred to Phase 2:**
+
+- **Compiler package:** Will translate domain models to GERT core primitives
+- Avoided importing v2 core to prevent circular deps during scaffolding
+- Compiler will need v2 types (Run, Task, Timer, Policy)
+
+**Open Questions:**
+
+1. Hemisphere detection for seasonal cadence (needs Property.locale or explicit field)
+2. Date format validation (currently strings, no parsing)
+3. Phone number validation (E.164 format)
+4. Circular dependency detection in incident step graphs
+5. Decision step choice validation (next_step references)
+
+**Artifacts:**
+- Implementation notes: `.squad/tmp/brian-home-scaffold.md`
+- Module location: `domains/home/`
+- Example file: `domains/home/examples/casa-santiago.home.yaml`
+
+**Status:** ✓ Complete — v0 scaffold functional, all validations passing.
+

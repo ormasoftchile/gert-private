@@ -491,6 +491,134 @@ Phase 17 added JWT expiry validation (`exp` and `iat` claims) but **does not ver
 - NBI-18-01: OAuth2/OIDC token validation
 - NBI-18-02: Rate limiting (carry-forward)
 - NBI-18-03: E2E parallelization (carry-forward)
+
+---
+
+## 2024-04-24 — gert-domain-home v0 Package Design
+
+**Task:** Design Go package structure for gert-domain-home v0 (home automation domain kit)  
+**Requestor:** Cristian  
+**Context:** First consumer-domain kit validating GERT v2 compilation model
+
+### Design Approach
+
+**Module placement:** Separate Go module at `domains/home/` (not inside `v2/` package)  
+**Rationale:** Domain kits are compilation layers over GERT primitives, not core runtime. Separate module enforces dependency direction (kit depends ON v2, never reverse) and enables future extraction to independent repository.
+
+**Package structure (4 core packages):**
+
+1. **pkg/model/** — Pure domain types (Property, Zone, Routine, Incident, Delegation)  
+   - No GERT types — this is household vocabulary only
+   - 7 files: property.go, zone.go, asset.go, routine.go, incident.go, delegation.go, executor.go
+
+2. **pkg/loader/** — YAML DSL parser (`.home.yaml` → model types)  
+   - Validates zone ID uniqueness, cadence rules (simple only in v0)
+   - Rejects v1-only features (seasonal cadence, consumables)
+   - 6 files: loader.go (interface), property.go, routines.go, assets.go, validation.go, loader_test.go
+
+3. **pkg/compiler/** — Domain model → GERT execution graph  
+   - Routine → timer-backed run + human task  
+   - Incident → ad-hoc run + repair sub-run (4 sequential steps)  
+   - Cadence → timer interval (simple only: every_n_days * 86400 seconds)  
+   - 6 files: compiler.go (interface), routine.go, incident.go, cadence.go, evidence.go, compiler_test.go
+
+4. **pkg/delegation/** — Away mode + delegate routing  
+   - DelegationPolicy: evaluate time window + scoped tasks filter  
+   - TaskFilter: delegate-visible projection (filter by executor + dates)  
+   - 4 files: policy.go, routing.go, projection.go, delegation_test.go
+
+**CLI tool:** `cmd/home-validate/` — validates `.home.yaml` files (proves loader works)
+
+**Testdata:** `testdata/` — golden files (property-simple.yaml, property-full.yaml, property-invalid-zone.yaml)
+
+### Key Interfaces
+
+```go
+// PropertyLoader parses .home.yaml into model.Property
+type PropertyLoader interface {
+    Load(ctx context.Context, r io.Reader) (*model.Property, error)
+}
+
+// DomainCompiler compiles Property → GERT ExecutionPlan
+type DomainCompiler interface {
+    CompileProperty(ctx context.Context, p *model.Property) (*engine.ExecutionPlan, error)
+    CompileIncident(ctx context.Context, inc *model.Incident) (*engine.ExecutionPlan, error)
+}
+
+// DelegationPolicy evaluates task routing (owner vs delegate)
+type DelegationPolicy interface {
+    ShouldDelegate(ctx context.Context, d *model.Delegation, taskName string, now time.Time) bool
+    GetDelegateExecutorID(ctx context.Context, d *model.Delegation, taskName string, now time.Time) string
+}
+```
+
+### GERT v2 Dependencies
+
+**Only `pkg/compiler/` imports GERT types:**
+- `github.com/ormasoftchile/gert/v2/pkg/engine` (ExecutionPlan, Run, Step)
+- `github.com/ormasoftchile/gert/v2/pkg/schema` (HumanTaskStep, TimerStep)
+- `github.com/ormasoftchile/gert/v2/pkg/evidence` (Evidence primitive)
+
+**Architectural invariant:** Model, loader, delegation packages operate in pure domain vocabulary — no GERT leakage.
+
+### go.work Integration
+
+Added `./domains/home` to workspace:
+```
+use (
+    .
+    ./ext/debug
+    ./ext/diagram
+    ./ext/mcp
+    ./ext/render
+    ./ext/serve
+    ./ext/tui
+    ./v2
+    ./domains/home   # ← NEW
+)
+```
+
+### v0 Implementation Order
+
+**Phase 1 (Week 1):** Model + Loader  
+- Scaffold `domains/home/` with go.mod  
+- Implement `pkg/model/` (all domain types)  
+- Implement `pkg/loader/` (YAML parser + validation)  
+- Build `cmd/home-validate/` CLI  
+- Parse `testdata/property-simple.yaml` successfully  
+
+**Phase 2 (Week 2):** Compiler  
+- Implement `pkg/compiler/` (routine → run + timer, incident → repair sub-run)  
+- Wire GERT v2 dependencies (engine, schema, evidence)  
+- Test: compile simple routine → verify ExecutionPlan structure  
+
+**Phase 3 (Week 3):** Delegation  
+- Implement `pkg/delegation/` (time-bounded routing, projection filter)  
+- Test: delegation active → tasks route to delegate; expired → route to owner  
+
+**Phase 4 (Week 4):** Integration (hand off to Barbara)  
+- E2E test: load property → compile → execute with v2 runtime  
+- Verify: timer wakes → human task created → evidence attached → timer resets  
+- Documentation: README.md, godoc comments  
+
+### Open Design Questions
+
+Flagged for Brian to verify before Phase 2:
+
+1. **Timer reset support** — Does `v2/pkg/schema.TimerStep` support dynamic next_wakeup recalculation on completion? (Required for cadence rules)  
+2. **Sub-run support** — Does `v2/pkg/engine.ExecutionPlan` support parent-child run relationships? (Required for incident → repair sub-run)  
+3. **Evidence API** — How does evidence attach to a human task step? (At step level or run level?)  
+
+### Output
+
+**Design document:** `.squad/tmp/ken-home-package-design.md` (22KB, 10 sections)  
+**Decision record:** `.squad/decisions/inbox/ken-home-pkg-layout.md` (architectural decision)  
+
+### Strategic Value
+
+This design validates the **domain kit compilation model** — thin authoring DSL (YAML routines) compiles to GERT primitives with zero runtime reimplementation. If successful, future kits (manufacturing, deployment, compliance) follow the same pattern.
+
+**Success criteria:** Barbara's integration test (Phase 4) executes a routine from `property-full.yaml` end-to-end.
 - NBI-18-04: Token revocation/blocklist (if needed)
 
 **Output:** `.squad/tmp/ken-phase18-design.md`, `.squad/decisions/inbox/ken-phase18-design.md`

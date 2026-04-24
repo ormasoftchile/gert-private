@@ -642,3 +642,83 @@ All `.home.yaml` files will include `apiVersion: home/v0`. When v1 ships, compil
 - Domain kits may need a `domain:` top-level field in GERT runbooks to declare which kit compiled them (for reverse-engineering and debugging)
 - Calendar-aware scheduling (seasonal cadence) might be useful in core GERT, not just domain kits
 - Evidence types (photo/note/checklist) could be promoted to core GERT manual/collector step types
+
+---
+
+### gert-domain-home v0 JSON Schema (2025-04-21)
+
+Produced the complete JSON Schema (Draft 2020-12) for gert-domain-home `.home.yaml` files.
+
+**Deliverables:**
+1. `specs/gert-domain-home/schema.json` — Complete JSON Schema (26,650 chars, 10 reusable definitions)
+2. `specs/gert-domain-home/schema-notes.md` — Implementation notes and validation caveats (8,459 chars)
+
+**Schema Coverage:**
+- **Property definition**: name, address, hemisphere, timezone, owner, zones (min 1)
+- **Zones**: id (kebab-case pattern), label, description, metadata (extensible)
+- **Assets**: id, zone reference, label, installed date, warranty expiration, metadata
+- **Routines**: id, label, zone/asset scope, cadence (every XOR seasonal), evidence, executor, notifications
+- **Incident templates**: id, label, applicable zones/assets, steps (min 1)
+- **Incident steps**: id, type (human_task/decision/parallel), label, evidence, depends_on, choices, parallel_steps
+- **Consumables**: id, label, zone/asset reference, replace_every, last_replaced, stock tracking, triggers_routine
+- **Delegation**: delegate info, active time window, task assignments (routine/zone), permissions, notifications
+
+**Reusable Definitions ($defs):**
+1. `zone` — Zone object with id pattern validation
+2. `asset` — Asset object with zone reference
+3. `routine` — Routine object with cadence oneOf constraint
+4. `incident_template` — Template object with steps array
+5. `incident_step` — Step object with type-specific fields
+6. `consumable` — Consumable object with duration validation
+7. `delegation` — Delegation object with time window and assigns array
+8. `duration` — Duration string pattern (e.g., "7d", "2w", "3M", "1y")
+9. `seasonal_cadence` — Object with spring/summer/autumn/winter fields (all required)
+10. `evidence_config` — Evidence type enum + optional prompt
+
+**Validation Constraints:**
+- Pattern validation: kebab-case IDs (`^[a-z][a-z0-9_]*$`), duration strings (`^\d+[dwMy]$`)
+- Enum constraints: hemisphere, evidence type, step type
+- OneOf constraints: cadence (every XOR seasonal), delegation assigns (routine XOR zone)
+- Required fields: property.name, property.zones, routine.cadence, etc.
+- MinItems constraints: zones (min 1), incident steps (min 1), delegation assigns (min 1)
+- AdditionalProperties: false on all objects (strict validation)
+
+**Known Limitations (documented in schema-notes.md):**
+1. **Referential integrity**: Cannot enforce zone/asset/routine ID references (runtime validation required)
+2. **Temporal constraints**: Cannot enforce date ordering (e.g., delegation.to > delegation.from)
+3. **Uniqueness**: Cannot enforce unique IDs across arrays (runtime validation required)
+4. **Circular dependencies**: Cannot detect cycles in incident_step.depends_on (topological sort required)
+5. **Mutual exclusivity**: routine.zone + routine.asset both optional (runtime should warn if both set)
+
+**Extension Points for v1:**
+- Asset metadata standardization (model, serial, warranty_url)
+- Routine executor enforcement (RBAC)
+- Consumable inventory tracking (operational reordering)
+- Seasonal boundary customization (override hemisphere defaults)
+- Incident template versioning
+- Multi-delegate assignment
+
+**Schema Quality:**
+- Uses `$schema: "https://json-schema.org/draft/2020-12/schema"`
+- Uses `$id: "https://gert.run/schemas/domains/home/v0.json"`
+- All properties have `title` and `description`
+- Enum values documented with descriptions where helpful
+- Examples provided for string patterns and common values
+- Strict validation with `additionalProperties: false` throughout
+
+**Validation Approach:**
+The schema enforces syntactic correctness. Runtime compilation must perform:
+1. ID registry building (collect all zone/asset/routine/template IDs)
+2. Reference validation (all ID references point to declared entities)
+3. Uniqueness validation (no duplicate IDs)
+4. Temporal validation (date ordering constraints)
+5. Dependency graph validation (no circular dependencies in incident steps)
+
+**Key Design Decisions:**
+- Duration compact notation (`7d` not `"7 days"`) for brevity
+- Evidence type as enum (not boolean flags) for extensibility
+- Seasonal cadence requires all four seasons (explicit > implicit)
+- Delegation assigns uses oneOf (routine XOR zone) for clarity
+- Metadata objects are free-form in v0 (standardized in v1)
+
+This schema can be used with standard JSON Schema validators (ajv-cli, Go jsonschema library) to validate `.home.yaml` files before compilation.

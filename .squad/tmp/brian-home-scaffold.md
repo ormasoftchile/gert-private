@@ -140,6 +140,113 @@ All tests pass clean. No linter errors.
 
 ---
 
+## Phase 3: Integration Testing (Completed)
+
+**Date:** 2024-04-23
+
+### Implemented
+
+#### Integration Test Suite (`integration_test.go`)
+
+Three integration tests that validate the end-to-end compilation pipeline:
+
+1. **TestIntegration_CompileAndParsePoolCleanRoutine**
+   - Loads `casa-santiago.home.yaml`
+   - Compiles via `compiler.CompileProperty()`
+   - Extracts and parses the `pool_clean` routine YAML
+   - Validates all expected fields: ID, name, kind, apiVersion, metadata, flow, step structure
+   - Confirms the collector step has the correct prompt and image field
+
+2. **TestIntegration_ParseAllCompiledRoutines**
+   - Compiles all 5 routines and 2 incident templates
+   - Parses each compiled YAML as a map
+   - Validates structural correctness for all outputs
+   - Confirms domain metadata is present
+
+3. **TestIntegration_WriteCompiledRunbooksToFile**
+   - Writes compiled YAMLs to temp files
+   - Re-reads and re-parses to confirm round-trip fidelity
+   - Validates file I/O doesn't corrupt the YAML
+
+**Build tag:** `//go:build integration` — excluded from default `go test ./...`
+
+**Run command:**
+```
+cd domains/home && go test -tags integration -v ./
+```
+
+#### CLI Validation Tool (`cmd/home-validate/main.go`)
+
+A standalone CLI tool that validates and compiles `.home.yaml` files:
+
+**Usage:**
+```
+go run ./cmd/home-validate examples/casa-santiago.home.yaml
+```
+
+**Output:**
+- Validation summary (property ID, routine count, incident template count, delegation period)
+- Full compiled GERT runbook YAML for each routine (printed to stdout)
+- Full compiled GERT runbook YAML for each incident template
+- Exit 0 on success, exit 1 on error
+
+**Purpose:** Demo tool for "show me it works" — visually inspect the compiled YAML.
+
+### Phase 3 Validation Result
+
+✅ **The compiled YAML is syntactically valid GERT runbook YAML.**
+
+All 7 compiled outputs (5 routines + 2 incident templates) parse cleanly and contain the expected structure:
+- `apiVersion: gert.sh/v2`
+- `kind: reference` (routines) or `mitigation` (incidents)
+- `flow` with collector/decision steps
+- `metadata` with `domain: gert-domain-home` marker
+
+### Limitations Discovered
+
+#### GERT v2 Internal API Boundary
+
+Full execution (parser → planner → engine → run) requires internal APIs from `v2/internal/*`, which cannot be imported from external modules. The integration test therefore validates:
+
+1. ✅ **Compilation** — home YAML → GERT YAML (our code)
+2. ✅ **Parse-time correctness** — GERT YAML parses as valid structure
+3. ⚠️  **Full execution** — requires GERT CLI subprocess or embedding in v2 repo
+
+**Workaround for full execution validation:**
+- Use the `gert` CLI to run compiled YAMLs:
+  ```
+  go run ./cmd/home-validate examples/casa-santiago.home.yaml > pool_clean.yaml
+  cd ../../../v2 && go run ./cmd/gert run pool_clean.yaml
+  ```
+
+This limitation is acceptable — the integration test proves the compilation boundary is correct.
+
+### Build Status
+
+```
+cd domains/home && go build ./...                          # ✓ all packages build
+cd domains/home && go test ./...                           # ✓ 7/7 compiler tests pass
+cd domains/home && go test -tags integration -v ./         # ✓ 3/3 integration tests pass
+cd domains/home && go run ./cmd/home-validate examples/casa-santiago.home.yaml  # ✓ outputs valid YAML
+```
+
+### Next Steps (If Required)
+
+1. **Schema Validation (Optional):**
+   - Use GERT's JSON Schema validator on compiled YAML (requires `v2/schemas/runbook.schema.json`)
+   - Would require importing `v2/internal/parser` or shelling out to `gert validate`
+
+2. **Full E2E Test in v2 Repo:**
+   - Create `v2/internal/e2e/domain_home_test.go`
+   - Can import both `gert-domain-home` and `v2/internal/*`
+   - Full parser → planner → engine → run → assert lifecycle
+
+3. **CI Pipeline:**
+   - Add `domains/home` to GitHub Actions workflow
+   - Run both unit and integration tests on PR
+
+---
+
 ## Key Design Decisions
 
 ### 1. YAML Output Strategy (Option B)

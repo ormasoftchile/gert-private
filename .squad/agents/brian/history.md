@@ -410,3 +410,92 @@ Multi-delegate feature fully implemented, tested (7 tests), and committed to mai
 
 **Work:** Model refactor, compiler loop, validation, backward compat, integration test.
 
+---
+
+## Phase 6: Home Domain Kit Migration to Standalone Repo
+
+**Date:** 2026-04-24  
+**Status:** ✅ Complete
+
+**Mission:** Migrate `domains/home/` from the gert monorepo to a standalone sibling repository at `/Volumes/Projects/gert-domain-home/`.
+
+### Deliverables
+
+1. **New Repository Created** — `/Volumes/Projects/gert-domain-home/`
+   - All files copied from `domains/home/`
+   - Git initialized with clean history
+   - Initial commit: "feat: initialize gert-domain-home from gert monorepo migration"
+
+2. **Module Name Verified** — `github.com/ormasoftchile/gert-domain-home`
+   - Module name was already correct (no changes needed)
+   - All import paths work correctly
+   - No internal dependency issues
+
+3. **Build & Test Validation** — All checks pass ✅
+   - `go mod verify` — all modules verified
+   - `go build ./...` — clean build
+   - `go vet ./...` — no issues
+   - `go test ./...` — 24 unit tests pass
+   - `go test -tags integration ./...` — 4 integration tests pass
+
+4. **Monorepo Cleanup** — `domains/home/` removed from gert
+   - Committed with message: "chore: remove Home Domain Kit — migrated to gert-domain-home repo"
+   - `domains/` directory no longer exists (was the only domain)
+   - Clean separation achieved
+
+### Repository Structure
+
+**gert-domain-home** contains:
+- `cmd/home-validate/` — CLI validation tool
+- `pkg/compiler/` — Home runbook compiler
+- `pkg/delegation/` — Delegation policy runtime
+- `pkg/loader/` — YAML loader
+- `pkg/model/` — Domain models
+- `examples/` — Sample property files
+- `testdata/` — Test fixtures
+- `integration_test.go` — Integration test suite
+
+### Test Results
+
+**Unit tests (24 tests):**
+- `pkg/compiler` — 18 tests ✅
+- `pkg/delegation` — 14 tests ✅
+
+**Integration tests (4 tests):**
+- `TestIntegration_CompileAndParsePoolCleanRoutine` ✅
+- `TestIntegration_ParseAllCompiledRoutines` ✅
+- `TestIntegration_WriteCompiledRunbooksToFile` ✅
+- `TestIntegration_CompileMultiDelegate` ✅
+- `cmd/home-validate.TestCLI_CasaSantiago` ✅
+
+### Git History
+
+**gert-domain-home:**
+```
+0141a6e (HEAD -> main) feat: initialize gert-domain-home from gert monorepo migration
+```
+
+**gert monorepo:**
+```
+8a88d7b (HEAD -> main) chore: remove Home Domain Kit — migrated to gert-domain-home repo
+3acb19b chore(squad): record domain kit repo structure pattern decision
+39e5092 (origin/main) feat(home): add multi-delegate support to Home Domain Kit
+```
+
+### Learnings
+
+1. **Module name was already correct** — The domain kit was already using `github.com/ormasoftchile/gert-domain-home` as module name, anticipating this migration
+2. **Clean separation validated** — No dependencies on gert v2 internals; domain kit is truly standalone
+3. **Test suite completeness** — All 28 tests (24 unit + 4 integration) pass in new location without modification
+4. **Git history strategy** — Fresh git init (not filter-branch) for clean separation; monorepo history preserved in gert repo
+5. **Domain kit pattern** — One repo per domain kit enables independent versioning and release cycles
+
+### Next Steps (Deferred to Cristian)
+
+- Create GitHub remote at `github.com/ormasoftchile/gert-domain-home`
+- Push initial commit
+- Set up CI/CD pipeline
+- Add GitHub repo metadata (description, topics, etc.)
+
+**Phase 6 Status:** ✅ Complete — Home Domain Kit successfully migrated to standalone repository
+

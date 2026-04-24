@@ -9140,3 +9140,138 @@ Only the testing row of the tech stack changes:
 - iOS architecture: Ken phase 18 history (D2a–D2e decisions)
 - Test strategy baseline: `.squad/decisions/d-14-phase14-e2e-suite-design.md`
 
+---
+
+## brian-home-migration-done
+
+# Home Domain Kit Migration — Complete
+
+**Date:** 2026-04-24  
+**Agent:** Brian (Go Programmer)  
+**Requested by:** Cristian  
+**Status:** ✅ Complete
+
+---
+
+## Summary
+
+The Home Domain Kit has been successfully migrated from `/Volumes/Projects/gert/domains/home/` to a standalone repository at `/Volumes/Projects/gert-domain-home/`.
+
+## What Was Done
+
+### 1. Repository Creation
+- Created new directory: `/Volumes/Projects/gert-domain-home/`
+- Copied all files from `domains/home/`
+- Initialized git with clean history
+- Created initial commit with proper Co-authored-by trailer
+
+### 2. Validation
+- **Module name:** Already correct (`github.com/ormasoftchile/gert-domain-home`)
+- **Build:** `go build ./...` — ✅ Clean
+- **Vet:** `go vet ./...` — ✅ No issues
+- **Unit tests:** 24 tests — ✅ All pass
+- **Integration tests:** 4 tests — ✅ All pass
+
+### 3. Monorepo Cleanup
+- Removed `domains/home/` from gert repo
+- Committed removal with descriptive message
+- `domains/` directory no longer exists (it was empty after removal)
+
+## Repository Structure
+
+The new `gert-domain-home` repository contains:
+
+```
+/Volumes/Projects/gert-domain-home/
+├── cmd/home-validate/        # CLI validation tool
+├── pkg/
+│   ├── compiler/             # Home runbook compiler (18 tests)
+│   ├── delegation/           # Delegation policy runtime (14 tests)
+│   ├── loader/               # YAML loader
+│   └── model/                # Domain models
+├── examples/                 # Sample property files
+├── testdata/                 # Test fixtures
+├── integration_test.go       # Integration test suite (3 tests)
+├── go.mod                    # Module definition
+├── README.md
+└── CHANGELOG.md
+```
+
+## Git Status
+
+### gert-domain-home
+- **Location:** `/Volumes/Projects/gert-domain-home/`
+- **Branch:** `main`
+- **Commits:** 1 commit (initial migration)
+- **Remote:** None (not configured yet)
+
+### gert monorepo
+- **Location:** `/Volumes/Projects/gert/`
+- **Branch:** `main`
+- **Latest commit:** "chore: remove Home Domain Kit — migrated to gert-domain-home repo"
+- **Change:** 21 files deleted (domains/home/)
+
+## Test Results
+
+All tests pass in the new location without modification:
+
+**Unit tests:**
+- `pkg/compiler` — 18 tests ✅
+- `pkg/delegation` — 14 tests ✅
+
+**Integration tests:**
+- `TestIntegration_CompileAndParsePoolCleanRoutine` ✅
+- `TestIntegration_ParseAllCompiledRoutines` ✅
+- `TestIntegration_WriteCompiledRunbooksToFile` ✅
+- `TestIntegration_CompileMultiDelegate` ✅
+- `cmd/home-validate.TestCLI_CasaSantiago` ✅
+
+## Next Steps for Cristian
+
+1. **Create GitHub remote:**
+   ```bash
+   # Create repo on GitHub: ormasoftchile/gert-domain-home
+   cd /Volumes/Projects/gert-domain-home
+   git remote add origin git@github.com:ormasoftchile/gert-domain-home.git
+   git push -u origin main
+   ```
+
+2. **Configure repository metadata:**
+   - Description: "Home Domain Kit for GERT — Compile household maintenance runbooks"
+   - Topics: `gert`, `domain-kit`, `home-automation`, `runbook-compiler`, `golang`
+
+3. **Set up CI/CD** (optional):
+   - GitHub Actions for `go test ./...`
+   - GitHub Actions for `go test -tags integration ./...`
+   - Test coverage reporting
+
+4. **Update gert monorepo references** (if any):
+   - Check for any documentation that references `domains/home/`
+   - Update to point to the new repository
+
+## Verification Commands
+
+To verify the migration locally:
+
+```bash
+# New repository exists and builds
+cd /Volumes/Projects/gert-domain-home
+go build ./...
+go test ./...
+go test -tags integration ./...
+
+# Old directory is gone
+ls /Volumes/Projects/gert/domains/  # Should show "No such file or directory"
+
+# Git logs look correct
+cd /Volumes/Projects/gert-domain-home && git log --oneline
+cd /Volumes/Projects/gert && git log --oneline -n 3
+```
+
+## Notes
+
+- The module name was already `github.com/ormasoftchile/gert-domain-home` before migration, so no import path changes were needed
+- The domain kit has no dependencies on gert v2 internals, confirming clean separation
+- Git history starts fresh in the new repo (not preserved from monorepo)
+- The `.squad/` directory remains in the gert monorepo (not copied)
+

@@ -9650,11 +9650,12 @@ struct HomeApp: App {
 
 ---
 
-# Auth Layer Design — gert-domain-home Full-Stack
+# Auth Layer Design v2 — Multi-Provider (Apple + Google)
 
-**Date:** 2026-04-25
-**Source:** Ken (ken-auth-design agent)
+**Date:** 2026-07-21
+**Source:** Ken (Software Architect)
 **Status:** PROPOSED
+**Supersedes:** Auth Layer Design — gert-domain-home Full-Stack (Phase 20, Apple-only)
 **Scope:** `apps/home-ios/` + `apps/home-api/` + `gert serve` sidecar + Maestro test flows
 
 ---
@@ -9663,92 +9664,140 @@ struct HomeApp: App {
 
 ### Principal Taxonomy
 
-Four principals interact with the system, each with distinct identity, trust level, and auth mechanism:
+| Principal | How they authenticate | Role |
+|-----------|----------------------|------|
+| Owner | Apple **or** Google | `owner` |
+| Delegate | Apple **or** Google | `delegate` |
+| home-api → gert serve | Static pre-signed JWT (`GERT_SERVICE_TOKEN`) | `service` |
+| Maestro test runner | `X-Test-Token` header (staging only) | `owner` (test user) |
 
-| Principal | Identity Source | Trust Level | Auth Mechanism |
-|-----------|----------------|-------------|----------------|
-| Homeowner | Apple ID | Highest | Sign in with Apple → home-api JWT |
-| Family delegate | Apple ID | Scoped | Sign in with Apple → home-api JWT (`role: delegate`) |
-| home-api → gert serve | Static env secret | Machine | Static bearer token (GERT_SERVICE_TOKEN) |
-| Maestro test runner | Seeded test user | Debug-only | X-Test-Token header (testenv build tag only) |
+No restriction on which provider a role may use. Any principal may authenticate via either Apple or Google.
 
-### Sign in with Apple
+### Unified `/auth/signin` Endpoint
 
-**Decision:** Sign in with Apple exclusively. No email/password, no magic link.
+All human sign-ins use a single endpoint:
 
-- iOS-native TestFlight → App Store distribution; Apple's guidelines strongly favour Sign in with Apple.
-- No password database, credential store, reset flows, or phishing surface.
-- All family validators are iOS users with Apple IDs.
-- Avoids email infrastructure (SES/SendGrid) and a second channel to maintain.
+```
+POST /auth/signin
+{ "provider": "apple" | "google", "identity_token": "<short-lived JWT from provider SDK>" }
+```
 
-**Flow:** iOS calls `ASAuthorizationAppleIDProvider` → receives a short-lived Apple identity token (~5 min) → POSTs it to `POST /auth/apple` → home-api fetches Apple JWKS, verifies signature + `iss`/`aud`/`exp`/`sub` claims → upserts `users` table → returns a home-api session JWT → iOS stores it in Keychain.
+**Success (200):** `{ "token": "<home-api session JWT>", "user_id": "<UUID>", "role": "owner" | "delegate" }`
 
-**Library:** `golang-jwt/jwt` + manual JWKS fetch, or `lestrrat-go/jwx`. Never decode without verifying.
+**Error codes:** 400 unrecognised provider · 401 invalid/expired token · 422 not a JWT · 500 JWKS fetch failure
 
-### home-api JWT (HS256, 24h)
+Delegate accept uses the same provider field:
 
-After Apple verification, home-api issues its own session token decoupling the iOS app from Apple's token lifetime.
+```
+POST /auth/signin/delegate
+{ "provider": "apple" | "google", "identity_token": "...", "invite_token": "<hex>" }
+```
 
-- **Algorithm:** HS256 (`HOME_API_JWT_SECRET`, min 32 bytes, never in source)
-- **Expiry:** 24 hours (short window for lost-device scenarios; re-auth via FaceID is near-instantaneous)
-- **Claims:** `sub` (internal UUID), `property_id`, `role` (`owner`|`delegate`), `routine_ids` (null for owner; scoped array for delegate)
-- **Refresh (v0):** Re-auth on 401 — no silent refresh. iOS shows sign-in screen; user taps Sign in with Apple.
-- **Keychain storage:** `kSecClassGenericPassword`, `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`. Never in `UserDefaults` or iCloud-synced stores.
+### Provider Verification Pipeline
 
-### Delegate Auth (Deferred to v1 unless delegation validation is in v0 scope)
+Both providers share the same pipeline using `lestrrat-go/jwx/v2`:
 
-1. Homeowner invites delegate → home-api creates `delegate_invites` record with 48h expiry + scoped `routine_ids`.
-2. home-api returns deep link: `gertapp://delegate/accept?token=<hex>`. Shared via iMessage/AirDrop — no third-party messaging infra.
-3. Delegate taps link, installs app if needed, performs Sign in with Apple on their own Apple ID.
-4. App calls `POST /auth/apple/delegate { identity_token, invite_token }` → home-api verifies Apple token + invite → issues JWT with `role: delegate`, `routine_ids: [...]`.
-5. Role enforcement: `RequireRole` middleware on every protected endpoint; delegate cannot create incidents, modify routines, or manage delegation.
-6. Deactivation: homeowner calls `POST /delegation/deactivate`; existing delegate JWTs expire naturally within 24h (acceptable for v0).
+```
+identity_token → parse header (kid, alg) → fetch JWKS (cached, 5-min TTL)
+  → verify signature (jwk.Fetch + jws.Verify) → validate exp/nbf/iat
+  → validate provider-specific iss + aud → extract sub
+  → upsert users (provider, provider_sub) → issue home-api session JWT
+```
 
-### GERT Service Token (home-api → gert serve)
+**Apple claims:** `iss=https://appleid.apple.com`, `aud=<APPLE_BUNDLE_ID>`, JWKS URL hardcoded in `AppleProvider`.
 
-- `home-api` holds a pre-signed HS256 JWT (`GERT_SERVICE_TOKEN`) signed with the same secret as `gert serve --auth-jwt-secret` (`GERT_JWT_SECRET`).
-- Token claims: `sub: home-api`, `role: service`, `aud: gert-serve`.
-- Static for v0 (rotation requires container redeploy). v1: Azure Managed Identity or short-lived rotated tokens.
-- User JWTs are never forwarded to gert serve — clean service boundary.
+**Google claims:** `iss=https://accounts.google.com`, `aud=<GOOGLE_CLIENT_ID>`, JWKS URL hardcoded in `GoogleProvider`.
 
-### Maestro Auth Bypass (X-Test-Token, testenv build tag only)
+**Go interface:**
 
-Maestro cannot automate Sign in with Apple (Apple UI is sandboxed).
+```go
+// internal/auth/provider.go
+type Provider interface {
+    JWKSURL()       string
+    ValidateIss(iss string) bool
+    Audience()      string // from env
+}
 
-- home-api compiled with `//go:build testenv` accepts `X-Test-Token` header matching `TEST_TOKEN_SECRET` env var.
-- On match: injects seeded test user claims (`usr_test_homeowner`, `prop_test_primary`, `role: owner`) and skips Apple verification.
-- `testenv` build tag is never used in production. `TEST_TOKEN_SECRET` is never set in production Container Apps.
-- iOS: `#if DEBUG` button "Sign In (Test)" stripped by compiler in Release builds.
+func Resolve(name string) (Provider, error) // "apple" | "google"
+
+func VerifyIdentityToken(ctx context.Context, p Provider, rawToken string) (sub string, err error)
+```
+
+JWKS caching uses `jwk.NewCache` (5-min refresh). On unknown `kid`, force-refresh once before returning 401.
+
+### iOS SDK
+
+- **Apple:** `AuthenticationServices` (system framework, no new dependency). `ASAuthorizationAppleIDProvider` → `identityToken`. Unchanged from Phase 20.
+- **Google:** `GoogleSignIn-iOS` via Swift Package Manager (`https://github.com/google/GoogleSignIn-iOS`, `>= 7.0.0`). `GIDSignIn.sharedInstance.signIn(withPresenting:)` → `result.user.idToken.tokenString`.
+- **UI:** Both `signInApple` and `signInGoogle` buttons shown to all users on the sign-in screen. No role-based visibility. Accessibility identifiers: `signInApple`, `signInGoogle` (Maestro).
+- `Info.plist` requires `GIDClientID` and a reversed-client-ID URL scheme (configuration values, not secrets).
+
+### Users Table Schema
+
+```sql
+CREATE TABLE users (
+    id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    provider     TEXT        NOT NULL CHECK (provider IN ('apple', 'google')),
+    provider_sub TEXT        NOT NULL,
+    email        TEXT,                    -- advisory only; NOT used as identity
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX users_provider_sub_idx ON users (provider, provider_sub);
+```
+
+`(provider, provider_sub)` is the identity key — not email. `apple_sub` from Phase 20 is dropped. A user signing in with Apple and one signing in with Google are **different users** even with the same email; account linking is deferred to v1.
+
+### Delegate Invite Flow (Provider-Agnostic)
+
+1. Owner POSTs `/invites` → receives `invite_token` (32-byte hex, 7-day TTL).
+2. Deep link `gertapp://delegate/accept?token=<hex>` shared via iMessage/AirDrop.
+3. Delegate opens app, chooses Apple **or** Google, POSTs `/auth/signin/delegate`.
+4. home-api: verify identity token → upsert user → validate invite → insert `delegation_membership` → mark invite accepted → issue JWT (`role: delegate`, scoped `routine_ids`).
+
+Invite token is provider-agnostic (bearer token). It is single-use; a second redemption returns 409.
 
 ### v0 Scope
 
-**Must have:** Sign in with Apple (owner), Keychain JWT storage, home-api JWT (24h HS256), Apple JWKS verification, GERT_SERVICE_TOKEN, 401 → re-auth flow, X-Test-Token for Maestro.
+| Feature | v0 | v1 |
+|---------|----|----|
+| Sign in with Apple | ✅ Required | — |
+| Sign in with Google | ✅ Required | — |
+| Provider-agnostic invite/delegate flow | ✅ Required | — |
+| Keychain storage of session JWT | ✅ Required | — |
+| JWKS verification (both providers) | ✅ Required | — |
+| home-api session JWT (HS256, 24h) | ✅ Required | — |
+| 401 → re-auth on iOS | ✅ Required | — |
+| X-Test-Token bypass (staging) | ✅ Required | — |
+| Service token (home-api → gert) | ✅ Required | — |
+| Silent token refresh | ❌ Deferred | ✅ |
+| Apple ID credential state check | ❌ Deferred | ✅ |
+| Account linking (Apple + Google same person) | ❌ Deferred | ✅ |
+| Real-time token revocation | ❌ Deferred | ✅ |
 
-**Deferred to v1:** Delegate invite flow, silent token refresh, real-time delegation revocation, Apple ID credential state check.
+### Security Constraints (Unchanged)
 
-### Security Constraints
+| Constraint | Status |
+|-----------|--------|
+| JWKS signature verification (not just decode) | ✅ Required for both providers (`lestrrat-go/jwx/v2`) |
+| `iss` + `aud` + `exp` claim validation | ✅ Required for both providers |
+| JWT secret (`HOME_API_JWT_SECRET`) ≥ 32 bytes | ✅ Validated at startup — process exits if shorter |
+| Keychain storage on iOS (`kSecClassGenericPassword`) | ✅ Required |
+| 401 → re-auth (no silent refresh in v0) | ✅ Required |
+| `X-Test-Token` only in staging (`testenv` build tag) | ✅ Required |
+| `GERT_SERVICE_TOKEN` never exposed to clients | ✅ Required |
+| Constant-time token comparison (D-17-01) | ✅ `subtle.ConstantTimeCompare` for all header comparisons |
+| JWKS cache force-refresh on unknown `kid` | ✅ Required |
 
-| Constraint | Enforcement |
-|------------|-------------|
-| JWT secret ≥ 32 bytes | home-api startup `log.Fatal` check |
-| HTTPS everywhere | Azure Container Apps TLS termination |
-| No tokens in logs | Never log `Authorization` header; Gin logger omits headers |
-| Apple token verified against JWKS | Not just decoded |
-| Keychain only on iOS | Enforced in `HomeAPIClient` |
-| X-Test-Token never in production | `testenv` build tag + no env var in prod |
-| Service token ≠ user token | Separate `GERT_SERVICE_TOKEN`; never derived from user claims |
+### Environment Variables
 
-### Database Schema Additions
+| Variable | Purpose | Change |
+|---------|---------|--------|
+| `APPLE_BUNDLE_ID` | Apple `aud` claim | Unchanged |
+| `GOOGLE_CLIENT_ID` | Google `aud` claim | **New** |
+| `HOME_API_JWT_SECRET` | Session JWT signing | Unchanged |
+| `GERT_SERVICE_TOKEN` | Service-to-service auth | Unchanged |
+| `TEST_TOKEN_SECRET` | X-Test-Token bypass | Unchanged |
 
-Three new tables: `users` (Apple identity anchor, `apple_sub` as stable key), `delegate_invites` (48h expiry, scoped `routine_ids`), `delegation_memberships` (activated/deactivated lifecycle).
-
-### Implementation Order
-
-1. `users` migration + Apple JWKS verifier + `/auth/apple` endpoint
-2. JWT middleware on all protected routes
-3. Service token client for gert serve
-4. iOS: Keychain service + Sign in with Apple flow + AppState wiring
-5. iOS: 401 interceptor → sign-out flow
-6. X-Test-Token bypass (staging only, testenv build tag)
-7. Maestro sign-in flow using test token
-8. Delegate invite + accept endpoints (if delegation is in v0 validation scope)
+JWKS URLs are hardcoded constants in each provider struct — no env var needed.

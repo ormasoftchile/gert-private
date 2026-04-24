@@ -63,3 +63,10 @@ Initial setup complete.
 - **Action:** Merged Ken's auth layer design (`ken-auth-design.md`) into `decisions.md` as "Auth Layer Design — gert-domain-home Full-Stack"
 - **Source:** `.squad/decisions/inbox/ken-auth-design.md` (deleted after merge)
 - **Summary:** Sign in with Apple (owner + delegate), home-api JWT (HS256, 24h), delegate invite flow (v1), GERT_SERVICE_TOKEN for gert serve, X-Test-Token Maestro bypass (testenv build tag only), v0 security constraints and DB schema additions.
+
+## Auth v2 Decision Merge
+
+- **Date:** 2026-07-21
+- **Action:** Merged Ken's revised auth design (`ken-auth-revise.md`) into `decisions.md`, replacing "Auth Layer Design — gert-domain-home Full-Stack" with "Auth Layer Design v2 — Multi-Provider (Apple + Google)"
+- **Source:** `.squad/decisions/inbox/ken-auth-revise.md` (deleted after merge)
+- **Summary:** Added Google Sign-In alongside Apple. Unified `POST /auth/signin { provider, identity_token }` endpoint. Provider abstraction with JWKS verification (`lestrrat-go/jwx/v2`) for both providers. `GoogleSignIn-iOS` via SPM. `users` table now uses `(provider, provider_sub)` unique index — replaces `apple_sub`. Delegate invite flow is provider-agnostic. Both providers required in v0; account linking deferred to v1. New env var: `GOOGLE_CLIENT_ID`.

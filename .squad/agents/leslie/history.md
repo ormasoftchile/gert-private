@@ -967,3 +967,62 @@ Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
 **Commit message:** `doc: add Kit Composition and Layering section to Domain Kit Model chapter`
 
 **Notes:** Page count (346) is within expected range (342–345 +/- rounding). The pre-existing reference warnings (`ch:governance`, `ch:evidence`, `ch:overview`, `sec:collector_field_validation`) are unrelated to this section.
+
+### 2026-01-27 — Created domain-kit LaTeX manual template
+
+**Task:** Build a reusable LaTeX skeleton that every new gert domain kit can start from, at `templates/domain-kit/design/`.
+
+**Files created:**
+- `main.tex` — full preamble (all packages from DRI) with `{{DOMAIN_NAME}}` / `{{DOMAIN_SLUG}}` placeholders
+- `Makefile` — `help`, `check-tools`, `build`, `watch`, `clean`, `distclean`, `rebuild`, `release`, and new `init` target
+- `sections/00-introduction.tex` through `sections/06-reference.tex` — minimal chapter stubs
+- `.gitignore` — mirrors `design/gert/.gitignore` plus `*.pdf` wildcard
+- `README.md` — quick-start instructions
+
+**Key decisions:**
+- `MastersThesis.cls` is NOT committed in the template; `make init` copies it from the gert repo via `$(GERT_REPO)` variable.
+- `SCRIPT_PATH` defaults to `../../gert/design/gert/scripts/latex.py`, matching the sibling-repo layout.
+- The `init` target validates that both `DOMAIN_NAME` and `DOMAIN_SLUG` are set before touching any file.
+- Template uses `sed -i.bak` for portability on macOS (BSD sed requires a backup extension).
+- `.gitignore` adds a blanket `*.pdf` on top of `main.pdf` so renamed PDFs are also ignored.
+
+### 2026-04-23 — Enriched domain-kit template sections with DRI-parity structure
+
+**Task:** Rebuild the 7 bare skeleton section stubs in
+`/Volumes/Projects/gert/templates/domain-kit/design/` to match the structural depth of the
+DRI kit at `/Volumes/Projects/gert-domain-dri/design/sections/`.
+
+**What I did:**
+- Read all DRI kit section files to extract patterns: separator comments, intro itemize,
+  description lists, minted YAML blocks, \paragraph{} sub-concepts, field description lists,
+  reference tables, and \label{} on every chapter/section.
+- Rewrote all 7 template section files with fully structured stubs using the canonical
+  placeholder convention ({{DOMAIN_NAME}}, {{DOMAIN_SLUG}}, {{KIT_VERSION}},
+  {{STEP_TYPE_*}}, {{ROLE_*}}, {{EVIDENCE_TYPE_*}}, {{CONCEPT_*}}, etc.).
+- Mirrored the 7 DRI kit patterns listed in the task spec consistently across all files.
+- Copied all 7 files to `/Volumes/Projects/gert-domain-home/design/` (identical copies).
+
+**Files written:**
+- `00-introduction.tex` — 163 lines: What This Manual Covers, Audience, What is CONCEPT_1,
+  How DOMAIN_SLUG Implements CONCEPT_1, Document Structure
+- `01-concepts.tex` — 227 lines: The CONCEPT_1 Model, Role Taxonomy (3 subsections), Role
+  Assignment, CONCEPT_2 Chain, SLA Concepts, CONCEPT_1 Transfer
+- `02-schema-reference.tex` — 213 lines: Kit Declaration, Metadata Fields (roles/sla/
+  governance), Step Types (3 subsections), Evidence Types (2 subsections)
+- `03-authoring-guide.tex` — 260 lines: Starting a File, Declaring Roles, Governance,
+  Using STEP_TYPE_1, Using STEP_TYPE_2, Capturing Evidence, Best Practices, Complete Example
+- `04-gert-integration.tex` — 240 lines: Core Hooks, Role-Based Gating (3 subsections),
+  Allowlists, Env Var Handling, Output Redaction, Audit Trail, Complete Config Example
+- `05-evidence-and-tracing.tex` — 204 lines: Evidence Model, Record Structure, Run Directory,
+  Timeline Projection, Compliance Bundles, SHA-256 Verification, Reading Evidence
+- `06-reference.tex` — 197 lines: Metadata Fields table, 3 step-type tables, Evidence Type
+  tables, Role Semantics table, Environment Variables table, Error Codes table
+
+**Quality bar met:**
+- Every \section{} has a \label{}
+- Every YAML block uses \begin{minted}{yaml}
+- tcolorbox notes use the standard colback=yellow!10 / colframe=orange!70 format
+- Domain-specific things use {{PLACEHOLDER}}; core gert things (apiVersion: runbook/v2,
+  cli/manual/branch/iterate) are concrete
+
+**Commit:** see git log

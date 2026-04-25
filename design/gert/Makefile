@@ -2,6 +2,7 @@ PYTHON ?= python3
 MAIN ?= main.tex
 BUILD_DIR ?= build
 ENGINE ?= auto
+PDF_NAME ?= gert
 
 .PHONY: help check-tools build clean distclean rebuild release watch
 
@@ -27,7 +28,7 @@ check-tools:
 	$(PYTHON) scripts/latex.py check --main $(MAIN) --build-dir $(BUILD_DIR) --engine $(ENGINE)
 
 build:
-	$(PYTHON) scripts/latex.py build --main $(MAIN) --build-dir $(BUILD_DIR) --engine $(ENGINE)
+	$(PYTHON) scripts/latex.py build --main $(MAIN) --build-dir $(BUILD_DIR) --engine $(ENGINE) --pdf-name $(PDF_NAME)
 
 clean:
 	$(PYTHON) scripts/latex.py clean --build-dir $(BUILD_DIR)

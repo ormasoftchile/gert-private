@@ -2,6 +2,7 @@ PYTHON ?= python3
 MAIN ?= main.tex
 BUILD_DIR ?= build
 ENGINE ?= auto
+PDF_NAME ?= domain-kit-guide
 
 .PHONY: help check-tools build clean distclean rebuild release watch
 
@@ -24,20 +25,20 @@ help:
 	@echo "  ENGINE=<auto|tectonic|latexmk|pdflatex>"
 
 check-tools:
-	$(PYTHON) ../gert-v2/scripts/latex.py check --main $(MAIN) --build-dir $(BUILD_DIR) --engine $(ENGINE)
+	$(PYTHON) ../gert/scripts/latex.py check --main $(MAIN) --build-dir $(BUILD_DIR) --engine $(ENGINE)
 
 build:
-	$(PYTHON) ../gert-v2/scripts/latex.py build --main $(MAIN) --build-dir $(BUILD_DIR) --engine $(ENGINE)
+	$(PYTHON) ../gert/scripts/latex.py build --main $(MAIN) --build-dir $(BUILD_DIR) --engine $(ENGINE) --pdf-name $(PDF_NAME)
 
 clean:
-	$(PYTHON) ../gert-v2/scripts/latex.py clean --build-dir $(BUILD_DIR)
+	$(PYTHON) ../gert/scripts/latex.py clean --build-dir $(BUILD_DIR)
 
 distclean: clean
 
 rebuild: clean build
 
 release: build
-	$(PYTHON) ../gert-v2/scripts/latex.py release --main $(MAIN) --build-dir $(BUILD_DIR)
+	$(PYTHON) ../gert/scripts/latex.py release --main $(MAIN) --build-dir $(BUILD_DIR)
 
 watch:
 	latexmk -pdf -pvc -interaction=nonstopmode -shell-escape -output-directory=$(BUILD_DIR) $(MAIN)

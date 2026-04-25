@@ -68,6 +68,8 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 
 def build_with_engine(engine: str, args: argparse.Namespace, project_dir: Path, build_dir: Path) -> int:
+    pdf_name = args.pdf_name or Path(args.main).stem
+
     if engine == "tectonic":
         # Run from build_dir so biber control files (.bcf, .bbl) are written
         # there — tectonic's --outdir places logs/pdf in build_dir but writes
@@ -88,6 +90,7 @@ def build_with_engine(engine: str, args: argparse.Namespace, project_dir: Path, 
             "-interaction=nonstopmode",
             "-shell-escape",
             f"-outdir={build_dir}",
+            f"-jobname={pdf_name}",
             args.main,
         ]
         return run(cmd, cwd=project_dir)
@@ -99,6 +102,7 @@ def build_with_engine(engine: str, args: argparse.Namespace, project_dir: Path, 
             "-interaction=nonstopmode",
             "--shell-escape",
             f"-output-directory={build_dir}",
+            f"-jobname={pdf_name}",
             args.main,
         ]
         code = run(cmd, cwd=project_dir)
@@ -127,14 +131,13 @@ def cmd_build(args: argparse.Namespace) -> int:
     if code != 0:
         return code
 
-    # Always sync the built PDF to the project root so the committed copy
-    # never lags behind what was actually compiled.
-    stem = Path(args.main).stem
-    built_pdf = build_dir / f"{stem}.pdf"
-    root_pdf = project_dir / f"{stem}.pdf"
+    # Copy the named PDF to the parent design/ folder.
+    pdf_name = args.pdf_name or Path(args.main).stem
+    built_pdf = build_dir / f"{pdf_name}.pdf"
+    dest_pdf = project_dir.parent / f"{pdf_name}.pdf"
     if built_pdf.exists():
-        shutil.copy2(built_pdf, root_pdf)
-        print(f"ok: synced {built_pdf.name} → {root_pdf}")
+        shutil.copy2(built_pdf, dest_pdf)
+        print(f"ok: published {built_pdf.name} → {dest_pdf}")
 
     return 0
 
@@ -208,6 +211,7 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("command", choices=["check", "build", "clean", "release"])
     p.add_argument("--main", default="main.tex", help="Main LaTeX file")
     p.add_argument("--build-dir", default="build", help="Build output directory")
+    p.add_argument("--pdf-name", default=None, help="Output PDF name (without .pdf); sets -jobname")
     p.add_argument(
         "--engine",
         default="auto",

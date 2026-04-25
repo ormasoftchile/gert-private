@@ -1,8 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{n+nt}{steps}\PYG{p}{:}
-\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{id}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{delete\PYGZus{}database}
-\PYG{+w}{    }\PYG{n+nt}{cli}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{kubectl}\PYG{n+nv}{ }\PYG{l+s}{delete}\PYG{n+nv}{ }\PYG{l+s}{database}\PYG{n+nv}{ }\PYG{l+s}{prod\PYGZhy{}db}\PYG{l+s}{\PYGZdq{}}
-\PYG{+w}{    }\PYG{n+nt}{approvals}\PYG{p}{:}
-\PYG{+w}{      }\PYG{n+nt}{min}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{1}
-\PYG{+w}{      }\PYG{n+nt}{roles}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{dba}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{admin}\PYG{l+s}{\PYGZdq{}}\PYG{p+pIndicator}{]}
-\end{MintedVerbatim}

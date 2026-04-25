@@ -1,9 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{p}{\PYGZob{}}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}jsonrpc\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}2.0\PYGZdq{}}\PYG{p}{,}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}id\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}choice\PYGZhy{}1\PYGZdq{}}\PYG{p}{,}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}result\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{p}{\PYGZob{}}
-\PYG{+w}{    }\PYG{n+nt}{\PYGZdq{}selected\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}us\PYGZhy{}west\PYGZhy{}2\PYGZdq{}}
-\PYG{+w}{  }\PYG{p}{\PYGZcb{}}
-\PYG{p}{\PYGZcb{}}
-\end{MintedVerbatim}

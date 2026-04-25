@@ -1,6 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{n+nx}{span}\PYG{p}{.}\PYG{n+nx}{RecordError}\PYG{p}{(}\PYG{n+nx}{err}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{trace}\PYG{p}{.}\PYG{n+nx}{WithAttributes}\PYG{p}{(}
-\PYG{+w}{  }\PYG{n+nx}{attribute}\PYG{p}{.}\PYG{n+nx}{String}\PYG{p}{(}\PYG{l+s}{\PYGZdq{}error.type\PYGZdq{}}\PYG{p}{,}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}tool\PYGZus{}invocation\PYGZus{}failed\PYGZdq{}}\PYG{p}{)}\PYG{p}{,}
-\PYG{+w}{  }\PYG{n+nx}{attribute}\PYG{p}{.}\PYG{n+nx}{String}\PYG{p}{(}\PYG{l+s}{\PYGZdq{}error.message\PYGZdq{}}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nx}{err}\PYG{p}{.}\PYG{n+nx}{Error}\PYG{p}{(}\PYG{p}{)}\PYG{p}{)}\PYG{p}{,}
-\PYG{p}{)}\PYG{p}{)}
-\end{MintedVerbatim}

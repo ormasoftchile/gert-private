@@ -1,6 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{event\PYGZus{}detected\PYGZus{}at}
-\PYG{+w}{  }\PYG{n+nt}{type}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{datetime}
-\PYG{+w}{  }\PYG{n+nt}{label}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{When}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{was}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{the}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{event}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{first}\PYG{l+lScalar+lScalarPlain}{ }\PYG{l+lScalar+lScalarPlain}{detected?}
-\PYG{+w}{  }\PYG{n+nt}{required}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{true}
-\end{MintedVerbatim}

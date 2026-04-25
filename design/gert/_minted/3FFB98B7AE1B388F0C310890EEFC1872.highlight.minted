@@ -1,4 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYGZdl{}\PYG{+w}{ }gert\PYG{+w}{ }serve\PYG{+w}{ }\PYGZhy{}\PYGZhy{}http\PYG{+w}{ }:8443\PYG{+w}{ }\PYGZhy{}\PYGZhy{}auth\PYGZhy{}mode\PYG{+w}{ }mtls\PYG{+w}{ }\PYG{l+s+se}{\PYGZbs{}}
-\PYG{+w}{    }\PYGZhy{}\PYGZhy{}tls\PYGZhy{}client\PYGZhy{}ca\PYG{+w}{ }/etc/gert/tls/client\PYGZhy{}ca.pem
-\end{MintedVerbatim}

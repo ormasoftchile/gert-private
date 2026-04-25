@@ -1,8 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{p}{\PYGZob{}}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}status\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}not\PYGZus{}ready\PYGZdq{}}\PYG{p}{,}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}reason\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}extension \PYGZsq{}aws\PYGZhy{}tools\PYGZsq{} failed to load\PYGZdq{}}\PYG{p}{,}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}extensions\PYGZus{}loaded\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+m+mi}{2}\PYG{p}{,}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}extensions\PYGZus{}failed\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+m+mi}{1}
-\PYG{p}{\PYGZcb{}}
-\end{MintedVerbatim}

@@ -1,9 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{n+nt}{inputs}\PYG{p}{:}
-\PYG{+w}{  }\PYG{n+nt}{api\PYGZus{}token}\PYG{p}{:}
-\PYG{+w}{    }\PYG{n+nt}{from}\PYG{p}{:}
-\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{env.ACME\PYGZus{}API\PYGZus{}TOKEN}\PYG{+w}{          }\PYG{c+c1}{\PYGZsh{} Try env var first}
-\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{vault.secret/acme/api\PYGZhy{}token}\PYG{+w}{ }\PYG{c+c1}{\PYGZsh{} Fall back to Vault}
-\PYG{+w}{      }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{prompt}\PYG{+w}{                      }\PYG{c+c1}{\PYGZsh{} Final fallback: ask the operator}
-\PYG{+w}{    }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{API}\PYG{n+nv}{ }\PYG{l+s}{token}\PYG{n+nv}{ }\PYG{l+s}{for}\PYG{n+nv}{ }\PYG{l+s}{Acme}\PYG{n+nv}{ }\PYG{l+s}{service}\PYG{l+s}{\PYGZdq{}}
-\end{MintedVerbatim}

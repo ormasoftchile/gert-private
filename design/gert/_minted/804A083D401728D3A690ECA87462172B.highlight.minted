@@ -1,9 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{n+nt}{inputs}\PYG{p}{:}
-\PYG{+w}{  }\PYG{n+nt}{ssh\PYGZus{}key}\PYG{p}{:}
-\PYG{+w}{    }\PYG{n+nt}{from}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{file.\PYGZti{}/.ssh/id\PYGZus{}rsa}\PYG{l+s}{\PYGZdq{}}
-\PYG{+w}{    }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{SSH}\PYG{n+nv}{ }\PYG{l+s}{private}\PYG{n+nv}{ }\PYG{l+s}{key}\PYG{l+s}{\PYGZdq{}}
-\PYG{+w}{  }\PYG{n+nt}{config\PYGZus{}value}\PYG{p}{:}
-\PYG{+w}{    }\PYG{n+nt}{from}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{file./etc/gert/config.json\PYGZsh{}/database/host}\PYG{l+s}{\PYGZdq{}}
-\PYG{+w}{    }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{Database}\PYG{n+nv}{ }\PYG{l+s}{host}\PYG{n+nv}{ }\PYG{l+s}{from}\PYG{n+nv}{ }\PYG{l+s}{config}\PYG{n+nv}{ }\PYG{l+s}{file}\PYG{l+s}{\PYGZdq{}}
-\end{MintedVerbatim}

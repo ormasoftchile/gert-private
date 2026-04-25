@@ -1,4 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYGZdl{}\PYG{+w}{ }gert\PYG{+w}{ }serve\PYG{+w}{ }\PYGZhy{}\PYGZhy{}http\PYG{+w}{ }:8443\PYG{+w}{ }\PYGZhy{}\PYGZhy{}auth\PYGZhy{}mode\PYG{+w}{ }bearer\PYG{+w}{ }\PYG{l+s+se}{\PYGZbs{}}
-\PYG{+w}{    }\PYGZhy{}\PYGZhy{}bearer\PYGZhy{}tokens\PYG{+w}{ }/etc/gert/tokens.yaml
-\end{MintedVerbatim}

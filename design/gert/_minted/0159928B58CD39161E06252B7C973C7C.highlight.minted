@@ -1,7 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-step.id          = \PYGZdq{}backup\PYGZhy{}db\PYGZdq{}          // step identifier from YAML
-step.type        = \PYGZdq{}cli\PYGZdq{}                // \PYGZdq{}cli\PYGZdq{} | \PYGZdq{}manual\PYGZdq{} | \PYGZdq{}tool\PYGZdq{} | \PYGZdq{}invoke\PYGZdq{}
-step.index       = 2                    // zero\PYGZhy{}based position in sequence
-run.id           = \PYGZdq{}20260418T143022\PYGZhy{}a3f9c1\PYGZdq{}  // run correlation
-step.name        = \PYGZdq{}Backup production database\PYGZdq{}  // human\PYGZhy{}readable name
-\end{MintedVerbatim}

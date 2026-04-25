@@ -1,6 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{n+nt}{inputs}\PYG{p}{:}
-\PYG{+w}{  }\PYG{n+nt}{default\PYGZus{}region}\PYG{p}{:}
-\PYG{+w}{    }\PYG{n+nt}{from}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{workspace.defaults.region}
-\PYG{+w}{    }\PYG{n+nt}{description}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{AWS}\PYG{n+nv}{ }\PYG{l+s}{region}\PYG{n+nv}{ }\PYG{l+s}{from}\PYG{n+nv}{ }\PYG{l+s}{workspace}\PYG{n+nv}{ }\PYG{l+s}{config}\PYG{l+s}{\PYGZdq{}}
-\end{MintedVerbatim}

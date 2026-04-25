@@ -1,4 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-tool.args        = [\PYGZdq{}apply\PYGZdq{}, \PYGZdq{}\PYGZhy{}f\PYGZdq{}, \PYGZdq{}deployment.yaml\PYGZdq{}]  // redacted args
-tool.duration\PYGZus{}ms = 1234                 // invocation latency
-\end{MintedVerbatim}

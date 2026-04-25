@@ -1,7 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{p}{\PYGZob{}}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}status\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}ok\PYGZdq{}}\PYG{p}{,}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}version\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}v2.0.0\PYGZdq{}}\PYG{p}{,}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}uptime\PYGZus{}seconds\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+m+mi}{3600}
-\PYG{p}{\PYGZcb{}}
-\end{MintedVerbatim}

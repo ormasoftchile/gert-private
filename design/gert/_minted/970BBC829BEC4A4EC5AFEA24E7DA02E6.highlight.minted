@@ -1,6 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{c+c1}{\PYGZsh{} In .tool.yaml (v2.1 target)}
-\PYG{n+nt}{outputs}\PYG{p}{:}
-\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{api\PYGZus{}key}
-\PYG{+w}{    }\PYG{n+nt}{sensitive}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{true}\PYG{+w}{   }\PYG{c+c1}{\PYGZsh{} value redacted from trace and captures}
-\end{MintedVerbatim}

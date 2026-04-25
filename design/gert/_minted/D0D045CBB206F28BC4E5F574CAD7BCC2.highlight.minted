@@ -1,7 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{p}{\PYGZob{}}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}status\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}ready\PYGZdq{}}\PYG{p}{,}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}extensions\PYGZus{}loaded\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+m+mi}{3}\PYG{p}{,}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}extensions\PYGZus{}failed\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+m+mi}{0}
-\PYG{p}{\PYGZcb{}}
-\end{MintedVerbatim}

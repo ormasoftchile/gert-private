@@ -1,8 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{p}{\PYGZob{}}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}step\PYGZus{}id\PYGZdq{}}\PYG{p}{:}\PYG{+w}{     }\PYG{err}{\PYGZlt{}}\PYG{err}{s}\PYG{k+kc}{tr}\PYG{err}{i}\PYG{k+kc}{n}\PYG{err}{g}\PYG{err}{\PYGZgt{}}\PYG{p}{,}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}outcome\PYGZdq{}}\PYG{p}{:}\PYG{+w}{     }\PYG{err}{\PYGZlt{}}\PYG{err}{s}\PYG{k+kc}{tr}\PYG{err}{i}\PYG{k+kc}{n}\PYG{err}{g}\PYG{err}{\PYGZgt{}}\PYG{p}{,}\PYG{+w}{  }\PYG{c+c1}{// \PYGZdq{}success\PYGZdq{} | \PYGZdq{}skipped\PYGZdq{}}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}duration\PYGZus{}ms\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{err}{\PYGZlt{}}\PYG{err}{i}\PYG{k+kc}{nt}\PYG{l+m+mi}{64}\PYG{err}{\PYGZgt{}}\PYG{p}{,}
-\PYG{+w}{  }\PYG{n+nt}{\PYGZdq{}exit\PYGZus{}code\PYGZdq{}}\PYG{p}{:}\PYG{+w}{   }\PYG{err}{\PYGZlt{}}\PYG{err}{i}\PYG{k+kc}{nt}\PYG{err}{\PYGZgt{}}\PYG{+w}{      }\PYG{c+c1}{// for cli/tool steps; 0 for manual/invoke}
-\PYG{p}{\PYGZcb{}}
-\end{MintedVerbatim}

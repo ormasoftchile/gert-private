@@ -1,6 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{n+nt}{capture}\PYG{p}{:}
-\PYG{+w}{  }\PYG{n+nt}{dns\PYGZus{}output}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{stdout}\PYG{+w}{          }\PYG{c+c1}{\PYGZsh{} Capture stdout as variable dns\PYGZus{}output}
-\PYG{+w}{  }\PYG{n+nt}{error\PYGZus{}log}\PYG{p}{:}\PYG{+w}{  }\PYG{l+lScalar+lScalarPlain}{stderr}\PYG{+w}{          }\PYG{c+c1}{\PYGZsh{} Capture stderr as variable error\PYGZus{}log}
-\PYG{+w}{  }\PYG{n+nt}{exit\PYGZus{}code}\PYG{p}{:}\PYG{+w}{  }\PYG{l+lScalar+lScalarPlain}{exitCode}\PYG{+w}{        }\PYG{c+c1}{\PYGZsh{} Capture numeric exit code}
-\end{MintedVerbatim}

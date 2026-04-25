@@ -1,5 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYGZdl{}\PYG{+w}{ }gert\PYG{+w}{ }codegen\PYG{+w}{ }client\PYG{+w}{ }\PYGZhy{}\PYGZhy{}language\PYG{o}{=}typescript\PYG{+w}{ }\PYGZhy{}\PYGZhy{}output\PYG{o}{=}./clients/ts/
-Generated\PYG{+w}{ }TypeScript\PYG{+w}{ }client\PYG{+w}{ }\PYG{k}{for}\PYG{+w}{ }exec/v2\PYG{+w}{ }and\PYG{+w}{ }events/v2
-Files\PYG{+w}{ }written\PYG{+w}{ }to\PYG{+w}{ }./clients/ts/
-\end{MintedVerbatim}

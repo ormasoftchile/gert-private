@@ -1,4 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{n+nb}{export}\PYG{+w}{ }\PYG{n+nv}{GERT\PYGZus{}LOG\PYGZus{}LEVEL}\PYG{o}{=}debug
-gert\PYG{+w}{ }run\PYG{+w}{ }deploy.yaml
-\end{MintedVerbatim}

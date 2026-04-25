@@ -1,7 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{n+nt}{apiVersion}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{runbook/v2}
-\PYG{n+nt}{meta}\PYG{p}{:}
-\PYG{+w}{  }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{incident\PYGZhy{}triage}
-\PYG{n+nt}{extensions}\PYG{p}{:}
-\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{path}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s}{\PYGZdq{}}\PYG{l+s}{./extensions/acme\PYGZhy{}pack}\PYG{l+s}{\PYGZdq{}}
-\end{MintedVerbatim}

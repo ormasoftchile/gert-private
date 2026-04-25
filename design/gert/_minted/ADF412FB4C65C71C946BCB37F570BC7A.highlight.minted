@@ -1,5 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{n+nt}{meta}\PYG{p}{:}
-\PYG{+w}{  }\PYG{n+nt}{governance}\PYG{p}{:}
-\PYG{+w}{    }\PYG{n+nt}{denied\PYGZus{}commands}\PYG{p}{:}\PYG{+w}{ }\PYG{p+pIndicator}{[}\PYG{n+nv}{rm}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{dd}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{shutdown}\PYG{p+pIndicator}{,}\PYG{+w}{ }\PYG{n+nv}{reboot}\PYG{p+pIndicator}{]}
-\end{MintedVerbatim}

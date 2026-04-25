@@ -1,5 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYGZdl{}\PYG{+w}{ }gert\PYG{+w}{ }serve\PYG{+w}{ }\PYGZhy{}\PYGZhy{}http\PYG{+w}{ }\PYG{l+m}{0}.0.0.0:8443\PYG{+w}{ }\PYG{l+s+se}{\PYGZbs{}}
-\PYG{+w}{    }\PYGZhy{}\PYGZhy{}tls\PYGZhy{}cert\PYG{+w}{ }/etc/gert/tls/cert.pem\PYG{+w}{ }\PYG{l+s+se}{\PYGZbs{}}
-\PYG{+w}{    }\PYGZhy{}\PYGZhy{}tls\PYGZhy{}key\PYG{+w}{ }/etc/gert/tls/key.pem
-\end{MintedVerbatim}

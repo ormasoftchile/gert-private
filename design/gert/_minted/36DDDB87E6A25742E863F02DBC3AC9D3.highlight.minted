@@ -1,3 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-gert\PYG{+w}{ }run\PYG{+w}{ }deploy.yaml\PYG{+w}{ }\PYGZhy{}\PYGZhy{}log\PYGZhy{}level\PYG{o}{=}debug
-\end{MintedVerbatim}

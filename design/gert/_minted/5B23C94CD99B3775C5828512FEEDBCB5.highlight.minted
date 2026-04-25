@@ -1,4 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{p}{\PYGZob{}}\PYG{n+nt}{\PYGZdq{}msg\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}input resolution failed\PYGZdq{}}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nt}{\PYGZdq{}input\PYGZus{}name\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}db\PYGZus{}password\PYGZdq{}}\PYG{p}{,}
-\PYG{+w}{ }\PYG{n+nt}{\PYGZdq{}provider\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}vault\PYGZdq{}}\PYG{p}{,}\PYG{+w}{ }\PYG{n+nt}{\PYGZdq{}error\PYGZdq{}}\PYG{p}{:}\PYG{+w}{ }\PYG{l+s+s2}{\PYGZdq{}connection timeout\PYGZdq{}}\PYG{p}{\PYGZcb{}}
-\end{MintedVerbatim}

@@ -1,8 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-\PYG{n+nt}{toolRefs}\PYG{p}{:}
-\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{curl}
-\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{nslookup}
-\PYG{+w}{  }\PYG{p+pIndicator}{\PYGZhy{}}\PYG{+w}{ }\PYG{n+nt}{name}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{k8s}
-\PYG{+w}{    }\PYG{n+nt}{path}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{./tools/k8s.tool.yaml}\PYG{+w}{   }\PYG{c+c1}{\PYGZsh{} override default discovery}
-\PYG{+w}{    }\PYG{n+nt}{alias}\PYG{p}{:}\PYG{+w}{ }\PYG{l+lScalar+lScalarPlain}{kubectl\PYGZhy{}wrapper}\PYG{+w}{        }\PYG{c+c1}{\PYGZsh{} optional local alias}
-\end{MintedVerbatim}

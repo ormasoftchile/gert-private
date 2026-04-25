@@ -10,5 +10,6 @@ main.out
 main.run.xml
 main.toc
 main.xdv
-_minted-main/
+_minted/
 *.fdb_latexmk
+main.pdf

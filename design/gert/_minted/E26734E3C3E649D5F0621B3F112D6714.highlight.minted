@@ -1,6 +1,0 @@
-\begin{MintedVerbatim}[commandchars=\\\{\}]
-input.name       = \PYGZdq{}db\PYGZus{}password\PYGZdq{}        // input key from runbook
-provider.type    = \PYGZdq{}vault\PYGZdq{}              // provider type
-provider.address = \PYGZdq{}https://vault:8200\PYGZdq{} // endpoint (if applicable)
-run.id           = \PYGZdq{}20260418T143022\PYGZhy{}a3f9c1\PYGZdq{}
-\end{MintedVerbatim}

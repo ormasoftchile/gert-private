@@ -1,0 +1,306 @@
+% Chapter 02: Authoring Schemas
+% Defining custom step types as YAML overlays on core schemas
+
+\chapter{Authoring Schemas}
+\label{ch:authoring-schemas}
+
+% ============================================================
+\section{What Kit Schemas Are}
+\label{sec:what-schemas-are}
+% ============================================================
+
+A Kit schema is a JSON Schema (Draft 2020-12) document that defines
+domain-specific step types as \emph{overlays} on top of the gert core schema.
+The core schema defines the base step types (\texttt{cli}, \texttt{tool},
+\texttt{manual}, \texttt{branch}, \texttt{iterate}) and their required fields.
+A Kit schema adds new step types with domain-specific field structures.
+
+Key principles:
+
+\begin{itemize}
+  \item A Kit schema is \textbf{additive}. It does not modify or remove core
+    step types. It adds new types that will be lowered into core types.
+  \item A Kit schema is \textbf{validated at parse time}. When a runbook
+    declares \texttt{apiVersion: runbook/v2+compliance/v1}, the gert parser
+    loads the Kit schema and validates the runbook against it.
+  \item A Kit schema is \textbf{domain-specific}. It should feel natural for
+    authors working in that domain. A compliance Kit might define
+    \texttt{approval-request} and \texttt{evidence-capture}; a workflow Kit
+    might define \texttt{select-priority} and \texttt{escalate}.
+\end{itemize}
+
+% ============================================================
+\section{Defining a Custom Step Type}
+\label{sec:custom-step-type}
+% ============================================================
+
+A custom step type is defined as a JSON Schema object that extends the base
+step schema with additional required and optional fields.
+
+\paragraph{Schema overlay pattern:}
+
+\begin{minted}{json}
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gert.dev/schemas/kits/compliance-v1.json",
+  "title": "Compliance Kit v1 Schema",
+  "description": "Compliance-focused authoring vocabulary for gert",
+
+  "definitions": {
+    "approval-request": {
+      "type": "object",
+      "required": ["id", "type", "approvers"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "const": "approval-request" },
+        "description": { "type": "string" },
+        "approvers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "List of user identifiers who can approve this step"
+        },
+        "timeout": {
+          "type": "string",
+          "pattern": "^[0-9]+(s|m|h|d)$",
+          "description": "Max wait time (e.g., '2h', '30m'). Auto-reject on timeout."
+        },
+        "evidence-required": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, approver must attach evidence"
+        },
+        "x-kit:metadata": {
+          "type": "object",
+          "description": "Kit-specific metadata preserved through lowering"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+
+  "oneOf": [
+    { "$ref": "#/definitions/approval-request" }
+  ]
+}
+\end{minted}
+
+\paragraph{Field conventions:}
+
+\begin{description}
+  \item[\texttt{id}] --- REQUIRED. Unique step identifier within the runbook.
+  \item[\texttt{type}] --- REQUIRED. Step type discriminator. Use \texttt{"const"}
+    to enforce exact match.
+  \item[\texttt{description}] --- Optional but recommended. Human-readable step
+    summary.
+  \item[Domain fields] --- Add required and optional fields specific to your
+    domain (e.g., \texttt{approvers}, \texttt{timeout}, \texttt{evidence-required}).
+  \item[\texttt{x-kit:*}] --- Prefix for Kit-defined metadata fields. Use this
+    namespace for fields that should be preserved through lowering but are not
+    part of the core schema.
+\end{description}
+
+% ============================================================
+\section{Field Extension Conventions}
+\label{sec:field-conventions}
+% ============================================================
+
+\paragraph{Required vs. optional fields:}
+
+Use \texttt{"required"} to declare fields that MUST be present for semantic
+correctness. Example: \texttt{approvers} is required for
+\texttt{approval-request} because an approval without approvers is meaningless.
+
+Optional fields should have sensible defaults or be truly optional. Document
+the default behavior in the schema \texttt{description}.
+
+\paragraph{Type constraints:}
+
+Use JSON Schema \texttt{type}, \texttt{pattern}, \texttt{minItems},
+\texttt{enum}, etc., to enforce structural correctness. Example:
+
+\begin{minted}{json}
+"timeout": {
+  "type": "string",
+  "pattern": "^[0-9]+(s|m|h|d)$",
+  "description": "Duration with unit suffix (s=seconds, m=minutes, h=hours, d=days)"
+}
+\end{minted}
+
+\paragraph{The \texttt{x-kit:} annotation prefix:}
+
+Fields prefixed with \texttt{x-kit:} are Kit-specific metadata that will be
+preserved through lowering but are not interpreted by the gert core. Use this
+for:
+
+\begin{itemize}
+  \item Hints to the lowering compiler (e.g., \texttt{x-kit:compile-mode: strict})
+  \item Metadata for projections (e.g., \texttt{x-kit:audit-category: sensitive})
+  \item Domain-specific annotations (e.g., \texttt{x-kit:compliance-framework: SOC2})
+\end{itemize}
+
+The gert core ignores \texttt{x-kit:*} fields. Your Kit compiler can read them
+from the AST and use them to inform lowering behavior.
+
+% ============================================================
+\section{Validation at Parse Time vs. Plan Time}
+\label{sec:parse-vs-plan}
+% ============================================================
+
+There are two phases of validation in the gert pipeline:
+
+\begin{description}
+  \item[Parse-time validation] runs when \texttt{gert validate} is invoked or
+    when a runbook is loaded. The parser validates the runbook YAML against
+    the Kit schema (structural validation). This catches syntax errors, missing
+    required fields, type mismatches, etc.
+
+  \item[Plan-time validation] runs after lowering, when the planner is about to
+    produce an ExecutionPlan. This is where semantic validators
+    (\S\ref{ch:validation-rules}) run. Plan-time validators can see the full
+    lowered runbook and enforce cross-step invariants (e.g., ``cleanup must
+    follow provision'').
+\end{description}
+
+\paragraph{What belongs in the schema (parse-time):}
+
+\begin{itemize}
+  \item Field presence (required vs. optional)
+  \item Field types (string, number, array, object)
+  \item Format constraints (patterns, enums, ranges)
+  \item Per-step structural correctness
+\end{itemize}
+
+\paragraph{What belongs in semantic validators (plan-time):}
+
+\begin{itemize}
+  \item Cross-step invariants (``every X must be followed by Y'')
+  \item Business rules (``timeout must not exceed SLA'')
+  \item Context-dependent validation (``if field A is set, field B is required'')
+\end{itemize}
+
+Use JSON Schema for structure; use semantic validators for semantics.
+
+% ============================================================
+\section{Example: \texttt{evidence-capture} Step Type}
+\label{sec:example-evidence}
+% ============================================================
+
+Let's define a second custom step type: \texttt{evidence-capture}. This step
+pauses execution and prompts a human to provide structured evidence (text,
+file upload, or both).
+
+\begin{minted}{json}
+{
+  "definitions": {
+    "evidence-capture": {
+      "type": "object",
+      "required": ["id", "type", "prompt"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "const": "evidence-capture" },
+        "description": { "type": "string" },
+        "prompt": {
+          "type": "string",
+          "description": "Instruction text shown to the operator"
+        },
+        "evidence-type": {
+          "type": "string",
+          "enum": ["text", "attachment", "both"],
+          "default": "text",
+          "description": "What kind of evidence to collect"
+        },
+        "required-attestation": {
+          "type": "boolean",
+          "default": true,
+          "description": "If true, operator must attest evidence is accurate"
+        },
+        "x-kit:audit-tag": {
+          "type": "string",
+          "description": "Tag for grouping evidence in audit reports"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
+\end{minted}
+
+\paragraph{Authoring example:}
+
+A runbook author using the compliance Kit might write:
+
+\begin{minted}{yaml}
+apiVersion: runbook/v2+compliance/v1
+meta:
+  title: "Quarterly access review"
+  kit:
+    name: gert.compliance
+    version: "^1.0.0"
+
+steps:
+  - id: request-approval
+    type: approval-request
+    description: "Get approval from security team"
+    approvers:
+      - alice@acme.example
+      - bob@acme.example
+    timeout: 2h
+    evidence-required: true
+
+  - id: capture-review-results
+    type: evidence-capture
+    description: "Upload access review spreadsheet"
+    prompt: "Attach the completed access review CSV file"
+    evidence-type: attachment
+    x-kit:audit-tag: "access-review-q1-2025"
+\end{minted}
+
+This Kit-authored runbook will be validated against the compliance Kit schema
+at parse time, then lowered into core step types before execution.
+
+% ============================================================
+\section{Schema Composition and Reuse}
+\label{sec:schema-composition}
+% ============================================================
+
+For complex Kits with many step types, use JSON Schema \texttt{\$ref} and
+\texttt{definitions} to avoid repetition:
+
+\begin{minted}{json}
+{
+  "definitions": {
+    "timeout-field": {
+      "type": "string",
+      "pattern": "^[0-9]+(s|m|h|d)$"
+    },
+    "user-list": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "approval-request": {
+      "type": "object",
+      "required": ["id", "type", "approvers"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "const": "approval-request" },
+        "approvers": { "$ref": "#/definitions/user-list" },
+        "timeout": { "$ref": "#/definitions/timeout-field" }
+      }
+    },
+    "escalate": {
+      "type": "object",
+      "required": ["id", "type", "escalate-to"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "const": "escalate" },
+        "escalate-to": { "$ref": "#/definitions/user-list" },
+        "timeout": { "$ref": "#/definitions/timeout-field" }
+      }
+    }
+  }
+}
+\end{minted}
+
+This reduces duplication and ensures consistency across step types.

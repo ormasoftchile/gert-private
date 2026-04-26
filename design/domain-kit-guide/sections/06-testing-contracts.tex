@@ -1,0 +1,305 @@
+% Chapter 06: Testing Contracts
+% Acceptance tests for your Domain Kit
+
+\chapter{Testing Contracts}
+\label{ch:testing-contracts}
+
+% ============================================================
+\section{Kit Acceptance Test Structure}
+\label{sec:test-structure}
+% ============================================================
+
+A Domain Kit MUST include acceptance tests that define what ``correct'' means
+for the Kit. These tests verify:
+
+\begin{enumerate}
+  \item \textbf{Lowering correctness} --- The compiler produces the expected
+    core YAML for Kit-authored runbooks.
+  \item \textbf{Validator behavior} --- Validators correctly accept valid input
+    and reject invalid input with actionable error messages.
+  \item \textbf{Projection output} --- Projections produce the expected output
+    for a given trace stream.
+\end{enumerate}
+
+\paragraph{Test directory structure:}
+
+\begin{verbatim}
+test/
+├── fixtures/                     # Test input runbooks
+│   ├── 01-basic-approval.yaml
+│   ├── 02-nested-governance.yaml
+│   ├── 03-evidence-capture.yaml
+│   └── 04-invalid-missing-owner.yaml
+└── expected/                     # Expected outputs
+    ├── 01-basic-approval.lowered.yaml
+    ├── 02-nested-governance.lowered.yaml
+    ├── 03-evidence-capture.lowered.yaml
+    └── 04-invalid-missing-owner.errors.json
+\end{verbatim}
+
+% ============================================================
+\section{Test Fixture Format}
+\label{sec:fixture-format}
+% ============================================================
+
+A test fixture is a Kit-authored runbook that exercises a specific feature or
+validates a specific error condition.
+
+\paragraph{Example: \texttt{01-basic-approval.yaml}}
+
+\begin{minted}{yaml}
+# Test fixture: basic approval-request lowering
+apiVersion: runbook/v2+compliance/v1
+meta:
+  title: "Basic approval test"
+  kit:
+    name: gert.compliance
+    version: "1.0.0"
+
+steps:
+  - id: approve-step
+    type: approval-request
+    description: "Simple approval with two approvers"
+    approvers:
+      - alice@acme.example
+      - bob@acme.example
+    timeout: 1h
+\end{minted}
+
+\paragraph{Expected lowered output: \texttt{01-basic-approval.lowered.yaml}}
+
+\begin{minted}{yaml}
+apiVersion: runbook/v2
+meta:
+  title: "Basic approval test"
+  x-kit:lowered-from:
+    kit: gert.compliance
+    version: "1.0.0"
+
+steps:
+  - id: approve-step
+    type: manual
+    description: "Simple approval with two approvers"
+    prompt: |
+      Approval required from:
+        - alice@acme.example
+        - bob@acme.example
+      
+      Timeout: 1h
+    approval:
+      required: true
+      approvers:
+        - alice@acme.example
+        - bob@acme.example
+      timeout: 3600
+\end{minted}
+
+% ============================================================
+\section{Running Kit Tests}
+\label{sec:running-tests}
+% ============================================================
+
+The \texttt{gert kit test} command (described here as expected behavior, even
+if not yet implemented) should:
+
+\begin{enumerate}
+  \item Discover all fixtures in \texttt{test/fixtures/}.
+  \item For each fixture:
+    \begin{enumerate}
+      \item Run the Kit compiler: \texttt{cat fixture.yaml | ./bin/gert-kit-compliance compile > actual.yaml}
+      \item Compare \texttt{actual.yaml} to \texttt{expected/*.lowered.yaml}.
+      \item If the fixture is marked as invalid (e.g., \texttt{04-invalid-*.yaml}), assert that the compiler exits with code 1 and produces the expected error JSON.
+    \end{enumerate}
+  \item Report results: pass/fail for each fixture.
+\end{enumerate}
+
+\paragraph{Manual test invocation:}
+
+Until \texttt{gert kit test} is implemented, run tests manually:
+
+\begin{verbatim}
+# Test 01: basic approval
+cat test/fixtures/01-basic-approval.yaml | \
+  ./bin/gert-kit-compliance compile > /tmp/actual.yaml
+
+diff -u test/expected/01-basic-approval.lowered.yaml /tmp/actual.yaml
+
+# Test 04: invalid missing owner (expect error)
+cat test/fixtures/04-invalid-missing-owner.yaml | \
+  ./bin/gert-kit-compliance compile > /tmp/errors.json
+echo $?  # Should be 1 (error)
+
+diff -u test/expected/04-invalid-missing-owner.errors.json /tmp/errors.json
+\end{verbatim}
+
+% ============================================================
+\section{What to Test}
+\label{sec:what-to-test}
+% ============================================================
+
+\paragraph{Lowering correctness:}
+
+\begin{itemize}
+  \item Basic step type lowering (one Kit step → one or more core steps).
+  \item Field mapping (Kit fields → core fields).
+  \item Governance field population (e.g., \texttt{approval-request} →
+    \texttt{approval} field).
+  \item Synthesized steps (if your Kit adds setup/teardown steps).
+  \item Variable injection (if your Kit adds variables to \texttt{vars}).
+\end{itemize}
+
+\paragraph{Validator edge cases:}
+
+\begin{itemize}
+  \item Valid input passes validation (exit code 0, empty error array).
+  \item Missing required fields produce errors.
+  \item Invalid field values produce errors.
+  \item Cross-step invariants are enforced (e.g., cleanup follows provision).
+  \item Warnings are emitted when appropriate (non-blocking).
+\end{itemize}
+
+\paragraph{Projection output format:}
+
+\begin{itemize}
+  \item Projections produce well-formed JSON/YAML/Markdown.
+  \item Projections correctly filter events (only audit-relevant events in
+    audit log).
+  \item Projections handle incomplete traces (if \texttt{run.completed} is
+    missing).
+\end{itemize}
+
+% ============================================================
+\section{Example Test Fixture for Validation}
+\label{sec:validation-fixture}
+% ============================================================
+
+\paragraph{Fixture: \texttt{04-invalid-missing-owner.yaml}}
+
+\begin{minted}{yaml}
+# Test fixture: missing owner (should fail validation)
+apiVersion: runbook/v2+compliance/v1
+meta:
+  title: "Invalid runbook: missing owner"
+
+steps:
+  - id: step-1
+    type: approval-request
+    description: "This should fail because meta.roles.owner is missing"
+    approvers:
+      - alice@acme.example
+    timeout: 1h
+\end{minted}
+
+\paragraph{Expected error output: \texttt{04-invalid-missing-owner.errors.json}}
+
+\begin{minted}{json}
+[
+  {
+    "file": "<stdin>",
+    "line": 3,
+    "severity": "error",
+    "message": "Compliance runbooks must declare an owner in meta.roles.owner",
+    "rule": "compliance/owner-required"
+  }
+]
+\end{minted}
+
+\paragraph{Test invocation:}
+
+\begin{verbatim}
+cat test/fixtures/04-invalid-missing-owner.yaml | \
+  ./bin/gert-kit-compliance compile 2>&1 > actual-errors.json
+
+# Assert exit code is 1
+echo $?  # Expected: 1
+
+# Assert error JSON matches
+diff -u test/expected/04-invalid-missing-owner.errors.json actual-errors.json
+\end{verbatim}
+
+% ============================================================
+\section{Automating Tests with a Makefile}
+\label{sec:makefile-tests}
+% ============================================================
+
+Create a \texttt{Makefile} target to run all tests:
+
+\begin{verbatim}
+.PHONY: test
+test: test-lowering test-validation
+
+.PHONY: test-lowering
+test-lowering:
+	@echo "Testing lowering..."
+	@for fixture in test/fixtures/*.yaml; do \
+		name=$$(basename $$fixture .yaml); \
+		if [ -f test/expected/$$name.lowered.yaml ]; then \
+			cat $$fixture | ./bin/gert-kit-compliance compile > /tmp/$$name.actual.yaml; \
+			diff -u test/expected/$$name.lowered.yaml /tmp/$$name.actual.yaml || exit 1; \
+			echo "✓ $$name"; \
+		fi \
+	done
+
+.PHONY: test-validation
+test-validation:
+	@echo "Testing validation..."
+	@for fixture in test/fixtures/04-invalid-*.yaml; do \
+		name=$$(basename $$fixture .yaml); \
+		cat $$fixture | ./bin/gert-kit-compliance compile > /tmp/$$name.actual.json 2>&1; \
+		if [ $$? -eq 1 ]; then \
+			diff -u test/expected/$$name.errors.json /tmp/$$name.actual.json || exit 1; \
+			echo "✓ $$name"; \
+		else \
+			echo "✗ $$name: expected exit code 1, got 0"; \
+			exit 1; \
+		fi \
+	done
+\end{verbatim}
+
+Run with:
+
+\begin{verbatim}
+make test
+\end{verbatim}
+
+% ============================================================
+\section{Continuous Integration}
+\label{sec:ci}
+% ============================================================
+
+Run Kit tests in CI (GitHub Actions, GitLab CI, etc.) to ensure regressions are
+caught before merge.
+
+\paragraph{Example GitHub Actions workflow:}
+
+\begin{minted}{yaml}
+name: Kit Tests
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build Kit compiler
+        run: go build -o bin/gert-kit-compliance ./cmd/compiler
+      - name: Run tests
+        run: make test
+\end{minted}
+
+% ============================================================
+\section{Versioning Test Fixtures}
+\label{sec:versioning-fixtures}
+% ============================================================
+
+As your Kit evolves, maintain backward compatibility by:
+
+\begin{enumerate}
+  \item Keeping test fixtures for all major versions (e.g.,
+    \texttt{test/v1/fixtures/}, \texttt{test/v2/fixtures/}).
+  \item Ensuring the compiler produces correct output for older runbooks (if
+    you support multiple Kit versions).
+  \item Adding new fixtures for new features without breaking old fixtures.
+\end{enumerate}
+
+This ensures that users can upgrade the Kit without rewriting their runbooks.

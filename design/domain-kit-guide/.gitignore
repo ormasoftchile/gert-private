@@ -1,0 +1,14 @@
+build/*
+!build/.gitkeep
+main.aux
+main.bbl
+main.bcf
+main.blg
+main.fls
+main.log
+main.out
+main.run.xml
+main.toc
+main.xdv
+_minted-main/
+main.pdf

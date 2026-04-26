@@ -1,0 +1,234 @@
+% Chapter 00: Introduction
+% What Domain Kits are, why they exist, who this guide is for
+
+\chapter{Introduction}
+\label{ch:introduction}
+
+% ============================================================
+\section{What Are Domain Kits?}
+\label{sec:what-are-kits}
+% ============================================================
+
+The gert v2 runtime is deliberately domain-agnostic. It executes steps, enforces
+governance, captures evidence, and writes traces---but it carries no opinion
+about \emph{what kind of work} a runbook describes. Whether you are orchestrating
+a compliance audit, provisioning infrastructure, migrating databases, or
+automating incident response, the gert core executes the same primitive
+operations: run CLI commands, invoke tools, pause for manual approval, branch on
+conditions, iterate over lists.
+
+This domain neutrality is not an omission---it is the core design principle.
+A stable, long-lived runtime cannot accommodate an ever-expanding union of
+domain-specific vocabularies without becoming brittle and unmaintainable.
+
+\textbf{Domain Kits} are the mechanism by which domain-specific semantics enter
+gert without contaminating the kernel. A Domain Kit is a compile-time semantic
+layer that sits \emph{above} the gert core runtime. It provides:
+
+\begin{enumerate}
+  \item \textbf{Authoring schemas} --- domain-specific YAML vocabulary (custom
+    step types, field structures, validation constraints) that feels natural for
+    authors working in a particular domain.
+  \item \textbf{Validation rules} --- semantic validators that enforce
+    domain-specific invariants (``every approval must have a fallback
+    timeout,'' ``cleanup must follow provision'').
+  \item \textbf{Lowering (compilation)} --- a pure transformation that compiles
+    Kit-specific authoring syntax into core gert primitives before execution.
+  \item \textbf{Projections} --- read-only transformations over run traces that
+    produce domain-specific reports (audit logs, timeline views, evidence
+    bundles).
+  \item \textbf{Testing contracts} --- fixture runbooks and expected outputs
+    that define what ``correct'' means for this domain.
+\end{enumerate}
+
+Domain Kits are \emph{not} runtime extensions. They do not add new capabilities
+to the gert engine, register tools, or subscribe to events. A Kit operates
+entirely at \textbf{author time} and \textbf{compile time}. By the time the
+gert runtime starts executing a runbook, all Kit-specific syntax has been
+lowered into core primitives.
+
+% ============================================================
+\section{Why Domain Kits Exist}
+\label{sec:why-kits}
+% ============================================================
+
+Without Domain Kits, domain-specific semantics have two bad places to live:
+
+\paragraph{Option 1: Leak into the core schema.}
+Every new domain (compliance, workflow automation, data migration, system
+provisioning) adds fields and step types to the core. The schema becomes a
+growing union type. The parser grows mode flags. The runtime accumulates
+conditionals. The kernel loses its stability guarantee. This is the path to a
+bloated, unmaintainable system.
+
+\paragraph{Option 2: Push into extensions.}
+Extensions add runtime capabilities (tools, event subscriptions, policy
+enforcement). If we also use them for authoring semantics, we conflate two
+fundamentally different concerns. An extension that contributes validators,
+authoring schemas, and projections is doing work that has nothing to do with
+runtime capabilities. Worse, it forces authoring-layer concerns into a runtime
+architecture, making them heavier than they need to be.
+
+\paragraph{Domain Kits solve this by providing a clean home for domain
+semantics.} They preserve the kernel's stability while allowing unlimited
+domain-specific expressiveness. The gert core schema never changes when a new
+domain is added---the Kit compiles domain vocabulary down to core primitives.
+
+% ============================================================
+\section{Relationship to Gert Core}
+\label{sec:kit-and-core}
+% ============================================================
+
+Domain Kits \textbf{compile down to core primitives}. The gert core is
+unchanged. A Kit is a higher-level authoring syntax built \emph{on top of} the
+core runtime, not a modification of it.
+
+The pipeline is:
+
+\begin{verbatim}
+Kit YAML → Kit Parser → Kit AST → Kit Compiler → Core YAML → Core Parser → ExecutionPlan
+\end{verbatim}
+
+Key properties:
+
+\begin{itemize}
+  \item The Kit compiler is a \textbf{pure function}: YAML in, YAML out, no
+    side effects.
+  \item The lowered output is a valid \texttt{runbook/v2} document that uses
+    only core step types (\texttt{cli}, \texttt{tool}, \texttt{manual},
+    \texttt{branch}, \texttt{iterate}).
+  \item The runtime \textbf{never sees Kit-specific nodes}. Lowering happens
+    before the planner produces an ExecutionPlan.
+  \item The lowered runbook can be inspected, version-controlled, and executed
+    \textbf{without the Kit installed}. This is critical for portability and
+    auditability.
+\end{itemize}
+
+% ============================================================
+\section{The Three Extension Points}
+\label{sec:three-extension-points}
+% ============================================================
+
+Gert v2 has three distinct extension mechanisms. Each serves a different purpose
+and operates at a different phase:
+
+\begin{description}
+  \item[Domain Kits (authoring semantics)] contribute domain-specific YAML
+    vocabulary, validation rules, lowering logic, and projections. They operate
+    at \textbf{author time} and \textbf{compile time}. They are pure
+    transformations with no runtime footprint.
+
+  \item[Extensions (runtime capabilities)] contribute tools, event
+    subscriptions, schema field extensions (\texttt{x-*} namespaced fields),
+    policy rules, and provider integrations. They operate at \textbf{run time}
+    as out-of-process children of the gert engine.
+
+  \item[Tools (effectful actions)] perform side-effecting work: binary
+    execution, API calls, MCP tool invocations. They operate at \textbf{run
+    time}, invoked on demand by the gert engine when a \texttt{tool} step
+    executes.
+\end{description}
+
+\paragraph{How Kits differ from Extensions and Tools.}
+
+\begin{itemize}
+  \item \textbf{Kits are compile-time; Extensions are runtime.} A Kit compiler
+    runs once before execution. An Extension runs throughout execution as a
+    persistent child process.
+  \item \textbf{Kits are pure; Extensions and Tools have side effects.} A Kit
+    never invokes binaries, calls APIs, or writes to disk (except for its own
+    compiled output). Extensions and Tools perform effectful work.
+  \item \textbf{Kits shape vocabulary; Extensions shape capabilities.} A Kit
+    determines what authors can write. An Extension determines what the runtime
+    can do.
+\end{itemize}
+
+A Kit distribution may \emph{ship alongside} an Extension (e.g., a ``compliance
+pack'' that includes both a Domain Kit and an Extension with compliance-specific
+tools), but they remain architecturally distinct.
+
+% ============================================================
+\section{Who Should Read This Guide}
+\label{sec:audience}
+% ============================================================
+
+This guide is for \textbf{Kit developers}---engineers who are building
+domain-specific authoring layers for gert. It is \emph{not} for runbook authors
+who are using an existing Kit.
+
+You should read this guide if you:
+
+\begin{itemize}
+  \item Want to create a custom step type for your domain (e.g.,
+    \texttt{approval-request}, \texttt{deploy-canary}, \texttt{migrate-table}).
+  \item Need to enforce domain-specific validation rules that cannot be
+    expressed in JSON Schema alone (e.g., ``every provision step must be
+    followed by a cleanup step'').
+  \item Want to generate domain-specific reports from gert run traces (e.g.,
+    audit logs, compliance evidence bundles, timeline views).
+  \item Are building a reusable authoring framework for a community (e.g., a
+    Kit for Kubernetes deployments, database migrations, or security audits).
+\end{itemize}
+
+\paragraph{Prerequisites.}
+This guide assumes you are comfortable with:
+
+\begin{itemize}
+  \item YAML syntax and structure
+  \item JSON Schema (Draft 2020-12)
+  \item Writing and invoking command-line tools
+  \item Basic compiler concepts (parsing, transformation, lowering)
+\end{itemize}
+
+You do \emph{not} need to know the gert v2 runtime internals. This guide stands
+alone. However, for deeper understanding of the core execution model, consult
+the \emph{Gert v2 Design Document} (particularly Chapter~4, Domain Kit Model).
+
+% ============================================================
+\section{How This Guide Is Structured}
+\label{sec:structure}
+% ============================================================
+
+This guide follows the Kit development lifecycle:
+
+\begin{description}
+  \item[Chapter 1: Kit Anatomy] --- directory structure, manifest format,
+    versioning contract.
+  \item[Chapter 2: Authoring Schemas] --- how to define custom step types as
+    YAML overlays on core schemas.
+  \item[Chapter 3: Validation Rules] --- writing parse-time and plan-time
+    validators.
+  \item[Chapter 4: Lowering] --- writing the Kit compiler that transforms your
+    authoring syntax into core primitives.
+  \item[Chapter 5: Projections] --- building read models over run traces.
+  \item[Chapter 6: Testing Contracts] --- acceptance tests for your Kit.
+  \item[Chapter 7: Publishing] --- packaging and distributing your Kit.
+  \item[Chapter 8: Reference] --- complete field reference for manifest and
+    binary interfaces.
+\end{description}
+
+Work through the chapters sequentially if you are building a Kit from scratch.
+Use Chapter~8 as a quick reference once you are familiar with the model.
+
+% ============================================================
+\section{Forward Reference}
+\label{sec:forward-ref}
+% ============================================================
+
+For details on the gert v2 runtime, execution model, governance layer, evidence
+system, and event model, consult the \emph{Gert v2 Design Document}. In
+particular:
+
+\begin{itemize}
+  \item \textbf{Chapter 4: Domain Kit Model} --- the architectural rationale
+    for Kits and their relationship to core primitives.
+  \item \textbf{Chapter 5: Runtime Architecture} --- the execution loop, state
+    machine, and planner.
+  \item \textbf{Chapter 6: Governance and Policy} --- allowlists, redaction,
+    approval gates, evidence capture.
+  \item \textbf{Chapter 9: Event Model} --- trace events, event schema, and
+    event lifecycle.
+\end{itemize}
+
+This guide focuses exclusively on \emph{building} Kits, not on the core runtime
+that executes them.

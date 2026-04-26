@@ -48,3 +48,66 @@ gert is a YAML-driven runbook orchestration engine. The mobile extension brings 
 - Sync: OkHttp streaming for JSONL push; WorkManager for background kit pulls
 
 ## Learnings
+
+### 2026-04-19: Android SDK Scaffold Complete
+
+**Task:** Create and scaffold the gert-sdk-android Kotlin library repository.
+
+**What I did:**
+1. Created `ormasoftchile/gert-sdk-android` GitHub repository (public)
+2. Scaffolded complete Gradle Kotlin DSL project structure:
+   - Root build config with version catalog (libs.versions.toml)
+   - `gertsdk` library module with Android API 26+ (Oreo) target
+   - Kotlin 1.9.22, Coroutines, OkHttp, Moshi dependencies
+3. Implemented public API surface in `GertSDK.kt`:
+   - `loadKit(context, uri)` — load from local bundle
+   - `loadKit(context, name, version)` — load from registry
+   - `syncRun(run, serverUrl, authToken)` — push completed run
+4. Created core architecture modules (all stubs):
+   - `KitLoader` — manifest parsing, dependency resolution, capability validation
+   - `RunSession` — runbook execution orchestration
+   - `StepExecutor` — tool dispatch logic
+   - `TraceWriter` — JSONL trace event persistence
+5. Defined model classes:
+   - `Manifest`, `LoadedKit`, `ToolDefinition`, `PlatformImpl`
+   - `RunEvent` sealed class hierarchy (8 event types)
+   - `Capability` object with 6 token constants
+6. Implemented `GertToolHandler` interface + 6 platform handler stubs:
+   - `CameraHandler` — Camera2 API, FEATURE_CAMERA_ANY
+   - `LocationHandler` — FusedLocationProvider, GPS/Network feature checks
+   - `NFCHandler` — NfcManager, FEATURE_NFC + adapter enabled check
+   - `BiometricsHandler` — BiometricManager, BIOMETRIC_STRONG|WEAK check
+   - `BluetoothHandler` — BluetoothManager, FEATURE_BLUETOOTH + adapter check
+   - `NotificationsHandler` — NotificationManager, areNotificationsEnabled() check
+7. Created sync clients:
+   - `SyncClient` — kit pull/push orchestration
+   - `IngestClient` — JSONL streaming to POST /api/v1/runs/ingest
+8. Added test stubs for KitLoaderTest and SyncClientTest
+9. Wrote comprehensive README with quick start, capabilities table, architecture diagram
+10. Committed and pushed to main branch
+
+**Key decisions:**
+- **Minimum API level 26 (Oreo, 2017)** — covers 95%+ of active devices, allows modern APIs
+- **Kotlin Coroutines + Flow** — async tool execution, run event streaming
+- **Eager dependency resolution** — fail at `loadKit()` time, not runtime
+- **`checkAvailability()`** — each handler validates capability before execution
+- **Platform impl transport `native-sdk`** — tool YAML declares handler class name
+- **JSONL trace format** — matches gert server ingest API contract
+
+**What's working:**
+- Complete project structure compiles (all TODOs marked for future impl)
+- Platform handlers reference correct Android APIs for each capability
+- Model classes align with kit bundle manifest.json schema
+- Public API surface matches mobile architecture design from history.md
+
+**Next steps:**
+1. Implement KitLoader manifest parsing (JSON → Manifest data class)
+2. Implement capability validation logic (PackageManager feature checks)
+3. Implement StepExecutor tool dispatch (type → handler routing)
+4. Implement each of the 6 platform handlers' `execute()` methods
+5. Implement SyncClient HTTP pull/push with OkHttp
+6. Add integration tests with mock kit bundles
+7. Create sample app module demonstrating end-to-end usage
+
+**Repository:** https://github.com/ormasoftchile/gert-sdk-android  
+**Commit:** 981f785 ("initial scaffold: GertSDK Android Kotlin library v0.1.0")

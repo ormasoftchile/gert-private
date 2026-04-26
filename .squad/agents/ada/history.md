@@ -47,3 +47,31 @@ gert is a YAML-driven runbook orchestration engine. The mobile extension brings 
 - Sync: `URLSession` streaming for JSONL push; background `URLSession` for pulls
 
 ## Learnings
+
+### 2025-01-15: iOS SDK Scaffold Complete
+
+**Task:** Created and scaffolded the gert-sdk-ios Swift Package repository
+
+**Deliverables:**
+- GitHub repo `ormasoftchile/gert-sdk-ios` created and pushed
+- Complete Swift Package structure with Package.swift targeting iOS 16+ / macOS 13+
+- Public API surface: `GertSDK.loadKit()`, `GertSDK.syncRun()`
+- Model layer: `Manifest`, `LoadedKit`, `ToolDefinition`, `PlatformImpl`, `RunEvent`, `Capability`
+- Core layer: `KitLoader`, `RunSession`, `StepExecutor`, `TraceWriter`
+- Platform layer: `GertToolHandler` protocol + 6 capability handlers (camera, location, NFC, biometrics, bluetooth, notifications)
+- Sync layer: `SyncClient`, `IngestClient` (POST /api/v1/runs/ingest JSONL streaming)
+- Test stubs: `KitLoaderTests`, `SyncClientTests`
+- Comprehensive README with quick start, architecture, and roadmap
+
+**Key Decisions:**
+- Eager dependency resolution at kit load time (fail-fast on missing iOS impl or unavailable capability)
+- PlatformHandlerRegistry with singleton pattern for built-in capability handlers
+- JSONL trace files written to Application Support directory
+- AsyncStream for run event streaming
+- All async/await, leveraging Swift 5.9 structured concurrency
+
+**Next Steps:**
+- Integrate local gert engine (Go via gomobile xcframework or pure Swift interpreter)
+- Implement full platform handler execute() methods
+- Add background URLSession for kit pulls
+- Build sample kits and demo iOS app

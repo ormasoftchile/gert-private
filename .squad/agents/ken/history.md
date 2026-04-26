@@ -1220,3 +1220,195 @@ Assessed whether the `dri-kit` (Kit-0, `gert.ops` Domain Kit) is ready for repo 
 **Deliverables:**
 - `.squad/tmp/ken-dri-kit-vocab-spec.md` — ~43KB, Brian's implementation brief
 - `.squad/decisions/inbox/ken-dri-kit-vocab.md` — Decision record (8 decisions)
+
+---
+
+## Phase 20 — Mobile Platform Architecture Design (2026-04-26)
+
+### Status: ✅ Complete
+
+**Mission:** Design v2 architecture for mobile platform support — enable gert runbooks to invoke mobile device capabilities (camera, location, NFC, biometrics) and track which client (CLI, server, mobile-ios, mobile-android) initiated each run.
+
+### Deliverables
+
+1. **Go v2 Mobile Implementation Blueprint** — `.squad/tmp/ken-mobile-blueprint.md`
+   - Comprehensive implementation guide for Brian (33KB document)
+   - 5 major changes to v2 Go codebase with exact file paths and code changes
+   - Test cases for all new functionality
+   - Integration checklist and validation steps
+
+2. **gert-mobile-platform Repository** — `ormasoftchile/gert-mobile-platform`
+   - Public GitHub repository created and scaffolded
+   - Platform kit structure with 6 mobile capability tools
+   - Full tool definitions with iOS and Android impl blocks
+   - Capability token documentation and permission requirements
+   - Repository: https://github.com/ormasoftchile/gert-mobile-platform
+
+### Blueprint: 5 Core Changes
+
+#### 1. Client Field in run/started Event
+- Add `Client` string field to `pkg/engine/run.go` Run struct
+- Populate from RunOptions (values: "cli", "server", "mobile-ios", "mobile-android")
+- Emit in run/started event payload for audit trail
+- Update CLI and server RPC handlers to set client field
+
+#### 2. Per-Platform impl Blocks in Tool Definitions
+- Add `Impl map[string]*PlatformImpl` to `pkg/schema/tool.go` ToolDef
+- Define `PlatformImpl` struct with Transport and Handler fields
+- Create `pkg/tool/platform.go` with ValidatePlatformAvailability() function
+- Returns PlatformUnavailableError if tool missing impl for target platform
+- Backward compatible: tools without impl blocks work everywhere (legacy mode)
+
+#### 3. Compiler --target Flag
+- New command: `gert compile <kit-dir> --target <platform>`
+- Target values: "ios", "android", "mobile" (shorthand for both)
+- Validates all tools in kit have impl blocks for target platform
+- Emits manifest.json with target platform(s) recorded
+- New file: `cmd/gert/compile.go` (~150 lines)
+
+#### 4. Run Ingest API
+- New endpoint: `POST /api/v1/runs/ingest` — accepts JSONL trace stream
+- New endpoint: `POST /api/v1/runs/{run-id}/attachments/{sha256}` — stores evidence files
+- Validates run_id consistency across events
+- Writes to run store trace file using platform.OpenAppend()
+- New file: `internal/serve/ingest.go` (~150 lines)
+
+#### 5. Platform Kit Registry
+- Registry file: `~/.gert/platform-kits/registry.json`
+- Tracks installed platform kits by name, version, path, target platforms
+- New file: `pkg/platform/registry.go` (~150 lines)
+- LoadRegistry(), Register(), Lookup() API
+- InitBuiltinRegistry() pre-registers gert-mobile-platform
+
+### gert-mobile-platform Kit
+
+Created public GitHub repository with complete platform kit structure:
+
+**Manifest:**
+- Name: gert-mobile-platform
+- Version: 0.1.0
+- Target: ["ios", "android"]
+- Provides 6 capabilities: camera, location, NFC, biometrics, bluetooth, notifications
+
+**Tools (6 total):**
+1. **camera.capture** — Photo/video capture with quality settings
+   - iOS: `GertSDK.Camera.capture`
+   - Android: `com.gert.platform.tools.CameraCaptureTool`
+
+2. **location.read** — GPS location with accuracy control
+   - iOS: `GertSDK.Location.read`
+   - Android: `com.gert.platform.tools.LocationReadTool`
+
+3. **nfc.scan** — NFC tag reading (NDEF, ISO15693, FeliCa)
+   - iOS: `GertSDK.NFC.scan`
+   - Android: `com.gert.platform.tools.NFCScanTool`
+
+4. **biometrics.confirm** — Face ID, Touch ID, fingerprint authentication
+   - iOS: `GertSDK.Biometrics.confirm`
+   - Android: `com.gert.platform.tools.BiometricsConfirmTool`
+
+5. **bluetooth.scan** — Bluetooth device scanning with service filtering
+   - iOS: `GertSDK.Bluetooth.scan`
+   - Android: `com.gert.platform.tools.BluetoothScanTool`
+
+6. **notifications.local** — Local notification scheduling and cancellation
+   - iOS: `GertSDK.Notifications.schedule`
+   - Android: `com.gert.platform.tools.NotificationsLocalTool`
+
+**Assets:**
+- `capability-tokens.yaml` — Documents capability requirements and platform permissions
+- Maps each capability to iOS (Info.plist keys) and Android (manifest permissions)
+
+### Key Architectural Decisions
+
+**AD-M1: Unified tool definition with platform-specific impl blocks**
+- Single .tool.yaml file per tool (not separate files per platform)
+- `impl` map allows platform-specific transport and handler
+- Backward compatible: tools without `impl` assumed platform-agnostic
+- Rationale: Reduces duplication, keeps action signatures consistent across platforms
+
+**AD-M2: Client tracking in trace events**
+- `client` field in run/started event identifies originating client
+- Enables mobile vs. server analytics, platform-specific debugging
+- Values: "cli", "server", "mobile-ios", "mobile-android"
+- Rationale: Critical for multi-platform audit trail and troubleshooting
+
+**AD-M3: Compile-time platform validation**
+- `gert compile --target` validates tool availability before deployment
+- Fails fast if kit uses tools unavailable on target platform
+- Emits target metadata in manifest for runtime checks
+- Rationale: Catch platform incompatibility at build time, not runtime
+
+**AD-M4: HTTP ingest for mobile trace submission**
+- Mobile clients submit completed runs via POST (not streaming WebSocket)
+- Accepts JSONL trace + separate attachment uploads
+- Server reconstructs run from events and stores in run store
+- Rationale: Simpler mobile SDK, offline-first capable, RESTful
+
+**AD-M5: Centralized platform kit registry**
+- Registry file at `~/.gert/platform-kits/registry.json`
+- gert-mobile-platform pre-registered as built-in kit
+- SDK and compiler load tools from registered kits
+- Rationale: Discoverable kits, version management, namespace collision prevention
+
+### Implementation Handoff
+
+**For Brian (Go implementation):**
+- Read `.squad/tmp/ken-mobile-blueprint.md` in full before coding
+- Implement changes in order (1→5) to maintain test coverage
+- Run existing tests after each change to ensure backward compatibility
+- All changes are additive (no breaking changes to existing APIs)
+
+**For Barbara (SDK integration):**
+- Use gert-mobile-platform as reference for iOS SDK tool implementations
+- Match handler signatures exactly: `GertSDK.<Module>.<action>`
+- Follow capability token documentation for permission requests
+
+**For Leslie (documentation):**
+- Add §13 Mobile Platform Architecture to design document
+- Document client tracking, platform impl blocks, compiler validation
+- Include gert-mobile-platform as reference kit example
+
+### Validation Plan
+
+**Unit tests:**
+- TestValidatePlatformAvailability (tool availability logic)
+- TestRegistry_RegisterAndLookup (platform kit registry)
+- TestRunCompile_ValidKit (compiler validation)
+- TestHandleIngestRun (JSONL trace ingestion)
+
+**Integration tests:**
+- Compile gert-mobile-platform kit for iOS → validates successfully
+- Compile kit with missing impl → fails with clear error
+- POST JSONL trace → reconstructs run in run store
+- POST attachment → stores in evidence directory
+
+**E2E validation:**
+- `gert compile gert-mobile-platform.kit --target mobile` → success
+- `gert run runbook.yaml` → trace includes `"client":"cli"`
+- iOS app submits run → server ingests trace with `"client":"mobile-ios"`
+
+### Learnings
+
+1. **Platform abstraction via impl blocks** — Single tool definition, multiple platform implementations
+2. **Compile-time validation wins** — Catch platform incompatibility before deployment
+3. **Client tracking enables analytics** — Differentiate mobile vs. CLI runs for debugging
+4. **Ingest API for offline-first** — Mobile clients submit after completion, not streaming
+5. **Registry pattern for extensibility** — Centralized kit discovery and version management
+
+### Files Created
+
+- `.squad/tmp/ken-mobile-blueprint.md` — Implementation guide (33KB)
+- `https://github.com/ormasoftchile/gert-mobile-platform` — Platform kit repository
+  - `gert-mobile-platform.kit/manifest.json`
+  - `gert-mobile-platform.kit/tools/*.tool.yaml` (6 tools)
+  - `gert-mobile-platform.kit/assets/capability-tokens.yaml`
+  - `README.md`
+
+### Next Steps
+
+1. Brian implements blueprint changes in v2 Go codebase
+2. Barbara implements iOS SDK handlers matching gert-mobile-platform specs
+3. Leslie documents mobile platform architecture in design document
+4. Integration testing: compile mobile kit, validate tool availability
+

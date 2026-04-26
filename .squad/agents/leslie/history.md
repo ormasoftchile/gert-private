@@ -1026,3 +1026,35 @@ DRI kit at `/Volumes/Projects/gert-domain-dri/design/sections/`.
   cli/manual/branch/iterate) are concrete
 
 **Commit:** see git log
+
+---
+
+## Session: gert-domain-home Design Doc Content Fill
+
+**Date:** 2025-07-10
+**Requested by:** Cristian
+
+### What was done
+
+Rewrote all 7 section files for the `gert-domain-home` design document, replacing every
+`\ph{...}` placeholder with real content from the home domain kit reference:
+
+- `00-introduction.tex` — Introduction, audience, What is a Property, implementation overview
+- `01-concepts.tex` — Property model, role taxonomy (homeowner/delegate/executor hints), role assignment, delegation chain, cadence concepts, delegation transfer
+- `02-schema-reference.tex` — Kit declaration, property/zone/asset metadata, home.routine/home.incident/home.delegate step types, evidence types (photo/note/checklist/none), consumables
+- `03-authoring-guide.tex` — Minimal skeleton, zones vs assets, routine authoring, incident templates, delegation config, consumable tracking, evidence best practices, complete Casa Santiago example
+- `04-gert-integration.tex` — Parse/validate/lower/execute pipeline, role gating (advisory hints + delegation scope enforcement), away mode enforcement, cadence checking, audit trail events, complete integration example with trace output
+- `05-evidence-and-tracing.tex` — Evidence model, record structure, run directory tree, timeline projection, compliance bundles, SHA-256 verification, reading completed runs
+- `06-reference.tex` — Full tabular field references (property, routine, incident, incident step, delegate, consumable), evidence type reference, environment variables (GERT_HOME_PROPERTY_FILE/RUN_DIR/TZ), error codes (HOME_ERR_001–005)
+
+### Verification
+
+- `grep '\\ph{' design/*.tex` — zero matches in the 7 section files (only a comment in `home.tex`)
+- `make build` — compiled clean to 52-page PDF (`build/home-manual.pdf`)
+
+### Key decisions
+
+- `executor.role` documented as advisory-only with a tcolorbox Note calling out the home/v0 limitation and v1 roadmap
+- Used `\begin{tabular}{lllp{5.5cm}}` for all reference tables per project convention
+- YAML examples use `\begin{minted}{yaml}` throughout
+- Delegation scope enforcement documented as runtime-enforced (assigns block), distinct from advisory executor hints

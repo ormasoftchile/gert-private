@@ -18,6 +18,8 @@
 | Barbara | Integrations Specialist | [charter](.squad/agents/barbara/charter.md) | 🔌 Active |
 | Brian | Go Programmer | [charter](.squad/agents/brian/charter.md) | 🔧 Active |
 | John | YAML/Schema Specialist | [charter](.squad/agents/john/charter.md) | 📋 Active |
+| Ada | iOS Engineer | [charter](.squad/agents/ada/charter.md) | 🍎 Active |
+| James | Android Engineer | [charter](.squad/agents/james/charter.md) | 🤖 Active |
 | Scribe | Session Logger | [charter](.squad/agents/scribe/charter.md) | 📋 Silent |
 | Ralph | Work Monitor | — | 🔄 Monitor |
 

@@ -12,6 +12,8 @@ How to decide who handles what.
 | Integrations, tool definitions, provider contracts, extension runtime | Barbara 🔌 | "design tool transport", "extension runtime model", "provider abstraction" |
 | Go implementation, package design, code review | Brian 🔧 | "is this implementable in Go?", "Go patterns for X", "review v1 code" |
 | Schema design, YAML grammar, JSON Schema, data model | John 📋 | "design step schema", "YAML grammar for X", "schema validation rules" |
+| iOS SDK, Swift Package, gert-sdk-ios, Apple platform | Ada 🍎 | "iOS kit loading", "Swift API surface", "camera tool on iOS", "gert-sdk-ios" |
+| Android SDK, Kotlin library, gert-sdk-android, Google platform | James 🤖 | "Android kit loading", "Kotlin API surface", "camera tool on Android", "gert-sdk-android" |
 | Multi-domain design questions | Ken + relevant specialist | "team, design the tool execution model" |
 | Session logging, decision merging | Scribe 📋 | (auto, after every batch) |
 

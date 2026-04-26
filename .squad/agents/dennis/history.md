@@ -34,6 +34,70 @@ This is a LaTeX document using the MastersThesis class. Sections are in `design/
 
 ## Learnings
 
+### 2026-04-25: Domain Kit README Template Synthesis
+
+**Objective:** Analyze existing domain kit READMEs (gert-domain-home, gert-domain-dri) and produce a standardized template that all future kits can adopt.
+
+**Analysis Performed:**
+1. **gert-domain-home README** — Good reference; covers overview, features, usage (Go imports + code), example YAML, status, module/dependencies, contributing
+2. **gert-domain-dri README** — Missing (needs to be filled); went to check repo structure
+3. **Design Document Structure** — Both kits follow LaTeX with sections covering: introduction, concepts, schema reference, authoring guide, governance, evidence tracing, workflows, reference, migration
+
+**Key Findings:**
+- Both kits follow similar arc: tagline → overview → features → usage → example → status
+- Neither covers "key concepts" (domain vocabulary explicitly)
+- Neither has a clear link strategy to design docs (sections referenced but path structure assumes LaTeX source, not PDF output)
+- gert-domain-home is missing explicit design doc link in README
+- Status sections are present but formats vary
+
+**Template Sections Designed (Mandatory):**
+1. **Title + Short Description** — One-liner, business value
+2. **Overview** — What this kit does, why it exists
+3. **Features** — 3–5 concrete capabilities (bulleted)
+4. **Key Concepts** — Domain vocabulary table (3–5 terms, one-line descriptions each)
+5. **Usage** — Go import pattern + minimal working code example
+6. **Example File** — Minimal YAML snippet (10–20 lines) + reference to full examples
+7. **Design Documentation** — Explicit link to design/, list of key section files
+8. **Status** — Current version capabilities, planned features, phase references
+9. **Module** — Go module path and version
+10. **Dependencies** — Key external deps with brief rationale
+11. **Contributing** — Links back to main GERT repo + domain kit authoring guide
+
+**Design Decisions:**
+- Used double-brace placeholders `{{PLACEHOLDER}}` (matches Helm convention, widely recognized)
+- Kept optional sections (Advanced Usage, Troubleshooting) but not forced
+- Made "Key Concepts" mandatory (fills a gap in both existing kits)
+- Explicit design doc references with section file names (enables better navigation)
+- Status format uses "Phase X" references (matches team's phase-based roadmap in decisions.md)
+- Dependencies block mirrors go.mod style for clarity
+
+**Artifacts Created:**
+1. `/Volumes/Projects/gert/templates/domain-kit/README.md` — The template (3808 chars)
+2. `/Volumes/Projects/gert/templates/domain-kit/TEMPLATE-GUIDE.md` — Implementation guide (7950 chars)
+
+**TEMPLATE-GUIDE.md Contents:**
+- Placeholder reference table (13 required placeholders)
+- Features/Concepts/Dependencies/Status guidance
+- Mandatory vs. optional sections
+- Step-by-step initialization instructions
+- Common mistakes to avoid
+- Maintenance checklist for version updates
+
+**Why This Template Solves the Problem:**
+- **Consistency:** Every future kit follows same arc, same structure
+- **Discoverability:** Key Concepts table makes vocabulary explicit
+- **Navigation:** Design doc section refs enable readers to drill down from README → design
+- **Onboarding:** TEMPLATE-GUIDE makes it trivial for new kit authors to fill in the blanks
+- **Maintainability:** Version/status updates follow a pattern; easy to audit compliance
+
+**Next Steps for Team:**
+1. Apply template to gert-domain-dri README (currently missing/empty)
+2. Optionally backfill gert-domain-home README using template (it already covers most)
+3. Reference template in gert/CONTRIBUTING.md when adding new domain kits
+4. Consider adding to `.squad/tooling/` or similar if there's a domain kit scaffolder
+
+---
+
 ### 2026-04-18: Comprehensive Runbook and Governance Research
 
 **Research Areas Completed:**

@@ -10376,3 +10376,184 @@ All trace events include a `client` field identifying the execution surface:
 - Clear structure for new kit authors
 - Better experience for integrators
 
+# Decision: Kit Catalog & Distribution Documentation (Chapter 18)
+
+**Date:** 2026-04-21  
+**Author:** Leslie (LaTeX Specialist)  
+**Status:** Documented  
+**Scope:** Design Documentation
+
+---
+
+## Context
+
+The gert team (Ken, Cristian) designed a complete Kit Catalog & Distribution system modeled after Homebrew's tap repository pattern. The catalog enables developers to discover, declare, and fetch domain kits without knowing specific GitHub repository URLs.
+
+The catalog lives in a dedicated GitHub repository (`ormasoftchile/gert-catalog`) containing a single `catalog.yaml` file—a machine-readable index of all published kits. Applications declare kit dependencies in a `Kitfile.yaml` manifest, and the gert CLI provides discovery and dependency management commands.
+
+This system needed comprehensive design documentation as a new chapter in the gert v2 design document.
+
+---
+
+## Decision
+
+Created **Chapter 18: Kit Catalog & Distribution** as `sections/18-kit-catalog.tex`.
+
+The chapter documents:
+
+1. **Overview and Motivation** — developer experience problem (kit discovery), design goals (discoverability, declarative dependencies, decentralized publishing)
+
+2. **Catalog Repository** — `ormasoftchile/gert-catalog` structure, public availability via GitHub raw CDN
+
+3. **Catalog Schema** — `catalog.yaml` format with required fields (name, description, source, latest) and optional fields (targets, tags)
+
+4. **Kitfile.yaml** — app-level dependency declaration, catalog source configuration, version constraint syntax (npm-style semver)
+
+5. **CLI Commands** — comprehensive reference table for `gert kit search/add/fetch/list` with descriptions and examples
+
+6. **Publishing Workflow** — PR-based catalog updates (identical to Homebrew formulae), maintainer review process
+
+7. **Multi-Kit Bundling** — handling multiple kits in a single project, capability collision resolution (last-write-wins based on declaration order)
+
+8. **Platform-Aware Kits** — `--target` filtering, platform-specific tool implementations via `impl` blocks
+
+9. **Kit-to-Kit Dependencies** — transitive dependency resolution, `requires` field in `manifest.json`, depth-first resolution strategy
+
+10. **Version Resolution** — semver constraint solving, intersection algorithm, `Kitfile.lock` generation for reproducible builds
+
+11. **Security Considerations** — catalog source trust anchors, bundle checksum verification, future signing key extension
+
+12. **Future Extensions** — deprecation markers, platform-specific versions, alias support, catalog schema versioning
+
+---
+
+## Rationale
+
+### Why This Documentation Was Needed
+
+The kit catalog system is a **critical user-facing capability** that bridges three existing design chapters:
+- Domain Kit Model (Ch. 4) — defines what kits are and how they compile
+- Mobile Execution (Ch. 17) — defines the `.kit` bundle format and manifest schema
+- Tool Runtime (Ch. 6) — defines the tool YAML schema that kits contain
+
+Without catalog documentation, developers would have no guidance on:
+- How to find available kits
+- How to declare kit dependencies in their projects
+- How version resolution works
+- How to publish their own kits
+- How transitive dependencies are resolved
+- How reproducible builds are achieved
+
+### Why a Dedicated Chapter
+
+The catalog system could have been folded into Ch. 4 (Domain Kit Model) as a subsection, but:
+1. **Scope justifies dedicated chapter:** The catalog introduces its own schemas (catalog.yaml, Kitfile.yaml, Kitfile.lock), CLI commands, publishing workflow, and resolution algorithm—collectively too large for a subsection.
+2. **Separation of concerns:** Ch. 4 covers kit architecture and compilation; Ch. 18 covers distribution and discovery. These are orthogonal concerns.
+3. **User journey alignment:** Developers encounter the catalog system *after* understanding what kits are (Ch. 4) but *before* building mobile apps (Ch. 17). Placing Ch. 18 after Ch. 17 maintains this logical flow while keeping related chapters adjacent.
+
+### Documentation Style
+
+The chapter follows established gert design doc patterns:
+- **Thorough specification:** All schemas fully documented with field descriptions, validation rules, examples
+- **CLI reference table:** Developers can use Table 18.2 (gert kit subcommands) as a quick reference
+- **Worked examples:** Each CLI command includes example output showing actual usage
+- **Algorithm specification:** Version resolution described as a normative 2-pass algorithm
+- **Security boundaries:** Explicit discussion of trust anchors and attack mitigation
+- **Cross-references:** Links to Ch. 4 (domain kits), Ch. 17 (mobile execution), Ch. 6 (tools)
+
+---
+
+## Integration Work
+
+### Files Created
+- `sections/18-kit-catalog.tex` — 900+ lines, 11 sections
+
+### Files Modified
+- `main.tex` — added `\input{sections/18-kit-catalog}` after §17
+- `sections/04-domain-kit-model.tex` — added forward reference at end of Non-Goals section: "Kit discovery and distribution mechanisms are covered in Chapter~\ref{sec:kit-catalog}."
+- `sections/17-mobile-execution.tex` — added forward reference at end of Security Model: "Kit discovery, dependency resolution, and distribution workflows are covered in Chapter~\ref{sec:kit-catalog}."
+
+### Build Verification
+- **Compilation:** Clean (exit code 0, no LaTeX errors)
+- **Page count:** 384 pages (up from ~350, +34 pages)
+- **Cross-references:** All `\ref{}` commands resolve correctly after second pdflatex pass
+- **Pre-existing warnings:** Unchanged (73 undefined citations in references.bib)
+
+---
+
+## Key Design Patterns Used
+
+1. **Schema-first documentation:** Every YAML/JSON format shown in full with minted syntax highlighting before discussing semantics
+2. **CLI command reference table:** Provides quick lookup for developers (similar to Ch. 15 observability metrics table)
+3. **Semver constraint table:** Explicit examples of `^`, `~`, range, exact version syntax
+4. **Resolution algorithm:** Normative 2-pass specification (constraint collection → constraint solving)
+5. **Security boundaries:** Dedicated section on trust anchors, checksum verification, future signing extensions
+6. **Future extensions:** Documented as "under consideration" to signal roadmap without committing to implementation
+
+---
+
+## Alternatives Considered
+
+### Alternative: Fold catalog into Ch. 4 (Domain Kit Model)
+
+**Rejected because:**
+- Ch. 4 is already 1077 lines (25+ pages). Adding 900 more lines would create a 50+ page chapter, violating the principle of "chapters should cover one cohesive topic."
+- The catalog system is orthogonal to kit compilation. A domain kit author doesn't need to understand catalog.yaml to implement a kit compiler.
+
+### Alternative: Fold catalog into Ch. 17 (Mobile Execution)
+
+**Rejected because:**
+- Ch. 17 is mobile-specific (iOS/Android SDK). The catalog system applies equally to CLI, server, and mobile platforms.
+- The catalog references `manifest.json` from Ch. 17, but it's not fundamentally a mobile concept—it's a distribution concept.
+
+### Alternative: Create a separate "Distribution" chapter covering bundles, registries, and signing
+
+**Rejected because:**
+- Would create scope overlap with Ch. 17 (which covers `.kit` bundles and manifests).
+- The catalog system is complete and self-contained; it doesn't need to be part of a broader "distribution" chapter.
+
+---
+
+## Success Criteria
+
+✅ **Complete schema documentation:** All YAML/JSON formats (catalog.yaml, Kitfile.yaml, Kitfile.lock) fully specified  
+✅ **CLI reference:** All `gert kit` subcommands documented in reference table  
+✅ **Algorithm specification:** Version resolution described as reproducible 2-pass algorithm  
+✅ **Publishing workflow:** PR-based catalog update process documented step-by-step  
+✅ **Cross-references:** Forward references added to Ch. 4 and Ch. 17  
+✅ **Build verification:** Document compiles cleanly with no new errors  
+✅ **Integration:** Chapter flows naturally after Ch. 17 (mobile execution)  
+
+---
+
+## Follow-Up Actions
+
+- [ ] **Scribe:** Merge this decision into `.squad/decisions.md` under "Documentation Structure" section
+- [ ] **Ken/Cristian:** Review Ch. 18 for technical accuracy (especially version resolution algorithm and semver constraint semantics)
+- [ ] **Future:** When `gert kit` CLI implementation begins, validate that Ch. 18 spec matches actual CLI behavior
+
+---
+
+## Related Decisions
+
+- **TikZ Global Diagrams** (2026-04-19) — established TikZ as standard for design doc diagrams; Ch. 18 does not require diagrams but could add a catalog resolution flowchart in future
+- **Bibliography System** (2026-04-18) — Ch. 18 does not add new citations but could reference Homebrew tap documentation if formal citation is desired
+- **Domain Kit Model (Ch. 4)** — Ch. 18 depends on Ch. 4's kit manifest and compilation model
+- **Mobile Execution (Ch. 17)** — Ch. 18 references `.kit` bundle format and `manifest.json` schema from Ch. 17
+
+---
+
+## Impact
+
+**Developers:** Now have complete documentation on how to discover, declare, fetch, and publish domain kits.  
+**Implementers:** Have normative specification for CLI implementation (`gert kit search/add/fetch/list` commands, version resolution algorithm).  
+**Kit authors:** Understand the PR-based publishing workflow and catalog schema requirements.  
+**Document maintainability:** Ch. 18 is self-contained; changes to catalog system do not require edits to Ch. 4 or Ch. 17.
+
+---
+
+**Documented by:** Leslie (LaTeX Specialist)  
+**Reviewed by:** [Pending review by Cristian/Ken]
+
+---
+

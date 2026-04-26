@@ -1147,3 +1147,66 @@ Rewrote all 7 section files for the `gert-domain-home` design document, replacin
 - main.tex (chapter 17 added)
 
 **Committed:** ✅ Mobile execution documentation (Chapter 17 + updates)
+
+### 2026-04-21 — Kit Catalog & Distribution Documentation (§18)
+
+**Task:** Document the complete Kit Catalog & Distribution system as a new chapter in the gert v2 design document.
+
+**Context:** The team (Ken/Cristian) designed a Homebrew-style catalog system for discovering and distributing domain kits. The catalog lives in `ormasoftchile/gert-catalog` as a single `catalog.yaml` file. Apps declare kit dependencies in `Kitfile.yaml`, and the CLI provides `gert kit search/add/fetch/list` commands.
+
+**What I created:**
+- `sections/18-kit-catalog.tex` — 11-section chapter covering:
+  - Overview and motivation
+  - Catalog repository structure (`ormasoftchile/gert-catalog`)
+  - `catalog.yaml` schema (name, description, source, latest, targets, tags)
+  - `Kitfile.yaml` app-level dependency declaration
+  - CLI commands table (search, add, fetch, list)
+  - Publishing workflow (PR-based, like Homebrew formulae)
+  - Multi-kit bundling and capability collision (last-write-wins)
+  - Platform-aware kit filtering (`--target ios`)
+  - Kit-to-kit dependencies and transitive resolution
+  - Version resolution algorithm and `Kitfile.lock` generation
+  - Security considerations (catalog trust, checksum verification)
+  - Forward references to §04 (domain kit model) and §17 (mobile execution)
+
+**Integration work:**
+- Updated `main.tex` to include `\input{sections/18-kit-catalog}` after §17
+- Added forward-reference sentences to:
+  - §04 (Domain Kit Model) at end of Non-Goals section
+  - §17 (Mobile Execution) at end of Security Model subsection
+
+**Build result:** CLEAN
+- Page count: 384 pages (up from ~350, +34 pages for new chapter)
+- Exit status: Clean compilation (exit code 0)
+- No LaTeX errors related to new section
+- Cross-references resolve correctly after second pdflatex pass
+- Pre-existing warnings (undefined citations in references.bib) unchanged
+
+**Key design patterns used:**
+- Used `\chapter{}` with `\label{sec:kit-catalog}` for top-level structure
+- Extensive use of `minted` for YAML/JSON code blocks (catalog.yaml, Kitfile.yaml, manifest.json, Kitfile.lock)
+- Created a CLI commands reference table (Table~\ref{tab:kit-commands})
+- Created a semver constraints syntax table (Table~\ref{tab:semver-constraints})
+- Used `\texttt{}` for filenames, field names, CLI commands
+- Cross-referenced Ch~4 (domain kits), Ch~17 (mobile execution), Ch~6 (tools)
+
+**Documentation scope:**
+The chapter is comprehensive (11 sections, ~900 lines of LaTeX). It covers:
+- Discovery mechanism (catalog search)
+- Dependency declaration (Kitfile.yaml)
+- Resolution algorithm (semver constraint solving)
+- Fetching workflow (transitive dependencies)
+- Publishing workflow (PR-based catalog updates)
+- Platform awareness (iOS/Android/CLI/server target filtering)
+- Reproducible builds (Kitfile.lock checksums)
+- Security boundaries (catalog source trust, bundle integrity)
+- Future extensions (deprecation markers, aliases, catalog versioning)
+
+**Files changed:**
+- Created: `sections/18-kit-catalog.tex`
+- Modified: `main.tex` (added \input line)
+- Modified: `sections/04-domain-kit-model.tex` (added forward reference)
+- Modified: `sections/17-mobile-execution.tex` (added forward reference)
+
+**Key lesson:** When documenting a complete subsystem (catalog + CLI + resolution), structure the chapter to follow the user journey: discovery → declaration → fetch → publish. This makes the design accessible to both implementers (who need the full algorithm spec) and users (who need to understand the workflow).
+

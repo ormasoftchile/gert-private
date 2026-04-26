@@ -978,3 +978,98 @@ Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 ### Ready for v0.1.0
 
 Schema is now fully specified, gaps resolved, and ready for production tagging.
+
+---
+
+## 2026-04-26 — Mobile Execution YAML/JSON Schema Specification
+
+**Requested by:** Cristian  
+**Output:** `.squad/tmp/john-mobile-schema.md` (31KB, 1200+ lines)
+
+Designed the complete schema specification for mobile execution support in gert v2. Covers all data structures needed for iOS/Android runbook execution, including tool definitions, kit bundles, trace events, and capability contracts.
+
+### Schema Components Specified
+
+1. **Per-platform `impl` block** (§1)
+   - JSON Schema for platform-specific handler bindings
+   - Transport types: native-sdk, http, grpc, local-process
+   - Example: camera.capture tool with iOS native SDK and Android native SDK implementations
+   - Validation rules for transport-handler compatibility
+   - Backward compatible (optional; absent = server-only tool)
+
+2. **Kit bundle manifest schema** (§2)
+   - `manifest.json` at kit root with full JSON Schema (Draft 2020-12)
+   - Required fields: name, version, target, description, compiled-at, compiler-version, checksum
+   - Runbook entries with id/name/version metadata
+   - Kit dependencies with semver version specifiers
+   - Provides-capabilities array (device capabilities provided by kit)
+   - Validation: kebab-case names, semantic versioning, sha256 checksums, unique runbook IDs
+
+3. **Client field in run/started event** (§3)
+   - New optional field: `client: ["cli", "server", "mobile-ios", "mobile-android"]`
+   - Defaults to "cli" if omitted (backward compatible)
+   - Enables audit trails and client-specific runtime behavior
+   - No breaking changes to existing traces
+
+4. **Capability token format** (§4)
+   - Canonical format: `capability/<name>` (kebab-case)
+   - Builtin tokens: camera, location, nfc, biometrics, bluetooth, notifications, contacts, calendar, microphone, sensors, network
+   - Used in tool `requires-capabilities` and kit manifest `provides-capabilities`
+   - Custom domain-specific capabilities allowed (vendor-prefixed, kebab-case)
+
+5. **Platform kit catalog** (§5)
+   - Static JSON published by CDN with all available kits
+   - Catalog entries: name, latest-version, versions array, description, target platforms, download-url, sha256
+   - SDK fetches to resolve kit dependencies and versions
+   - Fallback to offline pre-bundled kits if catalog fetch fails
+
+### Key Design Decisions
+
+1. **Platform impl is optional** — Backward compatible with server-only tools that predate mobile support
+2. **Manifest is self-contained** — All metadata needed for deployment, verification, and audit trails
+3. **Client field is semantic** — Enables analytics and future client-specific behavior without breaking old traces
+4. **Capability tokens are extensible** — Builtin capabilities cover core device features; custom tokens follow same format
+5. **Catalog is static JSON** — No runtime download logic needed; simple HTTP fetch + validation
+
+### Validation Rules Specified
+
+- Transport + handler compatibility (http/grpc = URL format; native-sdk = class paths; local-process = executable paths)
+- Semantic versioning in manifests (major.minor.patch)
+- Checksum format: sha256:<64-hex-digits>
+- Circular dependency detection at compile time
+- Platform name case-sensitivity
+- Runbook ID uniqueness within kit
+- Capability token format validation (capability/<kebab-case-name>)
+
+### Backward Compatibility Notes
+
+- Omitting `impl` → server-only tool (works with existing v2 tools)
+- Omitting `client` in traces → defaults to "cli" (old traces remain readable)
+- New capabilities → additive (don't break existing runbooks)
+- Schema additions are optional fields (no breaking changes)
+
+### Cross-References
+
+- Integrates with existing `apiVersion: tool/v2` from §03 Schema vNext
+- Aligns with mobile client platforms (iOS native Swift, Android native Kotlin)
+- Extends trace event schema from §06 Runtime Events
+- Complements domain kit compiler (computes manifests, validates dependencies)
+
+### Files Created/Modified
+
+- Created: `.squad/tmp/john-mobile-schema.md` (comprehensive specification with examples)
+
+### Learnings
+
+1. **Schema composition:** Mobile support doesn't break existing server-only tools; it's purely additive with optional `impl`
+2. **Capability model:** Token format (capability/<name>) enables both intrinsic device features (camera, location) and domain-specific capabilities (pool-automation)
+3. **Manifest design:** Including compiler-version and checksum enables audit trails and integrity verification
+4. **Backward compatibility:** Defaulting omitted fields (client="cli", impl absent=server-only) means no existing data breaks
+5. **Platform extensibility:** Kit target list is enum'd (ios, android, cli, server, wasm) but additional platforms can be added as new enum values
+
+### Ready for Integration
+
+Schema is fully specified with JSON Schema Draft 2020-12 validation, YAML examples, and edge case handling. Ready for:
+- SDK integration (mobile app kit resolution and validation)
+- Compiler implementation (manifest generation, dependency resolution)
+- Runtime updates (capability checking, client tracking in traces)

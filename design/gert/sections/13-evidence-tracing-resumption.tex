@@ -54,6 +54,7 @@ The \texttt{sequence} field provides a total order over events in a single run. 
 The following event kinds are normative in v2. All user-supplied string fields (command arguments, outputs, prompt responses) pass through the redaction pipeline before being written.
 
 \subsubsection{\texttt{run/started}}
+\label{sec:run-started-event-client-field}
 
 Emitted once, as the first event in every trace file.
 
@@ -63,7 +64,8 @@ Emitted once, as the first event in every trace file.
   "user":          <string>,  // actor identity
   "mode":          <string>,  // "real" | "replay" | "dry-run"
   "inputs":        <object>,  // resolved input values (redacted)
-  "client":        <string>,  // "cli" | "tui" | "web" | "mcp"
+  "client":        <string>,  // "cli" | "server" | "mobile-ios" 
+                              // | "mobile-android"
   "parent_run_id": <string>   // omitted if not an invoke child
 }
 \end{verbatim>
@@ -655,3 +657,135 @@ type EvidenceCollector interface {
 \end{minted}
 
 The \texttt{DirRunStore} is the production implementation. A \texttt{MemRunStore} (storing events in a slice) is provided for unit tests where filesystem I/O is undesirable. The \texttt{ReplayEvidenceCollector} returns pre-recorded evidence for scenario tests.
+
+% ------------------------------------------------------------------ %
+\section{Run Ingest API}
+% ------------------------------------------------------------------ %
+
+The run ingest API enables mobile and offline executors to upload completed runs to a central gert server for audit, compliance, and operational visibility. The API accepts runs in the standard trace JSONL format and reconstructs them server-side.
+
+\subsection{Endpoint: \texttt{POST /api/v1/runs/ingest}}
+
+Accepts a stream of JSONL trace events (identical format to \texttt{trace.jsonl}).
+
+\paragraph{Request format:}
+
+\begin{verbatim}
+POST /api/v1/runs/ingest
+Content-Type: application/x-ndjson
+Authorization: Bearer <token>
+
+{"event_id":"...","sequence":0,"kind":"run/started",...}
+{"event_id":"...","sequence":1,"kind":"step/started",...}
+{"event_id":"...","sequence":2,"kind":"step/completed",...}
+...
+\end{verbatim}
+
+\paragraph{Response:}
+
+\begin{minted}{json}
+{
+  "run_id": "20260418T143022-a3f9c1",
+  "status": "ingested",
+  "events_received": 47,
+  "attachments_pending": ["a3f9c1...", "b2e4d5..."]
+}
+\end{minted}
+
+The \texttt{attachments\_pending} field lists SHA256 digests of attachments referenced in the trace but not yet uploaded.
+
+\subsection{Endpoint: \texttt{POST /api/v1/runs/\{run-id\}/attachments/\{sha256\}}}
+
+Uploads a single attachment file.
+
+\paragraph{Request format:}
+
+\begin{verbatim}
+POST /api/v1/runs/20260418T143022-a3f9c1/attachments/a3f9c1...
+Content-Type: application/octet-stream
+Authorization: Bearer <token>
+
+<binary file content>
+\end{verbatim}
+
+\paragraph{Response:}
+
+\begin{minted}{json}
+{
+  "sha256": "a3f9c1...",
+  "size": 204800,
+  "status": "stored"
+}
+\end{minted}
+
+The server verifies the SHA256 checksum of the uploaded content before storing. If the checksum does not match the URL path, the request is rejected with HTTP 400.
+
+\subsection{Idempotency}
+
+Both endpoints are idempotent. Uploading the same trace or attachment multiple times has no adverse effect. The server deduplicates attachments by SHA256 digest.
+
+% ------------------------------------------------------------------ %
+\section{Run Ingest API}
+% ------------------------------------------------------------------ %
+
+The run ingest API enables mobile and offline executors to upload completed runs to a central gert server for audit, compliance, and operational visibility. The API accepts runs in the standard trace JSONL format and reconstructs them server-side.
+
+\subsection{Endpoint: \texttt{POST /api/v1/runs/ingest}}
+
+Accepts a stream of JSONL trace events (identical format to \texttt{trace.jsonl}).
+
+\paragraph{Request format:}
+
+\begin{verbatim}
+POST /api/v1/runs/ingest
+Content-Type: application/x-ndjson
+Authorization: Bearer <token>
+
+{"event_id":"...","sequence":0,"kind":"run/started",...}
+{"event_id":"...","sequence":1,"kind":"step/started",...}
+{"event_id":"...","sequence":2,"kind":"step/completed",...}
+...
+\end{verbatim}
+
+\paragraph{Response:}
+
+\begin{minted}{json}
+{
+  "run_id": "20260418T143022-a3f9c1",
+  "status": "ingested",
+  "events_received": 47,
+  "attachments_pending": ["a3f9c1...", "b2e4d5..."]
+}
+\end{minted}
+
+The \texttt{attachments\_pending} field lists SHA256 digests of attachments referenced in the trace but not yet uploaded.
+
+\subsection{Endpoint: \texttt{POST /api/v1/runs/\{run-id\}/attachments/\{sha256\}}}
+
+Uploads a single attachment file.
+
+\paragraph{Request format:}
+
+\begin{verbatim}
+POST /api/v1/runs/20260418T143022-a3f9c1/attachments/a3f9c1...
+Content-Type: application/octet-stream
+Authorization: Bearer <token>
+
+<binary file content>
+\end{verbatim}
+
+\paragraph{Response:}
+
+\begin{minted}{json}
+{
+  "sha256": "a3f9c1...",
+  "size": 204800,
+  "status": "stored"
+}
+\end{minted}
+
+The server verifies the SHA256 checksum of the uploaded content before storing. If the checksum does not match the URL path, the request is rejected with HTTP 400.
+
+\subsection{Idempotency}
+
+Both endpoints are idempotent. Uploading the same trace or attachment multiple times has no adverse effect. The server deduplicates attachments by SHA256 digest.

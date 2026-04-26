@@ -1058,3 +1058,45 @@ Rewrote all 7 section files for the `gert-domain-home` design document, replacin
 - Used `\begin{tabular}{lllp{5.5cm}}` for all reference tables per project convention
 - YAML examples use `\begin{minted}{yaml}` throughout
 - Delegation scope enforcement documented as runtime-enforced (assigns block), distinct from advisory executor hints
+
+### 2026-04-26 — Added §17 Mobile Execution Model and updated §03/§06/§13
+
+**Task:** Document the mobile offline runbook execution model for gert v2.
+
+**What I did:**
+1. Created `design/gert/sections/17-mobile-execution.tex` — comprehensive new chapter covering:
+   - Mobile architecture (embedded SDK, kit bundles, platform kits)
+   - Kit bundle format and manifest.json schema
+   - Per-platform tool dispatch with impl blocks
+   - Dependency resolution and registry model
+   - Run sync and ingest API
+   - iOS/Android SDK API surfaces
+   - New capability tokens (camera, location, NFC, biometrics, bluetooth, notifications)
+   - Compatibility guarantee (what stays unchanged)
+
+2. Updated `design/gert/sections/13-evidence-tracing-resumption.tex`:
+   - Added `client` field to `run/started` event with values: "cli", "server", "mobile-ios", "mobile-android"
+   - Added label `\label{sec:run-started-event-client-field}` for cross-references
+   - Added new section "Run Ingest API" documenting `POST /api/v1/runs/ingest` and `POST /api/v1/runs/{run-id}/attachments/{sha256}`
+
+3. Updated `design/gert/sections/06-tool-runtime.tex`:
+   - Added `impl:` block to tool definition schema example with iOS/Android handlers
+   - Added new section "Per-Platform Implementation Blocks" (§6.2.1) explaining native-sdk transport
+   - Added "Mobile Capability Tokens" subsection documenting capability/camera, capability/location, etc.
+
+4. Updated `design/gert/main.tex`:
+   - Added `\input{sections/17-mobile-execution}` before `\backmatter`
+
+**Verification:**
+- Document compiled successfully with latexmk
+- PDF generated at 740KB
+- All sections processed without syntax errors
+- Chapter 17 included in build
+
+**Design decisions:**
+- Format compatibility is a core principle: runbook YAML, trace JSONL, evidence model are 100% unchanged
+- Kit bundles reuse existing gert schemas (only manifest.json is new)
+- Fail-early capability gating at load time (not runtime) for better UX
+- Mobile client types are explicit in run/started event for audit trail clarity
+
+**Path note:** Confirmed that design document is at `design/gert/` (not `design/gert-v2/`).

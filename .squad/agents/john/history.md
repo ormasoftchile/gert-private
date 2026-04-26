@@ -1073,3 +1073,41 @@ Schema is fully specified with JSON Schema Draft 2020-12 validation, YAML exampl
 - SDK integration (mobile app kit resolution and validation)
 - Compiler implementation (manifest generation, dependency resolution)
 - Runtime updates (capability checking, client tracking in traces)
+
+## 2026-04-26: Mobile Schema Specification Complete (Team Sprint)
+
+**Context:** Full mobile execution platform deployed across 6 agents (Leslie, Ken, Brian, John, Ada, James)
+
+**Team Deliverables:**
+- Leslie: LaTeX Chapter 17 (Mobile Execution) + schema updates (§06, §13, §03) — clean compile
+- Ken: Mobile architecture blueprint + gert-mobile-platform repo scaffolded on GitHub
+- Brian: Go v2 implementation (client field, impl blocks, --target flag, ingest API, platform registry) — tests pass
+- John: YAML/JSON Schema specs (impl blocks, manifest.json, capability tokens, CDN catalog)
+- Ada: gert-sdk-ios Swift Package (23 files, full model + 6 handlers) — tests pass
+- James: gert-sdk-android Kotlin/Gradle AAR (24 files, full model + 6 handlers) — tests pass
+
+**John's Schema Deliverables:**
+1. **Implementation Blocks Schema:** Tool definition `impl:` field (platform → handler mapping)
+2. **Manifest Specification:** manifest.json structure with tool registrations and platform assignments
+3. **Capability Tokens:** Hierarchical format `{platform}:{tool}:{capability}`
+4. **CDN Catalog:** JSON specification for SDK package discovery and distribution
+
+**Key Decisions:**
+- `impl` blocks optional (backward compatible)
+- Capability tokens use lowercase hierarchical naming
+- manifest.json validates tool-to-platform mapping at load time
+- CDN catalog indexes available SDKs by platform/version
+
+**Cross-Team Integration:**
+- Brian: Schema drives impl block parsing in tool loader
+- Ada/James: SDKs declare capabilities in schema
+- Ken: Capability tokens used in architecture blueprint
+- Leslie: Schema referenced in mobile docs
+
+**Decisions Archived to decisions-archive.md:** 5 entries older than 30 days
+
+**Orchestration Logs Created:** 6 agent logs in `.squad/orchestration-log/` (ISO 8601 timestamps)
+
+**Session Log:** 2026-04-26T15:25:54Z-mobile-execution-implementation.md
+
+**Output Location:** `.squad/tmp/john-mobile-schema.md` and related schema files

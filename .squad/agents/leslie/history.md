@@ -1100,3 +1100,50 @@ Rewrote all 7 section files for the `gert-domain-home` design document, replacin
 - Mobile client types are explicit in run/started event for audit trail clarity
 
 **Path note:** Confirmed that design document is at `design/gert/` (not `design/gert-v2/`).
+
+## 2026-04-26: Mobile Execution Documentation Complete (Team Sprint)
+
+**Context:** Full mobile execution platform deployed across 6 agents (Leslie, Ken, Brian, John, Ada, James)
+
+**Team Deliverables:**
+- Leslie: LaTeX Chapter 17 (Mobile Execution) + schema updates (§06, §13, §03) — clean compile
+- Ken: Mobile architecture blueprint + gert-mobile-platform repo scaffolded on GitHub
+- Brian: Go v2 implementation (client field, impl blocks, --target flag, ingest API, platform registry) — tests pass
+- John: YAML/JSON Schema specs (impl blocks, manifest.json, capability tokens, CDN catalog)
+- Ada: gert-sdk-ios Swift Package (23 files, full model + 6 handlers) — tests pass
+- James: gert-sdk-android Kotlin/Gradle AAR (24 files, full model + 6 handlers) — tests pass
+
+**Leslie's Documentation Deliverables:**
+1. **Chapter 17: Mobile Execution Model** — Comprehensive chapter on offline runbook execution
+2. **§13 Update:** `run/started` event with `client` field (cli, server, mobile-ios, mobile-android)
+3. **§06 Update:** Per-platform tool implementation blocks (`impl:` field)
+4. **§03 Update:** Mobile schema compatibility (100% backward compatible)
+
+**Key Design Principles:**
+- Format compatibility is non-negotiable
+- Fail-early capability gating
+- Server-optional sync model
+- Explicit client field for audit trail
+- Per-platform tool dispatch
+
+**Build Status:** ✅ LaTeX clean compile, main.pdf generated
+
+**Cross-Team Integration:**
+- Brian: Client field usage examples
+- Ken: Architecture blueprint compliance
+- Ada/James: SDK integration examples
+- John: Schema references
+
+**Decisions Archived to decisions-archive.md:** 5 entries older than 30 days
+
+**Orchestration Logs Created:** 6 agent logs in `.squad/orchestration-log/` (ISO 8601 timestamps)
+
+**Session Log:** 2026-04-26T15:25:54Z-mobile-execution-implementation.md
+
+**Files Modified:**
+- sections/17-mobile-execution.tex (new)
+- sections/13-evidence-tracing-resumption.tex (updated)
+- sections/06-tool-runtime.tex (updated)
+- main.tex (chapter 17 added)
+
+**Committed:** ✅ Mobile execution documentation (Chapter 17 + updates)

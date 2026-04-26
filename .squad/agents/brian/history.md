@@ -584,3 +584,96 @@ This pattern will be replicated for subsequent domain kits (Policy, Compliance, 
 - Integration tests with v2 engine (Phase 8)
 - Cross-domain step type validation
 - Role enforcement blocking in v2.1 planning
+
+---
+
+## Phase: Mobile Execution Support (2026-04-26)
+
+**Status:** ✅ Complete — All changes implemented and building
+
+**Mission:** Implement Go v2 changes for mobile execution support across four key areas.
+
+### Deliverables
+
+1. **Client Field in run/started Event**
+   - Added `Client` field to `RunOptions` and `Run` structs in `pkg/engine/run.go`
+   - Thread client identifier through engine initialization
+   - Emit `client` field in `run/started` trace event payload
+   - Set `Client: "cli"` in CLI commands (`cmd/gert/run.go`)
+   - Set `Client: "server"` in RPC server (`internal/serve/rpc.go`)
+   - Values: "cli", "server", "mobile-ios", "mobile-android"
+
+2. **Per-Platform impl Blocks in Tool Definitions**
+   - Added `Impl map[string]*PlatformImpl` to `schema.ToolDef`
+   - Added `PlatformImpl` struct with `Transport` and `Handler` fields
+   - Tools can now declare platform-specific implementation descriptors
+   - Absent platform key = capability unavailable on that platform
+   - Pure server-side tools have empty/nil `Impl` map
+
+3. **Compiler --target Flag**
+   - Created `cmd/gert/compile.go` with platform validation command
+   - Flags: `--target ios|android|mobile`, `--output`, `--kit-name`
+   - Validates all .tool.yaml files in current directory
+   - Checks platform compatibility: tools with impl blocks must have entry for target platform
+   - Emits `manifest.json` with kit name, target, and compiled-at timestamp
+   - "mobile" is shorthand for validating both ios and android
+
+4. **Run Ingest API Endpoints**
+   - Created `internal/serve/ingest.go` with two new handlers
+   - `POST /api/v1/runs/ingest` — accepts JSONL stream of trace events
+   - Validates first event is `run/started`
+   - Writes events to new run directory with evidence subdirectory
+   - Returns `{"run_id": "<id>", "events_received": N}`
+   - `POST /api/v1/runs/{run-id}/attachments/{sha256}` — accepts file uploads
+   - Validates SHA-256 hash matches body content
+   - Writes attachment to run's evidence directory
+   - Returns 201 on success, 400 on hash mismatch, 404 if run not found
+
+5. **Platform Kit Registry**
+   - Created `pkg/platformkit` package
+   - `PlatformKitEntry` struct with Name, Version, Capabilities, URL
+   - `BuiltinPlatformKits` registry with gert-mobile-platform v0.1.0
+   - Capabilities: camera, location, nfc, biometrics, bluetooth, notifications
+
+### Technical Patterns
+
+- Client field propagation: RunOptions → Run → trace event payload
+- Tool platform validation: empty impl = server-only, present impl = must have target platform
+- Manifest generation: JSON output with metadata for mobile SDK integration
+- JSONL streaming ingestion: line-by-line parsing with first-event validation
+- Content-addressed attachment storage: SHA-256 filename in evidence directory
+
+### Build Status
+
+- ✅ All packages compile cleanly (`go build ./...`)
+- ✅ Existing tests pass (internal/engine, internal/serve)
+- ✅ No breaking changes to existing APIs
+- ✅ New compile command integrated into CLI help text
+
+### Learnings
+
+1. **Mobile-first platform support requires three layers:**
+   - Schema: tool definitions with platform impl blocks
+   - Validation: compile-time checks for platform compatibility
+   - Ingestion: server-side API to receive mobile-generated traces
+
+2. **Client field enables mobile analytics:**
+   - Differentiates runs by originating surface (CLI vs server vs mobile)
+   - Enables mobile-specific metrics and debugging workflows
+   - Simple string field, no enum enforcement at runtime
+
+3. **Platform kit registry pattern:**
+   - Centralized capability discovery (what can mobile do?)
+   - Version tracking for SDK compatibility
+   - URL field enables dynamic kit download/update flows
+
+4. **JSONL ingest pattern for offline-first mobile:**
+   - Mobile app records full trace locally
+   - Uploads complete run when connectivity restored
+   - Server-side receives as atomic batch, not real-time stream
+
+**Next Steps:**
+- Integration testing with mobile SDK (gert-sdk-ios, gert-sdk-android)
+- Document mobile workflow: compile → embed manifest → run → ingest trace
+- Add capability resolution at planning time (fail early if platform can't fulfill)
+

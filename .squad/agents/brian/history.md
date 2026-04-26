@@ -713,3 +713,58 @@ This pattern will be replicated for subsequent domain kits (Policy, Compliance, 
 
 **Branch:** `feat/mobile-execution`  
 **Ready for:** Review and merge to main
+
+
+## Learnings
+
+### 2026-04-26: Kit Management CLI Implementation
+
+**Task:** Implement `gert kit` CLI subcommands for kit catalog management
+
+**Implementation Details:**
+- Created `/Volumes/Projects/gert/cmd/gert/kit.go` with 4 subcommands:
+  - `search [query]` — fetches catalog from GitHub, filters kits by name/description
+  - `add <kit-name>` — validates kit exists in catalog, adds to Kitfile.yaml
+  - `fetch` — resolves kits from catalog, downloads via git clone, writes Kitfile.lock
+  - `list` — displays installed kits from lockfile or declared kits from Kitfile
+
+**Architecture Patterns Followed:**
+- Matched existing command structure from `gc.go`, `ls.go`, `run.go`
+- Used `flag.FlagSet` for argument parsing with `ContinueOnError` and stderr output
+- Returned int exit codes: `exitSuccess`, `exitRuntime`, `exitValidation`
+- Dispatched sub-subcommands via switch statement in `runKit()`
+- Registered in `main.go` switch and usage text
+
+**Key Decisions:**
+- Used `gopkg.in/yaml.v3` (already in go.mod) for YAML parsing
+- Stdlib `net/http` for catalog fetch with 10s timeout
+- Shell out to `git clone` via `os/exec` for kit download (acceptable for CLI tooling)
+- Fallback from shallow clone to full clone+checkout if tag shallow fails
+- Renamed `kitfileYAML` → `kitfile` to avoid type/variable name conflict
+
+**Testing:**
+- `go build ./cmd/gert/` — compiles cleanly
+- `go vet ./cmd/gert/` — passes
+
+**Commit:** `6ad0639` — feat: add gert kit CLI commands (search, add, fetch, list)
+
+---
+
+## Session Integration: Kit CLI & E2E Examples (2026-04-26T18:04:08Z)
+
+**Scope:** Parallel execution of 3 feature completions (kit CLI, iOS e2e, Android e2e)  
+**Orchestration Log:** `.squad/orchestration-log/2026-04-26T18:04:08Z-brian-kit-cli.md`  
+**Session Log:** `.squad/log/2026-04-26T18:04:08Z-kit-cli-and-e2e-examples.md`  
+**Decision Record:** Merged to `.squad/decisions.md` (see d-kit-cli-implementation)
+
+**Cross-Team Integrations:**
+- Kit CLI feeds Kitfile spec (design by Ken + Dennis)
+- gert-catalog repository (external source of truth)
+- Mobile platform consumes Kitfile.lock for capability routing
+- iOS + Android SDKs use `gert kit fetch` as prerequisite
+
+**Deferred:**
+- `gert kit update <name>` — upgrade specific kits
+- `gert kit remove <name>` — uninstall kits
+- Advanced version constraint parsing (^, ~)
+- Offline catalog caching

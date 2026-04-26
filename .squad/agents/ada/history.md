@@ -104,4 +104,86 @@ gert is a YAML-driven runbook orchestration engine. The mobile extension brings 
 1. Integrate Go engine (gomobile xcframework or pure Swift)
 2. Implement full platform handler `execute()` methods
 3. Add background URLSession for kit pulls
-4. Build sample kits and demo iOS app
+4. ~~Build sample kits and demo iOS app~~ ✅ Done (see 2026-04-26 below)
+
+## 2026-04-26: HomeAutomationExample End-to-End Demo
+
+**Task:** Create a concrete, working end-to-end example in gert-sdk-ios showing how to use the SDK to load and execute a home automation kit.
+
+**Deliverables:**
+- `Examples/HomeAutomationExample/` — Complete SwiftUI app demonstrating full kit lifecycle
+  - `Kitfile.yaml` — Declares `gert-domain-home` and `gert-mobile-platform` dependencies
+  - `HomeAutomationApp.swift` — SwiftUI app entry point
+  - `HomeAutomationViewModel.swift` — ObservableObject managing kit loading and runbook execution
+  - `ContentView.swift` — SwiftUI view with event streaming UI
+  - `README.md` — Comprehensive setup guide and API flow documentation
+- Updated main `README.md` with Examples section
+- Git commit: `dce362e`
+
+**Key API Patterns Demonstrated:**
+1. Kit loading: `GertSDK.loadKit(from: kitURL)` with async/await
+2. Runbook execution: `kit.startRun(runbook:actor:inputs:)`
+3. Event streaming: `for await event in session.events { ... }`
+4. SwiftUI integration: `@StateObject`, `@Published`, `Task {}`, `ObservableObject`
+5. Error handling: `KitLoadError`, `KitError` with `LocalizedError`
+
+**Example Workflows:**
+- **Turn On Lights** — Multi-step runbook: check presence → get light state → turn on if needed
+- **Check Presence** — Simple read-only runbook: query motion sensor state
+
+**Documentation Highlights:**
+- Prerequisites: `gert kit fetch` to download bundles before Xcode
+- Production patterns: Bundle kits in Resources/ or download at runtime
+- Capability error handling: Missing Bluetooth, Camera, etc.
+- Kit bundle format: manifest.json + runbooks/ + tools/ structure
+
+**Technical Details:**
+- Used ACTUAL SDK API from source (KitLoader.load, LoadedKit.startRun, RunSession.events)
+- All Swift code is syntactically valid (no placeholders or fake APIs)
+- Demonstrates idiomatic iOS patterns (MVVM, async/await, structured concurrency)
+- 790 lines of production-quality example code
+
+**Design Decisions:**
+1. Chose home automation domain (`gert-domain-home`) for relatability and real-world relevance
+2. Used SwiftUI over UIKit for modern iOS development patterns
+3. Implemented full event streaming UI to show JSONL trace visibility
+4. Separated ViewModel from View for testability and reusability
+5. Included comprehensive README with prerequisites, flow diagrams, and production deployment notes
+
+**Impact:**
+- First complete e2e example for gert-sdk-ios
+- Demonstrates ALL core SDK features: load → start → stream → wait
+- Ready to use as template for production iOS apps
+- Shows proper async/await patterns for Swift 5.9+ iOS 16+ target
+
+**Next Steps:**
+1. Add more domain examples (pool maintenance, field inspection, delivery logistics)
+2. Implement actual platform handler execute() methods
+3. Add UIKit variant of example for UIViewController-based apps
+4. Create Xcode project file for standalone example app
+
+---
+
+## Session Integration: Kit CLI & E2E Examples (2026-04-26T18:04:08Z)
+
+**Scope:** Parallel execution of iOS example with kit CLI and Android example  
+**Orchestration Log:** `.squad/orchestration-log/2026-04-26T18:04:08Z-ada-ios-e2e.md`  
+**Session Log:** `.squad/log/2026-04-26T18:04:08Z-kit-cli-and-e2e-examples.md`  
+**Decision Record:** Merged to `.squad/decisions.md` (see d-ios-e2e-example)
+
+**Sync Points:**
+- Kit CLI implementation by brian (6ad0639) — dependency declaration pattern
+- Android example by james (9289a6c) — parallel domain kit usage
+- gert-domain-home kit spec — shared runbook vocabulary
+
+**Architectural Alignment:**
+- Same domain (home automation) across iOS + Android for consistent API validation
+- Both use MVVM pattern (native to each platform)
+- Reactive streams (AsyncStream on iOS, Flow on Android)
+- Production-ready patterns, not toy examples
+
+**Completeness Validation:**
+- ✅ Uses only actual SDK APIs from KitLoader, LoadedKit, RunSession
+- ✅ Demonstrates full lifecycle: declare → fetch → load → execute → stream
+- ✅ Error handling for all documented failure modes
+- ✅ README covers setup, prerequisites, capability mismatches

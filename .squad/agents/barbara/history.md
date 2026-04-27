@@ -1196,3 +1196,26 @@ All checks ran successfully in `/Users/cristianormazabal/Projects/gert/v2`:
 - Top adoption risk: operator authoring complexity. A stay builder UI is the unlock for non-technical operators — deferred to v1 but high priority.
 - Two Kit patterns worth promoting to Kit standard library: advisory human task (suggest + confirm), event-sourced ledger.
 - Design constraint: Kit-specific vocabulary must NOT leak into gert serve. All domain read surfaces must be `run.get` projections, not new Kit-specific RPC methods.
+
+
+## Learnings
+
+### Evidence Sync Transport — gert-domain-home v0 (2025-05-02)
+
+**Question answered:** app-v0.md §10 Q2 — pre-signed URL vs GERT API relay for evidence uploads.
+
+**Decision:** Pre-signed object storage URL authorized by GERT API.
+
+**Key integration pattern:**
+- `POST /evidence/authorize {runID, stepID, mimeType}` → `{uploadURL (15-min TTL), uploadToken}`
+- `PUT {uploadURL}` (direct binary to storage) — emits `tool/progress {percent}` via transfer callbacks
+- `POST /evidence/confirm {uploadToken}` → `{attachmentID}` — emits `tool/completed {attachmentID}`
+- On retry: re-authorize (new URL + new token); old token invalidated.
+
+**Why not relay:** Proxying large binary photo blobs through the GERT API adds streaming complexity, memory pressure, and no security benefit. Pre-signed URL is the correct mobile pattern for binary evidence payloads.
+
+**`tool/progress` binding:** Progress is driven by real bytes-sent callbacks (`URLSession` on iOS, `OkHttp` on Android). Only works cleanly when device is the direct uploader — another argument against relay.
+
+**Background sync session:** When no `RunSession` is active, SyncClient emits events on a background `syncSession`. Screens subscribe to `syncSession.events(toolName: "evidence.upload")`. This matches the existing §6 pseudo-code and avoids coupling sync state to a potentially-closed run session.
+
+**Report:** `.squad/decisions/inbox/barbara-app-sync-transport.md`

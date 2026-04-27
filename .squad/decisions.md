@@ -10974,3 +10974,239 @@ None. Example is complete and demonstrates all key SDK features.
 - Commit: 9289a6c ("feat: add HomeAutomation sample showing gert-domain-home kit usage")
 - Repository: ormasoftchile/gert-sdk-android
 - Files: sample/Kitfile.yaml, sample/HomeAutomation{Activity,ViewModel}.kt
+
+---
+
+# Session 2026-04-27: App v0 Open Questions Resolution (8 Questions)
+
+**Participants:** Barbara, Ken, Ada, James, Coordinator  
+**Session Log:** .squad/log/2026-04-27T00:14:15Z-app-open-questions.md  
+**Orchestration Logs:** .squad/orchestration-log/2026-04-27T00:14:15Z-*.md
+
+---
+
+## Q2: Evidence Upload Transport — Pre-Signed URL
+
+**Author:** Barbara (Integrations Specialist)  
+**Date:** 2025-05-02  
+**Status:** Approved  
+
+**Decision:** Use pre-signed object storage URL as canonical evidence upload transport for v0, authorized by short-lived token from GERT API.
+
+### Rationale
+- **Reliability:** Direct-to-storage upload lets OS/HTTP client handle chunked transfer, stalling, resumption at transport layer. No open API connection required per device.
+- **Security:** Authorization stays server-side. Device calls `POST /evidence/authorize`, receives pre-signed URL (15 min TTL) + uploadToken. Confirmation via `POST /evidence/confirm` registers attachment.
+- **v0 simplicity:** Pre-signed URL requires two thin JSON endpoints; relay pattern would require streaming large blobs through Go handler.
+- **tool/progress fit:** Upload tool controls HTTP session, emits tool/progress from transfer callbacks (only available with direct upload).
+
+### Transport Sketch
+```
+Device                          GERT API                    Object Storage
+  |-- POST /evidence/authorize ----→|                             |
+  |   {runID, stepID, mimeType}      |-- generate pre-signed URL --|
+  |←-- {uploadURL, uploadToken} ----|                             |
+  |                                  |                             |
+  |-- PUT {uploadURL} (binary) ---------------------------→|       |
+  |   [emit tool/progress {percent}]                       |       |
+  |←-- 200 OK --------------------------------------------|       |
+  |                                  |                             |
+  |-- POST /evidence/confirm ------→|                             |
+  |   {uploadToken}                  |                             |
+  |←-- {attachmentID} --------------|                             |
+```
+
+**Failure path:** Re-request fresh pre-signed URL on transport failure (existing §6 retry policy: 3 attempts, exponential 0s/5s/30s).
+
+**Authorization TTL:** 15 minutes (prevents leakage; survives slow connections).
+
+### Spec Impact
+- **§6 Offline & Sync:** Add "Upload transport" subsection documenting authorize → PUT → confirm flow
+- **§8 S08 (Evidence Capture):** Update offline behavior to describe direct-to-storage upload
+- **§10 Open Questions:** Mark Q2 resolved
+
+---
+
+## Q1: KitLoader Delta Compilation (Hot Reload)
+
+**Author:** Ken (Software Architect)  
+**Date:** 2025-05-02  
+**Status:** Approved
+
+**Decision:** KitLoader exposes `reload()` method that recompiles config and emits `KitReloadedEvent` containing delta metadata; active RunSessions continue on old plan, new runs use updated plan.
+
+### Rationale
+1. **Execution isolation:** In-flight RunSessions complete on original plan. Changing step definitions mid-execution violates trace coherence.
+2. **Delta metadata:** `KitReloadedEvent` includes `added`, `modified`, `removed` routine/delegation IDs for UI confirmation.
+3. **No hot-swap:** RunSession holds immutable reference to ExecutionPlan. New RunSessions get new plan.
+4. **Delegation changes:** When delegation added/modified in S09, `reload()` recompiles delegation windows. Existing sessions continue; next access refreshes.
+
+### Spec Impact
+- **§9 SDK Integration Points:** Add `KitLoader.reload() -> KitReloadedEvent` API
+- **§S09 (Settings):** After saving delegation changes, call `KitLoader.reload()` and show confirmation
+
+---
+
+## Q3: run/cancelled Event Routing to Delegates
+
+**Author:** Ken (Software Architect)  
+**Date:** 2025-05-02  
+**Status:** Approved
+
+**Decision:** `run/cancelled` is always emitted to delegate's event stream with `payload["cancelled_by": "owner"]` metadata; S07/S03 displays "Task cancelled by owner" notice.
+
+### Rationale
+1. **Terminal event contract:** `run/cancelled` is terminal per run-events-v1.md. Delegate's UI must close run and release event binding.
+2. **Delegation transparency:** Delegates need to know when owner overrides their work.
+3. **Actor attribution:** `cancelled_by` field distinguishes owner-initiated from delegate self-cancellation.
+4. **Trace parity:** Cancellation event in trace must reflect same timeline on delegate's event stream.
+
+### Spec Impact
+- **§9 SDK Integration Points:** Document `run/cancelled` includes `payload["cancelled_by"]` (values: "owner", "delegate", "system")
+- **§S07/S03 State Tables:** Add transitions for owner-cancelled runs with context-appropriate messaging
+
+---
+
+## Q4: Evidence Attachment Storage & Cleanup Policy
+
+**Authors:** Ada (iOS), James (Android)  
+**Date:** 2025-05-02  
+**Status:** Approved (aligned)
+
+**Decision:** Evidence attachments are deleted from local storage **7 days after successful sync**.
+
+### iOS Implementation
+- **Type:** `EvidenceCleanupPolicy` struct in `gert-sdk-ios/Sources/GertSDK/Sync/EvidenceCleanupPolicy.swift`
+- **Trigger:** Background URLSession completion handler in `SyncClient`
+- **Storage:** `FileManager.applicationSupportDirectory/Evidence`
+- **Metadata:** SQLite `evidence_metadata` tracks `(file_path, sync_status, synced_at)`
+- **Settings disclosure:** S09 displays "Evidence photos kept for 7 days after upload, then deleted to save space"
+
+### Android Implementation
+- **Storage:** `context.filesDir/evidence/` (internal, scoped, auto-cleared on uninstall)
+- **Cleanup:** `WorkManager.enqueueUniquePeriodicWork()` with `PeriodicWorkRequest` (daily 1-day interval)
+- **SQLite:** `evidence_sync_log` tracks `sync_status` and expiry timestamp
+- **Failed sync:** Not auto-deleted; user manually retries or discards via S02 banner
+
+### Rationale
+- **Storage budget:** Prevents device bloat (estimate: 5-10 photos/week × 1-3 MB each = ~50 MB retained over 7 days)
+- **Privacy compliance:** Aligns with iOS App Store requirements; explicit retention policy required
+- **Verification window:** 7 days allows time for server-side errors or sync failures to surface before deletion
+- **User expectation:** Evidence is audit record, not personal photo; users expect it in Photos app if kept
+
+### Spec Impact
+- **§6 Offline & Sync:** Add evidence retention policy row and subsection (7-day TTL, automatic cleanup)
+- **§8 S08 (Evidence Capture):** Document storage location and cleanup mechanism
+- **§S09 (Settings):** Add evidence retention disclosure
+
+---
+
+## Q5: Seasonal Cadence Display Notice in S03
+
+**Authors:** Ada (iOS) proposal, James (Android) counter-proposal, Coordinator (arbitration)  
+**Date:** 2025-05-02  
+**Status:** Approved (Ada's approach adopted)
+
+**Arbitration:** James proposed "show nothing" for seasonal routines; Ada proposed calm informational notice. **Ada's approach wins** — prevents trust erosion and confusion.
+
+**Decision:** S03 Routine Detail displays a calm, informational notice for routines with `cadence.seasonal` in YAML:  
+*"Seasonal schedule (using N-day interval in v0)"*
+
+### Rationale
+- **Transparency:** Explaining fallback interval prevents owner confusion when user sees fixed schedule for `cadence.seasonal` routine
+- **Calm UI:** Notice styled as secondary/muted text (caption font, gray foreground), NOT warning banner
+- **Trust preservation:** Owner who configured seasonal schedule will otherwise question why it's executing on fixed interval
+- **Fallback semantics:** When runtime ignores seasonal but YAML declares it, notice clarifies the discrepancy
+
+### iOS Implementation
+- **Type:** `RoutineCadenceView` SwiftUI component in app layer
+- **Flag:** `Routine.cadence.isSeasonal` set during kit compilation if YAML contains `cadence.seasonal`
+- **Display:** Secondary text directly below "Every N days" line, `.foregroundColor(.secondary)` styling
+- **Location:** S03 detail card
+
+### Android Implementation
+- **Type:** `RoutineDetailScreen` Jetpack Compose
+- **Display:** Read `routine.cadence.type` from kit; if "seasonal", display `fallback_interval` with notice
+- **Styling:** Parity with iOS (secondary text, not banner)
+- **Comment:** "Seasonal cadence display deferred to v1 — show fallback interval only"
+
+### Spec Impact
+- **§4.2 S03 Routine Detail:** Update cadence display documentation to include seasonal notice styling and rationale
+- **§10 Open Questions:** Mark Q5 resolved with coordinator arbitration note
+
+---
+
+## Q6: Multi-Property Execution Plan Scoping (v1 Design)
+
+**Author:** Ken (Software Architect)  
+**Date:** 2025-05-02  
+**Status:** Approved (v1 design, no v0 impact)
+
+**Decision:** Yes to both — S01 presents property picker after auth (if user has 2+ properties); execution plans are property-scoped; KitLoader maintains one compiled plan per property, keyed by `property_id`.
+
+### Rationale
+1. **Property as isolation boundary:** Each property has distinct zones, assets, routines, delegations
+2. **KitLoader per property:** After selection, app calls `KitLoader.load(propertyID)`, returns property-scoped instance with cached plans
+3. **S01 routing:** After auth, query user's properties. If count > 1, present picker; if count = 1, auto-select
+4. **Delegation cross-property:** User can be delegate for one property, owner of another
+
+### Spec Impact (v1 milestone)
+- **§S01 (Launch/Auth):** Add property picker state; update routing to include property selection
+- **§9 SDK Integration Points:** Change KitLoader API to `KitLoader.load(propertyID: String) -> PropertyKit`
+- **§S02 (Today):** Document that S02 displays tasks for currently selected property only
+
+---
+
+## Q7: Consumable Tracking Screen (v1 Design)
+
+**Author:** Ken (Software Architect)  
+**Date:** 2025-05-02  
+**Status:** Approved (v1 design, no v0 impact)
+
+**Decision:** Separate screen (S11 Consumables) — consumables are inventory management, not daily tasks; S02 remains calm and task-focused; S11 reachable from S05 (Property) via "Consumables" affordance.
+
+### Rationale
+1. **Cognitive load distinction:** S02 is "what needs doing today" (executable tasks). Consumables are "plan to buy" (proactive inventory).
+2. **Calm UI principle:** Per spec § 1, app is "calm, linear" execution companion, not dashboard
+3. **Navigation coherence:** Consumables are property-level inventory; S05 (Property) is natural parent
+4. **Notification routing:** Deep link gert://consumable/{id} routes to S11, not S02
+
+### Spec Impact (v1 milestone)
+- **§2 Screen Inventory:** Add S11 Consumables — "Inventory tracking: stock levels, expiry dates, reorder triggers"
+- **§S05 (Property):** Add "Consumables" row linking to S11; display low-stock badge
+- **§3 Top-Level Navigation:** Add S05 → S11 edge
+- **§7 Notifications, Deep links:** Add gert://consumable/{consumable_id} scheme
+
+---
+
+## Q8: Android SharedFlow Replay Buffer Configuration
+
+**Author:** James (Android Engineer)  
+**Date:** 2025-05-02  
+**Status:** Approved
+
+**Decision:** `MutableSharedFlow<RuntimeEvent>(replay = 16, extraBufferCapacity = 64)` — replay last 16 events on new collector attachment for rotation safety.
+
+### Rationale
+- **Problem:** Screen recomposition after rotation/theme change creates new Flow collector, misses all prior events, shows stale/empty state
+- **Why 16?** Typical run has 8-12 steps × 2-4 events per step = ~30-50 total events. Last 16 events ensure UI reconstructs: current step index, last 2-3 completed steps, active tool status, run terminal state
+- **Why NOT full replay?** Full replay causes memory buildup for long-running workflows. Replay buffer kept in memory per RunSession
+- **extraBuffer = 64:** Absorbs tool/progress burst events (tool emits rapidly), prevents blocking emitter or dropping events if collector slow
+
+### Android Implementation
+- **File:** `RunSession.kt` line 20
+- **Change:** `private val _events = MutableSharedFlow<RuntimeEvent>(replay = 16, extraBufferCapacity = 64)`
+- **KDoc:** Add comment explaining rotation safety and buffer sizing
+- **Test:** Add rotation test in `RunSessionTest.kt` to verify new collector receives last 16 events
+
+### Spec Impact
+- **§9 SDK Integration Notes:** Document replay = 16 configuration for rotation safety
+- **§S03 Android integration:** Show replay buffer in code example
+- **§10 Open Questions:** Mark Q8 resolved
+
+---
+
+## Decision Coordination
+
+All 8 questions resolved in single session 2026-04-27 with zero blockers. Mobile teams (Ada/James) aligned on Q4 (evidence cleanup); arbitrated Q5 (seasonal display) with Coordinator override favoring Ada's transparency + calm UI approach. Ken's v0/v1 architecture decisions are implementable in parallel. Barbara's transport decision unblocks v0 sync implementation.
+
+**Next action:** Ken applies all decisions to app-v0.md spec (in-progress task ken-spec-update).

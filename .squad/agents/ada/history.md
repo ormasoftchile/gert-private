@@ -187,3 +187,54 @@ gert is a YAML-driven runbook orchestration engine. The mobile extension brings 
 - ✅ Demonstrates full lifecycle: declare → fetch → load → execute → stream
 - ✅ Error handling for all documented failure modes
 - ✅ README covers setup, prerequisites, capability mismatches
+
+## 2026-04-26: App v0 Evidence Storage & Seasonal Cadence Decisions
+
+**Task:** Answer Q4 (evidence attachment storage policy) and Q5 (seasonal cadence display) from app-v0.md § 10 Open Questions
+
+**Deliverables:**
+- `.squad/decisions/inbox/ada-app-evidence-seasonal.md` — formal decision record
+- Two concrete decisions with iOS-specific implementation guidance
+
+**Q4 Decision: Evidence Cleanup Policy**
+- **Policy:** Delete evidence 7 days after successful sync
+- **Rationale:** iOS storage budget management, App Store privacy compliance, user expectation alignment (audit records vs personal photos), 7-day verification window
+- **Implementation:** `EvidenceCleanupPolicy` in `Sources/GertSDK/Sync/`, SQLite `evidence_metadata` table, background cleanup trigger in `SyncClient`
+- **Storage location:** Application Support/Evidence/ (not backed up via `.setResourceValue(.isExcludedFromBackupKey)`)
+- **Settings disclosure:** S09 displays retention notice: "Evidence photos are kept for 7 days after upload, then deleted to save space."
+
+**Q5 Decision: Seasonal Cadence Notice**
+- **Policy:** Display calm informational notice in S03 for routines with `cadence.seasonal` in YAML: *"Seasonal schedule (using N-day interval in v0)"*
+- **Rationale:** Transparency over silence (avoids user confusion), calm UI principle (secondary text, not warning), explains fallback behavior
+- **Implementation:** `RoutineCadenceView` SwiftUI component in app layer, `Routine.cadence.isSeasonal` flag set during kit compilation
+- **Styling:** `.foregroundColor(.secondary)` for muted gray text, positioned below "Every N days" line
+- **Android parity:** Coordinate with James for equivalent Jetpack Compose implementation
+
+**iOS-Specific Design Patterns:**
+- FileManager Application Support directory for evidence storage (not Documents — no user-facing file browsing)
+- SQLite for sync metadata tracking (not CoreData — simpler schema, better test isolation)
+- SwiftUI conditional rendering for seasonal notice (`if routine.cadence.isSeasonal { ... }`)
+- Background URLSession completion handler as cleanup trigger (iOS-native background task pattern)
+
+**Spec Impact:**
+- app-v0.md § 6 Offline & Sync: Add § 6.4 Evidence Retention Policy subsection
+- app-v0.md § 4.2 S03 Routine Detail: Update "Cadence display" paragraph with seasonal notice behavior
+
+**Key iOS Considerations:**
+1. **Privacy:** App Store Review Guideline 5.1.1 requires explicit data retention policies — S09 disclosure satisfies this
+2. **Storage:** iOS app bundle size limits + user device storage pressure favor automatic cleanup over indefinite retention
+3. **Backup exclusion:** Mark Evidence/ directory with `isExcludedFromBackupKey` to prevent iCloud/iTunes backup bloat
+4. **User trust:** Transparent communication (Settings notice, seasonal notice) builds trust vs silent behavior changes
+
+**Cross-Agent Coordination:**
+- James (Android): Needs equivalent seasonal notice in `RoutineDetailScreen.kt`
+- John (schema): May need to add `isSeasonal` flag to compiled execution plan schema
+- Cristian: Final approval required before implementation
+
+**Next Steps:**
+1. Await Cristian approval on decision record
+2. Implement `EvidenceCleanupPolicy` in gert-sdk-ios
+3. Update app-v0.md spec with § 6.4 and § 4.2 changes
+4. Coordinate with James on Android parity
+5. Add cleanup policy tests (unit + integration)
+

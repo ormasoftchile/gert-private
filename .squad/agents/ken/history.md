@@ -1449,3 +1449,29 @@ Created public GitHub repository with complete platform kit structure:
 2. Create public documentation for SDK usage
 3. Beta deployment to iOS/Android app stores
 4. Server-side sync infrastructure (backend API team)
+
+---
+
+### gert-domain-home Mobile App — Open Questions Resolution (2025-05-02)
+
+**Task:** Resolve 4 architectural open questions from `gert-domain-home/specs/app-v0.md § 10. Open Questions` with concrete decisions (Q1, Q3, Q6, Q7).
+
+**Key Learnings:**
+
+1. **KitLoader must support delta compilation without breaking active runs.** The reload pattern (`KitLoader.reload()`) must preserve execution isolation: in-flight RunSessions continue on their original execution plan, while new runs use the updated plan. This prevents trace coherence violations where step IDs in a trace reference different step definitions mid-execution. The SDK layer needs to emit `KitReloadedEvent` with delta metadata (`added`, `modified`, `removed` routine/delegation IDs) to enable UI refresh without breaking active sessions.
+
+2. **Terminal events must always reach all subscribers, regardless of actor context.** The `run/cancelled` event is terminal per `run-events-v1.md` and must be emitted to delegates even when the owner cancels the run. Suppressing this event would leave delegate UI in an invalid state (waiting for `run/completed` that never arrives). Adding `payload["cancelled_by"]` attribution enables context-appropriate UI ("Owner cancelled this task" vs "You cancelled this task") while preserving terminal event semantics.
+
+3. **Property is the natural isolation boundary for multi-tenancy.** Execution plans must be property-scoped because zones, assets, routines, and delegations have distinct IDs per property. A single KitLoader managing multiple properties would create collision risk (e.g., `pool_clean` routine has different zone IDs in Casa Santiago vs Casa Lisboa). The architecture decision: KitLoader maintains one compiled plan per property, keyed by `property_id`; S01 presents a property picker when user has multiple properties; role resolution happens within the selected property context.
+
+4. **Consumables are inventory, not tasks — keep S02 calm and task-focused.** The "calm UI" principle from `app-v0.md § 1` demands that S02 Today remain a linear list of executable work (routines + incidents). Consumables introduce different cognitive load: "plan to buy this soon" vs "do this now." Creating a separate S11 Consumables screen reachable from S05 Property preserves S02's clarity. Notification routing for consumables deep-links to S11, not S02, maintaining screen-level intent coherence.
+
+5. **Architectural decisions require spec impact analysis, not just design rationale.** Each decision specifies exactly which sections of `app-v0.md` must be updated (e.g., "add `reload()` to § 9 SDK Integration Points", "update S07 State Table to include `cancelled_by_owner` state"). This prevents spec drift where design decisions are made but documentation lags. The spec is the contract; decisions without spec impact are incomplete.
+
+6. **SDK dependencies must be flagged for cross-team coordination.** Three of four decisions require SDK changes: Q1 needs `KitLoader.reload()` API, Q3 needs `RuntimeEvent` payload extension for `cancelled_by`, Q6 needs property-scoped KitLoader instances. These dependencies were explicitly called out in the decision record's "SDK team dependencies" section to enable parallel planning with the iOS/Android SDK teams.
+
+**Deliverables:**
+- `.squad/decisions/inbox/ken-app-open-questions.md` — 4 architectural decisions with rationale, spec impact, and implementation notes
+
+**Pattern reinforced:** Open questions in specs are architectural debt. Resolving them requires: (1) understanding runtime contracts and lifecycle semantics, (2) choosing one concrete design (not listing options), (3) analyzing spec impact to document the decision, (4) flagging cross-team dependencies for coordination. This is architecture work, not product management — the architect makes the call based on system coherence.
+

@@ -286,3 +286,129 @@ session.events.collect { event ->
 - ✅ Error handling for KitLoadError and missing platform capabilities
 - ✅ README covers setup, prerequisites, architecture flow
 
+---
+
+## 2025-05-02: Android App v0 Implementation Decisions (Q4, Q5, Q8)
+
+**Task:** Answer three open questions from `app-v0.md § 10` with concrete Android-specific decisions.
+
+**Context:**
+- Input artifacts: app-v0.md (§6 Offline & Sync, §8 S08 Evidence Capture, §3 S03 Routine Detail), RunSession.kt, run-events-v1.md
+- Requestor: Cristian
+- Scope: Make binding platform decisions for Android SDK and app implementation
+
+**Q4: Evidence attachment storage and cleanup policy**
+
+**Decision:** Evidence attachments deleted 7 days after successful sync, using WorkManager PeriodicWorkRequest.
+
+**Rationale:**
+- Post-sync retention provides 7-day grace period for sync bugs, server failures, or offline retry scenarios
+- Modern Android storage budgets (128GB+) make ~50 MB of weekly evidence photos negligible
+- Failed sync items retained indefinitely until manual user action (retry/discard)
+- Balances user expectation (evidence "just works" for recent tasks) with storage hygiene
+
+**Implementation details:**
+- Storage location: `context.getFilesDir()/evidence/` (internal storage, app-scoped, auto-cleared on uninstall)
+- Tracking: SQLite table `evidence_sync_log` with `sync_status`, `synced_at`, `expires_at` (synced_at + 7 days)
+- Cleanup: `WorkManager.enqueueUniquePeriodicWork(EvidenceCleanupWorker, 1 DAY)` runs daily pruning
+- Delete condition: `sync_status = 'synced' AND System.currentTimeMillis() > expires_at`
+
+**Q5: Seasonal cadence display notice**
+
+**Decision:** S03 Routine Detail does NOT display a seasonal notice. App shows fallback interval silently.
+
+**Rationale:**
+- Spec explicitly defers seasonal cadence UI to v1 (app-v0.md § 1)
+- "Calm UI" principle: avoid non-actionable notices that create confusion without user value
+- Fallback interval ensures correct execution; user cannot configure seasonal behavior in v0
+- Notice like "This is seasonal but showing 30-day interval" has no action and violates calm UX
+
+**Implementation details:**
+- `RoutineDetailScreen.kt` reads `routine.cadence.type` from kit
+- If `type == "seasonal"`, display only `fallback_interval` as cadence label (e.g., "Every 30 days")
+- No banner composable, no "v1 coming soon" messaging
+- Code comment: `// Seasonal cadence display deferred to v1 — show fallback interval only`
+
+**Q8: SharedFlow replay buffer size for RuntimeEvent**
+
+**Decision:** `MutableSharedFlow<RuntimeEvent>(replay = 16, extraBufferCapacity = 64)` — replay last 16 events on new collector.
+
+**Rationale:**
+- Configuration changes (rotation, theme, split-screen) create new Flow collectors that miss prior events
+- Typical home routine: 8-12 steps × 2-4 events/step = 30-50 total events
+- Replay 16 ensures UI reconstruction of:
+  - Current step index (step/started)
+  - Last 2-3 completed steps (progress list)
+  - Active tool status (tool/invoked, tool/completed)
+  - Run terminal state (run/completed, run/failed, run/cancelled)
+- Full replay (Int.MAX_VALUE) causes memory buildup for long incident workflows (50+ steps)
+- extraBufferCapacity = 64 prevents event loss during rapid tool progress bursts
+
+**Implementation details:**
+- Update `RunSession.kt` line 20: change from `extraBufferCapacity = 64` alone to `replay = 16, extraBufferCapacity = 64`
+- Current implementation has NO replay buffer → **rotation safety bug**
+- Add KDoc: "Replay buffer of 16 events allows new collectors (e.g., after screen rotation) to reconstruct UI state"
+- Add rotation test: emit 20 events, attach collector, rotate (new collector), verify new collector receives last 16
+
+**Spec impact across all three decisions:**
+- Q4: Update app-v0.md § 6 (Offline & Sync) + § S08 (Evidence Capture) with retention policy and storage location
+- Q5: Update app-v0.md § S03 (Routine Detail) cadence display rules, mark Q5 resolved
+- Q8: Update app-v0.md § S03 SDK integration Android block + § 9 SDK Integration Notes with replay config, mark Q8 resolved
+
+**Decisions recorded:** `.squad/decisions/inbox/james-app-android-questions.md`
+
+**Next implementation steps:**
+1. Implement `EvidenceCleanupWorker` in gert-sdk-android
+2. Fix `RunSession.kt` replay buffer (current: 0, target: 16)
+3. Add `RunSessionRotationTest.kt` for configuration change coverage
+4. Update app-v0.md spec per impacts listed above
+
+**Key insight:**
+- The current `RunSession.kt` implementation (`MutableSharedFlow(extraBufferCapacity = 64)`) has **zero replay** — this is a rotation bug. Any configuration change loses all prior events, making UI state reconstruction impossible. This is a critical fix for production readiness.
+
+**Cross-team coordination:**
+- Q4 decision aligns with iOS (Ada owns iOS evidence storage policy decision independently)
+- Q5 decision is platform-agnostic (applies to both iOS and Android app UX)
+- Q8 decision is Android-specific (`SharedFlow` vs iOS `AsyncStream` have different replay semantics)
+
+
+---
+
+## 2026-04-27: Q5 Decision Override — Seasonal Cadence Notice Adoption
+
+**Context:** Session resolution of app-v0.md § 10 open questions (Q1-Q8) across Barbara, Ken, Ada, James, Coordinator.
+
+**Q5 Conflict:** James proposed "show nothing" for seasonal routines (silent fallback interval); Ada proposed calm informational notice (muted secondary text).
+
+**Arbitration Result:** **Ada's approach adopted** — Coordinator override.
+
+**Decision Update:** S03 Routine Detail SHALL display a calm, informational notice for routines with `cadence.seasonal` in YAML:
+
+*"Seasonal schedule (using N-day interval in v0)"*
+
+**Rationale (Coordinator):**
+- **Trust preservation:** Owner who configured seasonal YAML will otherwise be confused by fixed-interval behavior
+- **Calm UI principle:** Muted secondary text styling (not warning banner) satisfies principle without omission
+- **User clarity:** Notice explains fallback without implying something is broken
+
+**Implementation requirement for James:**
+- `RoutineDetailScreen.kt` must display seasonal notice per Ada's iOS spec (Android styling parity)
+- Read `routine.cadence.isSeasonal` flag (set by kit compiler when YAML has `cadence.seasonal`)
+- Render secondary text below "Every N days" line: "Seasonal schedule (using N-day interval in v0)"
+- Styling: gray/muted foreground color (Compose equivalent of iOS `.foregroundColor(.secondary)`)
+
+**Related decisions:**
+- Q4 (Evidence cleanup): James & Ada agree on 7-day retention — no arbitration needed
+- Q8 (Event replay): James' proposal (replay=16) approved as-is
+
+**Session Log:** .squad/log/2026-04-27T00:14:15Z-app-open-questions.md  
+**Orchestration Logs:** .squad/orchestration-log/2026-04-27T00:14:15Z-*.md
+
+**Key insight for James:**
+The original proposal ("show nothing") aligns with the "calm UI" principle BUT misses the user-trust dimension. Silence when the spec shows a feature (seasonal) creates confusion/distrust. A muted notice explains the discrepancy without alarming (low cognitive cost, high clarity benefit). This is the correct trade-off.
+
+**Next steps:**
+1. Update `RoutineDetailScreen.kt` to show seasonal notice when `routine.cadence.isSeasonal == true`
+2. Coordinate styling with Ada (iOS RoutineCadenceView uses `.caption` font + `.secondary` foreground)
+3. Verify both iOS and Android render notice in same visual hierarchy (secondary text, below interval)
+4. Reference Q5 coordinator decision in commit message

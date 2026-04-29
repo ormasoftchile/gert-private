@@ -1,5 +1,79 @@
 # Agent: Brian — Session History
 
+## 2026-04-28: pkg/run Public API Implementation
+
+**Session**: gert v2 pkg/run — public runner API for external clients  
+**Role**: Implementation Engineer
+
+### Context
+
+Received task from Cristian: gert-tui (separate Go module) cannot import gert's internal packages to wire parser + planner + engine. Architectural decision (Deckard): add `pkg/run` public package exposing a high-level runner API.
+
+### Contributions
+
+1. **pkg/run/run.go** — Public Start() API
+   - `Config` struct: RunbookPath/RunbookFS, PromptProvider, Variables, Client, KitFS, TraceWriter, OnEvent
+   - `Start(ctx, Config) (RunHandle, error)` — wires parser → planner → engine → RunHandle
+   - Handles both filesystem and embedded FS loading (RunbookPath or RunbookFS+RunbookName)
+   - Internal wiring: builds parser, planner, tool registry, executor registry, engine config
+   - Returns ready-to-use RunHandle for `Next()` loop
+
+2. **Adapters** — Bridge internal/pkg interfaces
+   - `toolRegistryAdapter`: adapts internal MapRegistry to planner.ToolRegistry
+   - `fsRunbookLoader`: loads runbooks from fs.FS for include support
+   - `noopTraceWriter`: discards trace events when nil TraceWriter
+   - `noopPromptProvider`: auto-selects defaults for non-interactive mode
+
+3. **pkg/run/run_test.go** — Basic test coverage
+   - TestStart_MinimalRunbook: validates full wiring with echo step
+   - TestStart_MissingRunbook: error handling for missing runbook
+   - TestStart_InvalidRunbook: error handling for malformed YAML
+
+### Implementation Details
+
+**Files Created**: 3
+- `pkg/run/doc.go` — Package documentation
+- `pkg/run/run.go` — Start() implementation + adapters (320 lines)
+- `pkg/run/run_test.go` — Test suite
+
+**Wiring Pattern**:
+1. Load runbook bytes (os.ReadFile or fs.ReadFile)
+2. Parse with internal/parser.New(platform)
+3. Build tool registries (internal MapRegistry + planner adapter)
+4. Plan with internal/planner.New(config)
+5. Build EngineConfig (executors, dispatcher, trace, platform, etc.)
+6. Create engine with internal/engine.New(config)
+7. Start run → return RunHandle
+
+**Build**: ✅ Passes (`go build ./...`)  
+**Tests**: ✅ All pass (`go test ./pkg/run/... -v`)  
+**Vet**: ✅ No issues (`go vet ./...`)
+
+### Commits
+
+- **800d52c**: feat: add pkg/run public runner API for external clients
+  - Implements full Start() wiring
+  - Exposes Config struct for external clients
+  - Handles both filesystem and embedded FS loading
+  - No internal package access required by callers
+
+### Key Achievements
+
+✅ **Public API Surface**: Clean Start(ctx, Config) → RunHandle contract  
+✅ **No Internal Imports**: External clients use only pkg/ packages  
+✅ **Full Engine Wiring**: Parser + planner + engine in one call  
+✅ **FS Support**: RunbookPath OR RunbookFS+RunbookName loading  
+✅ **Tested**: 3 tests cover happy path + error cases  
+✅ **Ready for gert-tui**: Roy can wire against this immediately
+
+### Status
+
+🎯 **pkg/run API COMPLETE**
+
+Implementation complete and merged to main. gert-tui can now import `github.com/ormasoftchile/gert/pkg/run` and call `run.Start()` to wire the full engine.
+
+---
+
 ## 2026-04-28: TUI Interface Gaps Implementation
 
 **Session**: Gert v2 Go implementation — 3 critical TUI interface gaps  

@@ -768,3 +768,89 @@ This pattern will be replicated for subsequent domain kits (Policy, Compliance, 
 - `gert kit remove <name>` — uninstall kits
 - Advanced version constraint parsing (^, ~)
 - Offline catalog caching
+
+---
+
+## gert-tui Interface Gaps Implementation (2025-01-22)
+
+### Context
+
+gert-tui (ormasoftchile/gert-tui) is a standalone TUI diagnostic runner that strictly implements gert's public interfaces. During spec writing for gert-tui, three interface gaps were identified in gert v2 (§3.5 of gert-tui spec).
+
+### Implementation Summary
+
+Implemented all three gaps in gert v2:
+
+1. **EventKindStepOutput** — Step output streaming
+   - Added `EventKindStepOutput EventKind = "step/output"` to `pkg/trace/event.go`
+   - Emit pattern: After CLI executor completes, emit stdout/stderr as step/output events
+   - Location: `internal/engine/engine.go` (after line 500, before redaction)
+   - **Fallback approach:** Full stdout/stderr emitted at completion time (not line-by-line streaming)
+   - Rationale: `platform.Exec` returns full stdout/stderr; true streaming would require platform API changes
+
+2. **EventKindRunFailed** — Run failure event
+   - Added `EventKindRunFailed EventKind = "run/failed"` to `pkg/trace/event.go`
+   - Modified `failRun()` in `internal/engine/engine.go` to emit `run/failed` instead of `run/completed` with error payload
+   - This distinguishes failure from successful completion in event stream
+
+3. **RunState.Plan** — Expose ExecutionPlan on RunState
+   - Added `Plan *ExecutionPlan` field to `RunState` struct in `pkg/engine/run.go`
+   - Populated in `State()` method in `internal/engine/engine.go` (line 1211)
+   - Enables TUI step list panel to show full execution plan from `handle.State()`
+
+### Key Files Modified
+
+- `pkg/trace/event.go` — Added 2 new EventKind constants
+- `pkg/engine/run.go` — Added Plan field to RunState
+- `internal/engine/engine.go` — 
+  - Emit step/output events for CLI steps (lines ~502-520)
+  - Emit run/failed instead of run/completed (failRun function)
+  - Populate Plan field in State() method
+
+### Patterns Used
+
+**Event Emission:**
+- Followed existing pattern: `h.emitEventLocked(ctx, trace.EventKindX, map[string]any{...})`
+- Events emitted from engine layer, not executors (executors are pure; engine orchestrates events)
+- Step output emitted after executor returns, before redaction (to capture original output)
+
+**RunState Population:**
+- RunState is an immutable snapshot created on-demand by `State()` method
+- Added Plan field directly to struct; populated from `h.run.Plan` (internal mutable Run)
+- No breaking change: existing callers ignore new field
+
+### Testing
+
+- `go build ./...` — ✅ No compile errors
+- `go vet ./...` — ✅ No issues
+- `go test ./internal/engine/... -count=1` — ✅ All tests pass
+
+### Learnings
+
+1. **Executor purity:** Executors don't emit events; they return results. Engine layer orchestrates event emission based on executor results.
+
+2. **Platform streaming gap:** `platform.Exec` returns full stdout/stderr at completion. True line-by-line streaming would require:
+   - `platform.ExecStreaming()` API with `io.Reader` callbacks
+   - Executor refactoring to pass callbacks through
+   - Engine layer to emit events per line
+   - Decision: Fallback to full-output emission is acceptable for v2.0 (defer streaming to v2.1)
+
+3. **run/failed vs run/completed:** Previously, failures emitted `run/completed` with error payload. This made it hard for clients to distinguish success from failure without parsing payload. `run/failed` as a distinct event kind is cleaner.
+
+4. **ExecutionPlan on RunState:** Plan is already available on internal `Run` struct. Exposing on public `RunState` is zero-cost (just a pointer copy).
+
+### Commit
+
+```
+feat: add step/output, run/failed event kinds and Plan to RunState
+
+Three interface gaps identified by gert-tui spec (§3.5):
+- EventKindStepOutput: real-time step output streaming
+- EventKindRunFailed: distinguish failure from completion
+- RunState.Plan: expose ExecutionPlan for TUI step list panel
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+```
+
+Commit SHA: f960d2f
+

@@ -97,3 +97,67 @@ Revisited gert v1's TUI runner concept as a **single-binary distribution model**
 ### Status
 
 📋 **AWAITING TEAM REVIEW** — Design ready for discussion
+
+---
+
+## 2026-04-28: TUI Interface Gaps — Architectural Decision
+
+**Session**: gert-tui spec (§3.5) — 3 critical interface gaps blocking TUI implementation  
+**Role**: Solutions Architect
+
+### Context
+
+Gert-tui TUI runner requires 3 interface additions to gert v2 engine:
+
+1. **EventKindStepOutput** — Real-time step output streaming
+2. **EventKindRunFailed** — Distinguish run failure from completion
+3. **RunState.Plan** — Expose ExecutionPlan for TUI step-list panel
+
+Existing engine model incomplete; TUI cannot render live output, cannot show failure state, cannot populate step list without parsing raw YAML.
+
+### Architectural Decision
+
+**Option A (Rejected)**: Polling-based state machine
+- Client polls engine.GetRunState() on timer
+- Engine maintains complete state history
+- TUI renders from full state snapshot
+- ❌ Polling overhead; no change events; state machine complexity
+
+**Option B (Chosen)**: Event-based architecture + field addition
+- Engine emits StepOutput/RunFailed events as they occur
+- RunState carries Plan field for TUI consumption
+- TUI wires to event stream + reads RunState.Plan
+- ✅ Efficient, simple, aligned with gert v2 design
+
+### Rationale for Option B
+
+1. **Efficiency**: Event-driven avoids polling overhead; TUI updates only on state change
+2. **Simplicity**: No state machine; events are domain facts already in gert v2
+3. **Alignment**: Event-stream architecture already core to gert v2 tracing/logging
+4. **Extensibility**: New event kinds added incrementally without redesign
+5. **Backward Compatible**: Plan field is additive; existing consumers unaffected
+
+### Implementation Scope
+
+All 3 changes fit in 3 existing files:
+
+- `pkg/trace/event.go` — EventKindStepOutput, EventKindRunFailed constants
+- `pkg/engine/run.go` — RunState.Plan field definition
+- `internal/engine/engine.go` — Event emission logic
+
+### Deliverable
+
+- Architecture documented in `.squad/decisions.md`
+- Ready for Brian (Implementation Engineer) to implement
+- No blocking dependencies; can proceed immediately
+
+### Next Steps
+
+1. ✅ Brian implements all 3 changes (~30 LOC)
+2. ✅ Verify build passes; tests pass
+3. ✅ Merge to main
+4. TUI panel integration: wire events to output panel, failure indicator, step list
+
+### Status
+
+✅ **DECISION APPROVED & IMPLEMENTED** — Brian completed all 3 gaps; merged to main

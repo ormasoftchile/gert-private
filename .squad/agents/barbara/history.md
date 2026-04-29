@@ -1219,3 +1219,63 @@ All checks ran successfully in `/Users/cristianormazabal/Projects/gert/v2`:
 **Background sync session:** When no `RunSession` is active, SyncClient emits events on a background `syncSession`. Screens subscribe to `syncSession.events(toolName: "evidence.upload")`. This matches the existing §6 pseudo-code and avoids coupling sync state to a potentially-closed run session.
 
 **Report:** `.squad/decisions/inbox/barbara-app-sync-transport.md`
+
+
+## Tool Bundling Brainstorm — 2025-01-17
+
+**Context:** Standalone gert TUI executables for organizational distribution (e.g., `./network-diag` with no gert installation required)
+
+**Output:** `/Volumes/Projects/gert-domain-home/.squad/tmp/brainstorm-barbara-tools.md`
+
+### Key Decisions
+
+**Tool Categories:**
+1. **System CLI tools** (ping, curl, dig) — no bundling, PATH discovery, version enforcement, fallback chains
+2. **Built-in tools** (gert.http-check) — already in binary, zero extraction, in-process execution
+3. **Embedded scripts** (bash/python) — embed as text, extract to `~/.cache/gert-bundles/{bundleID}/scripts/{hash}.ext`, chmod +x
+4. **Embedded binaries** (nmap, custom tools) — multi-platform embedding, SHA256 verification, 5MB cap per binary
+5. **MCP servers** — **OUT OF SCOPE for v0** (process lifecycle complexity, startup overhead, binary bloat)
+
+**Execution Model:**
+- **Cache directory:** `~/.cache/gert-bundles/{bundleName}-{version}-{contentHash}/` (persistent across runs)
+- **Extraction:** Lazy (on first tool use), with flock to prevent concurrent extraction
+- **Security:** SHA256 verification on every execution (not just extraction) to mitigate TOCTOU attacks; secure cache dir (mode 700, owner check)
+- **Cleanup:** Persistent cache by default; manual `--clean-cache` flag; TTL eviction (7 days) deferred to should-have
+
+**Network Diagnostic Example:**
+- Runbook: ping → DNS lookup → traceroute → port check → TLS handshake → HTTP GET
+- Tools: 5 system CLI (ping, dig, traceroute, openssl) + 1 embedded script (check-port.sh) + 1 built-in (gert.http-check)
+- Bundle size: ~12MB (no external binaries embedded)
+- All tools except check-port.sh rely on system binaries (graceful degradation if unavailable)
+
+**Out of Scope for v0:**
+1. MCP servers / JSON-RPC extensions (complexity, startup overhead, 10-50MB each)
+2. Large embedded binaries >20MB (nmap full, wireshark, docker CLI)
+3. Dynamic tool loading (defeats self-contained goal)
+4. Cross-platform emulation (Rosetta, WSL)
+5. Stateful tools (embedded DBs, caches)
+
+**Tool Manifest Extensions:**
+- New fields: `required`, `platforms`, `version.min`, `scriptPath`, `binaryPath`, `platforms[].sha256`, `fallback`, `runtime.interpreter`
+- Multi-platform binary support with per-platform checksums
+- Fallback chains: try system tool → embedded binary → fail gracefully
+
+**Integration Surface:**
+- New components: BundleExtractor, ToolResolver, CacheManager, BuiltinToolRegistry
+- Modified: ToolExecutor (add extraction + checksum), ManifestParser (bundle fields)
+- Build tool: `gert bundle build --manifest=bundle.yaml --output=network-diag --platforms=linux/amd64,darwin/amd64`
+
+**Risks and Mitigations:**
+- Cache tampering → SHA256 on every exec, mode 700 cache dir
+- Disk full → pre-flight check, clear error
+- Platform drift → version detection, fallback chains
+- Binary bloat → 5MB cap per tool, offer lite/full variants
+
+**Open Questions for Team:**
+1. Cache location: `~/.cache/gert-bundles/` vs `~/.gert/bundle-cache/`?
+2. Interpreter version auto-detection or trust manifest?
+3. Lite vs Full bundle variants or single bundle with `--prefer-system` flag?
+4. Multi-platform cross-compile automation (Docker toolchain)?
+
+**Next:** Review with Ken (cache strategy, security model) and Brian (Go embed patterns, build tooling). Prototype `gert bundle build` command.
+

@@ -35,3 +35,65 @@
 ### Status
 
 🎯 **DELEGATION SPEC READY FOR INTEGRATION**
+
+---
+
+## 2026-04-28: TUI Runner Architecture Brainstorm
+
+**Session**: Architectural design for gert v2 TUI runbook runner  
+**Role**: Software Architect
+
+### Context
+
+Revisited gert v1's TUI runner concept as a **single-binary distribution model** for gert v2 diagnostics. Goal: bundle engine + runbook + tools + optional domain kit into one executable for zero-dependency diagnostics on target machines.
+
+### Key Architectural Decisions
+
+1. **Packaging**: Recommended `go:embed` with **inline tools only** (no external binaries) for v0
+   - Keeps binary size moderate (20-30MB)
+   - Eliminates licensing/redistribution complexity
+   - Forces portable runbook design
+
+2. **Distribution**: One binary per runbook-bundle (e.g., `network-diag`, `prereq-check`)
+   - Self-documenting, single-file transfer
+   - Engine duplication accepted for distribution simplicity
+
+3. **TUI Framework**: `charmbracelet/bubbletea` + `lipgloss`
+   - Industry standard, Elm-inspired architecture
+   - 3-panel layout: step list | live output | status bar
+   - Failure handling: pause + retry/skip/abort options
+
+4. **Domain Kit Integration**: First-class support for embedded kits
+   - Unlocks org-specific diagnostic abstractions
+   - Kit provides tool aliases + config, runbook references semantic names
+   - Offline-compatible (no network kit fetches)
+
+5. **Scope Constraints** (v0):
+   - Sequential execution only (no parallel steps)
+   - Non-interactive (no user prompts; CLI args for params)
+   - Inline tools only (no out-of-process delegation)
+   - One runbook per binary (no multi-runbook chooser)
+
+### Runbook Suitability Guidelines
+
+**✅ Appropriate**: Sequential diagnostics, prereq validators, health checks, simple remediation  
+**❌ Not appropriate**: Long-running daemons, GUI interactions, stateful workflows, collaborative processes
+
+### Deliverables
+
+📄 **Full brainstorm**: `/Volumes/Projects/gert-domain-home/.squad/tmp/brainstorm-ken-tui.md`  
+- 6 architectural dimensions analyzed
+- Implementation sketch with success criteria
+- Open questions for team review
+
+### Next Steps
+
+1. Prototype minimal bubbletea TUI with hardcoded runbook
+2. Design `gert bundle create` command API
+3. Wire TUI to gert v2 execution engine (observer pattern)
+4. Write example `network-diag.yaml` using inline tools
+5. Team sync for scope approval
+
+### Status
+
+📋 **AWAITING TEAM REVIEW** — Design ready for discussion

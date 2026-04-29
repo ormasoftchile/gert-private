@@ -1475,3 +1475,93 @@ Created public GitHub repository with complete platform kit structure:
 
 **Pattern reinforced:** Open questions in specs are architectural debt. Resolving them requires: (1) understanding runtime contracts and lifecycle semantics, (2) choosing one concrete design (not listing options), (3) analyzing spec impact to document the decision, (4) flagging cross-team dependencies for coordination. This is architecture work, not product management — the architect makes the call based on system coherence.
 
+
+---
+
+### gert-domain-home App v0 — All 8 Open Questions Resolved (2025-05-02)
+
+**Task:** Apply the 8 resolved architectural decisions to `gert-domain-home/specs/app-v0.md`, updating all affected sections in a single comprehensive edit pass.
+
+**Key Learnings:**
+
+1. **Spec coherence requires synchronized batch updates.** Resolving 8 interrelated questions meant updating 12+ distinct sections (§2 Screen Inventory, §3 Navigation, §4 screen specs for S01/S03/S05/S06/S07, §6 Offline & Sync, §7 Notifications, §9 SDK Integration, §10 Open Questions). Making these changes atomically (one commit, one edit session) prevents partial state where some sections reflect new decisions while others still reference old open questions. This is the difference between "making a change" and "updating a spec."
+
+2. **Property-scoped architecture cascades through multiple subsystems.** The multi-property decision (Q6) required changes to S01 state table (property picker), KitLoader API signature (`load(propertyID)`), and S02 property name display. This demonstrates that architectural decisions at system boundaries (property isolation) propagate through UI flows, data models, and SDK contracts. Missing any of these propagation points creates implementation ambiguity.
+
+3. **Terminal event semantics must be absolute.** The `run/cancelled` delegation question (Q3) reinforced that terminal events (`run/completed`, `run/failed`, `run/cancelled`) are runtime contracts, not UI affordances. A delegate must receive `run/cancelled` even when the owner initiates cancellation, because the event closes the stream and signals trace completion. The `cancelled_by` payload field provides attribution without violating the terminal event guarantee. This distinction — contract vs presentation — prevents UI convenience from breaking runtime invariants.
+
+4. **Evidence lifecycle has three distinct concerns: capture, sync, and retention.** Q2 (upload transport) and Q4 (retention policy) clarified that evidence management spans multiple subsystems: S08 (capture UI), SyncClient (upload transport), and platform-specific cleanup jobs (WorkManager on Android, URLSession callbacks on iOS). The spec now documents all three with concrete details (pre-signed URL flow, 7-day retention, DB tables). This prevents "we upload evidence" hand-waving that leaves implementation teams inventing their own policies.
+
+5. **Rotation safety is a platform-specific architectural constraint.** Android SharedFlow replay buffer (Q8) is not a general "how many events to keep" question — it's about surviving configuration changes (rotation, process death) without losing UI state. The decision (`replay = 16, extraBufferCapacity = 64`) directly addresses the bug in current `RunSession.kt` (`replay = 0`). iOS doesn't have this problem because SwiftUI view state restoration uses different primitives. This is why platform-specific sections in specs exist: different runtimes have different failure modes.
+
+6. **Muted notices for deferred features prevent user confusion without hiding functionality.** The seasonal cadence notice (Q5) shows how to surface future capabilities (YAML already supports `cadence.seasonal`) without creating false expectations (v0 uses fallback interval). The styling choice (secondary gray text, not warning red) signals "informational, not broken." This pattern applies to any v0/v1 boundary: acknowledge the feature exists in YAML, clarify current behavior, style as context not error.
+
+7. **Screen separation is about intent coherence, not reuse.** Consumables (Q7) could have been embedded in S02 Today, but S02's intent is "executable tasks due now." Consumables are "inventory to track / plan to restock" — a different cognitive mode. Creating S11 Consumables (reachable from S05 Property, not S02) keeps S02 calm and task-focused (the "calm UI" principle from § 1). This is not about component reuse or navigation efficiency — it's about preserving per-screen mental clarity.
+
+8. **Reload patterns must preserve execution isolation.** KitLoader.reload() (Q1) cannot invalidate in-flight RunSessions because their traces reference step IDs from the original execution plan. Changing step definitions mid-run would create trace incoherence (step_completed event for a step ID that no longer exists in the plan). The isolation rule: new runs use updated plan, in-flight runs keep old plan. This is a runtime invariant, not a feature request — violating it breaks trace replay.
+
+9. **Pre-signed URLs minimize server relay overhead for binary uploads.** The three-call flow (`/authorize` → direct `PUT` → `/confirm`) (Q2) keeps evidence binary data off the GERT API server. The server issues credentials, the device uploads directly to storage (S3/GCS/Azure Blob), the server finalizes the attachment record. This pattern is standard for user-generated content (UGC) systems where binary relay creates cost and latency. The 15-minute URL TTL balances security (short-lived credential) with mobile reality (uploads may pause mid-transfer).
+
+10. **Comprehensive spec updates require section-by-section impact analysis.** Each of the 8 decisions specified exactly which spec sections to update. This prevented the common failure mode: "we decided X" but the spec still says "open question: should we do X or Y?" The deliverable isn't just the decision — it's the decision applied to every affected contract (state tables, API signatures, event payloads, deep-link schemes). This is why architecture decisions take time: you're updating a system-wide contract, not just answering a question.
+
+**Deliverables:**
+- `gert-domain-home/specs/app-v0.md` rev2 — all 8 open questions resolved, 12 sections updated, §10 now shows resolved decisions table
+- Commit: `1f01ca3` — atomic update of all decision impacts
+
+**Pattern reinforced:** Architectural decisions are incomplete until all spec sections reflecting those decisions are updated. Open questions in specs are debt; resolving them means applying the decision across every affected screen, state table, event contract, and API signature. This is the difference between "we discussed it" and "it's architected."
+
+
+---
+
+### gert-domain-home Fifth Cross-Review Fixes — API Schema Alignment (2025-05-02)
+
+**Task:** Apply all fixes from the fifth cross-review to align API field names with schema.json canonical names and fix code examples.
+
+**Key Learnings:**
+
+1. **API-Schema drift creates mobile client confusion.** The mobile app spec used ad-hoc camelCase field names (`viewEvidence`, `runRoutines`, `addConsumables`, `onStart`, `onComplete`, `remindHoursBefore`) that didn't match the schema.json canonical names (`can_view_history`, `can_modify_routines`, `can_report_incidents`, `notify_owner_on_completion`, `notify_owner_if_overdue`, `remind_delegate_hours_before`). This wasn't just a naming inconsistency — it created implementation ambiguity where mobile developers couldn't know which name to use in requests. The fix: use schema-canonical names everywhere, treating the schema as the single source of truth.
+
+2. **Flat API forms can map to structured YAML without breaking mobile ergonomics.** The schema uses a discriminated union for assignments (`assigns: [{ routine: "id" } | { zone: "id" }]`), but the mobile API uses flat arrays (`assignedRoutines: string[]`, `zones: string[]`). This is correct: mobile clients benefit from simpler request shapes, and the server can transform to the YAML structure. The missing piece was documentation — the spec now explicitly states "Server maps `assignedRoutines` + `zones` to `assigns: [{routine}|{zone}]` in the YAML record" to clarify the transformation responsibility.
+
+3. **Required fields in schemas must appear in API specs.** The schema requires `delegate.contact` (phone/handle), but the POST /delegations API only had `delegateName`. This is a contract violation: the YAML couldn't be written without inventing a contact field. The fix added three delegate fields to the API request body: `delegateName` (required), `delegateContact` (required), `delegateEmail` (optional), directly mapping to the schema's `delegate` object. This demonstrates that API specs must be validated against schema requirements, not just feature descriptions.
+
+4. **"Same shape as X" is documentation debt.** The original PUT /delegations spec said "Body: same shape as `POST /delegations`" without repeating the schema. This violates the principle that each endpoint is a contract — readers shouldn't have to cross-reference other endpoints to understand what fields are expected. The fix: repeat the full request schema for PUT, even though it matches POST. This adds verbosity but eliminates ambiguity, especially when schemas evolve independently over time.
+
+5. **Code examples are executable contracts, not pseudocode.** The Kotlin examples had two bugs: `RuntimeEvent.StepCompleted` (incorrect enum case) and `event.payload["percent"]?.value as? Int` (incorrect payload accessor). These weren't typos — they represented actual misunderstandings of the SDK API surface. Fixing them required knowing that enums use `SCREAMING_SNAKE_CASE` and payload values are directly accessible without a `.value` wrapper. This reinforces that code examples in specs must be validated against actual SDK signatures, not just "looks right."
+
+6. **Reference examples should demonstrate optional fields.** The casa-santiago.home.yaml example omitted `unit:` on consumables and `type:` on assets, even though these are optional fields in the schema. This is a missed educational opportunity — examples should show the full richness of the schema, not just the minimum viable record. Adding `unit: kg` to pool_filter_sand and `type: pump`/`type: mower` to assets demonstrates field usage without breaking schema compliance.
+
+7. **Field name consistency prevents mobile-backend translation bugs.** When permissions use `viewEvidence` in the API but `can_view_history` in the schema, backend developers must maintain a translation layer, and any mismatch creates runtime errors. Using schema-canonical names end-to-end eliminates this translation: mobile sends `can_view_history`, backend writes `can_view_history` to YAML, no mapping required. This is the "boring is better" principle — fewer moving parts means fewer failure modes.
+
+8. **Notifications structure was incorrect at the API layer.** The original API had `"remindHoursBefore": 24` as a top-level field alongside `"notifications": { "onStart": true, "onComplete": true }`. This created inconsistency — reminder timing is part of notifications, not a peer field. The schema correctly nests all notification settings under `notifications:`. The fix moved everything into the notifications object using canonical field names, matching the schema structure exactly.
+
+9. **GET response expansion must be documented explicitly.** The GET /delegations/active endpoint returns `assignedRoutines: string[]` after zone → routine resolution (zones are expanded to their contained routines). This expansion behavior was implied but not stated. Adding the note "The `assignedRoutines` array is expanded after zone → routine resolution" clarifies that the GET response shape differs from POST/PUT (which accept both `assignedRoutines` and `zones` as separate arrays). This prevents client confusion when comparing request and response shapes.
+
+10. **Cross-review fixes are surgical, not refactors.** This task fixed 11 specific issues (5 groups) without touching unrelated spec content. The discipline: fix what was called out in the review, verify the fixes against the schema, document the transformations, commit with a detailed message. This is maintenance work, not feature work — the goal is alignment, not improvement. Every change was traceable to a specific review comment (John C1-C6, Barbara issues 1-3, James issues 1-2), demonstrating accountability to the review process.
+
+**Deliverables:**
+- `gert-domain-home/specs/app-v0.md` — API field names aligned with schema.json, Kotlin examples fixed, transformation notes added
+- `gert-domain-home/examples/casa-santiago.home.yaml` — unit and type fields added to demonstrate optional schema fields
+- `gert-domain-home/.squad/tmp/ken-fixes5-summary.md` — detailed summary of all fixes applied
+- Commit: `d36106b` — "fix(spec): align API field names with schema.json canonical names"
+
+**Pattern reinforced:** Specs and schemas must stay synchronized. When the schema is declared canonical (as schema.json is for gert-domain-home), the API spec must use schema field names exactly, map transformations must be documented, and required fields must appear in all relevant endpoints. Code examples are executable contracts and must be validated against SDK signatures. Reference examples should demonstrate optional fields, not just minimal records. This is the discipline of contract-driven development: the schema defines truth, everything else adapts to match.
+
+## Learnings
+- TUI exe design: interactive prompts + branching + include composition are all v0. Entry point is a single runbook; sub-runbooks composed via include: in branch steps. No launch selector.
+
+### gert-tui Interface Gaps — Three New Events and One RunState Field (2026-04-21)
+
+**Project:** gert-tui (repo: ormasoftchile/gert-tui) is a new strict gert client that implements gert's interfaces. During gert-tui-v0.md spec writing (§3.5), three interface gaps were identified where gert v2 needs to grow.
+
+**The Three Gaps Documented:**
+
+1. **Gap 1 — `EventKindStepOutput`:** Real-time step output streaming. gert currently emits `step/started`, `step/completed`, `step/failed`, `step/skipped` but no output events. gert-tui's Output panel needs per-line stdout/stderr streaming. **Decision:** Add `EventKindStepOutput EventKind = "step/output"` with payload `{step_id, stream, line, sequence}` emitted by executors as each line is produced. This is additive, fully event-driven, and aligns with v2's lifecycle event taxonomy.
+
+2. **Gap 2 — ExecutionPlan Exposure from RunHandle:** gert-tui's Step List panel needs the full plan to render step names and order. `RunHandle.State()` only returns `CurrentStep` and `CurrentStepIndex`, not the full plan. **Decision (CHOSE OPTION B):** Add `Plan *ExecutionPlan` field to `RunState` struct (not `Plan() *ExecutionPlan` method on `RunHandle`). Rationale: (1) Minimizes interface surface area—`RunHandle` stays a control surface for state manipulation; (2) Idiomatic Go—`RunState` is already a snapshot struct; adding a field is correct, not adding methods; (3) Consistency—`RunState` already holds immutable metadata (`RunID`, `RunbookPath`, `Vars`, timestamps). The plan is immutable context, belongs in the snapshot.
+
+3. **Gap 3 — `EventKindRunFailed`:** gert-tui's Status Bar needs to distinguish terminal states. Currently gert emits `run/started`, `run/completed`, `run/cancelled` but no `run/failed`. **Decision:** Add `EventKindRunFailed EventKind = "run/failed"` in `pkg/trace/event.go`, emitted when the run enters `RunStatusFailed`. This completes the terminal state event taxonomy (`run/completed`, `run/failed`, `run/cancelled`) and makes failure fully observable through the event stream.
+
+**Architectural Insight:** The Gap 2 decision reinforces gert's architectural boundary: `RunHandle` is the control plane (actions: Next, Approve, SubmitEvidence, Cancel), while `RunState` is the data plane (snapshots of observable state). Adding `Plan` to `RunState` keeps this boundary clean and is the idiomatic Go pattern for extending value snapshots. Choosing the method-free option reduced interface churn and maintained semantic clarity.
+
+**All three changes are non-breaking and additive.** Decisions documented in `.squad/decisions/inbox/ken-tui-interface-gaps.md`. Assigned to Brian for v2.0 implementation.

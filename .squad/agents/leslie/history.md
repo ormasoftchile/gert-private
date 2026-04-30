@@ -1210,3 +1210,67 @@ The chapter is comprehensive (11 sections, ~900 lines of LaTeX). It covers:
 
 **Key lesson:** When documenting a complete subsystem (catalog + CLI + resolution), structure the chapter to follow the user journey: discovery → declaration → fetch → publish. This makes the design accessible to both implementers (who need the full algorithm spec) and users (who need to understand the workflow).
 
+
+### 2026-04-23 — Added gate:stop_if: and iterate:concurrency: documentation
+
+**Task:** Document two new v2 features in `design/gert/sections/03-schema-vnext.tex`:
+1. `gate: stop_if:` on `type: include` steps
+2. `concurrency: N` on `iterate:` blocks
+
+**What I did:**
+
+**Feature 1 — `gate: stop_if:`**
+- Added `\paragraph{Outcome Gates (\texttt{gate:})}` after the "Difference from Sub-Procedure Call" paragraph in `\subsection{Step Type: include}` (§subsec:step-include).
+- Included a `minted{yaml}` listing showing the canonical YAML shape.
+- Added an `itemize` list covering all four gate semantics: match (absorbs), no-match (continues), child error (gate not consulted), no gate (always continue).
+- Added an incident-triage fan-out use-case paragraph.
+
+**Feature 2 — `iterate: concurrency:`**
+- Added `\paragraph{Concurrent Iteration (\texttt{concurrency:})}` before the TikZ figure in `\subsection{Step Type: iterate}` (§subsec:step-iterate).
+- Included a `minted{yaml}` listing showing a 3-worker pool over a `services` list.
+- Added an `itemize` covering: 0/1 = sequential, N>1 = pool, fail-fast, collect ordering (completion order, non-deterministic), variable isolation.
+- Added a contrast note vs `type: parallel` (static branches vs dynamic lists).
+
+**Build result:** CLEAN — `gert.pdf` updated, 390 pages, exit 0. Pre-existing 7 undefined-reference warnings unchanged (not introduced by this change).
+
+**Key lessons:**
+- New `\paragraph{}` blocks within an existing `\subsection` are the right granularity for feature additions that don't warrant a full new subsection.
+- Gate semantics must distinguish outcome (clean child stop) from error (exception); these are orthogonal paths. Documenting all four cases in an itemize prevents ambiguity.
+- For `concurrency:` on iterate, the most important caveats are fail-fast and non-deterministic collect ordering — both are surprising to first-time users.
+
+---
+
+## Session: Gate and Concurrent Iterate LaTeX Documentation (2026-04-23 to 2026-04-30)
+
+**Role:** Technical Documentation Specialist  
+**Task:** Update LaTeX design doc for `gate: stop_if:` and `concurrency:` features
+
+### Deliverables
+
+- ✅ LaTeX documentation (`design/gert/sections/03-schema-vnext.tex`)
+  - Gate feature documented: semantics, use cases, outcome matching
+  - Concurrent iterate feature documented: worker pool, collect behavior
+  - Both features added as `\paragraph{}` blocks within existing subsections
+
+- ✅ PDF compilation (`gert.pdf`)
+  - Compiled successfully: 390 pages
+  - All cross-references valid
+  - Ready for distribution
+
+### Documentation Decisions
+
+- Placement: Used `\paragraph{}` instead of new `\subsubsection{}` (avoids ToC bloat)
+- Gate placement: After "Difference from Sub-Procedure Call", before figure
+- Concurrency placement: After code examples, before loop diagram
+- Semantics: Itemize lists for compact rendering (vs. tabular)
+- Labels: Added for future cross-references (`para:include-gate`, `para:iterate-concurrency`)
+
+### Decision Filed
+
+- `leslie-gate-iterate-docs.md` (merged to `.squad/decisions.md`)
+  - Structural decisions for design doc placement
+  - Rationale for paragraph-level organization
+  - Labels for future reference
+
+**Status:** Documentation complete; design doc updated and compiled
+

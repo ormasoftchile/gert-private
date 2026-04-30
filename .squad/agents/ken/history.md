@@ -1565,3 +1565,191 @@ Created public GitHub repository with complete platform kit structure:
 **Architectural Insight:** The Gap 2 decision reinforces gert's architectural boundary: `RunHandle` is the control plane (actions: Next, Approve, SubmitEvidence, Cancel), while `RunState` is the data plane (snapshots of observable state). Adding `Plan` to `RunState` keeps this boundary clean and is the idiomatic Go pattern for extending value snapshots. Choosing the method-free option reduced interface churn and maintained semantic clarity.
 
 **All three changes are non-breaking and additive.** Decisions documented in `.squad/decisions/inbox/ken-tui-interface-gaps.md`. Assigned to Brian for v2.0 implementation.
+
+---
+
+## Feature Architecture: Gate and Concurrent Iterate (2026-04-28)
+
+### Status: ✅ Specification Complete
+
+**Mission:** Define precise architecture for two v2 features validated in gert-for-reference prototype:
+1. `gate: stop_if:` on `type: include` steps
+2. `concurrency:` on `iterate:` nodes
+
+### Deliverable
+
+**Specification:** `.squad/tmp/ken-gate-iterate-spec.md` (23KB, implementation-ready)
+
+### Feature 1: Gate Stop-If Pattern
+
+**Purpose:** Allow parent runbooks to "absorb" specific child outcomes without propagating as failures.
+
+**Schema extension:**
+```go
+type GateSpec struct {
+    StopIf []string `yaml:"stop_if" json:"stop_if"`
+}
+// Added to IncludeConfig.Gate *GateSpec
+```
+
+**Key semantics:**
+- When child outcome code matches `stop_if`, parent terminates successfully (not failure)
+- Parent run adopts child's outcome verbatim (allows nested gate evaluation)
+- Gate bypassed on child error/timeout/cancellation
+- Trace events include `gate_triggered: true` and `terminated_by_gate: true` fields
+
+**Critical design choice:** Outcome propagation vs. synthetic code
+- **Chosen:** Propagate child's outcome exactly
+- **Rationale:** Enables grandparent gates to evaluate against original child code
+- **Alternative rejected:** Synthetic "gate_absorbed" code loses context
+
+### Feature 2: Concurrent Iterate
+
+**Purpose:** Worker pool execution of iteration loops (e.g., restart 50 services with 10 workers).
+
+**Schema extension:**
+```go
+type IterateNode struct {
+    // ... existing fields ...
+    Concurrency int `yaml:"concurrency,omitempty" json:"concurrency,omitempty"`
+}
+```
+
+**Semantics:**
+- `Concurrency <= 1` → sequential (current behavior, no change)
+- `Concurrency > 1` → worker pool of N goroutines
+
+**Key architectural decisions:**
+
+1. **Error semantics: Fail-fast with cancellation**
+   - First error cancels remaining workers
+   - Partial results discarded (not aggregated)
+   - Rationale: Aligns with governance model (errors halt immediately)
+
+2. **Collect aggregation: List accumulation**
+   - `collect:` expressions aggregate into **lists** (not overwritten)
+   - Thread-safe via mutex
+   - Order non-deterministic (workers finish non-sequentially)
+   - Users embed iteration index if order matters
+
+3. **Until condition: Rejected with concurrency**
+   - Parser rejects `until` + `concurrency > 1` at parse time
+   - Rationale: `until` implies sequential short-circuit logic; meaningless with parallel workers
+
+4. **Variable isolation: Per-iteration copy**
+   - Each worker gets fresh copy of parent vars
+   - Loop variable (`as: svc`) isolated per iteration
+   - Captured vars aggregated into final result (last-writer-wins)
+
+5. **Trace events: Worker ID tagging**
+   - `iterate.started` includes `concurrency: N` field
+   - Per-iteration events include `worker_id: int` (0-indexed)
+   - Events emitted in completion order (non-deterministic)
+
+### Cross-Feature Interaction
+
+**Gate inside concurrent iterate:**
+- Gate operates at **iteration scope**, not parent run scope
+- If child terminates with gate-matched outcome, that iteration completes successfully
+- Parent iterate continues other workers normally
+- Top-level gates (outside iterate) terminate the entire run
+
+### Implementation Checklist
+
+**Parser:**
+- Parse `gate:` block on `type: include` steps
+- Parse `concurrency:` field on `iterate:` nodes
+- Reject empty `stop_if` array
+- Reject `until` + `concurrency > 1` combination
+
+**Executor (`iterate.go`):**
+- Implement worker pool pattern (goroutines + channels)
+- Add mutex-protected collect aggregation
+- Implement fail-fast cancellation on error
+- Fix collect bug: change from overwrite to list accumulation (affects BOTH sequential and concurrent)
+
+**Executor (`include.go`):**
+- Replace no-op stub with child runbook invocation
+- Capture child outcome
+- Evaluate gate condition
+- Signal parent termination when gate triggers
+
+**Engine:**
+- Detect gate-triggered signal from include executor
+- Skip remaining steps on gate trigger
+- Emit `gate_triggered` and `terminated_by_gate` trace events
+
+**Schema:**
+- Add `GateSpec` type
+- Add `Gate *GateSpec` field to `IncludeConfig`
+- Add `Concurrency int` field to `IterateNode`
+
+**Tests:**
+- Unit: gate trigger, gate bypass, nested gates
+- Unit: sequential/concurrent iterate, fail-fast, collect aggregation
+- Integration: 100 iterations with concurrency = 10
+- Trace: verify new event fields
+- Race detector: `-race` flag on all concurrent tests
+
+### Learnings
+
+1. **Outcome propagation is critical for nested gates** — Synthetic codes would break grandparent evaluation
+2. **Fail-fast is the right default** — Partial results from concurrent iterate are unreliable
+3. **Until condition incompatible with concurrency** — Better to reject at parse time than ambiguous runtime behavior
+4. **Collect must be list accumulation** — Current sequential implementation has overwrite bug (discovered during spec)
+5. **Worker ID tracing enables debugging** — Non-deterministic event ordering requires worker tagging
+
+### Open Questions (Deferred to v2.1)
+
+1. Gate on other step types (e.g., `type: tool` with outcome codes)
+2. Concurrency rate limiting (e.g., `max_per_second: 2`)
+3. Ordered collect with concurrency (preserve iteration order)
+4. Collect-all-errors mode (vs. fail-fast)
+
+### Files Modified
+
+- `.squad/tmp/ken-gate-iterate-spec.md` — Full architecture specification
+- `.squad/decisions/inbox/ken-gate-iterate-arch.md` — Decision record (to be written)
+- `.squad/agents/ken/history.md` — This entry
+
+### Handoff to Brian
+
+Specification is implementation-ready. All semantic edge cases resolved. Brian can implement directly from spec.
+
+
+---
+
+## Session: Gate and Concurrent Iterate Architecture Sprint (2026-04-28 to 2026-04-30)
+
+**Role:** Architect  
+**Task:** Architecture spec for `gate: stop_if:` on include steps and `concurrency:` on iterate nodes
+
+### Deliverables
+
+- ✅ Architecture specification (`.squad/tmp/ken-gate-iterate-spec.md`)
+  - Outcome propagation strategy (D1): child outcome propagated verbatim
+  - Error semantics for concurrent iterate (D2): fail-fast with context cancellation
+  - Collect aggregation fix (D3): list accumulation, not overwrite
+  - Until + concurrency rejection (D4): parser validates incompatibility
+  - Variable isolation (D5): per-iteration copies prevent races
+  - Trace event extensions (D6): new fields for gate and worker tracking
+
+- ✅ Decision documentation (merged to `.squad/decisions.md`)
+  - All 6 architecture decisions recorded and ratified
+  - Full specification with pseudocode and edge cases
+  - Implementation checklist for all team members
+
+### Collaboration
+
+- Reviewed schema proposal from John (john-gate-iterate-schema)
+- Coordinated with Brian on executor implementation approach
+- Verified all decisions align with gert-for-reference prototype
+
+### Quality
+
+- ✅ Spec complete before implementation started (Brian's work validated against spec)
+- ✅ Zero architectural conflicts discovered during implementation
+- ✅ All decisions ratified by team
+
+**Next:** Apply decisions to next phase (v2.1 planning)
+

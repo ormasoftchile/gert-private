@@ -1111,3 +1111,67 @@ Schema is fully specified with JSON Schema Draft 2020-12 validation, YAML exampl
 **Session Log:** 2026-04-26T15:25:54Z-mobile-execution-implementation.md
 
 **Output Location:** `.squad/tmp/john-mobile-schema.md` and related schema files
+
+---
+
+## 2026-04-26 — Schema Spec: `gate: stop_if:` on `include` + `concurrency:` on `iterate`
+
+**Requested by:** Cristian  
+**Output:** `.squad/tmp/john-gate-iterate-schema.md`  
+**Decision inbox:** `.squad/decisions/inbox/john-gate-iterate-schema.md`
+
+### Task
+
+Produced normative schema spec for two new features being added to gert v2:
+
+1. **`gate: stop_if:` on `type: include` steps** — allows a parent runbook to halt execution if the child runbook terminates with a matching `outcome.category`.
+2. **`concurrency:` on `iterate:` nodes** — allows parallel iteration with configurable fan-out width.
+
+### Learnings
+
+- **`IncludeConfig` gets `Gate *GateSpec`**: pointer (nullable), both yaml+json tags with omitempty. `GateSpec` contains `StopIf []string`. `stop_if` values match against `outcome.category` of the child's terminal `type: end` step (case-sensitive string equality). If `gate:` is present, `stop_if:` is required with `minItems: 1`.
+
+- **`IterateNode` gets `Concurrency int`**: zero-value `0` means sequential (same as omitting), so plain `int` (not pointer) is correct, matching the `Max int` convention already in the struct. Field placed after `Max` since both are numeric loop-control parameters. `concurrency: 0` and `concurrency: 1` are both sequential; `>= 2` enables concurrent fan-out.
+
+- **`collect:` non-determinism under concurrency**: When `concurrency >= 2`, collected values are appended in completion order (non-deterministic), not iteration order. This is a normative behavioral contract — callers must not rely on positional correspondence. Trace (JSONL evidence) must record the source item alongside each collected value. This is new design territory not previously documented in the schema spec.
+
+- **Semantic validation constraint (counter-based iterate)**: `concurrency > 1` on a counter-based iterate (no `over:` field) is a semantic error — concurrent counter loops produce undefined variable state. This is Phase 2 semantic validation, not JSON Schema structural.
+
+- **All `steps.go` structs carry both `yaml:` and `json:` tags.** This is a hard convention; any new struct or field must include both. Pointer types are used for optional nested structs. `omitempty` appears on both tags for optional fields.
+
+---
+
+## Session: Gate and Concurrent Iterate Schema Specification (2026-04-26 to 2026-04-30)
+
+**Role:** YAML/Schema Specialist  
+**Task:** Schema spec for `gate: stop_if:` on include and `concurrency:` on iterate
+
+### Deliverables
+
+- ✅ Schema specification (`.squad/tmp/john-gate-iterate-schema.md`)
+  - Go struct definitions for `GateSpec` with `StopIf []string`
+  - IterateNode extended with `Concurrency int` field
+  - YAML examples for both features
+  - JSON Schema fragments
+  - Behavioral contracts for executors
+
+- ✅ Decision documentation (merged to `.squad/decisions.md`)
+  - Schema definition decisions ratified
+  - Validation rules specified
+  - Semantic contract frozen for implementation
+
+### Quality
+
+- ✅ Struct definitions style-consistent with existing `pkg/schema/steps.go`
+- ✅ All tags (yaml + json) present on every field
+- ✅ Nullable pointers used for optional nested structs (matching existing patterns)
+- ✅ Schema validated against code standards before implementation
+
+### Collaboration
+
+- Consulted with Ken on architectural constraints
+- Provided schema to Brian with implementation guidance
+- Verified YAML examples compile correctly
+
+**Status:** Schema frozen; ready for implementation and documentation
+

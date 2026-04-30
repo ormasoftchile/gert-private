@@ -2177,6 +2177,48 @@ mapping), that is the responsibility of a future step type
 (\texttt{type: call} or \texttt{type: delegate}).  That capability is
 \textbf{not in v2.0 scope}.
 
+\paragraph{Outcome Gates (\texttt{gate:})}
+\label{para:include-gate}
+
+A \texttt{gate} block on a \texttt{type: include} step lets the parent run
+react to the child runbook's completion \emph{outcome} — specifically the
+\texttt{category} field written by the child's terminal \texttt{type: end}
+step — without requiring the parent to inspect variables explicitly.
+
+\begin{minted}{yaml}
+- step:
+    id: run_connectivity_check
+    type: include
+    include:
+      runbook: connectivity_test
+      with:
+        service_name: "{{ .service_name }}"
+    gate:
+      stop_if: [resolved]
+\end{minted}
+
+\texttt{gate.stop\_if} is a list of outcome category strings.  When the
+included runbook completes, the runtime checks whether its final outcome
+category appears in the list:
+
+\begin{itemize}
+  \item \textbf{Gate matches} — the parent run terminates cleanly with the
+        child's outcome; no error is raised.  The gate \emph{absorbs} the
+        resolution.
+  \item \textbf{Gate does not match} — execution continues normally to the
+        next step in the parent.
+  \item \textbf{Child run fails (error)} — the gate is not consulted.
+        Execution errors propagate to the parent in the usual way.
+  \item \textbf{No \texttt{gate} present} — the current behaviour: always
+        continue to the next step regardless of child outcome.
+\end{itemize}
+
+\textbf{Use case — incident triage fan-out.}  A parent runbook dispatches a
+sequence of diagnostic child runbooks.  If any child resolves the incident
+(outcome \texttt{category: resolved}), the parent stops immediately without
+executing the remaining diagnostic branches, avoiding unnecessary work and
+producing a clean audit trail.
+
 % ─────────────────────────────────────────────────────────────────────────────
 % Figure: Include inlining
 % ─────────────────────────────────────────────────────────────────────────────
@@ -2381,6 +2423,54 @@ current element.
           command: sleep
           args: ["15"]
 \end{minted}
+
+\paragraph{Concurrent Iteration (\texttt{concurrency:})}
+\label{para:iterate-concurrency}
+
+By default \texttt{iterate} processes one item at a time.  Setting
+\texttt{concurrency: N} (N $>$ 1) runs up to N iterations simultaneously as a
+worker pool, useful for health checks across many services or parallel
+deployments to multiple regions.
+
+\begin{minted}{yaml}
+- iterate:
+    over: services
+    as: svc
+    concurrency: 3
+    collect:
+      results: "{{ .last_host }}: {{ .last_status }}"
+    steps:
+      - step:
+          id: check_svc
+          type: include
+          include:
+            runbook: check
+            with:
+              service_host: "{{ .svc }}"
+          capture:
+            last_status: service_status
+            last_host: checked_host
+\end{minted}
+
+\begin{itemize}
+  \item \texttt{concurrency: 0} or \texttt{concurrency: 1} — sequential;
+        identical to the default behaviour.
+  \item \texttt{concurrency: N} (N $>$ 1) — worker pool of N; up to N
+        iterations run simultaneously.
+  \item \textbf{Fail-fast:} if any iteration fails, remaining in-flight
+        iterations are cancelled and the \texttt{iterate} step fails.
+  \item \textbf{Collect ordering:} results are appended in \emph{completion
+        order}, not iteration order — the collected list is non-deterministic
+        when concurrency is enabled.
+  \item \textbf{Variable isolation:} each iteration receives its own copy of
+        the loop variable; there are no cross-iteration data races.
+\end{itemize}
+
+\noindent\textbf{Contrast with \texttt{type: parallel}.}
+\texttt{type: parallel} requires statically-defined branches known at
+authoring time.  \texttt{concurrency:} on \texttt{iterate:} handles dynamic
+lists whose length is not known until runtime — it is the idiomatic fan-out
+pattern for variable-length collections.
 
 % ─────────────────────────────────────────────────────────────────────────────
 % Figure: Iterate loop

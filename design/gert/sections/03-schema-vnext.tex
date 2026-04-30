@@ -311,7 +311,7 @@ flow:
       type: branch
       title: Evaluate health results
       branches:
-        - condition: 'contains(http_result, "200")'
+        - condition: 'str.contains(http_result, "200")'
           label: Healthy
           steps:
             - step:
@@ -321,7 +321,7 @@ flow:
                 outcome:
                   category: resolved
                   code: http_ok
-        - condition: '!contains(http_result, "200")'
+        - condition: '!str.contains(http_result, "200")'
           label: Unhealthy
           steps:
             - step:
@@ -438,20 +438,14 @@ prefix notation.
   \item Grouping: \texttt{(expr)}
 \end{itemize}
 
-\textbf{Built-in functions:}
+\textbf{Built-in operators and predicates (expr-lang):}
 \begin{center}
 \begin{tabular}{ll}
 \hline
-\textbf{Function} & \textbf{Example} \\
+\textbf{Expression} & \textbf{Example} \\
 \hline
-\texttt{contains(s, substr)}     & \texttt{contains(status, "ok")} \\
-\texttt{startsWith(s, prefix)}   & \texttt{startsWith(hostname, "prod-")} \\
-\texttt{endsWith(s, suffix)}     & \texttt{endsWith(hostname, ".local")} \\
-\texttt{matches(s, pattern)}     & \texttt{matches(version, "\^{}v[0-9]+")} \\
 \texttt{len(s)}                  & \texttt{len(output) > 0} \\
-\texttt{trim(s)}                 & \texttt{trim(message) != ""} \\
-\texttt{lower(s)}                & \texttt{lower(env) == "prod"} \\
-\texttt{upper(s)}                & \texttt{upper(region) == "US-WEST"} \\
+\texttt{matches(s, pattern)}     & \texttt{matches(version, "\^{}v[0-9]+")} \\
 \hline
 \end{tabular}
 \end{center}
@@ -467,15 +461,102 @@ when: environment == "prod" && count > 1
 # Logical OR with grouping
 when: (severity == "medium" || severity == "critical") && customer_impact == true
 
-# Function call
-condition: contains(http_result, "200")
+# str.* helper (canonical gert syntax)
+condition: str.contains(http_result, "200")
 
 # Negation
-condition: !contains(http_result, "200")
+condition: '!str.contains(http_result, "200")'
 
 # Numeric comparison
 until: operation_status == "Running"
 \end{verbatim}
+
+\paragraph{String-operation helpers: \texttt{str.*}}
+\label{para:str-helpers}
+
+Gert defines a canonical string-operation vocabulary accessed through the
+\texttt{str} namespace.  The \texttt{namespace.method()} pattern is
+engine-portable: any future gert runtime (Go, C\#, etc.) implements the same
+vocabulary under the same names.  The \texttt{str} object is injected into the
+\texttt{expr} evaluation environment as a helper struct; member-access syntax
+(\texttt{str.contains(...)}) avoids conflicts with expr-lang reserved keywords
+such as \texttt{contains} and \texttt{startsWith}, which are infix operators in
+the underlying library and cannot be called as top-level functions.
+
+\begin{center}
+\begin{tabular}{lp{4.5cm}p{4.5cm}}
+\hline
+\textbf{Function} & \textbf{Signature} & \textbf{Description} \\
+\hline
+\texttt{str.contains}    & \texttt{str.contains(s, substr)}  & True if \texttt{s} contains \texttt{substr} \\
+\texttt{str.startsWith}  & \texttt{str.startsWith(s, prefix)} & True if \texttt{s} begins with \texttt{prefix} \\
+\texttt{str.endsWith}    & \texttt{str.endsWith(s, suffix)}   & True if \texttt{s} ends with \texttt{suffix} \\
+\texttt{str.toLower}     & \texttt{str.toLower(s)}            & Returns \texttt{s} converted to lowercase \\
+\texttt{str.toUpper}     & \texttt{str.toUpper(s)}            & Returns \texttt{s} converted to uppercase \\
+\texttt{str.trim}        & \texttt{str.trim(s)}               & Returns \texttt{s} with leading/trailing whitespace removed \\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{YAML runbook examples:}
+\begin{minted}{yaml}
+# Check if DNS output contains an address record
+- step:
+    id: check_dns
+    type: branch
+    branches:
+      - condition: 'str.contains(dns_output, "Address")'
+        label: Resolved
+      - condition: '!str.contains(dns_output, "Address")'
+        label: Unresolved
+
+# Environment-aware gate
+- step:
+    id: prod_check
+    type: cli
+    when: 'str.startsWith(hostname, "prod-") && str.endsWith(region, "-1")'
+    title: Verify prod-region-1 host
+
+# Case-insensitive method comparison
+- step:
+    id: route_request
+    type: branch
+    branches:
+      - condition: 'str.toLower(http_method) == "get"'
+        label: Read path
+      - condition: 'str.toLower(http_method) == "post"'
+        label: Write path
+
+# Trim and validate captured input
+- step:
+    id: validate_input
+    type: assert
+    condition: 'str.trim(user_input) != ""'
+    title: Input must not be blank
+\end{minted}
+
+\textbf{Future namespaces.}  The \texttt{namespace.method()} pattern is the
+standard for all gert helper vocabularies.  Future additions will follow the
+same convention:
+
+\begin{center}
+\begin{tabular}{ll}
+\hline
+\textbf{Namespace} & \textbf{Planned scope} \\
+\hline
+\texttt{list.*}   & Collection predicates (\texttt{list.contains}, \texttt{list.any}, \texttt{list.all}) \\
+\texttt{regex.*}  & Pattern matching (\texttt{regex.match}, \texttt{regex.replace}) \\
+\texttt{math.*}   & Numeric helpers (\texttt{math.round}, \texttt{math.abs}) \\
+\texttt{json.*}   & JSON traversal (\texttt{json.get}, \texttt{json.has}) \\
+\hline
+\end{tabular}
+\end{center}
+
+\textbf{Note on infix syntax.}  The expr-lang library exposes \texttt{x contains "y"}
+as an infix operator.  This form evaluates correctly at runtime but is
+\emph{not} part of the gert condition vocabulary: it is engine-specific,
+non-portable, and excluded from gert's normative spec.  Runbook authors
+\textbf{MUST} use \texttt{str.contains(x, "y")} in all condition fields.
 
 \paragraph{String interpolation: still Go templates}
 

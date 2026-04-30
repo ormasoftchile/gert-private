@@ -1395,3 +1395,24 @@ The chapter is comprehensive (11 sections, ~900 lines of LaTeX). It covers:
 **Files changed:**
 - `/Volumes/Projects/gert/design/gert/sections/03-schema-vnext.tex` — added subsection and examples
 
+
+### 2025-01-21 — Documented str.* condition helper syntax in design doc
+
+**Task:** Add authoritative documentation for the `str.*` condition expression vocabulary to the v2 design doc, reflecting a new design decision from Ken's analysis.
+
+**Where I inserted:** `design/gert/sections/03-schema-vnext.tex`, within `\subsection{Expression Language}` (`\label{subsec:expressions}`). Added a `\paragraph{String-operation helpers: \texttt{str.*}}` block immediately after the existing verbatim examples block, before the "String interpolation: still Go templates" paragraph.
+
+**What I changed:**
+1. Replaced the old "Built-in functions" table (which incorrectly listed bare `contains`, `startsWith`, `endsWith`, `lower`, `upper`, `trim` as gert built-ins — these are actually expr-lang reserved keywords/infix operators) with a minimal "Built-in operators and predicates (expr-lang)" table showing only `len()` and `matches()`.
+2. Updated the verbatim examples to use `str.contains()` instead of bare `contains()`.
+3. Updated the YAML runbook branch example (around line 314) from `contains(http_result, "200")` to `str.contains(http_result, "200")`.
+4. Added a new `\paragraph{String-operation helpers: \texttt{str.*}}` with:
+   - Prose explaining the namespace pattern and why member-access notation avoids keyword conflicts
+   - A 3-column `tabular` table of all 6 `str.*` functions with signature and description
+   - A `minted{yaml}` block with 4 real runbook examples
+   - A "Future namespaces" table (`list.*`, `regex.*`, `math.*`, `json.*`)
+   - A normative note that infix `x contains "y"` is NOT the canonical gert syntax
+
+**Key lesson:** The old table listed `contains()`, `startsWith()` etc. as top-level functions, but expr-lang v1.17.8 reserves those as infix operators — calling them as functions would throw a parse error. The `str.*` namespace approach avoids this by using member-access notation, which the lexer treats differently from keyword resolution.
+
+**Decision record:** `.squad/decisions/inbox/leslie-condition-syntax-doc.md`

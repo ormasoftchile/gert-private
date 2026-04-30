@@ -1924,3 +1924,43 @@ Specification is implementation-ready. All semantic edge cases resolved. Brian c
 **Next phase:** Code commit to repository and merge to v2.0 milestone.
 
 **Citation:** Session log `.squad/log/2026-04-30T09-30-00Z-gap-impl-phase2.md`, orchestration logs in `.squad/orchestration-log/`
+
+---
+
+## Learnings
+
+### Condition Syntax Design for expr-lang Keywords (2025-01-21)
+
+**Context:** Runbooks need string operations (contains, startsWith, endsWith) in `condition:` fields using expr-lang v1.17.8.
+
+**Problem:** Reserved keywords (`contains`, `matches`, `startsWith`, `endsWith`) cannot be called as functions. Infix operator syntax (`x contains "y"`) rejected by user as poor UX.
+
+**Solution designed:** Namespace-based helper object pattern: `str.contains(x, "y")`, `str.startsWith(x, "prefix")`
+
+**Key architectural insight:**
+- Object namespaces (`str.*`, `date.*`, `json.*`) prevent environment pollution as helper functions grow
+- Establishes consistent pattern for all future helper domains
+- Member-access notation (`obj.method()`) supported by expr-lang without keyword conflicts
+- Extensible framework-wide: same pattern applies to date math, JSON extraction, regex, etc.
+
+**Recommendation:** Adopt `namespace.method()` as the standard pattern for all GERT v2 helper functions. Register helpers as structs with methods:
+```go
+env := map[string]any{
+    "str":  &StringHelpers{},
+    "date": &DateHelpers{},
+    "json": &JSONHelpers{},
+}
+```
+
+**UX benefits:**
+- Clear, readable: `str.contains(dns_output, "Address")` reads as natural English
+- Self-documenting: namespace indicates domain
+- Autocomplete-friendly for tooling
+- Avoids "invented syntax" feel of bare prefixed functions (`strContains`)
+
+**Implementation implications:**
+- Create `v2/internal/expr/helpers.go` module
+- Document pattern in runbook reference docs
+- Phase 1: string ops (v2.0), Phase 2: date/JSON (v2.1), Phase 3: regex/math
+
+**Citation:** Design analysis `.squad/tmp/ken-condition-syntax-analysis.md`, decision inbox `.squad/decisions/inbox/ken-condition-syntax.md` (2025-01-21)

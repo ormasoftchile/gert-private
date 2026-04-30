@@ -2975,6 +2975,234 @@ actions:
 \end{itemize}
 
 % ============================================================
+\subsection{Transport Type: native}
+\label{subsec:transport-native}
+% ============================================================
+
+\subsubsection{Overview}
+
+The \texttt{native} transport type enables runbooks to invoke native CLI utilities
+(e.g., \texttt{ping}, \texttt{curl}, \texttt{nslookup}) without requiring a JSON
+protocol.  Unlike \texttt{stdio}, \texttt{jsonrpc}, and \texttt{mcp} transports
+which speak a structured protocol, native tools accept command-line arguments
+(argv), write plain text to stdout/stderr, and exit with a status code.
+
+\subsubsection{When to Use}
+
+Use \texttt{type: native} when:
+\begin{enumerate}
+  \item The tool is a system binary or CLI utility that accepts argv-style
+        arguments.
+  \item Output is plain text, not JSON or other structured formats.
+  \item The tool is stateless and invoked once per action (no persistent
+        connection).
+  \item You do not control or cannot modify the tool's source code.
+\end{enumerate}
+
+\noindent Use \texttt{type: stdio}, \texttt{jsonrpc}, or \texttt{mcp} when the
+tool can speak a structured protocol.
+
+\subsubsection{Schema: \texttt{transport:} for native tools}
+
+\begin{center}
+\begin{tabular}{llp{8cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\hline
+\texttt{transport.type}    & string & Must be \texttt{"native"} \\
+\texttt{transport.command} & string & Binary name or full path (e.g., \texttt{"ping"}, \texttt{"/usr/bin/curl"}) \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsubsection{Schema: \texttt{actions:} with argv templates}
+
+Each action in a native tool must declare an \texttt{argv:} field: a list of
+Go \texttt{text/template} strings.  Each element is rendered at invocation time
+with the step's \texttt{tool.args} as template data.
+
+\begin{center}
+\begin{tabular}{llp{8cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\hline
+\texttt{actions.<name>.argv}        & \texttt{[]string} & List of argv elements (Go templates) \\
+\texttt{actions.<name>.args}        & map              & Argument schema (same as stdio) \\
+\texttt{actions.<name>.description} & string           & Human-readable action description \\
+\texttt{actions.<name>.returns}     & string           & Output format; typically \texttt{"text"} \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{Example argv with template rendering}
+
+\begin{center}
+\begin{minted}[fontsize=\small]{yaml}
+argv:
+  - "-c"                    # -c flag (literal)
+  - "{{ .count }}"          # count argument from step.tool.args
+  - "{{ .host }}"           # host argument (required)
+\end{minted}
+\end{center}
+
+When invoked with \texttt{args: \{count: "4", host: "8.8.8.8"\}}, the argv
+renders to \texttt{["-c", "4", "8.8.8.8"]}.
+
+\subsubsection{Complete Tool Definition Example}
+
+\begin{minted}{yaml}
+apiVersion: tool/v2
+name: ping
+version: "1.0"
+description: Send ICMP ECHO_REQUEST packets to test network reachability
+
+transport:
+  type: native
+  command: ping
+
+actions:
+  check:
+    description: Ping a host with a fixed packet count
+    argv:
+      - "-c"
+      - "{{ .count }}"
+      - "{{ .host }}"
+    args:
+      host:
+        type: string
+        required: true
+        description: Hostname or IP address to ping
+      count:
+        type: string
+        required: false
+        default: "4"
+        description: Number of ICMP packets to send
+    returns: text
+
+  check-timeout:
+    description: Ping a host with a deadline per packet
+    argv:
+      - "-c"
+      - "{{ .count }}"
+      - "-W"
+      - "{{ .timeout }}"
+      - "{{ .host }}"
+    args:
+      host:
+        type: string
+        required: true
+        description: Hostname or IP address to ping
+      count:
+        type: string
+        required: false
+        default: "4"
+        description: Number of ICMP packets to send
+      timeout:
+        type: string
+        required: false
+        default: "5"
+        description: Time in seconds to wait for each reply
+    returns: text
+\end{minted}
+
+\subsubsection{Runbook Invocation: \texttt{toolRefs:} and Tool Steps}
+
+Tools are declared in the runbook's \texttt{toolRefs:} section.  Each ref has a
+\texttt{name} and a \texttt{path} (relative to the runbook file):
+
+\begin{minted}{yaml}
+toolRefs:
+  - name: ping
+    path: ../../tools/ping.tool.yaml
+  - name: curl
+    path: ../../tools/curl.tool.yaml
+  - name: nslookup
+    path: ../../tools/nslookup.tool.yaml
+\end{minted}
+
+Path resolution is relative to the runbook file's directory.  The loader
+resolves relative paths to absolute paths at load time and registers the tools
+into the tool registry before execution.
+
+\subsubsection{Complete Runbook Example}
+
+\begin{minted}{yaml}
+apiVersion: runbook/v2
+id: network-check
+name: Network Connectivity Check
+
+toolRefs:
+  - name: ping
+    path: ../../tools/ping.tool.yaml
+  - name: nslookup
+    path: ../../tools/nslookup.tool.yaml
+
+flow:
+  - step:
+      id: ping-dns
+      type: tool
+      title: Test connectivity to Google DNS
+      tool:
+        name: ping
+        action: check
+        args:
+          host: "8.8.8.8"
+          count: "3"
+      capture:
+        output: stdout
+
+  - step:
+      id: resolve-domain
+      type: tool
+      title: Resolve example.com
+      tool:
+        name: nslookup
+        action: lookup
+        args:
+          name: "example.com"
+      capture:
+        dns_response: stdout
+
+  - step:
+      id: check-results
+      type: conditional
+      title: Check if both checks passed
+      conditions:
+        - target: ping-dns.output
+          op: contains
+          value: "bytes from"
+        - target: resolve-domain.dns_response
+          op: contains
+          value: "Address:"
+\end{minted}
+
+\paragraph{Execution Model}
+
+When a \texttt{type: tool} step with a native tool executes:
+\begin{enumerate}
+  \item The runtime looks up the tool by name in the registry (resolved from
+        \texttt{toolRefs:}).
+  \item It renders each argv element as a Go template using \texttt{step.tool.args}
+        as data.
+  \item It spawns the binary (\texttt{transport.command}) with the rendered argv
+        and waits for completion.
+  \item It captures stdout and stderr as plain text.
+  \item If the process exits with status \texttt{0}, the step passes; non-zero
+        exit is an error.
+  \item Output is stored as \texttt{stdout} and \texttt{stderr} and can be
+        captured via \texttt{capture:} directives.
+\end{enumerate}
+
+\paragraph{Error Handling}
+
+Native tool invocation fails if:
+\begin{itemize}
+  \item The binary does not exist or is not executable.
+  \item An argv template fails to render (e.g., undefined variable).
+  \item The process exits with a non-zero status code.
+\end{itemize}
+
+% ============================================================
 \section{Provider Definition Schema (v2)}
 \label{sec:provider-schema}
 % ============================================================

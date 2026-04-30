@@ -1365,3 +1365,33 @@ The chapter is comprehensive (11 sections, ~900 lines of LaTeX). It covers:
 **Next phase:** Code commit to repository and merge to v2.0 milestone.
 
 **Citation:** Session log `.squad/log/2026-04-30T09-30-00Z-gap-impl-phase2.md`, orchestration logs in `.squad/orchestration-log/`
+
+### 2026-04-30 — Documented Native CLI Tool Transport (400 pages, CLEAN)
+
+**Task:** Document Alternative A (native transport type) in the design spec.
+
+**What was added:**
+- New subsection 4.5.2 "Transport Type: native" (pages 119–123)
+  - Overview: when and why to use native transport
+  - When to Use checklist (4 scenarios)
+  - Schema tables: `transport:` and `actions:` fields
+  - Complete `ping.tool.yaml` example with two actions (check, check-timeout)
+  - Runbook `toolRefs:` wiring and path resolution
+  - Full runbook example: network connectivity check with ping + nslookup + conditional
+  - Execution model: 6-step invocation flow + error handling
+
+**Implementation notes:**
+- Native transport invokes native CLI utilities (ping, curl, nslookup) without JSON protocol
+- Each action declares `argv:` — a list of Go text/template strings rendered at invocation time
+- Tool definitions reference relative paths (e.g., `path: ../../tools/ping.tool.yaml`)
+- Matched existing LaTeX prose style: `\begin{minted}{yaml}`, `\texttt{}` inline code, tables, `\label{subsec:transport-native}` for cross-refs
+- Added to the correct section hierarchy (subsection under 4.5.1, before 4.6 Provider Definition)
+
+**Build result:**
+- PDF: 400 pages (up from 325 pages in the last recorded baseline; significant growth reflects document expansion over multiple sessions)
+- No LaTeX errors or undefined references related to the new section
+- New content verified in extracted PDF text
+
+**Files changed:**
+- `/Volumes/Projects/gert/design/gert/sections/03-schema-vnext.tex` — added subsection and examples
+

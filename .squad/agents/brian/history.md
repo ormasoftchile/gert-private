@@ -1355,3 +1355,101 @@ Examples now serve as:
 - User documentation (getting started, runbook authoring guide)
 - Parser/validator test suites
 - CI pipeline (validate all examples on every commit)
+
+---
+
+## Phase: Native CLI Tool Transport Implementation
+
+**Date:** 2025-04-30  
+**Task:** Implement native CLI tool transport (Alternative A from gap analysis)  
+**Spec:** `.squad/tmp/ken-native-tool-spec.md`
+
+### Implementation Summary
+
+Successfully implemented the `native` transport type for gert v2, enabling native CLI tools (ping, curl, nslookup) to be invoked as first-class tools via argv-style arguments without requiring JSON protocol.
+
+### Files Modified
+
+**Schema Changes:**
+- `pkg/schema/tool.go` — Added `TransportNative` constant and `Argv []string` field to `ToolAction`
+- `pkg/tool/tool.go` — Added `TransportNative` constant, `Actions` map to `ToolDef`, and new `ToolAction`/`ArgDef` types
+
+**Runtime Implementation:**
+- `internal/tool/native.go` (NEW) — `NativeCLITransport` implementation with argv template rendering
+- `internal/tool/runtime.go` — Added native transport case to dispatch switch
+- `internal/tool/scan.go` — Added native transport mapping and Actions map conversion, exported `ParseToolFile` and `RuntimeToolDef`
+- `internal/adapter/toolrefs.go` (NEW) — `ResolveToolRefs` function for loading tools from runbook references
+
+**CLI Wiring:**
+- `cmd/gert/run.go` — Added toolRef resolution between parsing and planning
+
+**Tool Definitions:**
+- `tools/ping.tool.yaml` (NEW) — Native ping tool with `check` and `check-timeout` actions
+- `tools/curl.tool.yaml` (NEW) — Native curl tool with `get`, `post`, `head`, `download` actions
+- `tools/nslookup.tool.yaml` (NEW) — Native nslookup tool with `lookup`, `lookup-server`, `reverse`, `query-type` actions
+
+**Runbook Updates (added toolRefs and converted cli→tool steps):**
+- `examples/simple-health-check/simple-health-check.runbook.yaml`
+- `examples/service-health-branching/service-health-branching.runbook.yaml`
+- `examples/incident-triage/app-crash.runbook.yaml`
+- `examples/incident-triage/connectivity-test.runbook.yaml`
+- `examples/incident-triage/network.runbook.yaml`
+- `examples/incident-triage/resource-exhaustion.runbook.yaml`
+- `examples/collect-health/check-service.runbook.yaml`
+- `examples/collect-health-parallel/check-service.runbook.yaml`
+- `examples/multi-region-rollout/multi-region-rollout.runbook.yaml`
+
+**Tests:**
+- `internal/tool/native_test.go` (NEW) — Tests for argv rendering and native transport invocation
+
+### Design Decisions
+
+1. **Argv Template Rendering:** Uses Go `text/template` (consistent with v2 expression evaluator) for per-element rendering. Each argv element is rendered independently, enabling flexible argument construction.
+
+2. **Actions Map in Runtime:** Copied full action definitions from schema to runtime to support argv rendering. Alternative (storing schema in runtime) would couple runtime to schema types.
+
+3. **ToolRefs Resolution:** Resolved at parse time (after parsing, before planning) and registered into both planner's schema registry (for validation) and engine's runtime registry (for execution). Path resolution is relative to runbook file directory.
+
+4. **No JSON Protocol:** Native tools don't read stdin (closed immediately) and emit plain text to stdout/stderr (no structured output parsing). Non-zero exit code is treated as error.
+
+5. **Exported scan.go Functions:** `ParseToolFile` and `RuntimeToolDef` exported to enable toolrefs.go to load and convert tool definitions without duplicating logic.
+
+### Validation Results
+
+```
+go build ./... — SUCCESS
+go vet ./... — SUCCESS
+go test ./internal/tool -race -count=1 — ALL TESTS PASS
+go test ./internal/adapter -race -count=1 — ALL TESTS PASS
+```
+
+**Test Coverage:**
+- ✅ Argv template rendering (basic, empty, bad template)
+- ✅ Unknown action error handling
+- ✅ Process invocation and output capture
+
+### Key Learnings
+
+1. **Echo as Shell Builtin:** Direct `echo` command invocation doesn't work universally. Tests use `/bin/sh -c "echo hello"` instead for portability.
+
+2. **Process I/O Ordering:** Must start stdout/stderr reader goroutines BEFORE calling proc.Wait() to avoid race conditions, but the Wait() call correctly blocks until process exits and pipes are drained.
+
+3. **Schema vs Runtime Registries:** Planner uses schema tool registry for validation, engine uses runtime tool registry for execution. ToolRefs must be registered into both.
+
+4. **ToolRefs Path Resolution:** Paths in runbook `toolRefs:` are relative to the runbook file's directory (not current working directory). Use `filepath.Dir(runbookPath)` + `filepath.Join()` for resolution.
+
+### Impact
+
+- ✅ Native CLI utilities (ping, curl, nslookup, etc.) are now first-class gert tools
+- ✅ No subprocess overhead (direct exec, no wrapper scripts)
+- ✅ Clean separation from JSON-protocol tools (explicit transport type)
+- ✅ Consistent with v1 pattern (argv templates, per-action configuration)
+- ✅ All example runbooks updated to use tool steps with toolRefs
+- ✅ Full test coverage for core native transport functionality
+
+### Next Steps
+
+- Consider template validation at parse time (compile templates during tool load) — deferred to v2.1
+- Output parsing hints (regex capture groups, JSON detection) — deferred to v2.1
+- Tool catalog/registry (publish tools to shared index) — deferred to v2.1
+

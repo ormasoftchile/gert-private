@@ -1254,3 +1254,104 @@ go build ./... && go vet ./... && go test ./internal/executor/... -race -count=1
 **Next phase:** Code commit to repository and merge to v2.0 milestone.
 
 **Citation:** Session log `.squad/log/2026-04-30T09-30-00Z-gap-impl-phase2.md`, orchestration logs in `.squad/orchestration-log/`
+
+---
+
+## Examples Migration Complete (2025-01-19)
+
+**Task:** Migrate all v1 examples from gert-for-reference to v2 syntax in `/Volumes/Projects/gert/examples/`
+
+**Outcome:** ✅ Complete — 8 example folders, 22 runbooks, 9 READMEs created
+
+### Migration Summary
+
+**Folders Created:**
+1. **simple-health-check** (1 runbook) — Basic tool steps, capture, collector
+2. **service-health-branching** (1 runbook) — Multi-level conditional branching
+3. **incident-triage** (5 runbooks) — Multi-file composition with 3-level nesting
+4. **multi-region-rollout** (1 runbook) — Iterate + governance + approvals
+5. **collect-health** (2 runbooks) — Sequential iteration with accumulation
+6. **collect-health-parallel** (2 runbooks) — Concurrent iteration with collect
+7. **nested-chain** (5 runbooks) — 5-level deep include chain
+8. **edge-cases** (5 runbooks) — Minimal runbooks for boundary testing
+
+### v1 → v2 Conversion Patterns
+
+**Structural:**
+- `apiVersion: runbook/v1` → `apiVersion: runbook/v2`
+- `meta:` block → flattened to top-level (`id:`, `name:`, `kind:`, `description:`)
+- `meta.vars` → top-level `vars:`
+- `meta.inputs` → top-level `inputs:` (with `type:` and `from:` fields)
+- `tree:` → `flow:`
+
+**Step Type Conversions:**
+- `type: invoke` → `type: include` with nested `include:` block
+- `invoke.inputs:` → `include.with:`
+- `gate:` on invoke → `gate:` on include (syntax preserved)
+- `type: manual` with `instructions:` → `type: collector` with `prompt:` and `fields:`
+- `type: manual` with `choices:` → `type: choice` with `variable:` and `options:`
+- `type: manual` with `approvals:` → split into collector + `type: approve` step
+- Inline `branches:` on step → wrapped in `type: branch` step with `branches:` array
+
+**Field Renames:**
+- `allowed_commands` → `allow_commands` (in governance)
+- `invoke.runbook` → `include.runbook`
+
+**Features Preserved:**
+- `type: cli`, `type: tool`, `type: assert`, `type: end`, `type: noop` — unchanged
+- `capture:`, `when:`, `delay:`, `timeout:`, `retry:`, `continue_on_fail:` — unchanged
+- `required_evidence:` — retained (now first-class in v2)
+- `iterate:` with `over:`, `as:`, `max:`, `until:`, `collect:` — unchanged
+- `concurrency:` on iterate — v2 native feature
+- `gate.stop_if:` on include — v2 native
+
+### Learnings
+
+1. **Type: manual decomposition:** v1's polymorphic `type: manual` maps to 3 distinct v2 step types:
+   - Simple instructions → `type: collector` (with text field for notes)
+   - Choices → `type: choice`
+   - Approvals → `type: approve` (separate step after collector/choice)
+
+2. **Branch wrapping:** v1's inline `branches:` on a step becomes a separate `type: branch` step containing the branch arms. This makes the AST cleaner and simplifies validation.
+
+3. **Include vs invoke:** The rename from `invoke` to `include` clarifies that this is composition, not remote procedure call. The `with:` block (vs `inputs:`) emphasizes parameter passing rather than function signature.
+
+4. **Assert structure:** v2 asserts use explicit `type:`, `subject:`, `expected:` fields rather than shorthand syntax.
+
+5. **Evidence fields:** Evidence can be declared at step level (`required_evidence:`) or embedded in collector fields (`evidence:` on field). Both patterns appear in the examples.
+
+6. **Iterate ID:** v2 iterate blocks require explicit `id:` field for tracing and checkpointing.
+
+7. **Governance vocabulary:** `allowed_commands` → `allow_commands` for consistency with `deny_*` fields. All governance fields are at top-level `governance:` block.
+
+### Files Created
+
+**Runbooks:** 22 `.runbook.yaml` files across 8 folders  
+**Documentation:** 9 `README.md` files (8 folder-level + 1 top-level)
+
+**Top-level README:** `/Volumes/Projects/gert/examples/README.md`
+- Categorized examples (Fundamentals, Branching, Orchestration, Advanced)
+- Feature coverage table
+- Running instructions
+- v2 feature checklist
+
+### Decision Record
+
+Created `.squad/decisions/inbox/brian-examples-migration.md` documenting:
+- Conversion patterns discovered
+- Type: manual decomposition strategy
+- Branch wrapping rationale
+- Include vs invoke terminology shift
+
+### Impact
+
+Examples now serve as:
+1. **v2 syntax reference** — All step types and features demonstrated
+2. **Migration guide** — Each README documents v1 → v2 changes
+3. **Test corpus** — 22 runbooks for parser/planner/engine validation
+4. **Documentation samples** — Real-world runbook patterns for users
+
+**Next:** These examples should be referenced in:
+- User documentation (getting started, runbook authoring guide)
+- Parser/validator test suites
+- CI pipeline (validate all examples on every commit)

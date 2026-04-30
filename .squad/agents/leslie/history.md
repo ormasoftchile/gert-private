@@ -1274,3 +1274,94 @@ The chapter is comprehensive (11 sections, ~900 lines of LaTeX). It covers:
 
 **Status:** Documentation complete; design doc updated and compiled
 
+
+### 2026-04-30 — Documented 3 new gert v2 features in design doc
+
+**Task:** Add LaTeX documentation for three new v2.0 features:
+1. `type: noop` — New step type for pure delays and variable capture
+2. `required_evidence` — Evidence requirement declarations on steps
+3. `on_error:` — Per-step error routing (stop/continue/goto)
+
+**What I did:**
+
+- **Step type inventory update:**
+  - Updated count from "fourteen" to "fifteen" step types
+  - Added `noop` to the step type table with cross-reference
+  - Updated taxonomy diagram to include `noop` in Terminal category
+  - Updated diagram caption from "14 types" to "15 types"
+
+- **Common step fields table:**
+  - Added `on_error` field (string | object type)
+  - Added `required_evidence` field (array type)
+  - Both with cross-references to new documentation paragraphs
+
+- **New documentation paragraphs:**
+  - `\paragraph{Error routing}` with label `subsec:on-error`
+    - Three modes: stop, continue, goto
+    - YAML examples for all three modes
+    - Error variable injection: `__error_message`, `__error_step_id`, etc.
+    - Target resolution rules and precedence over `continue_on_fail`
+  
+  - `\paragraph{Required evidence}` with label `subsec:required-evidence`
+    - Three evidence kinds: text, checklist, attachment
+    - Step-level evidence requirements example
+    - Field-level evidence in collector steps
+    - Enforcement semantics (TUI blocks completion)
+
+  - `\subsection{Step Type: noop}` with label `subsec:step-noop`
+    - Execution semantics and no-side-effects guarantee
+    - Two YAML examples: pure delay and variable accumulation
+    - Use cases list
+    - Interaction with step-level fields
+
+**Placement decisions:**
+- `on_error` and `required_evidence` paragraphs: After "Step contract" paragraph in Common Step Fields section (lines 667-668)
+- `type: noop` subsection: After "Step Type: compensate", before "Step Type: end" (line 2842-2843)
+- Followed existing style: `\paragraph{}` for field-level features, `\subsection{}` for step types
+
+**Build verification:**
+- PDF compiled successfully: **395 pages** (up from 390)
+- Output: `design/gert/gert.pdf` (1.5 MB)
+- 7 undefined reference warnings (pre-existing, expected)
+- 1 multiply defined label warning (pre-existing)
+- All new content rendered correctly with syntax highlighting
+
+**Style consistency:**
+- Used `\begin{minted}{yaml}` for all code examples (matching existing pattern)
+- Used `\texttt{}` for inline code and field names
+- Escaped underscores: `on\_error`, `required\_evidence`, `\_\_error\_message`
+- Used `\begin{itemize}` for semantics lists
+- Matched paragraph structure and whitespace of adjacent sections
+
+**Source material:**
+- Ken's spec: `.squad/tmp/ken-gaps-v2-spec.md` (architecture details)
+- John's schema: `.squad/tmp/john-gaps-v2-schema.md` (YAML examples)
+
+**Key learnings:**
+- The step type taxonomy diagram is a TikZ diagram that must be updated when adding step types
+- The Terminal category is the right place for `noop` (alongside `end`)
+- Evidence can be declared at both step-level (any step type) and field-level (collector steps only)
+- `on_error: goto` only targets top-level flow steps (no jumping into branches/iterates)
+
+**Status:** All three features documented, PDF compiled and verified
+
+---
+
+## Team Update: Gap Implementation Phase 2 Complete (2026-04-30)
+
+**Status:** All 3 gap features now implemented and deployed.
+
+**Summary:**
+- **Type: noop** — First-class step type in engine, executor, schema ✓
+- **required_evidence** — Schema enforcement metadata, step/field-level declarations ✓
+- **on_error** — Error routing (continue/stop/goto) with precedence logic ✓
+
+**Team deliverables:**
+- Ken: Architectural decisions approved and documented
+- John: Schema design finalized and merged
+- Brian: Go implementation complete, all validation gates passing
+- Leslie: LaTeX documentation updated (390 → 395 pages)
+
+**Next phase:** Code commit to repository and merge to v2.0 milestone.
+
+**Citation:** Session log `.squad/log/2026-04-30T09-30-00Z-gap-impl-phase2.md`, orchestration logs in `.squad/orchestration-log/`

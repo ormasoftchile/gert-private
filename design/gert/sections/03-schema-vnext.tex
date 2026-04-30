@@ -524,7 +524,7 @@ Each step in \texttt{flow} is a \texttt{TreeNode}: either a \texttt{step} object
 (with optional \texttt{branches} and \texttt{iterate} siblings) or a standalone
 \texttt{iterate} block.
 
-v2 defines fourteen step types:
+v2 defines fifteen step types:
 
 \begin{center}
 \begin{tabular}{lp{8cm}}
@@ -544,6 +544,7 @@ v2 defines fourteen step types:
 \texttt{parallel}         & Fan-out concurrent branches with join semantics (\S\ref{subsec:step-parallel}) \\
 \texttt{assert}           & Evaluate a guard expression and halt on failure (\S\ref{subsec:step-assert}) \\
 \texttt{compensate}       & Declare a saga compensation action (\S\ref{subsec:step-compensate}) \\
+\texttt{noop}             & No-operation step; applies delay and capture without side effects (\S\ref{subsec:step-noop}) \\
 \texttt{end}              & Declare a terminal outcome (\S\ref{subsec:step-end}) \\
 \hline
 \end{tabular}
@@ -597,14 +598,15 @@ v2 defines fourteen step types:
 
     % ── Terminal ──────────────────────────────────────────────────────────────
     \node[catbox, right=0.9cm of cat-gov]               (cat-term)   {Terminal};
-    \node[stepbox, below=of cat-term]                   (end)        {end};
+    \node[stepbox, below=of cat-term]                   (noop)       {noop};
+    \node[stepbox, below=0.3cm of noop]                 (end)        {end};
 
     \begin{scope}[on background layer]
-      \node[gertfit, fit=(cat-term)(end)] (grp-term) {};
+      \node[gertfit, fit=(cat-term)(noop)(end)] (grp-term) {};
     \end{scope}
 
   \end{tikzpicture}
-  \caption{Step type taxonomy — 14 types organized by category.}
+  \caption{Step type taxonomy — 15 types organized by category.}
   \label{fig:step-type-taxonomy}
 \end{figure}
 
@@ -627,9 +629,11 @@ The following fields are available on every step type:
 \texttt{delay}           & string  & No  & Pre-execution pause (e.g.\ \texttt{5s}) \\
 \texttt{retry}           & object  & No  & Retry config (\S\ref{subsec:retry}) \\
 \texttt{continue\_on\_fail} & bool & No  & Continue execution on failure \\
+\texttt{on\_error}       & string \textbar{} object & No & Error handling strategy (\S\ref{subsec:on-error}) \\
 \texttt{scope}           & string  & No  & Named scope for variable isolation \\
 \texttt{export}          & string array & No & Variables to export from scope \\
 \texttt{capture}         & map     & No  & Output capture bindings \\
+\texttt{required\_evidence} & array & No & Evidence requirements (\S\ref{subsec:required-evidence}) \\
 \texttt{contract}        & object  & No  & Behavioral contract for governance \\
 \hline
 \end{tabular}
@@ -664,6 +668,127 @@ contract:
 
 Effects are free-form strings matched against \texttt{governance.rules[].effects}.
 The \texttt{secrets} list names variables whose values must be redacted in traces.
+
+\paragraph{Error routing}
+\label{subsec:on-error}
+
+The \texttt{on\_error} field declares the error handling strategy for a step.
+Three modes are supported:
+
+\begin{itemize}
+  \item \texttt{stop} — Halt execution immediately (default behavior)
+  \item \texttt{continue} — Suppress the error and advance to the next step
+  \item \texttt{goto:\textit{step\_id}} — Jump to a named step on error
+\end{itemize}
+
+\begin{minted}{yaml}
+# Suppress error and continue
+- step:
+    id: optional_check
+    type: cli
+    run: ./health_check.sh
+    on_error: continue
+
+# Explicit stop on error (default behavior, made explicit)
+- step:
+    id: critical_step
+    type: cli
+    run: ./deploy.sh
+    on_error: stop
+
+# Jump to a named step on error
+- step:
+    id: risky_operation
+    type: cli
+    run: ./risky.sh
+    on_error: "goto:rollback_handler"
+
+- step:
+    id: rollback_handler
+    type: cli
+    run: |
+      echo "Error: {{ .__error_message }}"
+      echo "Failed step: {{ .__error_step_id }}"
+      ./rollback.sh
+\end{minted}
+
+When \texttt{on\_error: goto} fires, the following variables are automatically set:
+
+\begin{itemize}
+  \item \texttt{\_\_error\_message} — Error message text
+  \item \texttt{\_\_error\_step\_id} — ID of the step that failed
+  \item \texttt{\_\_error\_code} — Error code (if available)
+  \item \texttt{\_\_error\_timestamp} — ISO8601 timestamp of error
+\end{itemize}
+
+\textbf{Target resolution:} Goto targets must be top-level flow steps; jumping into
+branch arms or iterate bodies is not supported.  Self-referential goto targets are
+rejected at parse time.
+
+\textbf{Precedence:} When both \texttt{continue\_on\_fail} and \texttt{on\_error} are
+present, \texttt{on\_error} takes precedence and \texttt{continue\_on\_fail} is ignored.
+
+\paragraph{Required evidence}
+\label{subsec:required-evidence}
+
+The \texttt{required\_evidence} field declares evidence artifacts the operator must
+provide before the step can be marked complete.  Three evidence kinds are supported:
+
+\begin{itemize}
+  \item \texttt{text} — Free-form text input
+  \item \texttt{checklist} — List of items the operator must acknowledge
+  \item \texttt{attachment} — File upload with content-addressed storage
+\end{itemize}
+
+\begin{minted}{yaml}
+- step:
+    id: deploy_service
+    type: cli
+    run: ./deploy.sh
+    required_evidence:
+      - kind: text
+        name: deployment_notes
+        label: "Deployment notes"
+      - kind: checklist
+        name: pre_deploy_check
+        label: "Pre-deployment checklist"
+        items:
+          - "Change ticket approved"
+          - "Rollback plan ready"
+          - "Monitoring dashboards open"
+      - kind: attachment
+        name: approval_screenshot
+        label: "Approval screenshot"
+\end{minted}
+
+\textbf{Enforcement:} The TUI surfaces evidence requirements to the operator and
+blocks step completion until all evidence is provided.  The engine records evidence
+artifacts in the trace.
+
+\textbf{Field-level evidence in collector steps:}
+Collector fields can declare evidence metadata using the \texttt{evidence} subfield:
+
+\begin{minted}{yaml}
+- step:
+    id: collect_deployment_info
+    type: collector
+    prompt: "Provide deployment evidence"
+    fields:
+      - name: notes
+        type: text
+        label: "Deployment notes"
+        evidence:
+          kind: text
+          name: deployment_evidence
+      - name: approval_doc
+        type: file
+        label: "Approval document"
+        evidence:
+          kind: attachment
+          name: approval_attachment
+\end{minted}
+
+This allows collector steps to explicitly mark which fields serve as compliance evidence.
 
 \subsection{Step Type: cli}
 \label{subsec:step-cli}
@@ -2714,6 +2839,57 @@ Compensation steps share the same variable context as the point at which the
 \caption{\texttt{type: compensate} saga flow: each compensation step is registered during forward execution. On failure or cancellation, registered compensations fire in reverse order, implementing the saga pattern for long-running operational transactions.}
 \label{fig:compensation-flow}
 \end{figure}
+
+\subsection{Step Type: noop}
+\label{subsec:step-noop}
+
+A no-operation step that advances execution without side effects.  Useful for pure
+delays between steps or variable accumulation without command execution.
+
+\textbf{Execution semantics:}
+
+\begin{itemize}
+  \item Applies \texttt{delay} if present (blocks for the specified duration)
+  \item Applies \texttt{capture} if present (evaluates and binds variables)
+  \item Records step execution event in trace
+  \item Immediately advances to the next step
+\end{itemize}
+
+\textbf{No side effects:} A noop step does not execute commands, invoke tools, wait for
+user input, or perform any external actions.  All behavior is driven by common step
+fields (\texttt{delay}, \texttt{capture}, \texttt{when}, \texttt{timeout}).
+
+\begin{minted}{yaml}
+# Pure delay step
+- step:
+    id: wait_for_settle
+    type: noop
+    title: "Wait for system to settle"
+    delay: 5s
+
+# Variable accumulation without command execution
+- step:
+    id: accumulate_report
+    type: noop
+    title: "Record {{ .svc }} result"
+    capture:
+      report: "{{ .report }}{{ .svc }}: {{ .status }}\n"
+\end{minted}
+
+\textbf{Use cases:}
+
+\begin{itemize}
+  \item Delays between steps (e.g.\ waiting for eventual consistency)
+  \item Variable transformations without command execution
+  \item Report accumulation in iterate loops
+  \item Stereotyping/rendering hints in TUI
+\end{itemize}
+
+\textbf{Interaction with step-level fields:}
+\texttt{delay}, \texttt{capture}, \texttt{when}, \texttt{timeout}, \texttt{scope}, and
+\texttt{export} apply as expected. \texttt{retry} and \texttt{on\_error} apply only if
+\texttt{timeout} is set (since the only failure mode is timeout expiration).
+\texttt{contract} does not apply (noop has no effects, reads, or writes).
 
 \subsection{Step Type: end}
 \label{subsec:step-end}

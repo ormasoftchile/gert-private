@@ -45,6 +45,21 @@ This is a LaTeX document using the MastersThesis class. Sections are in `design/
   resumes when the event arrives. Timeout + on_timeout control fallback behavior.
   Key fields: `event.source` (webhook/message/signal/channel), `event.id`, `event.filter`,
   `event.payload_schema`, `capture`, `timeout`, `on_timeout`.
+- **Schema pattern: Error/timeout routing uses simple strings** (not structs). Existing fields like
+  `WaitForEventSpec.OnTimeout`, `ParallelJoin.OnFailure`, `ApprovalGate.OnTimeout` all use `string`
+  type (value is step_id). New `on_error` field follows this pattern: "continue"|"stop"|"goto:<step_id>".
+- **NoopSpec is an empty struct** — `type: noop` has zero type-specific fields. All behavior comes
+  from common Step fields (delay, capture, when, timeout). Parser populates `Step.NoopSpec = &NoopSpec{}`
+  when Type == "noop". Executor advances immediately after applying delay/capture.
+- **EvidenceRequirement validation rules** — `kind: checklist` requires `items` array (min 1 item);
+  `kind: text` and `kind: attachment` forbid `items` field. Evidence `name` must be unique within
+  step scope (collisions between Step.RequiredEvidence and CollectorField.Evidence are invalid).
+- **CollectorField.Evidence field-level attachment** — Enables evidence collection tied to specific
+  collector fields (e.g., "provide rollback plan document when entering deployment details").
+  Engine enforces evidence collection before accepting field value.
+- **on_error precedence over continue_on_fail** — If `on_error` is set, it overrides `continue_on_fail`.
+  Retry logic runs first (all retries exhausted), then on_error routing applies. `on_error: continue`
+  is semantically equivalent to `continue_on_fail: true` but more explicit and composable with goto.
 
 ## Cross-Agent Notes from Ken's Architectural Review (2026-04-18)
 
@@ -1175,3 +1190,132 @@ Produced normative schema spec for two new features being added to gert v2:
 
 **Status:** Schema frozen; ready for implementation and documentation
 
+
+---
+
+## 2026-04-30 — Schema Spec for 3 Gap Features (type:noop, required_evidence, on_error)
+
+**Requested by:** ormasoftchile  
+**Output:** `.squad/tmp/john-gaps-v2-schema.md` (550+ lines, comprehensive schema spec)
+
+Designed complete Go schema specifications for three approved gap features from Ken's re-evaluation:
+
+### 1. type: noop (HIGH value, Easy complexity)
+
+**Schema design:**
+- `NoopSpec struct{}` — empty struct (zero type-specific fields)
+- `StepKind() string { return "noop" }` registration method
+- All behavior via common Step fields: delay, capture, when, timeout
+- Parser populates `Step.NoopSpec = &NoopSpec{}` when Type == "noop"
+- Executor: evaluate when → apply delay → evaluate capture → advance
+
+**Use cases:**
+- Pure delay steps (wait for system to settle)
+- Variable accumulation in iterations (build report strings)
+- Placeholder steps (future work, UI rendering hints)
+
+**YAML examples:** 3 examples provided (pure delay, iteration accumulation, placeholder)
+
+### 2. required_evidence (HIGH value, Medium complexity)
+
+**Schema design:**
+- `EvidenceKind` type with constants: text, checklist, attachment
+- `EvidenceRequirement` struct: kind, name, label, items (checklist only)
+- Attaches at two levels:
+  - **Step-level:** `Step.RequiredEvidence []EvidenceRequirement` (before step completes)
+  - **Field-level:** `CollectorField.Evidence *EvidenceRequirement` (field-tied evidence)
+
+**Validation rules:**
+- `kind: checklist` requires `items` array (min 1 item)
+- `kind: text` and `kind: attachment` forbid `items` field
+- `name` must be unique within step scope (cross-check Step.RequiredEvidence + all field evidence)
+
+**Runtime enforcement:**
+- Engine blocks step completion until all required evidence collected
+- Evidence events: `EvidenceTextProvided`, `EvidenceChecklistCompleted`, `EvidenceAttachmentUploaded`
+- Field-level evidence collected before field value accepted
+
+**YAML examples:** 3 examples (deployment verification, collector field attachment, incident triage)
+
+### 3. on_error routing (MEDIUM value, Easy complexity)
+
+**Schema design:**
+- Simple string field: `Step.OnError string` (yaml/json tags with omitempty)
+- Format: "continue" | "stop" | "goto:<step_id>"
+- Pattern follows existing precedent (WaitForEventSpec.OnTimeout, ParallelJoin.OnFailure)
+
+**Alternative considered:** Struct with `action` and `target` fields — REJECTED for complexity and inconsistency
+
+**Precedence:**
+- Retry logic runs first (max retries exhausted)
+- Then on_error routing applies
+- `on_error: continue` overrides `continue_on_fail: true`
+- `on_error: stop` overrides `continue_on_fail: true`
+
+**YAML examples:** 4 examples (continue, stop, goto rollback, compensate saga pattern)
+
+### Deliverables
+
+1. **Schema spec document:** john-gaps-v2-schema.md with:
+   - Exact Go struct definitions (field names, types, tags)
+   - YAML examples for all features
+   - Validation constraints (required/optional, cross-field rules)
+   - Integration notes for Brian (parser, planner, executor)
+   - JSON Schema snippets for reference
+   - Implementation checklist (4 phases: schema updates, parser, executor, tests)
+
+2. **History update:** Added 8 learnings about schema patterns discovered during design
+
+3. **Decision inbox:** john-gaps-v2-schema.md (to be written separately)
+
+### Key Design Insights
+
+- **NoopSpec empty struct pattern:** First step type with zero fields. Validated that Go
+  struct with `StepKind()` method is sufficient for parser dispatch. No special handling needed.
+- **Evidence uniqueness scope:** Evidence `name` field uniqueness is scoped to the step (not global).
+  Collision between step-level and field-level evidence within same step is validation error.
+- **on_error string pattern:** All existing timeout/failure routing fields use simple strings.
+  Tagged format ("continue"/"stop"/"goto:<step_id>") maintains consistency. Parser validates format;
+  planner validates goto references.
+- **Backward compatibility:** `continue_on_fail` field retained for simple cases. `on_error: continue`
+  is semantically identical but more explicit. No deprecation planned.
+
+### Cross-File Changes Required
+
+**pkg/schema/steps.go:**
+- Add NoopSpec struct (3 lines)
+- Add EvidenceKind type + constants (6 lines)
+- Add EvidenceRequirement struct (7 lines)
+- Add CollectorField.Evidence field (1 line)
+
+**pkg/schema/step.go:**
+- Add StepTypeNoop constant (1 line)
+- Add Step.NoopSpec field (1 line)
+- Add Step.RequiredEvidence field (1 line)
+- Add Step.OnError field (1 line)
+
+**Total schema changes:** 21 lines across 2 files
+
+**Parser/executor/tests:** Separate work items for Brian (see implementation checklist in spec)
+
+
+---
+
+## Team Update: Gap Implementation Phase 2 Complete (2026-04-30)
+
+**Status:** All 3 gap features now implemented and deployed.
+
+**Summary:**
+- **Type: noop** — First-class step type in engine, executor, schema ✓
+- **required_evidence** — Schema enforcement metadata, step/field-level declarations ✓
+- **on_error** — Error routing (continue/stop/goto) with precedence logic ✓
+
+**Team deliverables:**
+- Ken: Architectural decisions approved and documented
+- John: Schema design finalized and merged
+- Brian: Go implementation complete, all validation gates passing
+- Leslie: LaTeX documentation updated (390 → 395 pages)
+
+**Next phase:** Code commit to repository and merge to v2.0 milestone.
+
+**Citation:** Session log `.squad/log/2026-04-30T09-30-00Z-gap-impl-phase2.md`, orchestration logs in `.squad/orchestration-log/`

@@ -1800,3 +1800,127 @@ Specification is implementation-ready. All semantic edge cases resolved. Brian c
 
 **Citation:** Gap analysis document `.squad/tmp/ken-gap-reeval.md` (2026-04-30)
 
+
+### 2026-04-30: Architecture Specification for v2 Gap Implementation
+
+**Context:** User (ormasoftchile) approved implementing all 3 high-value gaps identified in gap re-evaluation: type: noop, required_evidence, and on_error routing. Tasked with writing detailed architecture specification for Brian's implementation.
+
+**Work Completed:**
+
+1. **Comprehensive Architecture Spec** — `.squad/tmp/ken-gaps-v2-spec.md` (34KB)
+   - Feature 1: type: noop (behavioral contract, executor behavior, edge cases)
+   - Feature 2: required_evidence (3 evidence kinds, step/field-level placement, enforcement semantics)
+   - Feature 3: on_error routing (3 modes: stop/continue/goto, error variables, goto target scoping)
+   - Cross-feature interactions (all 3 features compose cleanly)
+   - Implementation notes for Brian (parsing, planning, execution, trace events, TUI changes)
+   - Rollout plan (5 phases over 3 weeks)
+
+2. **Architectural Decisions Record** — `.squad/decisions/inbox/ken-gaps-v2-decisions.md` (10KB, 10 decisions)
+   - Decision 1: type: noop is first-class step type (not CLI hack)
+   - Decision 2: required_evidence supports both step-level and field-level declaration
+   - Decision 3: Evidence validation blocks step completion (governance control)
+   - Decision 4: on_error: goto targets top-level steps only (no local scoping)
+   - Decision 5: on_error takes precedence over continue_on_fail
+   - Decision 6: Error variables use double-underscore prefix (__error_message, etc.)
+   - Decision 7: No cycle detection for on_error: goto (user's responsibility)
+   - Decision 8: Evidence collected only on successful step execution (not on error)
+   - Decision 9: Noop steps can have required_evidence (valid manual checkpoint pattern)
+   - Decision 10: required_evidence doesn't replace collector steps (declarative vs. imperative)
+
+**Key Architectural Principles Established:**
+
+1. **type: noop as first-class primitive** — Not a CLI workaround. Empty NoopSpec struct. Executor applies delay + capture only. No side effects, no contract declarations allowed.
+
+2. **required_evidence as enforcement metadata** — Evidence declares WHAT must be captured (schema enforcement), NOT HOW to capture it (that's collector fields). Three evidence kinds: text, checklist, attachment. Engine blocks step completion until all evidence is provided (governance control). Supports both step-level (any step type) and field-level (collector fields) placement.
+
+3. **on_error routing completes error handling story** — Three modes: stop (default), continue (suppress error), goto (jump to step). Goto targets must be top-level flow steps (no jumping into branches/iterates). When goto fires, sets error variables (__error_message, __error_step_id, __error_code, __error_timestamp). on_error supersedes continue_on_fail when both present.
+
+4. **All 3 features compose cleanly** — A noop step can have required_evidence and on_error. Evidence is collected only on successful execution (if step fails, on_error fires BEFORE evidence collection). Noop with evidence enables manual checkpoint pattern (pause, collect evidence, advance).
+
+5. **Design for Brian's implementation** — Spec includes Go type sketches (not final — John owns schema), behavioral pseudocode for executors, planner validation rules, trace event definitions, TUI contract, edge case handling, and test strategy. Structured to minimize ambiguity.
+
+**Technical Decisions Highlights:**
+
+- **Goto target scoping** — Chose top-level only over local scoping. Rationale: goto targets are resolved at plan time (static), branches/iterates are dynamically unrolled at runtime. Local goto would require dynamic scoping (complex, less useful). Top-level goto enables runbook-level error recovery (more common pattern).
+
+- **Evidence validation strictness** — Chose BLOCK over WARN or FAIL. Rationale: Evidence is governance control (compliance requirement). Allowing skip defeats purpose. Operator can abandon run if they refuse to provide evidence (explicit choice). TUI disables "Next Step" button until satisfied.
+
+- **Error variable naming** — Chose double-underscore prefix over reserved namespace or env vars. Rationale: Low collision risk with user variables, consistent with internal/reserved conventions, no namespace pollution.
+
+- **Cycle detection** — Chose NO cycle detection for on_error: goto chains. Rationale: Runbook-level timeout already prevents runaway execution, cycle detection requires complex graph analysis, legitimate use case exists (retry loops with manual intervention).
+
+**Edge Cases Resolved:**
+
+- Noop inside iterate/branch/parallel → Standard control flow semantics apply
+- Noop with timeout but no delay → Completes immediately (timeout ignored)
+- on_error: goto inside iterate → Exits iterate, jumps to top-level step
+- on_error: goto inside parallel → First error wins (subsequent errors ignored)
+- Step with both required_evidence and on_error → If step fails, route error (skip evidence); if succeeds, validate evidence (block until provided)
+
+**Open Questions Documented (for team review):**
+
+1. Evidence validation strictness — Recommended BLOCK, but flagged for team discussion
+2. Error variable namespace — Recommended `__` prefix, but flagged for team input
+3. Cycle detection depth — Recommended NO detection, but flagged as architectural choice
+
+**Implementation Guidance:**
+
+- **Parser:** Add StepTypeNoop, parse required_evidence array, parse on_error with custom UnmarshalYAML
+- **Planner:** Resolve on_error goto targets, validate targets exist, detect self-loops only
+- **Executor:** Add NoopExecutor (minimal), evidence validation at step completion, error routing with error variable binding
+- **Trace Events:** Add EvidenceProvided, StepErrorRouted events
+- **TUI:** Evidence collection UI, error routing notifications, visual indicators
+
+**Rollout Plan:** 5 phases over 3 weeks (Schema+Parser → Planner → Executor → TUI → Docs)
+
+**Backward Compatibility:** All 3 features are additive (opt-in). Existing runbooks work unchanged. Migration from v1 is direct (syntax matches).
+
+**Testing Strategy:** Unit tests (parser, planner, executor), integration tests (6 scenarios), golden trace comparison (5 new traces).
+
+**Learnings:**
+
+1. **Spec detail level matters** — Brian needs implementation-ready specs, not high-level guidance. Including Go type sketches, pseudocode, and edge case handling reduces ambiguity and implementation time.
+
+2. **Decision justification is critical** — Documenting WHY a choice was made (not just WHAT) enables future reviewers to challenge or extend decisions with full context.
+
+3. **Cross-feature interaction analysis prevents bugs** — Explicitly analyzing how features compose (noop + evidence, evidence + on_error, etc.) surfaces edge cases before implementation.
+
+4. **Enforcement semantics must be explicit** — "Required evidence" could mean warn, block, or fail. Without explicit decision, Brian would have to guess (likely inconsistently). Spec must state enforcement mode clearly.
+
+5. **Scoping rules need rationale** — "Goto targets top-level only" seems arbitrary without rationale. Explaining the plan-time vs. runtime distinction makes the constraint logical.
+
+6. **Open questions are signals, not blockers** — Flagging 3 open questions for team review signals confidence gaps without blocking progress. If team doesn't respond, recommendations become defaults.
+
+**Artifacts:**
+- `.squad/tmp/ken-gaps-v2-spec.md` — Architecture specification (34KB, implementation-ready)
+- `.squad/decisions/inbox/ken-gaps-v2-decisions.md` — 10 architectural decisions with rationale
+
+**Next Steps:**
+- Team review (Ken, Brian, John, Barbara)
+- Approval gate (Ken sign-off — APPROVED as of 2026-04-30)
+- Implementation (Brian, Phase 1-5 over 3 weeks)
+
+**Status:** APPROVED FOR IMPLEMENTATION
+
+**Citation:** Architecture spec `.squad/tmp/ken-gaps-v2-spec.md`, decisions record `.squad/decisions/inbox/ken-gaps-v2-decisions.md` (2026-04-30)
+
+---
+
+## Team Update: Gap Implementation Phase 2 Complete (2026-04-30)
+
+**Status:** All 3 gap features now implemented and deployed.
+
+**Summary:**
+- **Type: noop** — First-class step type in engine, executor, schema ✓
+- **required_evidence** — Schema enforcement metadata, step/field-level declarations ✓
+- **on_error** — Error routing (continue/stop/goto) with precedence logic ✓
+
+**Team deliverables:**
+- Ken: Architectural decisions approved and documented
+- John: Schema design finalized and merged
+- Brian: Go implementation complete, all validation gates passing
+- Leslie: LaTeX documentation updated (390 → 395 pages)
+
+**Next phase:** Code commit to repository and merge to v2.0 milestone.
+
+**Citation:** Session log `.squad/log/2026-04-30T09-30-00Z-gap-impl-phase2.md`, orchestration logs in `.squad/orchestration-log/`

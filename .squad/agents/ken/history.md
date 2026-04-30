@@ -1753,3 +1753,50 @@ Specification is implementation-ready. All semantic edge cases resolved. Brian c
 
 **Next:** Apply decisions to next phase (v2.1 planning)
 
+---
+
+## Learnings
+
+### 2026-04-30: Gap Re-Evaluation of gert-for-reference vs gert v2
+
+**Context:** Conducted comprehensive re-evaluation of all 21 gert-for-reference examples against current v2 implementation, accounting for recently added features (gate/stop_if on include steps, concurrency on iterate).
+
+**Key Findings:**
+1. **Recent features close critical gaps** — gate/stop_if and iterate.concurrency were identified as high-value gaps in earlier analysis. Both are now implemented (commit aad6fa6), closing 2 of the top priority gaps.
+
+2. **7 structural gaps remain** (3 high-value):
+   - **HIGH: type: noop** — Simple delay/transform step without side effects. Used in 2 reference examples. Easy to implement.
+   - **HIGH: required_evidence schema** — Schema-enforced evidence collection (text, checklist, attachment). Used in 10+ examples. Core governance feature. Medium complexity.
+   - **MEDIUM: on_error routing** — Explicit error handling (goto/stop/continue). Easy to implement, completes error handling story.
+   - **MEDIUM: outcomes (predictive)** — Declarative outcome hints on manual/choice steps. Medium complexity (requires expression evaluator).
+   - **LOW: iterate.stereotype** — UI rendering hint (expanded vs collapsed). TUI-only concern.
+   - **LOW: Runbook-level timeout** — Global execution deadline. Not urgent.
+   - **DEFER: type: manual** — v1's unified manual step. v2 intentionally split into choice/decision/collector/approve for architectural clarity. Do NOT re-add.
+
+3. **4 formal syntax differences (not gaps)** — v2 uses different keywords but provides equivalent or better semantics:
+   - invoke → include (clearer composition semantics)
+   - tree → flow (better reflects linear execution)
+   - meta block → top-level fields (cleaner schema)
+   - tools array → toolRefs structured (versioning/isolation)
+
+4. **Translation viability** — All 21 reference examples can be mechanically translated to v2 syntax. With workarounds for type: noop (use cli+run:true) and type: manual (split into separate steps), translation success rate is 100%. Without workarounds (lossless), ~60% (blocked primarily by required_evidence).
+
+5. **Architecture validation** — v2's separation of choice/decision/collector/approve is architecturally superior to v1's type: manual despite increased verbosity. The split enables:
+   - Type-safe step handling (discriminated unions)
+   - Clear separation of concerns (choice vs data collection vs approval)
+   - Better governance enforcement (approval gates separate from UI prompts)
+
+**Recommendations for v2.0:**
+- Implement type: noop (HIGH value, easy)
+- Implement required_evidence schema (HIGH value, medium complexity, core governance)
+- Implement on_error routing (MEDIUM value, easy)
+- Defer outcomes (predictive) to v2.1 (requires expression evaluator)
+- Defer iterate.stereotype and runbook timeout to v2.1 (low value)
+- Do NOT implement type: manual (architecturally inferior; document migration guide instead)
+
+**Artifacts:**
+- `.squad/tmp/ken-gap-reeval.md` — Full gap analysis with coverage table, examples, recommendations
+- No decision inbox required — recommendations are advisory, not architectural changes
+
+**Citation:** Gap analysis document `.squad/tmp/ken-gap-reeval.md` (2026-04-30)
+

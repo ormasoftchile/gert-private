@@ -11573,3 +11573,291 @@ select {
 
 **Status:** APPROVED — Ready for production integration
 
+
+---
+
+## Ken — Gap Re-evaluation: High-Value Closures for v2.0
+
+**Proposed by:** Ken (Software Architect)  
+**Date:** 2026-04-30  
+**Status:** Proposed  
+**Related:** Gap re-evaluation `.squad/tmp/ken-gap-reeval.md`
+
+### Context
+
+Comprehensive re-evaluation of 21 gert-for-reference examples against current v2 implementation identified 7 remaining structural gaps after the recent addition of `gate: stop_if` and `iterate.concurrency` features.
+
+Three gaps are **HIGH value** and should be addressed in v2.0:
+
+### Decision 1: Add type: noop
+
+**Proposal:** Add `StepTypeNoop` as a new step type to `pkg/schema/step.go`.
+
+**Rationale:**
+- Found in 2 reference examples (edge-case-single-step-timeout, collect-health)
+- Use cases: Pure delay steps, variable transformations via capture, state transitions without side effects
+- Current workaround: `type: cli` with `run: "true"` (hacky, introduces spurious process spawn)
+- Complexity: Easy (1-2 hours implementation + tests)
+- Value: HIGH — enables clean variable transformation and pure delay patterns without hacks
+
+**Implementation:**
+```go
+const (
+    StepTypeNoop StepType = "noop"
+)
+```
+
+### Decision 2: Add required_evidence Schema
+
+**Proposal:** Add `RequiredEvidence []EvidenceRequirement` field to `Step` struct (step-level) and `CollectorField` struct (field-level).
+
+**Rationale:**
+- Found in 10+ reference examples (service-health-branching, incident-triage, app-crash, etc.)
+- Use cases: Schema-enforced evidence collection, runtime validation before step completion, governance audit trail
+- Current status: Evidence collection exists; evidence schema enforcement does NOT exist
+- Complexity: Medium (1-2 days)
+- Value: HIGH — Core governance feature. Evidence collection is a v2 differentiator vs v1. Schema enforcement makes it actionable.
+
+**Implementation:**
+```go
+type Step struct {
+    RequiredEvidence []EvidenceRequirement `yaml:"required_evidence,omitempty" json:"required_evidence,omitempty"`
+}
+
+type EvidenceRequirement struct {
+    Kind  EvidenceKind `yaml:"kind"  json:"kind"`
+    Name  string       `yaml:"name"  json:"name"`
+    Items []string     `yaml:"items,omitempty" json:"items,omitempty"`
+}
+
+type EvidenceKind string
+const (
+    EvidenceKindText       EvidenceKind = "text"
+    EvidenceKindChecklist  EvidenceKind = "checklist"
+    EvidenceKindAttachment EvidenceKind = "attachment"
+)
+```
+
+### Decision 3: Add on_error Routing
+
+**Proposal:** Add `OnError *ErrorHandler` field to `Step` struct to enable explicit error routing.
+
+**Rationale:**
+- Current status: `continue_on_fail: bool` exists (binary choice: stop or continue); no way to specify "on error, goto step X"
+- Use cases: Rollback handlers, retry with different strategy, graceful degradation
+- Complexity: Easy (1 day)
+- Value: MEDIUM — Completes error handling story, enables rollback patterns
+
+**Implementation:**
+```go
+type Step struct {
+    OnError *ErrorHandler `yaml:"on_error,omitempty" json:"on_error,omitempty"`
+}
+
+type ErrorHandler struct {
+    Action string `yaml:"action"           json:"action"`
+    Target string `yaml:"target,omitempty" json:"target,omitempty"`
+}
+```
+
+**Actions:** goto, stop, continue, compensate (compensate deferred to v2.1)
+
+### Proposed Scope for v2.0
+
+**Implement:**
+1. ✅ Decision 1: type: noop (HIGH value, easy)
+2. ✅ Decision 2: required_evidence schema (HIGH value, medium complexity)
+3. ✅ Decision 3: on_error routing (MEDIUM value, easy)
+
+**Defer to v2.1:**
+4. outcomes (predictive) — MEDIUM value, medium complexity
+5. iterate.stereotype — LOW value, TUI-only
+6. Runbook-level timeout — LOW value, not urgent
+
+**Do NOT implement:**
+7. type: manual — Architecturally inferior to v2's separated primitives
+
+### Consequences
+
+**If Approved:**
+- ✅ Closes 3 high/medium-value gaps identified in reference examples
+- ✅ Enables clean migration paths from v1 runbooks
+- ✅ Strengthens governance layer (required_evidence is a core differentiator)
+- ✅ Completes error handling story
+- ✅ Eliminates hacky workarounds
+
+**If Deferred:**
+- ⚠️ v1 → v2 migration requires more workarounds
+- ⚠️ Evidence collection remains non-enforced
+- ⚠️ Error handling limited to binary continue_on_fail
+
+### Recommendation
+
+**Approve all 3 decisions for v2.0.**
+
+**Total implementation effort:** ~3-4 days (acceptable for v2.0 scope)
+
+**Assignments:**
+- Brian (executor layer expert): Decision 1 (noop), Decision 3 (on_error routing)
+- John (schema layer expert): Decision 2 (required_evidence)
+- Ken (architect): Sign-off before merge
+
+---
+
+## Brian — from_step Pre-population Race Condition Fix
+
+**Date:** 2026-04-25  
+**Author:** Brian (Go Programmer)  
+**Status:** Implemented  
+**Component:** gert-tui
+
+### Summary
+
+Fixed race condition in `gert-tui` where collector forms failed to pre-populate fields from immediately preceding CLI steps (fields from earlier steps worked, but immediately preceding step output lost the race).
+
+### Root Cause
+
+Two concurrent paths in event handling:
+1. **Event path:** Step output → events buffer → forwarding goroutine → session accumulation
+2. **Form request path:** Engine calls PromptForm (synchronous) → form reads session map
+
+When engine immediately calls PromptForm after emitting output, the output event may not have propagated to the session map yet.
+
+### Solution: Three-Layer Defense
+
+**Layer 1:** Session-level output accumulation (mutex-protected map)
+**Layer 2:** 30ms yield before form pre-population (lets event goroutine drain)
+**Layer 3:** InitialValue field on FormField (pre-populated by LiveSession, fallback to app.go)
+
+### Changed Files
+
+- `/Volumes/Projects/gert-tui/internal/session/live.go` — accumulation logic, yield, pre-population
+- `/Volumes/Projects/gert-tui/internal/session/session.go` — InitialValue field
+- `/Volumes/Projects/gert-tui/internal/tui/app.go` — prefer InitialValue over stepOutputs
+
+### Impact
+
+- ✅ All existing tests pass (backward compatible)
+- ✅ Race detector clean
+- ✅ No breaking changes
+- ✅ Manual testing with net-diag.yaml confirms fix
+
+### Trade-offs
+
+**Pro:** Simple implementation, backward compatible, no new dependencies
+
+**Con:** 30ms yield is heuristic (but three-layer defense makes okay), session map duplicates app.go's map
+
+---
+
+## Brian — ApprovalGate Injection in run.Config
+
+**Date:** 2025-04-29  
+**Author:** Brian (Go Programmer)  
+**Status:** Implemented
+
+### Summary
+
+Added `ApprovalGate governance.ApprovalGate` field to `run.Config` struct to allow external clients (like gert-turn-ui) to inject custom approval gate implementations.
+
+### Decision
+
+Modified `buildEngineConfig` to use `cfg.ApprovalGate` if set, defaulting to NoOp if nil.
+
+### Rationale
+
+1. **Capability injection:** External clients control approval UX by implementing the interface
+2. **Nil means default:** Backwards-compatible (existing code gets no-op behavior)
+3. **Symmetry:** Same pattern already established for PromptProvider
+
+### Impact
+
+- ✅ External clients can now implement custom approval UX (JSON protocol, web UI, Slack bot, etc.)
+- ✅ No breaking change — nil defaults to existing no-op behavior
+- ✅ Clean separation: engine handles approval logic, clients handle approval UX
+
+---
+
+## Brian — gert-tui Interface Gaps Implementation
+
+**Date:** 2025-01-22  
+**Author:** Brian (Go Programmer)  
+**Status:** Implemented & Committed (f960d2f)
+
+### Summary
+
+Implemented three interface gaps in gert v2 identified during gert-tui spec writing:
+
+1. **EventKindStepOutput** — Step output streaming
+2. **EventKindRunFailed** — Run failure event kind
+3. **RunState.Plan** — Expose ExecutionPlan from RunHandle
+
+### Gap 1: EventKindStepOutput
+
+- **Constant:** `EventKindStepOutput EventKind = "step/output"`
+- **Emission:** After CLI executor returns result, before governance redaction
+- **Payload:** step_id, stream (stdout/stderr), line, sequence
+- **Note:** Full stdout/stderr emitted at completion (line-by-line streaming deferred to v2.1)
+
+### Gap 2: EventKindRunFailed
+
+- **Constant:** `EventKindRunFailed EventKind = "run/failed"`
+- **Emission:** When `failRun()` marks run as failed
+- **Benefit:** Distinct event kind makes failure explicit at event-kind level (no payload parsing needed)
+
+### Gap 3: RunState.Plan
+
+- **Field:** Added `Plan *ExecutionPlan` to `RunState` struct
+- **Population:** Copied from `h.run.Plan` in `State()` method
+- **Benefits:** Zero-cost (just pointer copy), non-breaking, enables TUI step list panel
+
+### Impact
+
+- ✅ All tests pass
+- ✅ Go build and vet clean
+- ✅ Non-breaking changes
+
+### Future Work
+
+**Platform Streaming API** (deferred to v2.1) to enable true line-by-line step output streaming.
+
+---
+
+## Ken — gert-tui Interface Gaps (Architectural Decisions)
+
+**Date:** 2026-04-21  
+**Architect:** Ken (Software Architect)  
+**Status:** DECIDED ✅
+
+### Gap 1: Real-Time Step Output Streaming
+
+**Decision:** Add `EventKindStepOutput EventKind = "step/output"` to `pkg/trace/event.go`
+
+**Rationale:** gert is event-driven; all observable state changes should emit events. Output streaming is observable state.
+
+### Gap 2: Access to ExecutionPlan from RunHandle
+
+**Decision:** Add `Plan *ExecutionPlan` field to `RunState` struct (not new method on RunHandle)
+
+**Rationale:**
+- Minimizes interface surface area changes
+- Idiomatic Go (RunState is already a snapshot struct)
+- Consistent with existing design (Plan is immutable context)
+- Zero additional allocation
+
+### Gap 3: Run Failure Event
+
+**Decision:** Add `EventKindRunFailed EventKind = "run/failed"` to `pkg/trace/event.go`
+
+**Rationale:** A run entering `RunStatusFailed` is a terminal state transition that deserves its own event, separate from `run/completed`.
+
+### Summary of Changes
+
+| Gap | Artifact | Type | Priority |
+|-----|----------|------|----------|
+| 1 | EventKindStepOutput | New event kind | v2.0 |
+| 2 | Plan field in RunState | Struct field | v2.0 |
+| 3 | EventKindRunFailed | New event kind | v2.0 |
+
+All three are **non-breaking** (additive only) and fit cleanly into gert v2's event-driven architecture.
+

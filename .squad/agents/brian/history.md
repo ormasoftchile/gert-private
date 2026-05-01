@@ -1764,3 +1764,36 @@ Input defaults via the `default:` field on inputs weren't working (likely not im
 - Markdown rendering in TUI layer (engine just emits text for now)
 - Table format support requires structured input (deferred)
 
+---
+
+## Learnings
+
+### RunGraph implementation (gert-tui session package)
+
+**Note:** RunGraph implemented at `/Volumes/Projects/gert-tui/internal/session/navigation.go`
+
+- `NodeStatus` values match `pkg/engine/run.go` `StepStatus*` constants exactly (pending, running, waiting, completed, failed, skipped, denied).
+- `RunGraph` is NOT goroutine-safe by design — TUI calls it only from bubbletea's `Update()` (single-threaded). Web adapters synchronize externally.
+- `Apply` is graceful for unknown nodes (no-op) — events may arrive before `AddNode` during startup.
+- `FocusedOutput` uses `\n---\n` separator for aggregate output; nodes with empty output are excluded.
+- 19 unit tests cover all specified behaviors; all pass.
+
+
+---
+
+## 2026-05-01 — Scribe recording
+
+**Manifest completion — RunGraph harness integration**
+
+### brian-rungraph (COMPLETED)
+- Implemented session.RunGraph at `/Volumes/Projects/gert-tui/internal/session/navigation.go`
+- Full API: AddNode, Apply, Focus/Unfocus, FocusedOutput, OnChange, Len, Node/Nodes
+- 19 unit tests passing
+
+### brian-harness-wire (COMPLETED)
+- Wired RunGraph into TUIApp as parallel backing store
+- Updated harness accessors to delegate: GetStepStatus, GetStepOutputStr, GetSteps, GetStepCount
+- All tui package tests passing
+
+**Decision record:** `.squad/decisions/decisions.md` (merged from inbox)
+

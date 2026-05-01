@@ -1449,3 +1449,26 @@ The chapter is comprehensive (11 sections, ~900 lines of LaTeX). It covers:
 **Build verification:** Compiled cleanly with latexmk. Output: `gert.pdf` (405 pages, 1.6M).
 
 **Decision record:** `.squad/decisions/inbox/leslie-display-latex.md`
+
+### Step state diagram terminology alignment
+
+**Task:** Align step state diagram labels in `design/gert/sections/02-architecture.tex` to match authoritative engine constants from `pkg/engine/run.go`.
+
+**Changes made** (lines 892–913 in 02-architecture.tex):
+1. Display label change: `{executing}` → `{running}` (node name `ss-executing` unchanged, internal only)
+2. Display label change: `{waiting\_for\_input}` → `{waiting}`
+3. Comment update: "below executing" → "below running"
+4. Added `denied` terminal state node (line 902) with new arrow from executing
+5. Adjusted arrow angles to accommodate the new state and maintain visual clarity
+
+**Verification:** No prose references to state names found in the document. TikZ syntax valid after changes. No PDF rebuild performed per request.
+
+**Why:** Design documentation was diverging from the engine's authoritative step state constants.
+
+---
+
+## 2026-05-01 — Scribe recording
+
+**Task:** leslie-latex-fix manifest completion  
+**Status:** Recorded orchestration-log entry for completed step state diagram updates
+

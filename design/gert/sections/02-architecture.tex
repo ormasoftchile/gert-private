@@ -557,6 +557,13 @@ identities. Supports \texttt{all}/\texttt{any}/\texttt{quorum} modes with an exp
 pool. Optionally enforces a business-day timeout (GAP-1) and M-of-N quorum tracking (GAP-2). See
 §\ref{sec:approve_executor_contract}. \\
 \hline
+\textbf{Presentation} & display & Render template content to the operator without requiring input.
+\texttt{content} is evaluated via Go \texttt{text/template} against the current variable scope.
+\texttt{format} controls rendering hint (\texttt{text} or \texttt{markdown}). Fire-and-continue;
+no state mutation. \\
+\hline
+\textbf{Utility} & noop & No-op placeholder. Evaluates \texttt{capture} expressions. Zero side effects. \\
+\hline
 \end{tabular}
 \end{center}
 
@@ -1345,6 +1352,139 @@ incoming approval/rejection without consulting the calendar, and the timeout sch
 checks \texttt{now >= deadline} without consulting the quorum state. Whichever condition
 fires first wins: quorum reached → step proceeds; deadline fired → \texttt{on\_timeout}
 policy governs the outcome.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Display Step Executor Contract}
+\label{sec:display_executor_contract}
+% ─────────────────────────────────────────────────────────────────────────────
+
+A \texttt{type: display} step renders template content to the operator's terminal
+without blocking for input. It is the standard primitive for presenting collected
+data, reports, and status summaries mid-flow.
+
+\subsubsection*{Schema}
+
+\begin{minted}[frame=lines,framesep=2mm,fontsize=\small]{yaml}
+- step:
+    id: show_health_report
+    type: display
+    title: "Service Health Report"     # step-list label
+    display:
+      content: "{{ .report }}"         # template body (required)
+      format: text                     # text | markdown (default: text)
+\end{minted}
+
+\subsubsection*{Fields}
+
+\begin{center}
+\begin{tabular}{|l|l|l|p{7cm}|}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{content} & string & Yes & Template body rendered via \texttt{text/template}
+against the current variable scope. YAML \texttt{|} and \texttt{>} blocks are supported.
+Must not be empty. \\
+\hline
+\texttt{format} & enum & No & Render hint for the display surface. \texttt{text} (default):
+pre-formatted plaintext, whitespace preserved. \texttt{markdown}: render with Markdown
+formatting (bold, lists, headers, code blocks). \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsubsection*{Execution Semantics}
+
+The display executor:
+\begin{enumerate}
+  \item Evaluates \texttt{content} through the template engine (same evaluator used by
+        \texttt{title}, \texttt{subtitle}, and \texttt{capture} expressions).
+  \item Writes the rendered string to the operator's output stream.
+        In CLI mode this is stdout; TUI clients may render into a styled panel.
+  \item Returns immediately — the step never blocks for acknowledgment.
+  \item Records a \texttt{step/completed} trace event. The rendered content is included
+        in the event payload subject to the run's redaction policy.
+  \item Never mutates the variable scope. \texttt{capture:} is disallowed on display steps
+        (semantic validation rejects it).
+\end{enumerate}
+
+\subsubsection*{Surface Behaviour}
+
+\begin{center}
+\begin{tabular}{|l|p{5cm}|p{5cm}|}
+\hline
+\textbf{Surface} & \textbf{Behaviour} & \textbf{Notes} \\
+\hline
+CLI (TTY) & \texttt{fmt.Fprintln(stdout, rendered)} & ANSI passthrough if format is markdown \\
+\hline
+CLI (pipe / CI) & Same as TTY — output is emitted to stdout & Markdown stripped to plaintext \\
+\hline
+TUI & Rendered in the step panel / output card & \texttt{format: markdown} enables styled rendering \\
+\hline
+Dry-run & Emits trace event; no stdout write & Content is logged as-is \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsubsection*{Disallowed Common Fields}
+
+The following common \texttt{Step} fields are incompatible with \texttt{type: display}
+and are rejected by semantic validation:
+
+\begin{itemize}
+  \item \texttt{capture:} — display produces no output values; nothing to bind.
+  \item \texttt{retry:} — display cannot fail in a retriable sense.
+  \item \texttt{contract:} — display has no side effects; a contract declaration is misleading.
+\end{itemize}
+
+\subsubsection*{Runbook Example}
+
+\begin{minted}[frame=lines,framesep=2mm,fontsize=\small]{yaml}
+flow:
+  - iterate:
+      id: collect_health_loop
+      over: services
+      as: svc
+      steps:
+        - step:
+            id: check_svc
+            type: include
+            include:
+              runbook: check-service.runbook.yaml
+              with:
+                service_host: "{{ .svc }}"
+            capture:
+              last_status: service_status
+
+        - step:
+            id: accumulate
+            type: noop
+            capture:
+              report: "{{ .report }}{{ .svc }}: {{ .last_status }}\n"
+
+  - step:
+      id: show_report
+      type: display
+      title: "Health Report"
+      display:
+        content: |
+          Service Health Report
+          =====================
+
+          {{ .report }}
+        format: text
+
+  - step:
+      id: done
+      type: end
+      outcome:
+        category: resolved
+        code: health_report_complete
+\end{minted}
+
+The \texttt{type: display} step is the correct primitive for presenting accumulated
+data to the operator. Using \texttt{type: noop} with a multiline \texttt{title:} is
+explicitly an anti-pattern: \texttt{title} is a navigation label for the step list,
+not a display surface.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \subsection{Collector Field Validation Contract}

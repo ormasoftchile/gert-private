@@ -1416,3 +1416,36 @@ The chapter is comprehensive (11 sections, ~900 lines of LaTeX). It covers:
 **Key lesson:** The old table listed `contains()`, `startsWith()` etc. as top-level functions, but expr-lang v1.17.8 reserves those as infix operators — calling them as functions would throw a parse error. The `str.*` namespace approach avoids this by using member-access notation, which the lexer treats differently from keyword resolution.
 
 **Decision record:** `.squad/decisions/inbox/leslie-condition-syntax-doc.md`
+
+### 2026-04-30 — Added type: display step documentation to design doc
+
+**Task:** Document the new `type: display` step in the gert v2 design doc based on research by Ken and John.
+
+**Where I changed:**
+1. `design/gert/sections/02-architecture.tex` — Step Type Classification table (around line 528)
+2. `design/gert/sections/02-architecture.tex` — New Display Step Executor Contract section (before Collector Field Validation Contract at line 1350)
+
+**What I added:**
+1. **Step Type Classification table:** Added two new rows:
+   - **Presentation** category with `display` step type: "Render template content to the operator without requiring input."
+   - **Utility** category with `noop` step type: "No-op placeholder. Evaluates capture expressions. Zero side effects."
+
+2. **Display Step Executor Contract section** (`\label{sec:display_executor_contract}`):
+   - Schema example showing `content:` and `format:` fields
+   - Fields table documenting `content` (required) and `format` (optional: text|markdown)
+   - Execution Semantics: 5-step list explaining template evaluation, output writing, non-blocking behavior, trace event recording, and no state mutation
+   - Surface Behaviour table: CLI (TTY), CLI (pipe/CI), TUI, Dry-run
+   - Disallowed Common Fields: `capture:`, `retry:`, `contract:` are rejected by semantic validation
+   - Runbook Example: Full `collect-health` pattern showing iterate loop → accumulate with noop → display report → end
+
+**Key design points from Ken & John's research:**
+- `type: display` is a dedicated Presentation/Utility step type (not an overload of noop or end)
+- `content:` is template-rendered via Go `text/template` (same engine as title/subtitle/capture)
+- `format:` controls rendering hint (text default, markdown optional); engine is agnostic, surface decides how to render
+- Fire-and-continue: never blocks for input (unlike collector/choice/approve)
+- No state mutation: `capture:` is disallowed (semantic validation rejects it)
+- Distinct from tool-based export: display is operator-facing, not artifact-facing
+
+**Build verification:** Compiled cleanly with latexmk. Output: `gert.pdf` (405 pages, 1.6M).
+
+**Decision record:** `.squad/decisions/inbox/leslie-display-latex.md`

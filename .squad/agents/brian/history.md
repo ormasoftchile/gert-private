@@ -1656,3 +1656,111 @@ Input defaults via the `default:` field on inputs weren't working (likely not im
 - ❌ 2 tests still failing (both related to include-in-iterate pattern)
 - Proper fix requires SubStepRunner architecture refactoring (separate task recommended)
 
+
+---
+
+## Phase 18: Implement `type: display` Step (2026-07-16)
+
+**Task:** Add `type: display` as a new step type for rendering template content to the operator without requiring user input.
+
+**Context:** The `collect-health` runbook needed to display an accumulated health report to the operator. Ken and John independently brainstormed the solution and both recommended `type: display` as a new dedicated step type, analogous to Ansible's `debug` task.
+
+**Implementation Scope:**
+
+1. **Schema Changes:**
+   - Added `DisplaySpec` struct to `pkg/schema/steps.go` with `Content` and `Format` fields
+   - Added `StepTypeDisplay` constant to `pkg/schema/step.go`
+   - Added `DisplaySpec` inline field to `Step` struct
+   - Added `StepKind()` method implementation for `DisplaySpec`
+
+2. **Parser:**
+   - Added `case schema.StepTypeDisplay` to `internal/parser/unmarshal.go`
+   - Simple decode pattern (no custom decoder needed)
+
+3. **Executor:**
+   - Created `internal/executor/display.go` with `DisplayExecutor`
+   - Renders `Content` via template evaluator
+   - Writes to configurable `io.Writer` (defaults to `os.Stdout`)
+   - Returns completed status immediately (no user input)
+
+4. **Registry:**
+   - Added `Output io.Writer` field to `RegistryConfig`
+   - Registered display executor in `NewDefaultRegistry` with fallback to `os.Stdout`
+   - Added `io` and `os` imports
+
+5. **Engine Integration:**
+   - Added display case to `specForStep` in `internal/engine/engine.go`
+   - Added display case to `stepSpecForStep` in `internal/adapter/wire.go`
+
+6. **Example Update:**
+   - Fixed `examples/collect-health/collect-health.runbook.yaml`
+   - Changed `show_report` step from noop abuse to proper display step:
+     ```yaml
+     - step:
+         id: show_report
+         type: display
+         title: "Health Report"
+         display:
+           content: |
+             Service Health Report
+             =====================
+
+             {{ .report }}
+           format: text
+     ```
+
+7. **Tests:**
+   - Created `internal/executor/display_test.go` with 6 test cases:
+     - Basic content rendering
+     - Template variable interpolation
+     - Nil spec error handling
+     - Wrong spec type error handling
+     - Template evaluation error handling
+     - Multiline content rendering
+
+**Validation Results:**
+- ✅ `go build ./...` — clean build
+- ✅ `go vet ./...` — no issues
+- ✅ `go test ./internal/executor -run TestDisplayExecutor` — all 6 tests pass
+- ✅ `go test ./... -race -count=1` — display tests pass (pre-existing failures in other packages unchanged)
+
+**Design Decisions:**
+- Placed `display` in the **Utility step types** category alongside `noop`
+- No state mutation (like noop) — display doesn't capture variables
+- Template evaluation errors surface as step failures
+- Format field is a hint for TUI rendering; executor writes plain text to `io.Writer`
+- `pause:` field deferred to future (would blur into approve semantics)
+
+**Files Modified:**
+- `pkg/schema/steps.go` — added DisplaySpec struct and StepKind method
+- `pkg/schema/step.go` — added StepTypeDisplay constant and DisplaySpec field
+- `internal/parser/unmarshal.go` — added display case
+- `internal/executor/display.go` — new executor
+- `internal/executor/display_test.go` — new tests
+- `internal/executor/registry.go` — added Output field and display registration
+- `internal/engine/engine.go` — added display to specForStep
+- `internal/adapter/wire.go` — added display to stepSpecForStep
+- `examples/collect-health/collect-health.runbook.yaml` — fixed show_report step
+
+**Key Learnings:**
+
+1. **Consistent Pattern for New Step Types:** Adding a new step type requires touching exactly 7 files:
+   - Schema definition (steps.go, step.go)
+   - Parser (unmarshal.go)
+   - Executor (new file + registry.go)
+   - Engine integration (engine.go, wire.go)
+   - Tests (new test file)
+
+2. **DisplaySpec is Simpler Than Expected:** Unlike input-requiring steps (choice, collector), display has no complex interaction flow. The executor is nearly identical to noop but with output writing.
+
+3. **io.Writer Injection Pattern:** Using `io.Writer` in the executor makes testing trivial (bytes.Buffer) and keeps the executor decoupled from stdout/stderr decisions.
+
+4. **Format Field as Hint:** The `format` field (text/markdown) is stored but not interpreted by the engine — it's a progressive enhancement hint for TUI rendering. This keeps the engine simple.
+
+5. **Template Error Handling:** Template evaluation errors (e.g., `{{ .undefined.field }}`) correctly surface as step failures, maintaining the contract that display can fail if its content template is invalid.
+
+**What's Next:**
+- Ken and John's brainstorm docs recommend considering `pause: true` for future enhancement (operator acknowledgment before advancing)
+- Markdown rendering in TUI layer (engine just emits text for now)
+- Table format support requires structured input (deferred)
+

@@ -890,16 +890,17 @@ When \texttt{Next} returns \texttt{io.EOF}:
 \begin{tikzpicture}[node distance=0.8cm and 1.0cm, scale=0.9, transform shape]
   %% Main path
   \node[stepbox]                               (ss-pending)      {pending};
-  \node[stepbox, right=1.2cm of ss-pending]    (ss-executing)    {executing};
+  \node[stepbox, right=1.2cm of ss-pending]    (ss-executing)    {running};
   \node[stepbox, right=1.8cm of ss-executing]  (ss-completed)    {completed};
 
-  %% Waiting for input (below executing, loops back)
-  \node[stepbox, below=1.3cm of ss-executing]  (ss-waiting) {waiting\_for\_input};
+  %% Waiting for input (below running, loops back)
+  \node[stepbox, below=1.3cm of ss-executing]  (ss-waiting) {waiting};
 
   %% Terminal / error states (right of waiting)
   \node[stepbox, right=1.8cm of ss-waiting]    (ss-failed)       {failed};
   \node[stepbox, below=0.8cm of ss-failed]     (ss-skipped)      {skipped};
-  \node[stepbox, below=0.8cm of ss-skipped]    (ss-compensating) {compensating};
+  \node[stepbox, below=0.8cm of ss-skipped]    (ss-denied)       {denied};
+  \node[stepbox, below=0.8cm of ss-denied]     (ss-compensating) {compensating};
 
   %% Arrows
   \draw[gertarrow] (ss-pending)   -- (ss-executing);
@@ -908,7 +909,8 @@ When \texttt{Next} returns \texttt{io.EOF}:
   \draw[gertarrow] (ss-waiting)   to[bend right=30] (ss-executing);
   \draw[gertarrow] (ss-executing) to[out=-30, in=165] (ss-failed);
   \draw[gertarrow] (ss-executing) to[out=-45, in=170] (ss-skipped);
-  \draw[gertarrow] (ss-executing) to[out=-55, in=175] (ss-compensating);
+  \draw[gertarrow] (ss-executing) to[out=-65, in=175] (ss-denied);
+  \draw[gertarrow] (ss-executing) to[out=-75, in=175] (ss-compensating);
 \end{tikzpicture}
 
 \caption{Execution lifecycle --- run states (top) and step states (bottom).}

@@ -152,3 +152,11 @@ Implementation complete and merged to main. Ready for TUI panel integration in n
 **Trade-offs Accepted**:
 - TUI must register event listeners (vs. polling); standard bubbletea pattern
 - RunState.Plan is reference; caller must not mutate (Go convention)
+
+---
+
+## Learnings
+
+- RunGraph wired into TUIApp at app.go (parallel to flat state — flat state retained for rendering)
+- Harness accessors (GetStepStatus, GetStepOutputStr, GetSteps, GetStepCount) now delegate to RunGraph
+- Harness-first rule: TUI rendering still uses flat state; RunGraph integration validated via tests

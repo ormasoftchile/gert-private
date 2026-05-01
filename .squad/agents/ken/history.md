@@ -1964,3 +1964,45 @@ env := map[string]any{
 - Phase 1: string ops (v2.0), Phase 2: date/JSON (v2.1), Phase 3: regex/math
 
 **Citation:** Design analysis `.squad/tmp/ken-condition-syntax-analysis.md`, decision inbox `.squad/decisions/inbox/ken-condition-syntax.md` (2025-01-21)
+
+---
+
+### RunGraph Normalized Provenance Model (2025-01-21)
+
+**Context:** Runtime execution graph (`RunGraph`) needs provenance metadata to link runtime nodes back to source runbook files and step specifications. Required for focus navigation in TUI, web renderer, VS Code adapter.
+
+**Problem:** Rejected `SourceRef` model embedded full runbook metadata on every `RunNode`, causing wasteful duplication when 100 nodes come from same runbook.
+
+**Solution designed:** Normalized relational model with three entity types:
+1. **RunbookRef** — stored once per unique runbook file (includes parent link for include chains)
+2. **StepRef** — stored once per unique (runbook, step) pair
+3. **RunNode** — runtime node with foreign key `StepRefID` → `StepRef.ID`
+
+**Key architectural insights:**
+- Foreign key approach achieves O(1) lookup without data duplication
+- Include chains represented by `ParentRefID` links in `RunbookRef` (no recursion needed)
+- Iteration handled by `RunNode.Iteration` field; multiple nodes share same `StepRefID`
+- Provenance tables populated from new `step/planned` event during planning phase
+- Adapters (TUI, web, VS Code) use uniform `GetNodeProvenance()` API
+
+**ID naming conventions established:**
+- RunbookRef: `"main"` | `"include:<alias>"` | `"include:<parent>/<child>"`
+- StepRef: `"<runbook-ref-id>:<step-id>"`
+- RunNode: engine-generated (UUID or sequential)
+
+**Event schema additions:**
+- `step/planned` (new): emitted once per unique step during planning
+- `step/started` (extended): add `step_ref_id` and `iteration` fields
+
+**Benefits:**
+- Runbook metadata stored once (not N times for N nodes)
+- Include chain reconstruction via `GetNodeProvenance()` walk
+- Supports all navigation requirements (TUI focus, web graph render, VS Code drill-down)
+- Backward compatible (old adapters ignore new fields)
+
+**Implementation handoff to Brian:**
+- Update `internal/session/navigation.go` with new types and API
+- Extend engine event emitter for `step/planned` and `step/started` payloads
+- Add integration test for included runbook with iteration
+
+**Citation:** Design document `.squad/tmp/ken-rungraph-provenance-design.md`, decision record `.squad/decisions/inbox/ken-rungraph-provenance.md` (2025-01-21)

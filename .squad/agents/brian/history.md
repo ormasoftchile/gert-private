@@ -1797,3 +1797,130 @@ Input defaults via the `default:` field on inputs weren't working (likely not im
 
 **Decision record:** `.squad/decisions/decisions.md` (merged from inbox)
 
+---
+
+## 2026-05-01 — Provenance Implementation
+
+**Task:** Implement Ken's normalized provenance design in `/Volumes/Projects/gert-tui/internal/session/navigation.go`
+
+### Implementation Summary
+
+Added normalized provenance tracking to RunGraph following Ken's design from `/Volumes/Projects/gert/.squad/tmp/ken-rungraph-provenance-design.md`:
+
+**New types:**
+- `RunbookRef` — stores runbook metadata once per unique file (ID, FilePath, RunbookName, ParentRefID, ImportAlias)
+- `StepRef` — stores step metadata once per unique (runbook, step) pair (ID, RunbookID, StepID, StepName, StepKind)
+
+**Extended types:**
+- `RunNode` gained `StepRefID` (FK → StepRef.ID) and `Iteration` (0-indexed iteration counter)
+- `RunGraph` gained `runbooks` and `steps` maps for O(1) provenance lookup
+
+**New methods:**
+- `RegisterRunbook(ref RunbookRef)` — panics on duplicate ID
+- `RegisterStep(ref StepRef)` — panics on duplicate ID
+- `GetRunbookRef(runbookID string) *RunbookRef` — returns nil if not found
+- `GetStepRef(stepRefID string) *StepRef` — returns nil if not found
+- `GetNodeProvenance(nodeID string) (stepRef *StepRef, runbookRef *RunbookRef, includeChain []*RunbookRef)` — walks ParentRefID chain to build include chain root → leaf; returns (nil, nil, nil) if node not found or has no provenance
+
+**Testing:**
+- Added 10 new tests to `navigation_test.go` covering all registration, lookup, and provenance chain scenarios
+- All existing tests continue to pass (backward compatible)
+- Full test suite passes with race detector: `go test ./... -race -count=1`
+
+### Go Idiom Notes
+
+1. **Zero-value friendliness:** `StepRefID` and `Iteration` on `RunNode` are zero-valued by default. Existing callers that don't set them get empty string + 0, which is correct. No validation required in `AddNode`.
+
+2. **Nil safety:** `GetNodeProvenance` handles missing provenance gracefully — if `node.StepRefID == ""`, it returns `(nil, nil, nil)` immediately (no panic).
+
+3. **Include chain ordering:** The include chain slice is ordered **root → leaf** as specified. Implementation walks up via `ParentRefID` and prepends each parent to maintain order.
+
+4. **Panic messages:** All new panic messages follow existing pattern: `"session: RunGraph.{Method}: {reason}: " + id`
+
+5. **Pointer semantics:** `RegisterRunbook` and `RegisterStep` copy the value to heap (via `r := ref; g.runbooks[r.ID] = &r`) to avoid capturing loop variables incorrectly in future callers.
+
+### Design Quality
+
+Ken's normalized design is **excellent Go**:
+- No duplication (runbook metadata stored once, not per-node)
+- O(1) lookup via map keys (no linear scans)
+- Supports arbitrary include depth (walk up ParentRefID chain)
+- Iteration semantics are clean (multiple nodes → same StepRefID, different Iteration)
+- API surface is minimal (5 methods)
+- Backward compatible (new fields are optional)
+
+This is production-ready. Next step: engine must emit `step/planned` events to populate these tables, and `step/started` must include `step_ref_id` + `iteration` fields.
+
+
+---
+
+## 2026-05-01 — Provenance Harness Integration
+
+**Task:** Add provenance methods to TUI harness and write E2E tests
+
+### Implementation Summary
+
+Extended the TUI harness (`/Volumes/Projects/gert-tui/internal/tui/testing.go`) to expose provenance API:
+
+**New harness methods:**
+- `RegisterRunbook(ref session.RunbookRef)` — delegates to graph.RegisterRunbook
+- `RegisterStep(ref session.StepRef)` — delegates to graph.RegisterStep
+- `GetNodeProvenance(nodeID string) (*session.StepRef, *session.RunbookRef, []*session.RunbookRef)` — delegates to graph.GetNodeProvenance
+- `AddTestNode(node session.RunNode)` — bypasses Update() to add nodes directly (test-only; needed because engine doesn't emit StepRefID yet)
+
+**E2E test added:**
+- `TestE2E_ProvenanceNavigation` in `/Volumes/Projects/gert-tui/internal/e2e/tui_e2e_test.go`
+- Harness-level test (no engine involved) using FakeSession with empty script
+- Sets up 2-level include chain (main → include:check)
+- Registers step, adds node with provenance, asserts correct chain
+- Tests nil safety for nonexistent nodes
+- **All assertions pass** ✅
+
+**Test coverage:**
+- Unit tests (navigation_test.go): 10 provenance tests (graph-level)
+- E2E tests (tui_e2e_test.go): 1 provenance test (harness-level)
+- Full path validated: test → harness → graph → return
+- All existing tests continue to pass (zero regressions)
+
+**Test results:**
+```
+cd /Volumes/Projects/gert-tui
+go test ./... -race -count=1
+✅ All packages pass (40+ total tests)
+
+go test -v ./internal/e2e -run TestE2E_ProvenanceNavigation
+=== RUN   TestE2E_ProvenanceNavigation
+    tui_e2e_test.go:537: Provenance harness API validated successfully
+--- PASS: TestE2E_ProvenanceNavigation (0.00s)
+```
+
+### Why AddTestNode is Needed
+
+The engine does **not yet emit** `step/planned` events with StepRefID. The real flow will be:
+1. Engine emits `step/planned` → TUI calls `RegisterRunbook` + `RegisterStep`
+2. Engine emits `step/started` with `step_ref_id` + `iteration` → TUI calls `Update()` → graph.AddNode with provenance
+
+Since we don't have engine support yet, `AddTestNode` bypasses `Update()` to directly call `graph.AddNode()` with a synthetic node that has `StepRefID` set. This is **test-only** and will be removed once the engine emits the correct events.
+
+### Go Idiom Notes
+
+1. **Harness-first testing pattern:** The team rule is "harness-first always" — tests must go through the harness API, not call the graph directly. This E2E test validates that rule is enforced.
+
+2. **FakeSession usage:** Using `session.NewFakeSession(session.NewScript())` with an empty script is idiomatic for tests that need a TUIApp but don't need engine interaction.
+
+3. **Test naming:** `TestE2E_ProvenanceNavigation` follows the existing E2E test naming convention in the file.
+
+4. **Import structure:** E2E tests are in package `e2e_test` and import both `session` and `tui` packages to construct the app directly.
+
+### Design Quality
+
+The harness integration is **clean and minimal**:
+- 4 new methods, all simple delegations
+- No breaking changes to existing harness API
+- AddTestNode is clearly marked as test-only in comment
+- Full test coverage at both unit and E2E levels
+- Zero test regressions
+
+This satisfies the charter requirement: **harness exposes provenance API, E2E test validates full path**.
+
+**Status:** ✅ Complete — provenance fully wired through harness with E2E test coverage

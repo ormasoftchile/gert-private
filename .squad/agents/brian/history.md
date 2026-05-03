@@ -1924,3 +1924,40 @@ The harness integration is **clean and minimal**:
 This satisfies the charter requirement: **harness exposes provenance API, E2E test validates full path**.
 
 **Status:** ✅ Complete — provenance fully wired through harness with E2E test coverage
+
+---
+
+## Learnings — gert-tui test suite enhancement (2026-06-12)
+
+### Context
+Implemented 11 test enhancement opportunities for the gert-tui test suite (`/Volumes/Projects/gert-tui`), targeting both integration tests (`internal/tui/integration_test.go`) and E2E tests (`internal/e2e/tui_e2e_test.go`).
+
+### Implemented / Skipped Summary
+
+| # | Enhancement | Status |
+|---|-------------|--------|
+| 1 | `TestTUI_BooleanFieldTogglesWithSpace` — Tab+second-field assertion | ✅ Implemented |
+| 2 | `TestTUI_EdgeCaseBranch_OptionA` — assert no Target 2 step in graph | ✅ Implemented |
+| 3 | `TestTUI_EdgeCaseBranch_OptionB` — assert no Target 1 step in graph | ✅ Implemented |
+| 4 | `TestMultiForm_BooleanFieldDefaultsFalse` companion test | ✅ Implemented |
+| 5 | `TestTUI_CollectorAutoPopulatesFromStepOutput` pre-populate assertion | ✅ Already implemented in original test |
+| 6 | New `TestTUI_OptionalFieldCanBeEmpty` integration test | ✅ Implemented |
+| 7 | `TestE2E_EdgeCase_Branch` — assert invoke_target_1 ran, Target 2 absent | ✅ Implemented |
+| 8 | `TestE2E_IncidentTriage_Unknown` — escalate_unknown="completed", check_db="" | ✅ Implemented |
+| 9 | `TestE2E_IncidentTriage_Database` — check_db="completed" + output check | ✅ Implemented |
+| 10 | `TestE2E_PostCompletionNavigation` — GetFocusedOutput stability check | ✅ Implemented (adapted) |
+| 11 | New `TestE2E_MultiRegionRollout_StepStatuses` | ✅ Implemented |
+
+### Key Technical Learnings
+
+**`FocusStep` panics on unknown node IDs** — `RunGraph.Focus` is a hard panic for non-existent IDs (by design). Enhancement #10 originally called `FocusStep("step_missing")` which panicked. Adapted to re-focus an existing step and verify `GetFocusedOutput()` stability.
+
+**Boolean defaults in `NewMultiFieldFormModel`** — Boolean fields always default to `"true"` when not in `initialValues`. To test a `"false"` initial value, use `NewMultiFieldFormModelWithValues(msg, map[string]string{"field": "false"})`. There is no `Default` field on `FormField`; use `InitialValue` for pre-population in production code.
+
+**`GetActiveFormFieldValue` is name-based, not focus-based** — returns the value of the named field regardless of which field is currently active. To verify Tab moved focus, test that Space after Tab toggles the second field (not the first).
+
+**Collector steps don't emit stdout** — `GetStepOutput("check_db")` returns empty for collector steps because they collect user input, not CLI output. The meaningful assertion for collectors is `GetStepStatus() == "completed"`. Output assertions on collectors should use `t.Logf` (non-fatal).
+
+**Edit tool and closing brace pattern** — When old_str ends with `}` and the next line is a comment, the edit tool can accidentally merge them. Always include the following comment line in old_str to ensure unique matching.
+
+**`TestMultiForm_BooleanFieldDefaultsFalse` variable naming** — use `msg` as the model variable name for `NewMultiFieldFormModelWithValues` return value (returns `MultiFieldFormModel`, not `FormRequestMsg`).

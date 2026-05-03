@@ -160,3 +160,7 @@ Implementation complete and merged to main. Ready for TUI panel integration in n
 - RunGraph wired into TUIApp at app.go (parallel to flat state — flat state retained for rendering)
 - Harness accessors (GetStepStatus, GetStepOutputStr, GetSteps, GetStepCount) now delegate to RunGraph
 - Harness-first rule: TUI rendering still uses flat state; RunGraph integration validated via tests
+- Include steps inlined by planner at depth+1; engine main loop skips all depth>0 steps (they run only via SubStepRunner inside iterate/branch/parallel). Top-level include-only chains produce 0 step events.
+- `GetStepOutputStr` returns `node.Output` which is only non-empty for tool/CLI steps that capture stdout. Collector, noop, end, display, branch, include steps all have empty Output.
+- Collector steps (type:collector) have status "completed" but empty GetStepOutputStr — use GetStepStatus to verify they ran, not GetStepOutputStr.
+- Noop steps produce no stdout output (GetStepOutputStr returns ""). The delay field on noop steps is defined in YAML but the NoopExecutor does not sleep — it completes instantly.

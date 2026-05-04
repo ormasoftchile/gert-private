@@ -352,9 +352,12 @@ type Adapter interface {
     Run(ctx context.Context) error
 }
 
-// The gert serve JSON-RPC layer implements Adapter over stdio.
+// The gert serve HTTP layer implements Adapter for the VS~Code extension
+// and the embedded web preview, exposing JSON-RPC at POST /rpc plus REST
+// endpoints (/runs, /runs/{id}/state) and SSE event streams (/events,
+// /runs/{id}/state, /runs/{id}/interactions).
 // The TUI (Bubble Tea) implements Adapter over a terminal.
-// Future: a web adapter implements Adapter over WebSocket.
+// A WebSocket transport (/ws) is also exposed for byte-stream consumers.
 \end{minted}
 
 \paragraph{Dependencies.}
@@ -1936,42 +1939,61 @@ Within a single run, the concurrency model is:
 \section{\texttt{gert serve} Integration}
 % ─────────────────────────────────────────────────────────────────────────────
 
-\texttt{gert serve} is the JSON-RPC 2.0 server that powers the VS Code extension, the MCP
-tools layer, and any future web client. In the v2 architecture it is classified as an
-\textbf{adapter in the API/Adapter Layer}.
+\texttt{gert serve} is the HTTP server that powers the VS Code extension, the embedded
+web preview, the MCP tools layer, and any future external client. It exposes a JSON-RPC 2.0
+endpoint at \texttt{POST /rpc} alongside REST and Server-Sent Events (SSE) endpoints. In the
+v2 architecture it is classified as an \textbf{adapter in the API/Adapter Layer}.
 
 \subsection{Architectural Position}
 
 \texttt{gert serve} is a process that:
 \begin{enumerate}
-  \item Starts a long-lived stdio JSON-RPC 2.0 listener (newline-delimited JSON over stdin/stdout).
-  \item On receiving \texttt{exec/start}, calls \texttt{Runtime.Start()} and stores the
+  \item Starts a long-lived HTTP listener (default \texttt{:7778}) exposing JSON-RPC 2.0 at
+        \texttt{POST /rpc} alongside REST endpoints (\texttt{POST /runs}, \texttt{GET /runs/\{id\}/state},
+        \texttt{DELETE /runs/\{id\}}, \ldots) and Server-Sent Events streams
+        (\texttt{GET /events}, \texttt{GET /runs/\{id\}/state}, \texttt{GET /runs/\{id\}/interactions}).
+  \item On receiving \texttt{exec/start} (or \texttt{POST /runs}), calls \texttt{Runtime.Start()} and stores the
         resulting \texttt{RunHandle} in a session map (keyed by \texttt{RunID}).
   \item On receiving \texttt{exec/next}, calls \texttt{RunHandle.Next()} and returns the
         \texttt{StepResult} as the RPC response.
   \item Drains the \texttt{Events()} channel in a background goroutine and forwards each
-        event as a JSON-RPC notification to the client.
+        event to subscribed SSE clients as a named SSE event whose data payload is the
+        event's JSON representation. JSON-RPC clients receive the same events as
+        notifications on a long-lived RPC channel.
   \item On receiving \texttt{exec/approve}, \texttt{exec/submitEvidence}, or
         \texttt{exec/cancel}, dispatches to the corresponding \texttt{RunHandle} method.
 \end{enumerate}
 
 \subsection{Event Forwarding}
 
-Every event emitted by the Runtime Core is forwarded to the client as a JSON-RPC
-\emph{notification} (no \texttt{id} field) with method \texttt{event/\textit{eventType}}.
-The payload is the event's JSON representation. The VS Code extension subscribes to
-these notifications to update its UI without polling.
+Every event emitted by the Runtime Core is forwarded to subscribed clients. Two transports
+are offered concurrently against the same in-process event bus:
 
-Events forwarded over WebSocket (for a future web adapter) follow the same schema;
-only the transport changes.
+\begin{itemize}
+  \item \textbf{SSE} (\texttt{text/event-stream}): the VS Code extension and the web preview
+        attach an \texttt{EventSource} to \texttt{GET /events} (or scope-narrowed streams
+        like \texttt{GET /runs/\{id\}/state} and \texttt{GET /runs/\{id\}/interactions}).
+        Each event is emitted with an \texttt{id:} header carrying the event sequence so
+        clients can resume with \texttt{Last-Event-ID} after a transient disconnect. A 15\,s
+        comment-frame heartbeat (\texttt{:\ hb\textbackslash n\textbackslash n}) keeps idle
+        connections alive through reverse proxies.
+  \item \textbf{JSON-RPC notifications}: clients holding a long-lived RPC channel receive
+        each event as a notification (no \texttt{id} field) with method
+        \texttt{event/\textit{eventType}}. The payload is identical to the SSE data field.
+\end{itemize}
+
+A WebSocket endpoint (\texttt{GET /ws}) is exposed for byte-stream consumers that prefer
+framed messages over SSE; it carries the same event schema.
 
 \subsection{Crash Recovery in \texttt{gert serve}}
 
 If the VS Code extension reconnects after a crash (e.g., the gert process was killed),
 \texttt{gert serve} exposes \texttt{exec/list} and \texttt{exec/resume} methods. The
 extension discovers the interrupted run, calls \texttt{exec/resume}, and receives a new
-\texttt{RunHandle} over the same session. The trace and checkpoint on disk ensure no
-steps are lost.
+\texttt{RunHandle} over the same session. Mid-run SSE disconnects are recovered by the
+browser/EventSource layer automatically: the client reconnects with the most recent
+\texttt{Last-Event-ID}, and \texttt{gert serve} replays buffered events past that
+sequence number. The trace and checkpoint on disk ensure no steps are lost.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \subsection{Event Dispatcher}

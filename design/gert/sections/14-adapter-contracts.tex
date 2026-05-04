@@ -766,10 +766,15 @@ Contract tests are part of the CI gate for all adapter implementations:
 
 \paragraph{VS Code extension.}
 
-The official VS Code extension (\texttt{vscode/} in the repository) is the
-reference implementation of the JSON-RPC execution contract (\texttt{exec/v2})
-and the WebSocket event stream contract (\texttt{events/v2}).  Adapter authors
-should study its implementation for best practices.
+The official VS Code extension lives in its own repository at
+\url{https://github.com/ormasoftchile/gert-vscode}. It is the reference implementation of
+the HTTP transport surface exposed by \texttt{gert serve}: it manages a child
+\texttt{gert serve} process, attaches a webview that loads
+\texttt{/preview/} from the local server, and consumes the SSE event streams
+(\texttt{/events}, \texttt{/runs/\{id\}/state}, \texttt{/runs/\{id\}/interactions}) plus
+the REST/JSON-RPC endpoints. Adapter authors should study its implementation for best
+practices. The extension is packaged with \texttt{vsce} and ships a \texttt{.vsix}
+artifact from CI.
 
 \paragraph{Built-in tools.}
 

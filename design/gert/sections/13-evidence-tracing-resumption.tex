@@ -45,7 +45,7 @@ Every line in \texttt{trace.jsonl} is a self-contained JSON object with a common
   "path":      <array>,     // tree-path to the active node (may be null)
   "payload":   <object>     // kind-specific payload (see below)
 }
-\end{verbatim>
+\end{verbatim}
 
 The \texttt{sequence} field provides a total order over events in a single run. It is assigned by the \texttt{RunStore.WriteTrace} implementation and is not trusted for cross-run ordering. The \texttt{event\_id} field is a UUID v4 assigned at event emission time for correlation with external systems.
 
@@ -68,7 +68,7 @@ Emitted once, as the first event in every trace file.
                               // | "mobile-android"
   "parent_run_id": <string>   // omitted if not an invoke child
 }
-\end{verbatim>
+\end{verbatim}
 
 \subsubsection{\texttt{step/started}}
 
@@ -80,7 +80,7 @@ Emitted immediately before executing a step.
   "step_type": <string>,  // "cli" | "manual" | "tool" | "invoke"
   "step_name": <string>   // human-readable name from runbook YAML
 }
-\end{verbatim>
+\end{verbatim}
 
 \subsubsection{\texttt{step/completed}}
 

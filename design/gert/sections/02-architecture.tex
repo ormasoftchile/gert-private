@@ -149,7 +149,9 @@ evaluator (for template syntax validation). It has no runtime dependencies.
 \paragraph{Responsibility.}
 The Planner transforms a \texttt{ParsedRunbook} into an \texttt{ExecutionPlan}: a resolved, ordered,
 dependency-annotated representation of every step the runtime will execute. The Planner resolves imports
-(recursively parsing and inlining included runbooks), discovers and validates tool definitions, resolves
+(parsing and inlining included runbooks whose effective expansion mode is \texttt{eager}; recording
+\texttt{lazy} includes as opaque flow nodes for run-time materialization, see
+\S\ref{para:planner-expand}), discovers and validates tool definitions, resolves
 input provider bindings to their declared sources, and produces the static step ordering. It does
 \emph{not} evaluate dynamic conditions (branch predicates, iterate count expressions) — those are
 runtime concerns.
@@ -210,6 +212,20 @@ discovery). It must not depend on the Runtime Core, Extension Host, or any adapt
   \item All \texttt{from:} bindings that declare a provider appear in \texttt{ExecutionPlan.Providers}.
   \item The Planner does not execute or side-effect; it is safe to plan without running.
 \end{itemize}
+
+\paragraph{Include expansion modes.}
+\label{para:planner-expand}
+The Planner consults the active expansion policy (see
+\S\ref{para:include-expand}) at every \texttt{include} site. When the
+effective mode is \texttt{eager}, the referenced runbook is loaded, planned,
+and inlined into the current plan; when it is \texttt{lazy}, the include
+appears in the plan as an opaque flow node whose only payload is the absolute
+path of the child runbook. Plan-time validation (cycle detection, max-depth,
+transitive contracts) walks only the eagerly expanded sub-tree; lazy edges
+are validated when they are entered at run time. The Adapter supplies the
+Planner with a \emph{lazy loader} that propagates lazy mode recursively into
+any sub-include reached through a deferred edge, so a single eager include in
+a lazy sub-tree does not silently fall back to eager for the entire chain.
 
 % ──────────────────────────────────────────────────────────────────────────────
 \subsection{Runtime Core}
@@ -508,7 +524,14 @@ For each step, the runtime executes the following sequence:
         current variable scope. Inline-expand the referenced runbook's steps into the
         current execution queue at \texttt{Depth+1}. The include step itself does not
         appear in the run trace; expanded steps run as if defined inline, each carrying
-        an \texttt{Origin} breadcrumb: \texttt{[included from: <path>]}.
+        an \texttt{Origin} breadcrumb: \texttt{[included from: <path>]}. Includes may be
+        materialized eagerly (loaded and expanded at plan time) or lazily (loaded,
+        planned, and inlined when the step is actually entered) according to the
+        runbook's \texttt{expand} field, the site's \texttt{include.expand}, or the
+        runtime default; see \S\ref{para:include-expand}. Lazy includes carry only
+        an absolute path through the plan; at execution time the include executor
+        delegates to a sub-engine that reuses the parent run identifier so deferred
+        prompts surface on the parent's interaction stream.
   \item \textbf{branch:} Evaluate branch predicates (expression evaluator) against current
         variables. Select the matching branch arm. Write \texttt{event/branchResolved}
         trace event. Advance step cursor to the first step of the resolved arm.

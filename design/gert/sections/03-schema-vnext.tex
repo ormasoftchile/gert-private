@@ -144,6 +144,7 @@ The runbook document has the following top-level fields:
 \texttt{governance}   & object  & No  & Governance policy \\
 \texttt{prose}        & object  & No  & Human-readable TSG sections \\
 \texttt{metadata}     & map     & No  & Arbitrary key-value annotations \\
+\texttt{expand}       & enum    & No  & Default include-expansion mode for this runbook: \texttt{eager | lazy | auto}. Empty inherits the platform default (\texttt{lazy}). See \S\ref{para:include-expand}. \\
 \texttt{flow}         & array   & Yes & Execution tree (TreeNode array) \\
 \hline
 \end{tabular}
@@ -2340,6 +2341,7 @@ to any steps that follow in the caller.
 \texttt{include.runbook}  & string & Yes & Path or ID of the runbook to include. Relative paths resolve from the including runbook's location. \\
 \texttt{include.with}     & map    & No  & Variable overrides injected into the shared scope before expansion (key: variable name, value: expression). Applied in order, visible to included steps. \\
 \texttt{include.when}     & string & No  & Boolean expression. If false, the include is skipped entirely (no steps expanded). \\
+\texttt{include.expand}   & enum   & No  & Per-site override of the expansion mode: \texttt{eager | lazy | auto}. Empty inherits the parent runbook's mode (or the platform default). See \S\ref{para:include-expand}. \\
 \hline
 \end{tabular}
 \end{center}
@@ -2372,6 +2374,61 @@ cyclic include detected: A -> B -> A
 
 The validator reports every edge in the offending cycle so the operator can
 identify the exact chain.
+
+\paragraph{Eager vs Lazy Expansion}
+\label{para:include-expand}
+
+Each include site is materialized into the execution plan in one of two modes:
+
+\begin{itemize}
+  \item \textbf{eager} — The planner loads, parses, validates, and expands the
+        referenced runbook \emph{at plan time}. Every step in the child (and its
+        transitive includes) appears in the resolved plan before execution
+        begins. Plan-time errors include broken references in branches that may
+        never run.
+  \item \textbf{lazy} — The planner records the include as an opaque flow node
+        carrying the absolute path of the child. The child runbook is loaded,
+        planned, and executed only when the include step is actually entered at
+        run time. Plan time is fast and only walks the local runbook; broken
+        references in unentered branches surface only when (and if) those
+        branches execute, or via a separate \texttt{gert lint} pass.
+  \item \textbf{auto} — Resolves to \texttt{lazy} when the runbook contains
+        more than a small number of include sites (default: 5), otherwise
+        \texttt{eager}. The threshold is configurable via the embedding
+        application's expansion policy.
+\end{itemize}
+
+The effective mode at any include site is resolved with the following
+precedence (highest first):
+
+\begin{enumerate}
+  \item \texttt{include.expand} on the site itself.
+  \item \texttt{expand} on the parent runbook.
+  \item The runtime default supplied by the CLI flag \texttt{--expand} or the
+        embedding application.
+  \item The platform default: \texttt{lazy}.
+\end{enumerate}
+
+\textbf{Lazy is the baked-in default} because real-world orchestrator runbooks
+fan out into many sub-runbooks of which only a few execute on any given path;
+eager loading punishes the common case to validate branches that will never
+run. Operators who want full plan-time validation opt in via
+\texttt{expand: eager} on the runbook or \texttt{--expand=eager} on the
+command line.
+
+Lazy expansion is \emph{recursive}: an include site reached through a lazily
+loaded child runbook is itself lazy by default, regardless of the child
+runbook's own \texttt{expand} field. This keeps an entire sub-tree opaque
+until it is entered. A site that explicitly sets \texttt{include.expand: eager}
+overrides the contagion at that point.
+
+\paragraph{Cycle detection under lazy expansion}
+Lazy expansion does \emph{not} disable cycle detection. The planner still
+runs cycle detection across the eagerly expanded sub-tree at plan time, and
+each lazy expansion at execution time runs cycle detection on the freshly
+loaded child runbook against the active include chain. A cycle reached
+through a lazy edge surfaces as a runtime error on the offending include step
+with the same chain message as the plan-time error.
 
 \paragraph{Difference from Sub-Procedure Call}
 \texttt{type: include} shares the caller's variable space; there is no input

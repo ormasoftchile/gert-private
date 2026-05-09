@@ -97,10 +97,10 @@ process-scoped, and are intended to prevent scope creep during implementation.
     will not operate a registry, curate extensions, or act as a certificate authority. Extension
     distribution is the responsibility of the extension author.
 
-  \item \textbf{Gert does not guarantee binary backward compatibility with v1 internal packages.}
-    This is a clean-break architecture. The internal Go package structure, private interfaces, and
-    runtime internals are not subject to backward compatibility guarantees. Only the documented public
-    contracts---the runbook schema, the tool schema, the JSON-RPC API surface, the extension
-    protocol, and the JSONL trace schema---carry compatibility commitments.
+  \item \textbf{Gert does not guarantee binary stability for internal packages.}
+    The internal Go package structure, private interfaces, and runtime internals are not subject to
+    backward compatibility guarantees. Only the documented public contracts---the runbook schema,
+    the tool schema, the JSON-RPC API surface, the extension protocol, and the JSONL trace
+    schema---carry compatibility commitments.
 
 \end{enumerate}

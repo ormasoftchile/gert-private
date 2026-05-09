@@ -1,6 +1,6 @@
-# Gert v2 Design Docs
+# Gert Design Docs
 
-This folder contains the LaTeX design document scaffold for Gert v2.
+This folder contains the LaTeX design document scaffold for Gert.
 
 ## Prerequisites
 

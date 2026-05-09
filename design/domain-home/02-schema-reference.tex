@@ -1,0 +1,327 @@
+\chapter{Schema Reference}
+\label{ch:schema-reference}
+
+This chapter is the authoritative reference for every schema construct in the
+\texttt{gert.home} Domain Kit. It covers the Kit declaration, the property metadata block,
+all step types, evidence types, and consumables. For the core gert schema (step types
+\texttt{cli}, \texttt{manual}, \texttt{tool}, \texttt{branch}, \texttt{iterate}), refer to
+the \emph{gert Design Document}, §3.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Kit Declaration and \texttt{apiVersion}}
+\label{sec:schema-apiversion}
+% ─────────────────────────────────────────────────────────────────────────────
+
+A \texttt{gert.home} property file declares both the core schema version and the Kit at the
+top of the file. The file extension is \texttt{.home.yaml}.
+
+\begin{minted}{yaml}
+apiVersion: runbook/v1
+kit: home/v0
+
+property:
+  name: Casa Santiago
+  zones:
+    - id: pool
+      label: Swimming Pool
+      description: Saltwater pool with heat pump and LED lighting
+\end{minted}
+
+\begin{description}
+  \item[\texttt{apiVersion: runbook/v1}] Required. Selects the gert core schema.
+  \item[\texttt{kit: home/v0}] Required. Activates the \texttt{gert.home} Kit compiler,
+        making \texttt{home.*} step types and property metadata fields available.
+\end{description}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Property Metadata Fields}
+\label{sec:schema-metadata}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{\texttt{property} Block}
+
+The \texttt{property} block declares the household unit identity and its named zones.
+
+\begin{minted}{yaml}
+property:
+  name: Casa Santiago
+  zones:
+    - id: pool
+      label: Swimming Pool
+      description: Saltwater pool with heat pump and LED lighting
+    - id: front_lawn
+      label: Front Lawn
+\end{minted}
+
+\begin{description}
+  \item[\texttt{property.name}] Display name for the property. Shown in reports and
+        notifications.
+  \item[\texttt{property.zones}] List of named areas within the property (see below).
+\end{description}
+
+\subsection{\texttt{zones[]} Fields}
+
+\begin{description}
+  \item[\texttt{id}] Unique identifier for the zone. Referenced by routines,
+        incident templates, and delegations.
+  \item[\texttt{label}] Human-readable display name.
+  \item[\texttt{description}] Optional. Free-text description of the zone.
+  \item[\texttt{metadata}] Optional. Arbitrary key-value pairs for additional context.
+\end{description}
+
+\subsection{\texttt{assets[]} Fields}
+
+Assets are tracked physical items within a zone.
+
+\begin{minted}{yaml}
+assets:
+  - id: pool_pump
+    zone: pool
+    label: Hayward SuperPump VS
+    installed: 2023-06-15
+    warranty_expires: 2025-06-15
+    metadata:
+      model: VS-100
+\end{minted}
+
+\begin{description}
+  \item[\texttt{id}] Unique identifier for the asset. Referenced by routines and consumables.
+  \item[\texttt{zone}] Zone ID where the asset is located.
+  \item[\texttt{label}] Human-readable display name.
+  \item[\texttt{installed}] ISO 8601 date of installation (\texttt{YYYY-MM-DD}).
+  \item[\texttt{warranty\_expires}] Optional. ISO 8601 date the warranty expires.
+  \item[\texttt{metadata}] Optional. Arbitrary key-value pairs (e.g., model number, serial).
+\end{description}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Step Types}
+\label{sec:schema-step-types}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The \texttt{gert.home} kit defines three step types. All are lowered to core primitives at
+compile time.
+
+\subsection{\texttt{home.routine}}
+
+A scheduled recurring maintenance task. Lowers to an \texttt{iterate} core step containing
+a \texttt{manual} step, one execution per due routine instance.
+
+\begin{minted}{yaml}
+routines:
+  - id: pool_clean
+    label: Pool cleaning
+    description: Weekly pool water quality check and surface clean
+    zone: pool
+    cadence:
+      every: 7d
+    evidence:
+      type: photo
+      prompt: Take photo of clear water and chemical test strip
+    executor:
+      role: gardener
+    notifications:
+      remind_hours_before: 4
+      escalate_hours_overdue: 24
+\end{minted}
+
+\begin{description}
+  \item[\texttt{id}] Required. Unique identifier for the routine.
+  \item[\texttt{label}] Required. Short display name.
+  \item[\texttt{description}] Optional. Longer description of the task.
+  \item[\texttt{zone}] Conditional. Zone ID scoping this routine. One of \texttt{zone} or
+        \texttt{asset} must be provided.
+  \item[\texttt{asset}] Conditional. Asset ID scoping this routine. One of \texttt{zone} or
+        \texttt{asset} must be provided.
+  \item[\texttt{cadence.every}] Conditional. Fixed interval (e.g., \texttt{7d}, \texttt{2w}).
+  \item[\texttt{cadence.seasonal}] Conditional. Season-keyed intervals
+        (\texttt{summer}, \texttt{autumn}, \texttt{winter}, \texttt{spring}).
+  \item[\texttt{evidence.type}] Optional. Evidence type required on completion.
+  \item[\texttt{evidence.prompt}] Optional. Instruction shown to the executor.
+  \item[\texttt{executor.role}] Optional. Advisory role hint (e.g., \texttt{gardener},
+        \texttt{plumber}). Not enforced at runtime in \texttt{home/v0}.
+  \item[\texttt{notifications.remind\_hours\_before}] Optional. Hours before due date to
+        send reminder.
+  \item[\texttt{notifications.escalate\_hours\_overdue}] Optional. Hours past due date to
+        send overdue alert.
+\end{description}
+
+\subsection{\texttt{home.incident}}
+
+A reactive repair workflow with sequential, parallel, and branching steps. Each incident
+step type lowers to a core primitive: \texttt{human\_task} → \texttt{manual},
+\texttt{decision} → \texttt{branch}, \texttt{parallel} → \texttt{parallel}.
+
+\begin{minted}{yaml}
+incident_templates:
+  - id: leak
+    label: Water leak
+    description: Emergency water leak response procedure
+    zones: [pool, backyard, garage]
+    steps:
+      - id: assess
+        type: human_task
+        label: Locate and assess the leak
+        evidence:
+          type: photo
+          prompt: Take photo of leak source and affected area
+      - id: shutoff
+        type: human_task
+        label: Shut off water supply
+        depends_on: [assess]
+        evidence:
+          type: photo
+      - id: fix
+        type: human_task
+        label: Perform repair
+        depends_on: [shutoff]
+        evidence:
+          type: photo
+\end{minted}
+
+\begin{description}
+  \item[\texttt{id}] Required. Unique identifier for the incident template.
+  \item[\texttt{label}] Required. Short display name.
+  \item[\texttt{description}] Optional. Longer description.
+  \item[\texttt{zones}] Optional. List of zone IDs this incident may affect.
+  \item[\texttt{assets}] Optional. List of asset IDs this incident may affect.
+  \item[\texttt{steps}] Required. List of IncidentStep objects (see below).
+\end{description}
+
+\paragraph{IncidentStep types.}
+
+\begin{description}
+  \item[\texttt{human\_task}] A manual procedure requiring human action. Fields:
+        \texttt{id}, \texttt{type}, \texttt{label}, \texttt{description}, \texttt{evidence},
+        \texttt{depends\_on}.
+  \item[\texttt{decision}] A branching choice. Fields: \texttt{id}, \texttt{type},
+        \texttt{label}, \texttt{choices} (list of \texttt{\{value, label, next\_step\}}).
+  \item[\texttt{parallel}] Sub-steps executed concurrently. Fields: \texttt{id},
+        \texttt{type}, \texttt{label}, \texttt{parallel\_steps}.
+\end{description}
+
+\subsection{\texttt{home.delegate}}
+
+An away-mode delegation block. Checked at run-time via \texttt{IsAwayModeActive()};
+when active, substitutes the delegate identity as executor for assigned routines or zones.
+
+\begin{minted}{yaml}
+delegations:
+  - delegate:
+      name: Carlos Méndez
+      contact: "+56 9 8765 4321"
+      email: carlos@example.com
+    active:
+      from: 2025-04-25
+      to: 2025-05-02
+    assigns:
+      - routine: water_plants
+      - zone: pool
+    permissions:
+      can_report_incidents: true
+      can_modify_routines: false
+      can_view_history: true
+    notifications:
+      remind_delegate_hours_before: 24
+      notify_owner_on_completion: true
+      notify_owner_if_overdue: true
+\end{minted}
+
+\begin{description}
+  \item[\texttt{delegate.name}] Required. Display name of the delegate.
+  \item[\texttt{delegate.contact}] Required. Phone number or contact method.
+  \item[\texttt{delegate.email}] Optional. Email address.
+  \item[\texttt{active.from}] Required. Delegation start date (\texttt{YYYY-MM-DD}).
+  \item[\texttt{active.to}] Required. Delegation end date (\texttt{YYYY-MM-DD}).
+  \item[\texttt{assigns}] Required. List of \texttt{\{routine: id\}} or
+        \texttt{\{zone: id\}} entries scoping the delegation.
+  \item[\texttt{permissions.can\_report\_incidents}] Optional. Default \texttt{false}.
+  \item[\texttt{permissions.can\_modify\_routines}] Optional. Default \texttt{false}.
+  \item[\texttt{permissions.can\_view\_history}] Optional. Default \texttt{false}.
+\end{description}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Evidence Types}
+\label{sec:schema-evidence}
+% ─────────────────────────────────────────────────────────────────────────────
+
+All evidence types share two common fields:
+
+\begin{description}
+  \item[\texttt{type}] Required. One of: \texttt{photo}, \texttt{note},
+        \texttt{checklist}, \texttt{none}.
+  \item[\texttt{prompt}] Optional. Instruction or question shown to the executor at the
+        time of evidence submission.
+\end{description}
+
+\subsection{\texttt{photo}}
+
+A photograph proving task completion. Required for most outdoor and physical tasks.
+
+\begin{minted}{yaml}
+evidence:
+  type: photo
+  prompt: Take photo of clear water and chemical test strip
+\end{minted}
+
+\subsection{\texttt{note}}
+
+A free-text note from the executor. Useful for recording cost, measurements, or observations.
+
+\begin{minted}{yaml}
+evidence:
+  type: note
+  prompt: Record the chemical readings and any materials used
+\end{minted}
+
+\subsection{\texttt{checklist}}
+
+A structured checklist that must be completed item by item before the step closes.
+
+\begin{minted}{yaml}
+evidence:
+  type: checklist
+  prompt: Confirm all safety checks before closing the incident
+\end{minted}
+
+\subsection{\texttt{none}}
+
+No evidence required. The step is self-certifying on completion.
+
+\begin{minted}{yaml}
+evidence:
+  type: none
+\end{minted}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Consumables}
+\label{sec:schema-consumables}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Consumables are items on a replacement schedule with optional stock tracking.
+
+\begin{minted}{yaml}
+consumables:
+  - id: pool_filter_sand
+    label: Pool sand filter media
+    zone: pool
+    asset: pool_pump
+    replace_every: 180d
+    last_replaced: 2024-11-01
+    stock:
+      current: 1
+      reorder_at: 1
+    triggers_routine: pool_filter_replace
+\end{minted}
+
+\begin{description}
+  \item[\texttt{id}] Required. Unique identifier.
+  \item[\texttt{label}] Required. Display name.
+  \item[\texttt{description}] Optional. Longer description.
+  \item[\texttt{zone}] Optional. Zone where the consumable is used.
+  \item[\texttt{asset}] Optional. Asset ID this consumable belongs to.
+  \item[\texttt{replace\_every}] Required. Replacement interval (e.g., \texttt{180d}).
+  \item[\texttt{last\_replaced}] Required. Date of last replacement (\texttt{YYYY-MM-DD}).
+  \item[\texttt{stock.current}] Optional. Current stock quantity on hand.
+  \item[\texttt{stock.reorder\_at}] Optional. Stock level that triggers a reorder alert.
+  \item[\texttt{triggers\_routine}] Optional. Routine ID to fire when replacement is due.
+\end{description}

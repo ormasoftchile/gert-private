@@ -1,0 +1,139 @@
+% Domain Kit Manual Template
+% Replace Home Domain Kit with the human-readable kit name (e.g., "DRI Domain Kit")
+% Replace home with the URL-safe slug (e.g., "dri")
+% Run: make init DOMAIN_NAME="DRI Domain Kit" DOMAIN_SLUG=dri
+
+\documentclass[
+	11pt,
+	oneside,
+	english,
+	singlespacing,
+	headsepline,
+]{MastersThesis}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{amssymb}
+\usepackage{tcolorbox}
+\usepackage{newunicodechar}
+
+% ── Diagrams (TikZ) ──────────────────────────────────────────────────────────
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, automata, positioning, shapes.geometric,
+                fit, chains, calc, backgrounds}
+
+% Node styles
+\tikzset{
+  stepbox/.style={
+    rectangle, rounded corners=3pt,
+    draw=black!60, fill=white,
+    font=\small\ttfamily,
+    minimum width=2.2cm, minimum height=0.7cm,
+    align=center, inner sep=4pt
+  },
+  catbox/.style={
+    rectangle, rounded corners=3pt,
+    draw=black!80, fill=black!8,
+    font=\small\bfseries,
+    minimum width=2.4cm, minimum height=0.75cm,
+    align=center, inner sep=4pt
+  },
+  gertarrow/.style={
+    ->, >=Stealth, thick, draw=black!60
+  },
+  gertfit/.style={
+    draw=black!30, dashed, rounded corners=4pt,
+    inner sep=6pt
+  }
+}
+
+% ── Syntax Highlighting (minted) ─────────────────────────────────────────────
+\usepackage{minted}
+\setminted{
+  fontsize=\small,
+  baselinestretch=1.1,
+  breaklines=true,
+  breakanywhere=false,
+  autogobble=true,
+}
+\setminted[yaml]{
+  style=friendly,
+  linenos=false,
+  frame=leftline,
+  framesep=6pt,
+  rulecolor=\color{black!25}
+}
+\setminted[go]{
+  style=friendly,
+  linenos=false,
+  frame=leftline,
+  framesep=6pt,
+  rulecolor=\color{black!25}
+}
+\setminted[json]{
+  style=friendly,
+  linenos=false,
+  frame=leftline,
+  framesep=6pt,
+  rulecolor=\color{black!25}
+}
+
+% Convenience command for inline code
+\newcommand{\yinline}[1]{\mintinline{yaml}{#1}}
+% Placeholder macro: renders unfilled template placeholders visibly during development.
+% Replace \ph{NAME} with actual content when filling in this domain kit manual.
+\newcommand{\ph}[1]{\textcolor{orange!80!black}{\texttt{<#1>}}}
+
+% Define Unicode characters for checkmarks and tree symbols
+\newunicodechar{✓}{\checkmark}
+\newunicodechar{✗}{$\times$}
+\newunicodechar{└}{L}
+\newunicodechar{─}{-}
+\newunicodechar{├}{+}
+\newunicodechar{│}{|}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue,
+  pdftitle={Home Domain Kit Manual},
+  pdfauthor={The gert Project}
+}
+
+\thesistitle{Home Domain Kit Manual}
+\author{The gert Project}
+\supervisor{Technical Documentation}
+\degree{User Manual}
+\university{Gert Project}
+\department{Domain Kits}
+\subject{Home Domain Kit}
+\keywords{home, gert, domain kit, yaml, dsl}
+
+\begin{document}
+
+\frontmatter
+
+\maketitle
+
+\tableofcontents
+\newpage
+
+\mainmatter
+
+\input{00-introduction}
+\input{01-concepts}
+\input{02-schema-reference}
+\input{03-authoring-guide}
+\input{04-gert-integration}
+\input{05-evidence-and-tracing}
+\input{06-reference}
+
+\end{document}

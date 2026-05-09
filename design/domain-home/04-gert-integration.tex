@@ -1,0 +1,202 @@
+\chapter{gert Integration}
+\label{ch:gert-integration}
+
+This chapter describes how \texttt{gert.home} integrates with the gert runtime: how
+property files are parsed, validated, and lowered to core primitives; how away mode is
+enforced; how cadence checking works; and what trace events are emitted during execution.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Core Integration Hooks}
+\label{sec:integration-hooks}
+% ─────────────────────────────────────────────────────────────────────────────
+
+A \texttt{.home.yaml} property file passes through four stages before any step executes:
+
+\begin{enumerate}
+  \item \textbf{Parse} --- The YAML file is parsed and the \texttt{apiVersion} and
+        \texttt{kit} fields are read. The \texttt{home/v0} Kit compiler is activated.
+  \item \textbf{Validate} --- The property file is validated against the \texttt{gert.home}
+        JSON Schema. Zone and asset references are resolved; missing zone IDs or invalid
+        cadence formats produce compile errors.
+  \item \textbf{Lower} --- \texttt{home.*} step types are lowered to core gert primitives:
+        \texttt{home.routine} → \texttt{iterate} + \texttt{manual}; incident
+        \texttt{human\_task} → \texttt{manual}; \texttt{decision} → \texttt{branch};
+        \texttt{parallel} → \texttt{parallel}.
+  \item \textbf{Execute} --- The gert runtime executes the lowered runbook, checking
+        cadence due dates, calling \texttt{IsAwayModeActive()}, and emitting trace events at
+        each step boundary.
+\end{enumerate}
+
+The gert runtime never sees \texttt{home.*} vocabulary after the lower stage. This means
+all core gert tooling (trace readers, evidence bundlers, CI integrations) works with
+\texttt{gert.home} runs without modification.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Role-Based Gating}
+\label{sec:integration-role-gating}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Executor Role Hints}
+
+The \texttt{executor.role} field on a \texttt{home.routine} is advisory in
+\texttt{home/v0}. The runtime reads the field and includes it in notification messages and
+the task UI, but does not block execution if the current actor does not match the hint.
+
+\begin{tcolorbox}[colback=yellow!10,colframe=orange!70,title=Note]
+  \texttt{home/v0} does not enforce executor role hints at runtime. A homeowner or active
+  delegate can always execute any step regardless of the \texttt{executor.role} value. Hard
+  role gates are planned for \texttt{home/v1}.
+\end{tcolorbox}
+
+\subsection{Delegation Scope Enforcement}
+
+The \texttt{assigns} block in a \texttt{delegations} entry is enforced at runtime.
+When \texttt{IsAwayModeActive()} returns \texttt{true}:
+
+\begin{itemize}
+  \item The runtime checks whether the current routine's ID appears in any active
+        delegation's \texttt{assigns} list as \texttt{\{routine: id\}}.
+  \item The runtime also checks whether the routine's \texttt{zone} ID appears as
+        \texttt{\{zone: id\}}.
+  \item If neither match, the routine is not delegated and the homeowner remains executor.
+  \item If a match is found, the delegate's name and contact are substituted as executor
+        identity for that run.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Command / Action Scope}
+\label{sec:integration-commands}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\texttt{gert.home} routines and incidents generate \texttt{manual} steps --- human-action
+steps that pause execution until a person confirms completion and submits evidence.
+The kit does not generate \texttt{cli} steps. There are no shell commands, no environment
+variable access, and no network calls in a \texttt{gert.home} execution. This keeps the
+security surface minimal for household contexts.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Away Mode Enforcement}
+\label{sec:integration-away-mode}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Away mode is evaluated at the start of each routine execution via the
+\texttt{IsAwayModeActive()} runtime function:
+
+\begin{enumerate}
+  \item The runtime reads all \texttt{delegations} entries from the property file.
+  \item It compares the current timestamp against each entry's \texttt{active.from} and
+        \texttt{active.to} fields using the timezone from \texttt{GERT\_HOME\_TZ}.
+  \item If one or more entries are active, \texttt{IsAwayModeActive()} returns \texttt{true}
+        and the runtime proceeds with delegation scope checks.
+  \item If no entries are active, \texttt{IsAwayModeActive()} returns \texttt{false} and
+        the homeowner is executor for all routines.
+\end{enumerate}
+
+When away mode is active, a \texttt{delegation\_active} trace event is emitted for each
+routine execution that matches an active delegation scope.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Cadence Enforcement}
+\label{sec:integration-cadence}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Before firing a \texttt{home.routine} step, the runtime checks whether the routine is due:
+
+\begin{enumerate}
+  \item The runtime reads the last completion timestamp from the run directory
+        (\texttt{runs/\{routine-id\}/latest/trace.jsonl}).
+  \item It computes the next due date: last completion + cadence interval (or the seasonal
+        interval for the current date).
+  \item If the current timestamp is before the due date, the routine is skipped and a
+        \texttt{routine\_skipped} trace event is emitted.
+  \item If the current timestamp is within \texttt{notifications.remind\_hours\_before} of
+        the due date, a reminder notification is sent to the executor.
+  \item If the current timestamp is past \texttt{due date + notifications.escalate\_hours\_overdue},
+        an overdue alert is sent to the homeowner regardless of delegation state.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{The Audit Trail}
+\label{sec:integration-audit-trail}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The \texttt{gert.home} runtime emits structured trace events throughout execution. These are
+written to \texttt{runs/\{routine-id\}/\{date\}/trace.jsonl} in newline-delimited JSON.
+
+\begin{description}
+  \item[\texttt{routine\_due}] Emitted when a routine's due date arrives. Fields:
+        \texttt{routine\_id}, \texttt{zone}, \texttt{executor}.
+  \item[\texttt{routine\_completed}] Emitted when all steps of a routine run are completed.
+        Fields: \texttt{routine\_id}, \texttt{duration\_minutes}.
+  \item[\texttt{incident\_opened}] Emitted when an incident template is instantiated.
+        Fields: \texttt{incident\_id}, \texttt{opened\_by}.
+  \item[\texttt{incident\_step\_completed}] Emitted when each incident step finishes.
+        Fields: \texttt{incident\_id}, \texttt{step\_id}, \texttt{type}.
+  \item[\texttt{evidence\_submitted}] Emitted when evidence is captured. Fields:
+        \texttt{step\_id}, \texttt{evidence\_type}, \texttt{submitted\_by}, \texttt{sha256}.
+  \item[\texttt{delegation\_active}] Emitted at the start of any routine execution where
+        an active delegation scope matches. Fields: \texttt{delegate\_name},
+        \texttt{routine\_id}, \texttt{active\_until}.
+\end{description}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Complete Integration Example}
+\label{sec:integration-complete-example}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The following shows a property file with an active delegation alongside the expected trace
+output for a pool-cleaning routine run during the away window.
+
+\begin{minted}{yaml}
+apiVersion: runbook/v1
+kit: home/v0
+
+property:
+  name: Casa Santiago
+  zones:
+    - id: pool
+      label: Swimming Pool
+
+routines:
+  - id: pool_clean
+    label: Pool cleaning
+    zone: pool
+    cadence:
+      every: 7d
+    evidence:
+      type: photo
+      prompt: Take photo of clear water and chemical test strip
+    notifications:
+      remind_hours_before: 4
+      escalate_hours_overdue: 24
+
+delegations:
+  - delegate:
+      name: Carlos Méndez
+      contact: "+56 9 8765 4321"
+    active:
+      from: 2025-04-25
+      to: 2025-05-02
+    assigns:
+      - zone: pool
+    permissions:
+      can_report_incidents: true
+      can_modify_routines: false
+      can_view_history: true
+\end{minted}
+
+Trace events emitted on 2025-04-28 when the routine fires:
+
+\begin{minted}{yaml}
+{"seq":1,"ts":"2025-04-28T08:00:00Z","type":"delegation_active",
+ "delegate_name":"Carlos Méndez","routine_id":"pool_clean",
+ "active_until":"2025-05-02"}
+{"seq":2,"ts":"2025-04-28T08:00:01Z","type":"routine_due",
+ "routine_id":"pool_clean","zone":"pool","executor":"Carlos Méndez"}
+{"seq":3,"ts":"2025-04-28T09:15:00Z","type":"evidence_submitted",
+ "step_id":"pool_clean","evidence_type":"photo",
+ "submitted_by":"Carlos Méndez",
+ "sha256":"a3f2...c1d9"}
+{"seq":4,"ts":"2025-04-28T09:15:01Z","type":"routine_completed",
+ "routine_id":"pool_clean","duration_minutes":75}
+\end{minted}

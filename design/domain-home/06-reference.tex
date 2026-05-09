@@ -1,0 +1,214 @@
+\chapter{Reference}
+\label{ch:reference}
+
+This chapter contains complete field reference tables for all \texttt{gert.home} schema
+elements, environment variables, and error codes.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Property File Fields}
+\label{sec:ref-property-fields}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{center}
+\small
+\begin{tabular}{lllp{5.5cm}}
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{property.name} & string & YES & Display name for the household unit. \\
+\texttt{property.zones} & list & NO & List of named zone objects. \\
+\texttt{assets} & list & NO & List of tracked physical asset objects. \\
+\texttt{routines} & list & NO & List of recurring routine definitions. \\
+\texttt{incident\_templates} & list & NO & List of reactive incident workflow templates. \\
+\texttt{consumables} & list & NO & List of consumable items on replacement schedules. \\
+\texttt{delegations} & list & NO & List of away-mode delegation blocks. \\
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{\texttt{home.routine} Field Reference}
+\label{sec:ref-routine-fields}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{center}
+\small
+\begin{tabular}{lllp{5.5cm}}
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{id} & string & YES & Unique routine identifier. \\
+\texttt{label} & string & YES & Short display name. \\
+\texttt{description} & string & NO & Longer description of the task. \\
+\texttt{zone} & string & COND & Zone ID. One of \texttt{zone} or \texttt{asset} required. \\
+\texttt{asset} & string & COND & Asset ID. One of \texttt{zone} or \texttt{asset} required. \\
+\texttt{cadence.every} & string & COND & Fixed interval (e.g., \texttt{7d}, \texttt{2w}). \\
+\texttt{cadence.seasonal} & map & COND & Season-keyed intervals. Mutually exclusive with \texttt{cadence.every}. \\
+\texttt{evidence.type} & string & NO & Evidence type: \texttt{photo}, \texttt{note}, \texttt{checklist}, \texttt{none}. \\
+\texttt{evidence.prompt} & string & NO & Instruction shown to the executor. \\
+\texttt{executor.role} & string & NO & Advisory executor role hint. Not enforced in \texttt{home/v0}. \\
+\texttt{notifications.remind\_hours\_before} & integer & NO & Hours before due date to send reminder. \\
+\texttt{notifications.escalate\_hours\_overdue} & integer & NO & Hours past due date before overdue alert. \\
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{\texttt{home.incident} Field Reference}
+\label{sec:ref-incident-fields}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{center}
+\small
+\begin{tabular}{lllp{5.5cm}}
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{id} & string & YES & Unique incident template identifier. \\
+\texttt{label} & string & YES & Short display name. \\
+\texttt{description} & string & NO & Longer description. \\
+\texttt{zones} & list & NO & Zone IDs this incident may affect. \\
+\texttt{assets} & list & NO & Asset IDs this incident may affect. \\
+\texttt{steps} & list & YES & List of IncidentStep objects. \\
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{IncidentStep Field Reference}
+\label{sec:ref-incident-step-fields}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{center}
+\small
+\begin{tabular}{lllp{5.5cm}}
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{id} & string & YES & Unique step identifier within the incident. \\
+\texttt{type} & string & YES & Step type: \texttt{human\_task}, \texttt{decision}, \texttt{parallel}. \\
+\texttt{label} & string & YES & Short display name. \\
+\texttt{description} & string & NO & Longer description. \\
+\texttt{evidence} & object & NO & Evidence requirement (type + prompt). \\
+\texttt{depends\_on} & list & NO & IDs of steps that must complete before this step starts. \\
+\texttt{choices} & list & COND & Required for \texttt{type: decision}. List of choice objects. \\
+\texttt{parallel\_steps} & list & COND & Required for \texttt{type: parallel}. Sub-steps executed concurrently. \\
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{\texttt{home.delegate} Field Reference}
+\label{sec:ref-delegate-fields}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{center}
+\small
+\begin{tabular}{lllp{5.5cm}}
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{delegate.name} & string & YES & Display name of the delegate. \\
+\texttt{delegate.contact} & string & YES & Phone number or primary contact method. \\
+\texttt{delegate.email} & string & NO & Email address of the delegate. \\
+\texttt{active.from} & string & YES & Delegation start date (\texttt{YYYY-MM-DD}). \\
+\texttt{active.to} & string & YES & Delegation end date (\texttt{YYYY-MM-DD}). \\
+\texttt{assigns} & list & YES & Scoped assignments (\texttt{\{routine: id\}} or \texttt{\{zone: id\}}). \\
+\texttt{permissions.can\_report\_incidents} & boolean & NO & Whether delegate may open incidents. Default: \texttt{false}. \\
+\texttt{permissions.can\_modify\_routines} & boolean & NO & Whether delegate may edit routines. Default: \texttt{false}. \\
+\texttt{permissions.can\_view\_history} & boolean & NO & Whether delegate may read run history. Default: \texttt{false}. \\
+\texttt{notifications.remind\_delegate\_hours\_before} & integer & NO & Hours before due date to remind delegate. \\
+\texttt{notifications.notify\_owner\_on\_completion} & boolean & NO & Notify homeowner when delegate completes a task. \\
+\texttt{notifications.notify\_owner\_if\_overdue} & boolean & NO & Notify homeowner if delegate's task is overdue. \\
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Evidence Type Field Reference}
+\label{sec:ref-evidence-fields}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Common Fields}
+
+\begin{description}
+  \item[\texttt{type}] Required. One of: \texttt{photo}, \texttt{note},
+        \texttt{checklist}, \texttt{none}.
+  \item[\texttt{prompt}] Optional. Instruction or question shown to the executor at the
+        time of evidence submission.
+\end{description}
+
+\subsection{\texttt{photo}}
+
+Requires submission of an image file. The file is SHA-256 hashed and stored in the run
+directory. Use for outdoor and physical tasks where completion is visually verifiable.
+
+\subsection{\texttt{note}}
+
+Requires submission of a free-text string. Use for recording cost, measurements, or
+contractor communications.
+
+\subsection{\texttt{checklist}}
+
+Requires completion of a structured list of items. Each item is checked individually before
+the step closes. Use for multi-step verification tasks.
+
+\subsection{\texttt{none}}
+
+No evidence required. The step closes on executor confirmation. Use sparingly --- only when
+no record is needed and completion is self-evident.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Consumable Field Reference}
+\label{sec:ref-consumable-fields}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{center}
+\small
+\begin{tabular}{lllp{5.5cm}}
+\textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{id} & string & YES & Unique consumable identifier. \\
+\texttt{label} & string & YES & Display name. \\
+\texttt{description} & string & NO & Longer description. \\
+\texttt{zone} & string & NO & Zone where the consumable is used. \\
+\texttt{asset} & string & NO & Asset ID this consumable belongs to. \\
+\texttt{replace\_every} & string & YES & Replacement interval (e.g., \texttt{180d}). \\
+\texttt{last\_replaced} & string & YES & Date of last replacement (\texttt{YYYY-MM-DD}). \\
+\texttt{stock.current} & integer & NO & Current stock quantity on hand. \\
+\texttt{stock.reorder\_at} & integer & NO & Stock level that triggers a reorder alert. \\
+\texttt{triggers\_routine} & string & NO & Routine ID to fire when replacement is due. \\
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Environment Variables}
+\label{sec:ref-env-vars}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{description}
+  \item[\texttt{GERT\_HOME\_PROPERTY\_FILE}] Path to the property file. Default:
+        \texttt{./casa.home.yaml}.
+  \item[\texttt{GERT\_HOME\_RUN\_DIR}] Root directory for run output and evidence storage.
+        Default: \texttt{./runs}.
+  \item[\texttt{GERT\_HOME\_TZ}] Timezone used for cadence computation and delegation
+        date range evaluation. Default: \texttt{UTC}. Use IANA timezone names
+        (e.g., \texttt{America/Santiago}).
+\end{description}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Error Codes}
+\label{sec:ref-error-codes}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{center}
+\small
+\begin{tabular}{llp{7cm}}
+\textbf{Code} & \textbf{Stage} & \textbf{Description} \\
+\hline
+\texttt{HOME\_ERR\_001} & Parse & Property file not found at the path specified by
+                                  \texttt{GERT\_HOME\_PROPERTY\_FILE}. \\
+\texttt{HOME\_ERR\_002} & Validate & Invalid cadence format. The \texttt{every} value must
+                                     be a positive integer followed by \texttt{d} or \texttt{w}
+                                     (e.g., \texttt{7d}, \texttt{2w}). \\
+\texttt{HOME\_ERR\_003} & Validate & Zone reference not found. A routine, incident template,
+                                     or delegation references a zone ID that is not declared
+                                     in \texttt{property.zones}. \\
+\texttt{HOME\_ERR\_004} & Validate & Asset reference not found. A routine or consumable
+                                     references an asset ID that is not declared in
+                                     \texttt{assets}. \\
+\texttt{HOME\_ERR\_005} & Parse & Delegation date parse error. The \texttt{active.from}
+                                  or \texttt{active.to} value is not a valid \texttt{YYYY-MM-DD}
+                                  date string. \\
+\end{tabular}
+\end{center}

@@ -1,7 +1,7 @@
 \chapter{Mobile Execution Model}
 \label{ch:mobile-execution}
 
-The gert v2 design supports offline, on-device runbook execution on mobile platforms through an embedded SDK and platform-specific kit bundles. This chapter specifies the mobile execution architecture, the kit bundle format, per-platform tool dispatch, dependency resolution, and run synchronisation.
+The gert design supports offline, on-device runbook execution on mobile platforms through an embedded SDK and platform-specific kit bundles. This chapter specifies the mobile execution architecture, the kit bundle format, per-platform tool dispatch, dependency resolution, and run synchronisation.
 
 % ------------------------------------------------------------------ %
 \section{Motivation and Design Goals}
@@ -88,7 +88,7 @@ A kit bundle is a directory with the following canonical structure:
 
 \subsection{Manifest Schema}
 
-The \texttt{manifest.json} file is the only new schema artefact introduced by the mobile execution model. All other files reuse existing gert v2 schemas.
+The \texttt{manifest.json} file is the only new schema artefact introduced by the mobile execution model. All other files reuse existing gert schemas.
 
 \begin{minted}{json}
 {
@@ -199,11 +199,11 @@ Registry resolution follows the order declared. The SDK queries each registry in
 
 \subsection{Impl Blocks in Tool Definitions}
 
-Mobile tool definitions extend the v2 \texttt{.tool.yaml} schema (Chapter~\ref{ch:tools}) with an optional \texttt{impl:} block declaring platform-specific handlers.
+Mobile tool definitions extend the \texttt{.tool.yaml} schema (Chapter~\ref{ch:tools}) with an optional \texttt{impl:} block declaring platform-specific handlers.
 
 \begin{minted}{yaml}
 # tools/camera.capture.tool.yaml
-apiVersion: tool/v2
+apiVersion: tool/v1
 
 meta:
   name: camera.capture
@@ -569,10 +569,10 @@ Tools that require these capabilities must declare them in the \texttt{governanc
 \section{What Stays Unchanged}
 % ------------------------------------------------------------------ %
 
-The mobile execution model is explicitly designed to preserve compatibility with the core gert v2 specification. The following components are \textbf{unchanged}:
+The mobile execution model is explicitly designed to preserve compatibility with the core gert specification. The following components are \textbf{unchanged}:
 
 \begin{itemize}
-  \item \textbf{Runbook YAML format} — \texttt{apiVersion: runbook/v2} documents are identical across CLI, server, and mobile platforms. The same runbook source file compiles to all targets.
+  \item \textbf{Runbook YAML format} — \texttt{apiVersion: runbook/v1} documents are identical across CLI, server, and mobile platforms. The same runbook source file compiles to all targets.
   \item \textbf{Trace JSONL format} — Mobile runs produce the same \texttt{trace.jsonl} format described in Chapter~\ref{ch:evidence-tracing-resumption}. Event kinds, envelopes, and payload schemas are identical.
   \item \textbf{Evidence and attachment model} — SHA256 content-addressed attachments, evidence capture, and redaction rules are unchanged.
   \item \textbf{Run directory structure} — The \texttt{.runbook/runs/<run-id>/} directory layout is identical. Mobile runs can be copied to a desktop environment and resumed via \texttt{gert exec --resume}.

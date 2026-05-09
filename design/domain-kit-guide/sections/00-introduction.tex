@@ -9,7 +9,7 @@
 \label{sec:what-are-kits}
 % ============================================================
 
-The gert v2 runtime is deliberately domain-agnostic. It executes steps, enforces
+The gert runtime is deliberately domain-agnostic. It executes steps, enforces
 governance, captures evidence, and writes traces---but it carries no opinion
 about \emph{what kind of work} a runbook describes. Whether you are orchestrating
 a compliance audit, provisioning infrastructure, migrating databases, or
@@ -94,7 +94,7 @@ Key properties:
 \begin{itemize}
   \item The Kit compiler is a \textbf{pure function}: YAML in, YAML out, no
     side effects.
-  \item The lowered output is a valid \texttt{runbook/v2} document that uses
+  \item The lowered output is a valid \texttt{runbook/v1} document that uses
     only core step types (\texttt{cli}, \texttt{tool}, \texttt{manual},
     \texttt{branch}, \texttt{iterate}).
   \item The runtime \textbf{never sees Kit-specific nodes}. Lowering happens
@@ -109,7 +109,7 @@ Key properties:
 \label{sec:three-extension-points}
 % ============================================================
 
-Gert v2 has three distinct extension mechanisms. Each serves a different purpose
+Gert has three distinct extension mechanisms. Each serves a different purpose
 and operates at a different phase:
 
 \begin{description}
@@ -180,9 +180,9 @@ This guide assumes you are comfortable with:
   \item Basic compiler concepts (parsing, transformation, lowering)
 \end{itemize}
 
-You do \emph{not} need to know the gert v2 runtime internals. This guide stands
+You do \emph{not} need to know the gert runtime internals. This guide stands
 alone. However, for deeper understanding of the core execution model, consult
-the \emph{Gert v2 Design Document} (particularly Chapter~4, Domain Kit Model).
+the \emph{Gert Design Document} (particularly Chapter~4, Domain Kit Model).
 
 % ============================================================
 \section{How This Guide Is Structured}
@@ -215,8 +215,8 @@ Use Chapter~8 as a quick reference once you are familiar with the model.
 \label{sec:forward-ref}
 % ============================================================
 
-For details on the gert v2 runtime, execution model, governance layer, evidence
-system, and event model, consult the \emph{Gert v2 Design Document}. In
+For details on the gert runtime, execution model, governance layer, evidence
+system, and event model, consult the \emph{Gert Design Document}. In
 particular:
 
 \begin{itemize}

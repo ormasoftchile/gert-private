@@ -1,13 +1,13 @@
 \chapter{Adapter Contracts}
 
-Gert v2 decouples the core runtime from presentation adapters (TUI, Web, VS
+Gert decouples the core runtime from presentation adapters (TUI, Web, VS
 Code) and integration systems (CI/CD platforms, observability backends, approval
 workflow systems) through explicitly versioned contracts.  An \textbf{adapter
 contract} is a stable, versioned interface that gert commits to maintain across
 minor and patch releases.  Adapters are consumers of these contracts: they
 observe, render, or orchestrate gert runs, but they own no execution logic.
 
-This chapter defines the four primary adapter surfaces exposed by gert v2:
+This chapter defines the four primary adapter surfaces exposed by gert:
 JSON-RPC execution contract, WebSocket event stream contract, tool invocation
 contract, and extension handshake contract.
 
@@ -47,17 +47,17 @@ version bump and a deprecation period.
 \label{sec:contract-categories}
 % ─────────────────────────────────────────────────────────────────────────────
 
-Gert v2 exposes four distinct adapter surfaces, each with its own versioning
+Gert exposes four distinct adapter surfaces, each with its own versioning
 and stability guarantees.
 
-\subsection{JSON-RPC Execution Contract (\texttt{exec/v2})}
+\subsection{JSON-RPC Execution Contract (\texttt{exec/v1})}
 \label{sec:jsonrpc-exec-contract}
 
 The execution contract is the primary interface for starting, monitoring, and
 controlling gert runs.  It is served over \texttt{gert serve --stdio} (stdio
 JSON-RPC) or \texttt{gert serve --http} (HTTP POST to \texttt{/rpc}).
 
-\paragraph{Contract version:} \texttt{exec/v2}
+\paragraph{Contract version:} \texttt{exec/v1}
 
 \paragraph{Transport:} stdio JSON-RPC 2.0 or HTTP POST (JSON-RPC over HTTP)
 
@@ -95,7 +95,7 @@ Get full details of a run.  Params: \texttt{runId}.  Returns: \texttt{run:
 RunDetails}. \\
 \hline
 \end{tabular}
-\caption{JSON-RPC execution contract methods (\texttt{exec/v2}).}
+\caption{JSON-RPC execution contract methods (\texttt{exec/v1}).}
 \label{tab:exec-methods}
 \end{table}
 
@@ -157,26 +157,26 @@ See Section~\ref{sec:error-codes} for the canonical error code registry.
 
 \paragraph{Stability guarantee:}
 
-Within the \texttt{exec/v2} contract:
+Within the \texttt{exec/v1} contract:
 
 \begin{itemize}
   \item All required fields in request/response schemas are stable.
   \item Optional fields may be added in minor versions (clients MUST ignore
         unknown fields).
   \item Required fields will not be removed or renamed (breaking change →
-        \texttt{exec/v3}).
+        \texttt{exec/v2}).
   \item Error codes are stable; new codes may be added but existing codes will
         not change semantics.
 \end{itemize}
 
-\subsection{WebSocket Event Stream Contract (\texttt{events/v2})}
+\subsection{WebSocket Event Stream Contract (\texttt{events/v1})}
 \label{sec:ws-event-contract}
 
 The event stream contract allows adapters to subscribe to real-time events from
 a running or completed gert execution.  It is served over \texttt{gert serve
 --http} at the \texttt{/ws} or \texttt{/events} endpoint.
 
-\paragraph{Contract version:} \texttt{events/v2}
+\paragraph{Contract version:} \texttt{events/v1}
 
 \paragraph{Transport:} WebSocket (wss:// or ws://)
 
@@ -247,7 +247,7 @@ The server will replay all events with \texttt{sequence > 42}.
 
 \paragraph{Stability guarantee:}
 
-Within the \texttt{events/v2} contract:
+Within the \texttt{events/v1} contract:
 
 \begin{itemize}
   \item Event envelope fields (\texttt{eventType}, \texttt{timestamp},
@@ -258,14 +258,14 @@ Within the \texttt{events/v2} contract:
         fields.
 \end{itemize}
 
-\subsection{Tool Invocation Contract (\texttt{tool/v2})}
+\subsection{Tool Invocation Contract (\texttt{tool/v1})}
 \label{sec:tool-invocation-contract}
 
 The tool invocation contract defines the stdio JSON-RPC protocol that tools
 must implement to be invoked by gert.  All tools — whether built-in,
 project-level, or extension-contributed — implement this contract.
 
-\paragraph{Contract version:} \texttt{tool/v2}
+\paragraph{Contract version:} \texttt{tool/v1}
 
 \paragraph{Transport:} stdio JSON-RPC 2.0
 
@@ -370,7 +370,7 @@ adapter:
 
 \paragraph{Stability guarantee:}
 
-Within the \texttt{tool/v2} contract:
+Within the \texttt{tool/v1} contract:
 
 \begin{itemize}
   \item Request/response envelope fields are stable.
@@ -379,14 +379,14 @@ Within the \texttt{tool/v2} contract:
   \item Tools MUST ignore unknown fields in requests.
 \end{itemize}
 
-\subsection{Extension Handshake Contract (\texttt{extension/v2})}
+\subsection{Extension Handshake Contract (\texttt{extension/v1})}
 \label{sec:extension-handshake-contract}
 
 The extension handshake contract defines the initialization and capability
 negotiation protocol between the gert host and an extension process.  It is
 defined in §4 and summarized here for completeness.
 
-\paragraph{Contract version:} \texttt{extension/v2}
+\paragraph{Contract version:} \texttt{extension/v1}
 
 \paragraph{Transport:} stdio JSON-RPC 2.0
 
@@ -459,7 +459,7 @@ Response:
 
 \paragraph{Stability guarantee:}
 
-Within the \texttt{extension/v2} contract:
+Within the \texttt{extension/v1} contract:
 
 \begin{itemize}
   \item The \texttt{extension/initialize} request/response schema is stable.
@@ -476,7 +476,7 @@ Within the \texttt{extension/v2} contract:
 
 Each adapter contract has a version declared in the initial handshake or HTTP
 header.  The version format is \texttt{\{surface\}/\{major\}} (e.g.,
-\texttt{exec/v2}, \texttt{events/v2}).  There is no minor version: any breaking
+\texttt{exec/v1}, \texttt{events/v1}).  There is no minor version: any breaking
 change bumps the major version.
 
 \subsection{Version Declaration}
@@ -489,14 +489,14 @@ request:
 \begin{verbatim}
 GET /ws HTTP/1.1
 Host: gert.acme.example:8443
-X-Gert-Contract: events/v2
+X-Gert-Contract: events/v1
 \end{verbatim}
 
 The server responds with:
 
 \begin{verbatim}
 HTTP/1.1 200 OK
-X-Gert-Contract: events/v2
+X-Gert-Contract: events/v1
 \end{verbatim}
 
 If the client sends an unsupported contract version, the server responds with
@@ -509,7 +509,7 @@ HTTP 400 and error:
     "message": "unsupported contract version",
     "data": {
       "requestedVersion": "events/v3",
-      "supportedVersions": ["events/v2"]
+      "supportedVersions": ["events/v1"]
     }
   }
 }
@@ -553,8 +553,8 @@ unknown methods, ignore unknown event types.
   \item Incompatible transport changes (e.g., switching from JSON-RPC to gRPC).
 \end{itemize}
 
-Breaking changes require a new contract version (e.g., \texttt{exec/v2} →
-\texttt{exec/v3}).
+Breaking changes require a new contract version (e.g., \texttt{exec/v1} →
+\texttt{exec/v2}).
 
 \subsection{Deprecation Policy}
 
@@ -569,10 +569,10 @@ Breaking changes require a new contract version (e.g., \texttt{exec/v2} →
 Example timeline:
 
 \begin{itemize}
-  \item 2026-04-01: \texttt{exec/v2} released.
-  \item 2027-06-01: \texttt{exec/v3} released; \texttt{exec/v2} enters
+  \item 2026-04-01: \texttt{exec/v1} released.
+  \item 2027-06-01: \texttt{exec/v2} released; \texttt{exec/v1} enters
         deprecation.
-  \item 2028-06-01: \texttt{exec/v2} removed; only \texttt{exec/v3} supported.
+  \item 2028-06-01: \texttt{exec/v1} removed; only \texttt{exec/v2} supported.
 \end{itemize}
 
 \subsection{Forward and Backward Compatibility}
@@ -585,7 +585,7 @@ optional fields without breaking existing clients.
 Example:
 
 \begin{minted}{bash}
-// Server adds a new optional field in exec/v2
+// Server adds a new optional field in exec/v1
 {
   "result": {
     "runId": "run-abc123",
@@ -709,17 +709,17 @@ Contract tests are located in \texttt{testdata/contracts/}:
 
 \begin{verbatim}
 testdata/contracts/
-  exec-v2/
+  exec-v1/
     01-start-run.test.yaml
     02-cancel-run.test.yaml
     03-list-runs.test.yaml
-  events-v2/
+  events-v1/
     01-subscribe.test.yaml
     02-reconnect.test.yaml
-  tool-v2/
+  tool-v1/
     01-invoke.test.yaml
     02-cancel.test.yaml
-  extension-v2/
+  extension-v1/
     01-initialize.test.yaml
     02-ping.test.yaml
 \end{verbatim}
@@ -739,9 +739,9 @@ Each test case is a YAML file with:
 \begin{minted}{bash}
 $ gert contract test --adapter=vscode
 Running contract tests for adapter: vscode
-  ✓ exec-v2/01-start-run (passed)
-  ✓ exec-v2/02-cancel-run (passed)
-  ✗ events-v2/01-subscribe (failed: missing 'sequence' field)
+  ✓ exec-v1/01-start-run (passed)
+  ✓ exec-v1/02-cancel-run (passed)
+  ✗ events-v1/01-subscribe (failed: missing 'sequence' field)
 
 Contract test results: 2 passed, 1 failed
 \end{minted}
@@ -779,7 +779,7 @@ artifact from CI.
 \paragraph{Built-in tools.}
 
 The built-in tools (\texttt{ext/builtin/tools/} in the repository) are the
-reference implementation of the tool invocation contract (\texttt{tool/v2}).
+reference implementation of the tool invocation contract (\texttt{tool/v1}).
 They demonstrate how to handle \texttt{invoke}, \texttt{cancel}, and error
 responses.
 
@@ -792,7 +792,7 @@ how to wrap an external protocol (MCP) to satisfy the tool invocation contract.
 \section{Contract Stability Guarantees}
 % ─────────────────────────────────────────────────────────────────────────────
 
-Gert v2 commits to the following stability guarantees for all adapter
+Gert commits to the following stability guarantees for all adapter
 contracts:
 
 \begin{enumerate}
@@ -823,8 +823,8 @@ documented as OpenAPI 3.1 specifications~\cite{openapi-spec} in
 \texttt{specs/contracts/}:
 
 \begin{itemize}
-  \item \texttt{specs/contracts/exec-v2.openapi.yaml}
-  \item \texttt{specs/contracts/events-v2.openapi.yaml}
+  \item \texttt{specs/contracts/exec-v1.openapi.yaml}
+  \item \texttt{specs/contracts/events-v1.openapi.yaml}
 \end{itemize}
 
 These specifications are the source of truth for request/response schemas and
@@ -849,7 +849,7 @@ from the OpenAPI and JSON Schema definitions:
 
 \begin{minted}{bash}
 $ gert codegen client --language=typescript --output=./clients/ts/
-Generated TypeScript client for exec/v2 and events/v2
+Generated TypeScript client for exec/v1 and events/v1
 Files written to ./clients/ts/
 \end{minted}
 

@@ -52,12 +52,12 @@ If two tools share the same name, the first match wins and a warning is
 emitted.  Tool authors SHOULD use reverse-DNS namespace prefixes to avoid
 collisions (e.g., \texttt{acme.pd-lookup}).
 
-\section{Tool Definition Schema (v2)}
+\section{Tool Definition Schema}
 \label{sec:tool-definition-schema}
 
 \begin{minted}{yaml}
 # tools/my-service.tool.yaml
-apiVersion: tool/v2
+apiVersion: tool/v1
 
 meta:
   name: my-service              # Unique identifier within the workspace

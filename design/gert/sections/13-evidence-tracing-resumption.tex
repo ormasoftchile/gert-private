@@ -1,9 +1,12 @@
 \chapter{Evidence, Tracing, and Resumption}
+\label{ch:evidence-tracing-resumption}
+\label{ch:evidence}
 
-Gert v2 captures a complete, durable record of every execution for audit, compliance, incident response, and operational replay. This section specifies the append-only JSONL trace format, evidence capture model, per-step snapshot contract, run resumption semantics, replay mode, and OpenTelemetry integration. Together these mechanisms ensure that every run produces a self-contained artifact that answers three questions: \textit{what happened}, \textit{what evidence was collected}, and \textit{how can execution be recovered or replicated}.
+Gert captures a complete, durable record of every execution for audit, compliance, incident response, and operational replay. This section specifies the append-only JSONL trace format, evidence capture model, per-step snapshot contract, run resumption semantics, replay mode, and OpenTelemetry integration. Together these mechanisms ensure that every run produces a self-contained artifact that answers three questions: \textit{what happened}, \textit{what evidence was collected}, and \textit{how can execution be recovered or replicated}.
 
 % ------------------------------------------------------------------ %
 \section{Trace File Format}
+\label{sec:trace-file-format}
 % ------------------------------------------------------------------ %
 
 \subsection{File Location and Naming}
@@ -51,7 +54,7 @@ The \texttt{sequence} field provides a total order over events in a single run. 
 
 \subsection{Event Type Catalogue}
 
-The following event kinds are normative in v2. All user-supplied string fields (command arguments, outputs, prompt responses) pass through the redaction pipeline before being written.
+The following event kinds are normative in the schema. All user-supplied string fields (command arguments, outputs, prompt responses) pass through the redaction pipeline before being written.
 
 \subsubsection{\texttt{run/started}}
 \label{sec:run-started-event-client-field}
@@ -293,7 +296,7 @@ On recovery, any line that fails \texttt{json.Unmarshal} is silently skipped. Th
 
 \subsection{Tamper Evidence}
 
-The v2 trace format supports optional HMAC-SHA256 signing of each event. When a signing key is configured (via \texttt{GERT\_TRACE\_KEY} or the workspace config), the runtime appends a \texttt{"sig"} field to the envelope containing the HMAC-SHA256 of the canonical JSON of all other fields. Verifiers can replay the trace and recompute signatures. This does not prevent deletion of events (append-only at the filesystem level provides that property) but detects modification of existing events.
+The trace format supports optional HMAC-SHA256 signing of each event. When a signing key is configured (via \texttt{GERT\_TRACE\_KEY} or the workspace config), the runtime appends a \texttt{"sig"} field to the envelope containing the HMAC-SHA256 of the canonical JSON of all other fields. Verifiers can replay the trace and recompute signatures. This does not prevent deletion of events (append-only at the filesystem level provides that property) but detects modification of existing events.
 
 % ------------------------------------------------------------------ %
 \section{Evidence Capture}
@@ -301,7 +304,7 @@ The v2 trace format supports optional HMAC-SHA256 signing of each event. When a 
 
 \subsection{What Constitutes Evidence}
 
-In v2, ``evidence'' is any artefact that attests to a step's outcome:
+In the schema, ``evidence'' is any artefact that attests to a step's outcome:
 
 \begin{itemize}
   \item \textbf{Command output} — stdout/stderr of a \texttt{cli} step, captured and embedded in \texttt{step/completed}.
@@ -533,7 +536,7 @@ For replay to produce the same outcome across runs, the runbook must be determin
 
 \subsection{Rationale}
 
-The JSONL trace format is optimised for durability, human readability, and offline analysis. OpenTelemetry (OTel) spans are optimised for real-time observability, distributed tracing, and integration with platforms such as Jaeger, Zipkin, Datadog, and Grafana Tempo. Both serve complementary purposes and v2 supports both simultaneously.
+The JSONL trace format is optimised for durability, human readability, and offline analysis. OpenTelemetry (OTel) spans are optimised for real-time observability, distributed tracing, and integration with platforms such as Jaeger, Zipkin, Datadog, and Grafana Tempo. Both serve complementary purposes and supports both simultaneously.
 
 \subsection{Span Hierarchy}
 

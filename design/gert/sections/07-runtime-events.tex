@@ -1,7 +1,7 @@
 \chapter{Runtime Events and Determinism}
 \label{ch:events}
 
-Gert v2 is an event-driven system. Every state change in the runtime---run initiation, step advancement, governance checks, tool invocations, human interactions---produces a structured event. Events serve three purposes: (1) adapters (TUI, Web, VS Code) subscribe to events to render UI state without coupling to execution logic, (2) events are appended to the JSONL trace file for audit and replay (§12), and (3) events propagate to observability systems for real-time monitoring and alerting.
+Gert is an event-driven system. Every state change in the runtime---run initiation, step advancement, governance checks, tool invocations, human interactions---produces a structured event. Events serve three purposes: (1) adapters (TUI, Web, VS Code) subscribe to events to render UI state without coupling to execution logic, (2) events are appended to the JSONL trace file for audit and replay (§12), and (3) events propagate to observability systems for real-time monitoring and alerting.
 
 This section defines the complete event system: the event envelope schema, delivery semantics, the normative event catalog, event channels, subscription API, wire format, and the required vs.\ optional event classification.
 
@@ -146,7 +146,7 @@ Every event carries a mandatory envelope with the following fields. Consumers MU
 \label{sec:event-catalog}
 % ─────────────────────────────────────────────────────────────────────────────
 
-The following subsections define every normative event kind in v2.0. Each definition includes the payload schema, emission semantics, and whether the event is required or optional.
+The following subsections define every normative event kind in . Each definition includes the payload schema, emission semantics, and whether the event is required or optional.
 
 \subsection{Run Lifecycle Events}
 
@@ -158,7 +158,7 @@ The following subsections define every normative event kind in v2.0. Each defini
 \begin{minted}{json}
 {
   "runbook_id":    <string>,  // from meta.name or file path
-  "version":       <string>,  // runbook schema version (e.g., "runbook/v2")
+  "version":       <string>,  // runbook schema version (e.g., "runbook/v1")
   "actor":         <string>,  // identity (from --as flag or adapter session)
   "input_hash":    <string>,  // SHA256 of sorted input key-value pairs
   "mode":          <string>,  // "real" | "dry-run" | "replay"
@@ -295,7 +295,7 @@ The following subsections define every normative event kind in v2.0. Each defini
 
 \subsubsection{\texttt{step/retrying}}
 
-\textbf{Emitted:} Before each retry attempt (v2.1 feature; requires retry policy).
+\textbf{Emitted:} Before each retry attempt (feature; requires retry policy).
 
 \textbf{Payload:}
 \begin{minted}{json}
@@ -307,7 +307,7 @@ The following subsections define every normative event kind in v2.0. Each defini
 }
 \end{minted}
 
-\textbf{Required:} YES, if retry is attempted. Optional in v2.0 (retry not yet implemented).
+\textbf{Required:} YES, if retry is attempted. Optional in the (retry not yet implemented).
 
 % ──────────────────────────────────────────────────────────────────────────────
 
@@ -501,9 +501,9 @@ All governance events are normatively defined in §11. The following is a summar
 
 % ──────────────────────────────────────────────────────────────────────────────
 
-\subsection{Saga and Compensation Events (v2.1+)}
+\subsection{Saga and Compensation Events (+)}
 
-The following events are reserved for the saga/compensation pattern, which is targeted for v2.1. They are included here for forward compatibility.
+The following events are reserved for the saga/compensation pattern, which is targeted for . They are included here for forward compatibility.
 
 \subsubsection{\texttt{saga/compensation\_triggered}}
 
@@ -517,7 +517,7 @@ The following events are reserved for the saga/compensation pattern, which is ta
 }
 \end{minted}
 
-\textbf{Required:} YES, if compensation is triggered (v2.1+).
+\textbf{Required:} YES, if compensation is triggered (+).
 
 % ──────────────────────────────────────────────────────────────────────────────
 
@@ -532,7 +532,7 @@ The following events are reserved for the saga/compensation pattern, which is ta
 }
 \end{minted}
 
-\textbf{Required:} YES, if compensation is triggered (v2.1+).
+\textbf{Required:} YES, if compensation is triggered (+).
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Event Channels}
@@ -679,7 +679,7 @@ The following table classifies every event as REQUIRED (MUST be emitted) or OPTI
 \texttt{step/completed} & REQUIRED & For every successful step \\
 \texttt{step/failed} & REQUIRED & For every failed step \\
 \texttt{step/skipped} & REQUIRED & For every skipped step \\
-\texttt{step/retrying} & OPTIONAL & v2.1+ retry feature \\
+\texttt{step/retrying} & OPTIONAL & + retry feature \\
 \texttt{governance/command\_checked} & OPTIONAL & Useful for audit trails \\
 \texttt{governance/approval\_requested} & REQUIRED & If approval gates used \\
 \texttt{governance/approval\_received} & REQUIRED & If approval gates used \\
@@ -690,12 +690,12 @@ The following table classifies every event as REQUIRED (MUST be emitted) or OPTI
 \texttt{tool/completed} & OPTIONAL & Observability \\
 \texttt{input/prompted} & REQUIRED & For manual steps \\
 \texttt{input/received} & REQUIRED & For manual steps \\
-\texttt{saga/compensation\_triggered} & REQUIRED & v2.1+ if saga used \\
-\texttt{saga/compensation\_completed} & REQUIRED & v2.1+ if saga used \\
+\texttt{saga/compensation\_triggered} & REQUIRED & + if saga used \\
+\texttt{saga/compensation\_completed} & REQUIRED & + if saga used \\
 \end{tabular}
 \end{center}
 
-\paragraph{Adapter compatibility.} Adapters MUST handle all REQUIRED events. They SHOULD gracefully ignore unknown event kinds to support forward compatibility (e.g., a v2.0 adapter rendering a v2.1 trace with saga events).
+\paragraph{Adapter compatibility.} Adapters MUST handle all REQUIRED events. They SHOULD gracefully ignore unknown event kinds to support forward compatibility (e.g., a the adapter rendering a trace with saga events).
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Determinism and Replay Semantics}

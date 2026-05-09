@@ -1,10 +1,10 @@
 % ============================================================
-% §03 — Schema vNext
+% §03 — Schema
 % Author: John (YAML/Schema Specialist)
 % Last updated: 2026-04-18
 % ============================================================
 
-\chapter{Schema vNext}
+\chapter{Schema}
 
 \label{ch:schema}
 
@@ -34,9 +34,9 @@ identifies both the document kind and the schema version.  The current values ar
 \hline
 \textbf{Document kind} & \textbf{apiVersion} \\
 \hline
-Runbook                & \texttt{runbook/v2} \\
-Tool definition        & \texttt{tool/v2}   \\
-Provider definition    & \texttt{provider/v2} \\
+Runbook                & \texttt{runbook/v1} \\
+Tool definition        & \texttt{tool/v1}   \\
+Provider definition    & \texttt{provider/v1} \\
 \hline
 \end{tabular}
 \end{center}
@@ -49,12 +49,12 @@ the \texttt{apiVersion} string; they are tracked by the schema artifact version
 \label{subsec:self-description}
 
 Following JSON~Schema~\cite{jsonschema-spec} best practice and the pattern used by GitHub Actions,
-Argo~Workflows, and Kubernetes~CRDs, every v2 document \emph{should} carry a
+Argo~Workflows, and Kubernetes~CRDs, every runbook document \emph{should} carry a
 \texttt{\$schema} field pointing to the canonical JSON~Schema URL:
 
 \begin{minted}{yaml}
-$schema: "https://schemas.gert.dev/runbook/v2.json"
-apiVersion: runbook/v2
+$schema: "https://schemas.gert.dev/runbook/v1.json"
+apiVersion: runbook/v1
 id: service-health
 name: Service Health Check
 ...
@@ -75,9 +75,9 @@ The \texttt{\$schema} field is optional at runtime (the runtime uses
 Schema URLs for each document kind:
 
 \begin{verbatim}
-https://schemas.gert.dev/runbook/v2.json
-https://schemas.gert.dev/tool/v2.json
-https://schemas.gert.dev/provider/v2.json
+https://schemas.gert.dev/runbook/v1.json
+https://schemas.gert.dev/tool/v1.json
+https://schemas.gert.dev/provider/v1.json
 \end{verbatim}
 
 \subsection{Versioning Strategy}
@@ -87,13 +87,13 @@ gert schema versioning follows a simplified semantic versioning model applied
 to the \texttt{apiVersion} major component:
 
 \begin{itemize}
-  \item \textbf{Major increment} (e.g.\ \texttt{runbook/v1} → \texttt{runbook/v2}):
+  \item \textbf{Major increment} (e.g.\ \texttt{runbook/v1} → \texttt{runbook/v1}):
         A breaking change.  The parser \emph{must not} silently accept the old
         format.  Automated migration is provided via \texttt{gert migrate}.
   \item \textbf{Minor/patch changes within a major}: Additive, backward-compatible.
         New optional fields may be added.  Existing fields may not be removed or
         renamed.  The JSON~Schema artifact version tracks these with a semver
-        suffix (e.g.\ \texttt{runbook/v2.json} at artifact version
+        suffix (e.g.\ \texttt{runbook/v1.json} at artifact version
         \texttt{2.1.0}).
 \end{itemize}
 
@@ -115,7 +115,7 @@ constraints are \emph{not} breaking changes.
 
 
 % ============================================================
-\section{Core Runbook Fields (v2)}
+\section{Core Runbook Fields}
 \label{sec:core-fields}
 % ============================================================
 
@@ -130,7 +130,7 @@ The runbook document has the following top-level fields:
 \textbf{Field} & \textbf{Type} & \textbf{Required} & \textbf{Description} \\
 \hline
 \texttt{\$schema}     & string  & No  & JSON~Schema URL (recommended) \\
-\texttt{apiVersion}   & string  & Yes & Must be \texttt{runbook/v2} \\
+\texttt{apiVersion}   & string  & Yes & Must be \texttt{runbook/v1} \\
 \texttt{id}           & string  & Yes & Unique machine identifier (slug) \\
 \texttt{name}         & string  & Yes & Human-readable display name \\
 \texttt{kind}         & enum    & No  & \texttt{mitigation | reference | composable | rca} \\
@@ -187,12 +187,12 @@ relative to the runbook file.  The \texttt{path} field overrides this.
 The \texttt{alias} field lets the runbook reference the tool by a local name
 that differs from the tool's declared \texttt{meta.name}.
 
-\subsection{Minimal Valid v2 Runbook}
+\subsection{Minimal Valid Runbook}
 \label{subsec:minimal-runbook}
 
 \begin{minted}{yaml}
-$schema: "https://schemas.gert.dev/runbook/v2.json"
-apiVersion: runbook/v2
+$schema: "https://schemas.gert.dev/runbook/v1.json"
+apiVersion: runbook/v1
 id: hello-world
 name: Hello World
 
@@ -218,8 +218,8 @@ flow:
 \label{subsec:full-example}
 
 \begin{minted}{yaml}
-$schema: "https://schemas.gert.dev/runbook/v2.json"
-apiVersion: runbook/v2
+$schema: "https://schemas.gert.dev/runbook/v1.json"
+apiVersion: runbook/v1
 id: service-health-check
 name: Service Health Check
 kind: mitigation
@@ -342,7 +342,7 @@ flow:
 \subsection{Input Declarations}
 \label{subsec:inputs}
 
-Inputs declare variables that must be resolved before execution begins.  In v2
+Inputs declare variables that must be resolved before execution begins.  In the schema
 the \texttt{inputs} map is a top-level field (promoted from \texttt{meta.inputs}).
 
 \begin{minted}{yaml}
@@ -395,7 +395,7 @@ runtime will reject the runbook at semantic validation time.
 Outputs declare values that a composable runbook exposes to its callers.
 With \texttt{type: include}, the caller's variable space is shared directly;
 explicit output declarations are reserved for the future \texttt{type: call}
-step type (post-v2.0 scope, isolated scope with explicit I/O mapping).
+step type (future scope, isolated scope with explicit I/O mapping).
 
 \begin{minted}{yaml}
 outputs:
@@ -405,7 +405,7 @@ outputs:
     from: captures.<captureName>    # must reference a capture variable
 \end{minted}
 
-The \texttt{from: captures.*} binding is the only supported form in v2.
+The \texttt{from: captures.*} binding is the only supported form in the schema.
 The named capture must be written by at least one step in the runbook; the
 semantic validator checks this.
 
@@ -598,7 +598,7 @@ field is a hard step failure (not a soft skip).  The step transitions to
 set on the step.
 
 % ============================================================
-\section{Step Types (v2 Inventory)}
+\section{Step Types}
 \label{sec:step-types}
 % ============================================================
 
@@ -606,7 +606,7 @@ Each step in \texttt{flow} is a \texttt{TreeNode}: either a \texttt{step} object
 (with optional \texttt{branches} and \texttt{iterate} siblings) or a standalone
 \texttt{iterate} block.
 
-v2 defines fifteen step types:
+The defines fifteen step types:
 
 \begin{center}
 \begin{tabular}{lp{8cm}}
@@ -875,7 +875,7 @@ This allows collector steps to explicitly mark which fields serve as compliance 
 \subsection{Step Type: cli}
 \label{subsec:step-cli}
 
-Executes a local command directly.  In the v2 runtime \texttt{cli} is the
+Executes a local command directly.  In the runtime \texttt{cli} is the
 canonical command step; the v1 \texttt{with.argv} form is accepted in
 compatibility mode and rewritten to \texttt{cli} by the migration tool.
 
@@ -1232,7 +1232,7 @@ All fields in a single \texttt{collector} step are presented and submitted
 atomically — the operator fills them all in and confirms once.
 The collected values are stored as named variables or artifacts for downstream
 steps and evidence capture.  This replaces the overly-generic \texttt{manual}
-step type from early v2 drafts.
+step type from early drafts.
 
 \begin{center}
 \begin{tabular}{lllp{5cm}}
@@ -1451,9 +1451,9 @@ parseable as a specific structured data format:
 \begin{itemize}
   \item \texttt{format: yaml} — value must parse as valid YAML.
   \item \texttt{format: json} — value must parse as valid JSON.
-  \item \texttt{format: toml} — value must parse as valid TOML~v2.1.
+  \item \texttt{format: toml} — value must parse as valid TOML~.
         \emph{Note: TOML format validation is deferred to a future release;
-        declaring it is a validation warning in v2.0.}
+        declaring it is a validation warning in .}
   \item No \texttt{format} (default) — plain text; no structural validation.
 \end{itemize}
 
@@ -1782,7 +1782,7 @@ from designated roles before proceeding.
 \end{tabular}
 \end{center}
 
-The \texttt{timeout} and \texttt{on\_timeout} fields are new in v2, addressing
+The \texttt{timeout} and \texttt{on\_timeout} fields are new in this schema, addressing
 the SLA enforcement gap identified in the research brief.
 
 \paragraph{Example: Incident evidence collection}
@@ -1832,7 +1832,7 @@ artifacts in the execution trace with SHA256 hashes for tamper-evidence.
 \label{par:questionnaire-pattern}
 
 A \texttt{collector} step with multiple \texttt{fields} is the canonical way
-to present a questionnaire in gert v2.  All fields are presented and submitted
+to present a questionnaire in gert.  All fields are presented and submitted
 atomically: the operator fills in the entire form and confirms once, rather than
 answering questions in sequential individual steps.  This pattern is preferred
 over a series of single-field \texttt{collector} steps when the questions are
@@ -1931,7 +1931,7 @@ Benefits of the questionnaire pattern:
         true} is also set.  If \texttt{format} is declared on a
         non-multiline field, a validation warning is emitted and the
         constraint is ignored at runtime.
-  \item \texttt{validation.format: toml} is a validation warning in v2.0
+  \item \texttt{validation.format: toml} is a validation warning in 
         (TOML parse validation is deferred); the runbook is accepted and the
         format constraint is not enforced at runtime.
   \item A field with \texttt{ephemeral: true} and \texttt{type: file} or
@@ -2149,7 +2149,7 @@ mcp).
 \end{tabular}
 \end{center}
 
-Output capture in v2 adds a \texttt{json.<path>} form for JSON-structured tool
+Output capture, adds a \texttt{json.<path>} form for JSON-structured tool
 outputs, eliminating the need for follow-up \texttt{cli} steps with \texttt{jq}:
 
 \begin{minted}{yaml}
@@ -2438,7 +2438,7 @@ trace — there is no sub-run, no separate audit entry, and no scope boundary.
 If isolation \emph{is} needed (separate variable scope, explicit input/output
 mapping), that is the responsibility of a future step type
 (\texttt{type: call} or \texttt{type: delegate}).  That capability is
-\textbf{not in v2.0 scope}.
+\textbf{not in the scope}.
 
 \paragraph{Outcome Gates (\texttt{gate:})}
 \label{para:include-gate}
@@ -2519,7 +2519,7 @@ producing a clean audit trail.
 \subsection{Step Type: branch}
 \label{subsec:step-branch}
 
-Evaluates a list of conditions and executes the first matching arm.  In v2,
+Evaluates a list of conditions and executes the first matching arm.  In the schema,
 \texttt{branch} is an explicit first-class step type (as well as the inline
 \texttt{branches:} sibling on any step node).
 
@@ -2538,7 +2538,7 @@ Evaluates a list of conditions and executes the first matching arm.  In v2,
 
 At most one branch arm executes.  If no arm matches and no arm has an
 \texttt{else: true} marker, execution continues past the branch node with no
-steps run.  The \texttt{else: true} marker (new in v2) designates a catch-all
+steps run.  The \texttt{else: true} marker (new in this schema) designates a catch-all
 arm:
 
 \begin{minted}{yaml}
@@ -2617,7 +2617,7 @@ arm:
 \label{subsec:step-iterate}
 
 Repeats a block of steps over a collection or until a convergence condition
-is met.  In v2 \texttt{iterate} is a TreeNode sibling (not a step type in the
+is met.  In the schema \texttt{iterate} is a TreeNode sibling (not a step type in the
 \texttt{step.type} enum) — it appears at the tree level alongside \texttt{step}
 nodes.
 
@@ -2770,7 +2770,7 @@ pattern for variable-length collections.
 \subsection{Step Type: parallel}
 \label{subsec:step-parallel}
 
-Executes a set of independent step groups concurrently, then joins.  New in v2,
+Executes a set of independent step groups concurrently, then joins.  New in this schema,
 addressing the fan-out/fan-in gap identified in Dennis's research brief.
 
 \begin{center}
@@ -2894,7 +2894,7 @@ Assertion types: \texttt{contains}, \texttt{not\_contains}, \texttt{matches}
 \subsection{Step Type: compensate}
 \label{subsec:step-compensate}
 
-New in v2.  Registers a compensation (rollback) action that is executed in
+New in this schema.  Registers a compensation (rollback) action that is executed in
 reverse order if the run fails or is cancelled after this step.  Implements the
 saga pattern for long-running operational transactions.
 
@@ -3048,20 +3048,20 @@ in v1.
 \end{minted}
 
 % ============================================================
-\section{Tool Definition Schema (v2)}
+\section{Tool Definition Schema}
 \label{sec:tool-schema}
 % ============================================================
 
 Tool definitions describe callable tools: their actions, argument schemas,
-transport, and behavioral contract.  In v2 the \texttt{tool/v0} version is
-replaced by \texttt{tool/v2}.
+transport, and behavioral contract.  In the schema the \texttt{tool/v0 (legacy)} version is
+replaced by \texttt{tool/v1}.
 
 \subsection{Tool Definition Field Inventory}
 \label{subsec:tool-fields}
 
 \begin{minted}{yaml}
-$schema: "https://schemas.gert.dev/tool/v2.json"
-apiVersion: tool/v2
+$schema: "https://schemas.gert.dev/tool/v1.json"
+apiVersion: tool/v1
 
 meta:
   name: kubectl
@@ -3100,7 +3100,7 @@ actions:
       action: allow
 \end{minted}
 
-\paragraph{New in v2}
+\paragraph{New}
 
 \begin{itemize}
   \item \texttt{capture.stdout.format} — declares the output format; enables
@@ -3189,7 +3189,7 @@ renders to \texttt{["-c", "4", "8.8.8.8"]}.
 \subsubsection{Complete Tool Definition Example}
 
 \begin{minted}{yaml}
-apiVersion: tool/v2
+apiVersion: tool/v1
 name: ping
 version: "1.0"
 description: Send ICMP ECHO_REQUEST packets to test network reachability
@@ -3265,7 +3265,7 @@ into the tool registry before execution.
 \subsubsection{Complete Runbook Example}
 
 \begin{minted}{yaml}
-apiVersion: runbook/v2
+apiVersion: runbook/v1
 id: network-check
 name: Network Connectivity Check
 
@@ -3341,16 +3341,16 @@ Native tool invocation fails if:
 \end{itemize}
 
 % ============================================================
-\section{Provider Definition Schema (v2)}
+\section{Provider Definition Schema}
 \label{sec:provider-schema}
 % ============================================================
 
 Provider definitions declare external input resolution services.
-In v2 the \texttt{provider/v0} version is replaced by \texttt{provider/v2}.
+In the schema the \texttt{provider/v0} version is replaced by \texttt{provider/v1}.
 
 \begin{minted}{yaml}
-$schema: "https://schemas.gert.dev/provider/v2.json"
-apiVersion: provider/v2
+$schema: "https://schemas.gert.dev/provider/v1.json"
+apiVersion: provider/v1
 
 meta:
   name: tracking
@@ -3393,13 +3393,13 @@ reference a field declared in a loaded provider definition.
 \subsection{The Extension Field Problem}
 
 Strict JSON Schema validation (\texttt{additionalProperties: false}) is a core
-v2 design constraint: unknown fields in a runbook must be rejected, not silently
+design constraint: unknown fields in a runbook must be rejected, not silently
 ignored.  At the same time, extensions must be able to attach metadata to steps,
 runbooks, and tool definitions without forking the core schema.
 
 \subsection{Convention: \texttt{x-<namespace>:} at the Field Level}
 
-v2 adopts the \textbf{\texttt{x-<namespace>}} prefix convention used by OpenAPI
+The adopts the \textbf{\texttt{x-<namespace>}} prefix convention used by OpenAPI
 and GitHub Actions.  Extension fields must:
 
 \begin{enumerate}
@@ -3413,8 +3413,8 @@ and GitHub Actions.  Extension fields must:
 \paragraph{At the runbook level}
 
 \begin{minted}{yaml}
-$schema: "https://schemas.gert.dev/runbook/v2.json"
-apiVersion: runbook/v2
+$schema: "https://schemas.gert.dev/runbook/v1.json"
+apiVersion: runbook/v1
 id: provision-service
 name: Provision Service
 
@@ -3484,7 +3484,7 @@ registered, enabling IDE auto-completion for extension fields as well.
 \label{sec:validation}
 % ============================================================
 
-v2 validation runs in two sequential phases.  Both must pass for a runbook to
+The validation runs in two sequential phases.  Both must pass for a runbook to
 be considered valid.
 
 \subsection{Phase 1: Structural Validation}
@@ -3586,16 +3586,16 @@ $ gert validate service-health.runbook.yaml
 
 \subsection{Shipped Artifacts}
 
-gert v2 ships the following schema artifacts:
+gert ships the following schema artifacts:
 
 \begin{center}
 \begin{tabular}{lp{9cm}}
 \hline
 \textbf{Artifact} & \textbf{Description} \\
 \hline
-\texttt{runbook.v2.schema.json}   & JSON~Schema Draft~2020-12 for runbook documents \\
-\texttt{tool.v2.schema.json}      & JSON~Schema for tool definitions \\
-\texttt{provider.v2.schema.json}  & JSON~Schema for provider definitions \\
+\texttt{runbook.v1.schema.json}   & JSON~Schema Draft~2020-12 for runbook documents \\
+\texttt{tool.v1.schema.json}      & JSON~Schema for tool definitions \\
+\texttt{provider.v1.schema.json}  & JSON~Schema for provider definitions \\
 \hline
 \end{tabular}
 \end{center}
@@ -3615,7 +3615,7 @@ gert schema export
 gert schema export --kind runbook   # runbook | tool | provider | bundle
 
 # Export full bundle (all three)
-gert schema export --kind bundle > gert-v2-schemas.json
+gert schema export --kind bundle > gert-schemas.json
 
 # Validate a document against the exported schema
 gert schema export | check-jsonschema --schemafile - runbook.yaml
@@ -3633,9 +3633,9 @@ The gert VS~Code extension configures schema-backed YAML validation via the
 # .vscode/settings.json (auto-generated by gert vscode init)
 {
   "yaml.schemas": {
-    "https://schemas.gert.dev/runbook/v2.json": "**/*.runbook.yaml",
-    "https://schemas.gert.dev/tool/v2.json":    "**/*.tool.yaml",
-    "https://schemas.gert.dev/provider/v2.json": "**/*.provider.yaml"
+    "https://schemas.gert.dev/runbook/v1.json": "**/*.runbook.yaml",
+    "https://schemas.gert.dev/tool/v1.json":    "**/*.tool.yaml",
+    "https://schemas.gert.dev/provider/v1.json": "**/*.provider.yaml"
   }
 }
 \end{verbatim}
@@ -3662,14 +3662,14 @@ Each schema artifact carries a version manifest in its \texttt{\$id} and a
 \begin{minted}{json}
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.gert.dev/runbook/v2.json",
+  "$id": "https://schemas.gert.dev/runbook/v1.json",
   "x-gert-version": "2.0.0",
   "x-gert-released": "2026-04-18",
-  "title": "gert runbook v2",
+  "title": "gert runbook",
   ...
 }
 \end{minted}
 
 Automated compatibility testing (part of the gert CI pipeline) runs every
-v1 example runbook through the v2 compatibility parser and asserts no regression,
-and runs every v2 example through the exported JSON~Schema validator.
+v1 example runbook through the compatibility parser and asserts no regression,
+and runs every example through the exported JSON~Schema validator.

@@ -46,7 +46,7 @@ gert.compliance/               # Kit root directory
 
   \item[\texttt{bin/<compiler-binary>}] --- The Kit compiler. A standalone
     executable that reads Kit YAML on stdin and writes core
-    \texttt{runbook/v2} YAML to stdout. Must be named in the manifest under
+    \texttt{runbook/v1} YAML to stdout. Must be named in the manifest under
     \texttt{compiler.executable}.
 \end{description}
 
@@ -97,7 +97,7 @@ compatibility:
   gert-core: ">=2.0.0 <3.0.0"    # Semver range for gert core compatibility
 
 schema:
-  apiVersion-suffix: "compliance/v1"  # Authors use: runbook/v2+compliance/v1
+  apiVersion-suffix: "compliance/v1"  # Authors use: runbook/v1+compliance/v1
   json-schema: "./schemas/compliance-v1.json"
 
 compiler:
@@ -148,8 +148,8 @@ projections:                     # Optional read models over trace data
     gert core versions this Kit is compatible with. If omitted, the Kit claims
     compatibility with all versions (not recommended).
   \item[\texttt{schema.apiVersion-suffix}] --- The suffix appended to
-    \texttt{runbook/v2+} in runbooks authored with this Kit. Example:
-    \texttt{compliance/v1} results in \texttt{apiVersion: runbook/v2+compliance/v1}.
+    \texttt{runbook/v1+} in runbooks authored with this Kit. Example:
+    \texttt{compliance/v1} results in \texttt{apiVersion: runbook/v1+compliance/v1}.
   \item[\texttt{schema.json-schema}] --- Path to the Kit's JSON Schema overlay.
   \item[\texttt{step-types}] --- List of Kit-defined step types with metadata
     about what core types they lower to.
@@ -171,7 +171,7 @@ Breaking changes to the authoring schema. Examples:
   \item Renaming a required field
   \item Changing field semantics in a non-backward-compatible way
   \item Changing the \texttt{apiVersion-suffix} (e.g., \texttt{compliance/v1}
-    $\to$ \texttt{compliance/v2})
+    $\to$ \texttt{compliance/v2 (later major)})
 \end{itemize}
 
 \paragraph{Minor version bump (1.X.0):}
@@ -198,7 +198,7 @@ Bug fixes with no schema changes. Examples:
 Runbook authors can pin to a specific Kit version in the runbook metadata:
 
 \begin{minted}{yaml}
-apiVersion: runbook/v2+compliance/v1
+apiVersion: runbook/v1+compliance/v1
 meta:
   kit:
     name: gert.compliance
@@ -236,9 +236,9 @@ gert.compliance/
 \end{verbatim}
 
 The \texttt{gert-kit-compliance} binary is invoked by gert when processing a
-runbook with \texttt{apiVersion: runbook/v2+compliance/v1}. It reads Kit YAML
+runbook with \texttt{apiVersion: runbook/v1+compliance/v1}. It reads Kit YAML
 on stdin, validates it against the Kit schema, and writes lowered
-\texttt{runbook/v2} YAML to stdout.
+\texttt{runbook/v1} YAML to stdout.
 
 In the next chapter, we will define the Kit schema that describes the
 \texttt{approval-request} step type.

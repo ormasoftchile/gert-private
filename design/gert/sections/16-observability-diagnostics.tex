@@ -1,6 +1,6 @@
 \chapter{Observability and Diagnostics}
 
-Operational visibility is essential for production systems. This chapter specifies the observability model for gert v2: structured logging, metrics, distributed tracing, health probes, and diagnostics tooling. It is distinct from \S~12 (Evidence, Tracing, and Resumption): \textbf{§12 specifies immutable audit records for compliance and resumption}; this chapter specifies \textbf{operational signals for operators} to answer questions like \textit{is the system healthy?}, \textit{what is slow?}, \textit{where did this run fail?}, and \textit{what is the resource utilization?}
+Operational visibility is essential for production systems. This chapter specifies the observability model for gert: structured logging, metrics, distributed tracing, health probes, and diagnostics tooling. It is distinct from \S~12 (Evidence, Tracing, and Resumption): \textbf{§12 specifies immutable audit records for compliance and resumption}; this chapter specifies \textbf{operational signals for operators} to answer questions like \textit{is the system healthy?}, \textit{what is slow?}, \textit{where did this run fail?}, and \textit{what is the resource utilization?}
 
 The design follows the three-pillar observability model~\cite{google-sre-book} adapted for workflow execution: metrics for aggregated performance, distributed tracing for execution flow, and structured logging for detailed context. All three are instrumented using industry standards (OpenTelemetry~\cite{otel-spec}, W3C Trace Context~\cite{w3c-trace-context}, RFC 3339 timestamps~\cite{rfc3339}) to ensure interoperability with observability platforms.
 
@@ -8,7 +8,7 @@ The design follows the three-pillar observability model~\cite{google-sre-book} a
 \section{Observability Model}
 % ================================================================
 
-Gert v2 applies the three-pillar observability model to workflow execution. Each pillar serves a distinct purpose:
+Gert applies the three-pillar observability model to workflow execution. Each pillar serves a distinct purpose:
 
 \subsection{Metrics: Aggregated Performance Indicators}
 
@@ -85,7 +85,7 @@ gert.run (run_id=...)
 \section{OpenTelemetry Integration}
 % ================================================================
 
-Gert v2 integrates OpenTelemetry as the standard tracing layer. All spans, metrics, and logs follow the OpenTelemetry specification~\cite{otel-spec} to ensure portability across observability backends.
+Gert integrates OpenTelemetry as the standard tracing layer. All spans, metrics, and logs follow the OpenTelemetry specification~\cite{otel-spec} to ensure portability across observability backends.
 
 \subsection{Span Hierarchy and Attributes}
 
@@ -230,7 +230,7 @@ span.RecordError(err, trace.WithAttributes(
 
 \subsection{Context Propagation}
 
-Gert v2 propagates trace context across system boundaries using W3C Trace Context~\cite{w3c-trace-context}.
+Gert propagates trace context across system boundaries using W3C Trace Context~\cite{w3c-trace-context}.
 
 \subsubsection{W3C Trace Context Headers}
 
@@ -299,7 +299,7 @@ This prints spans to \texttt{stderr} in a human-readable format.
 
 \subsection{Sampling Strategy}
 
-Gert v2 uses \textbf{parent-based sampling} with a configurable default rate:
+Gert uses \textbf{parent-based sampling} with a configurable default rate:
 
 \begin{itemize}
   \item If an incoming request already has a trace context (e.g., gert invoked via HTTP from another traced system), \textbf{inherit the parent's sampling decision}.
@@ -319,7 +319,7 @@ For production systems with high throughput, consider \texttt{0.01} (1\%) or \te
 \section{Metrics Catalog}
 % ================================================================
 
-Gert v2 exposes the following metrics in Prometheus OpenMetrics format. All metrics are prefixed with \texttt{gert\_}.
+Gert exposes the following metrics in Prometheus OpenMetrics format. All metrics are prefixed with \texttt{gert\_}.
 
 \subsection{Run Metrics}
 
@@ -459,7 +459,7 @@ The runtime pushes metrics to the OTLP endpoint at configurable intervals (defau
 \section{Structured Logging}
 % ================================================================
 
-Gert v2 emits structured JSON logs to \texttt{stderr}. Every log line is a complete JSON object.
+Gert emits structured JSON logs to \texttt{stderr}. Every log line is a complete JSON object.
 
 \subsection{Log Line Format}
 
@@ -595,7 +595,7 @@ GET /health
 \begin{minted}{json}
 {
   "status": "ok",
-  "version": "v2.0.0",
+  "version": ".0",
   "uptime_seconds": 3600
 }
 \end{minted}
@@ -641,7 +641,7 @@ metadata:
 spec:
   containers:
   - name: gert
-    image: gert:v2.0.0
+    image: gert:.0
     command: ["gert", "serve", "--http", "--addr=:8080"]
     livenessProbe:
       httpGet:
@@ -661,7 +661,7 @@ spec:
 \section{Diagnostics Commands}
 % ================================================================
 
-Gert v2 provides CLI commands for self-diagnosis and trace inspection.
+Gert provides CLI commands for self-diagnosis and trace inspection.
 
 \subsection{\texttt{gert diagnose}}
 
@@ -766,7 +766,7 @@ gert run list [--limit=N] [--json]
 \begin{verbatim}
 RUN_ID                       RUNBOOK          ACTOR                OUTCOME    DURATION
 20260418T143022-a3f9c1       deploy-app-v3    alice@example.com    success    2m53s
-20260418T140015-f3a7b2       rollback-v2      bob@example.com      failure    45s
+20260418T140015-f3a7b2       rollback-prod      bob@example.com      failure    45s
 20260418T135512-c9e8d1       backup-db        cron@system          success    3m12s
 \end{verbatim}
 
@@ -905,7 +905,7 @@ Consult platform documentation for exact endpoint URLs and authentication header
 \section{Observability for CI/CD Pipelines}
 % ================================================================
 
-Gert v2 provides machine-readable output for CI/CD integration.
+Gert provides machine-readable output for CI/CD integration.
 
 \subsection{JSON Output Mode}
 
@@ -976,7 +976,7 @@ deploy:
 \section{Summary}
 % ================================================================
 
-This chapter specifies a production-grade observability model for gert v2 grounded in industry standards:
+This chapter specifies a production-grade observability model for gert grounded in industry standards:
 
 \begin{itemize}
   \item \textbf{Three-pillar model:} Metrics (Prometheus), distributed tracing (OpenTelemetry), structured logging (JSON)

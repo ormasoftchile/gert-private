@@ -1,7 +1,7 @@
 \chapter{Architecture}
 \label{ch:architecture}
 
-This chapter defines the v2 system architecture: the five primary components, their interfaces and invariants,
+This chapter defines the system architecture: the five primary components, their interfaces and invariants,
 the complete data flow from runbook invocation to trace archive, the execution lifecycle, the concurrency model,
 and how the \texttt{gert serve} JSON-RPC layer integrates as a first-class adapter.
 
@@ -54,7 +54,7 @@ the dependency graph.
   \draw[gertarrow] (arc-handlers)  -- (arc-inputprov);
   \draw[gertarrow] (arc-handlers)  -- (arc-eventbus);
 \end{tikzpicture}
-\caption{gert v2 architecture --- component dependency overview.}
+\caption{gert architecture --- component dependency overview.}
 \label{fig:architecture-overview}
 \end{figure}
 
@@ -106,7 +106,7 @@ malformed Go template expressions) but intentionally defers deep semantic valida
 \begin{minted}{go}
 // Parser transforms raw YAML bytes into a validated ParsedRunbook.
 type Parser interface {
-    // Parse reads YAML from r, validates against the v2 JSON Schema,
+    // Parse reads YAML from r, validates against the JSON Schema,
     // applies structural semantic checks, and returns a ParsedRunbook.
     // Errors carry structured diagnostics (file, line, column, message).
     Parse(ctx context.Context, r io.Reader, opts ParseOptions) (*ParsedRunbook, error)
@@ -137,7 +137,7 @@ evaluator (for template syntax validation). It has no runtime dependencies.
 
 \paragraph{Key Invariants.}
 \begin{itemize}
-  \item A \texttt{ParsedRunbook} returned without error is structurally valid against the v2 JSON Schema.
+  \item A \texttt{ParsedRunbook} returned without error is structurally valid against the JSON Schema.
   \item All step IDs are unique within a \texttt{ParsedRunbook}.
   \item No I/O occurs during parsing (file imports are recorded as paths, not resolved).
   \item Parsing is pure and deterministic: the same input always produces the same output.
@@ -433,7 +433,7 @@ exactly where each responsibility is exercised.
 
 The user invokes \texttt{gert exec runbook.yaml --as eng@corp.com}. The CLI layer reads the
 YAML file and calls \texttt{Parser.Parse()}. The Parser validates the document against the
-embedded v2 JSON Schema, checks structural semantic rules, and returns a \texttt{ParsedRunbook}.
+embedded JSON Schema, checks structural semantic rules, and returns a \texttt{ParsedRunbook}.
 If validation fails, structured diagnostics are returned and execution does not proceed.
 
 \subsection{Phase 2: Plan}
@@ -487,7 +487,7 @@ For each step, the runtime executes the following sequence:
   \item \textbf{Contract check:} The step's \texttt{Contract.Risk()} is evaluated. Steps
         with \texttt{RiskCritical} that do not have an explicit approval gate declaration
         in the plan emit a \texttt{governance/contractWarning} event (not a hard failure in
-        v2.0; upgraded to error in strict mode).
+        ; upgraded to error in strict mode).
   \item \textbf{Approval gate:} If the step declares \texttt{approvals.min > 0}, the runtime
         pauses and emits an \texttt{ApprovalRequired} event. Execution blocks at this step
         until \texttt{RunHandle.Approve()} is called with sufficient approvals.
@@ -785,7 +785,7 @@ the map form alone can express.
 \label{sec:include_executor_contract}
 % ─────────────────────────────────────────────────────────────────────────────
 
-The \texttt{include} step is the v2.0 inline composition primitive. It expands a referenced
+The \texttt{include} step is the the inline composition primitive. It expands a referenced
 runbook's steps directly into the caller's execution queue — no new run context, no isolated
 variable scope, no separate audit entry.
 
@@ -844,10 +844,10 @@ infinite include loops at execution time. The executor-level re-assertion in ste
 is a defence-in-depth check, not the primary enforcement point.
 
 \paragraph{Future: Sub-Procedure Call.}
-\texttt{type: include} is the v2.0 composition primitive: inline expansion into a shared
+\texttt{type: include} is the the composition primitive: inline expansion into a shared
 variable scope. A future \texttt{type: call} step type would provide isolated scope with
 explicit input/output mapping, analogous to a function call. This pattern is deferred
-post-v2.0; \texttt{type: include} covers the primary composition use case for the v2.0
+future; \texttt{type: include} covers the primary composition use case for the 
 release.
 
 \subsubsection*{Step Post-flight (all step types)}
@@ -1000,7 +1000,7 @@ from the existing user-initiated \textbf{PAUSED} state:
 \hline
 \texttt{COMPLETED} & All steps finished & Terminal. \\
 \hline
-\texttt{FAILED}   & Unhandled error or \texttt{on\_timeout: fail} & Terminal (unless compensated in v2.1). \\
+\texttt{FAILED}   & Unhandled error or \texttt{on\_timeout: fail} & Terminal (unless compensated in a future release). \\
 \hline
 \end{tabular}
 \end{center}
@@ -1173,7 +1173,7 @@ are:
         given start instant.
   \item Enumerate elapsed business days between two instants (for reporting and audit).
   \item Load and cache named business calendars; built-in calendars are compiled into
-        the gert binary. Custom calendar definitions are deferred to v2.1.
+        the gert binary. Custom calendar definitions are deferred to a future release.
 \end{itemize}
 
 \paragraph{Go interface.}
@@ -1194,7 +1194,7 @@ type BusinessCalendar interface {
 }
 \end{minted}
 
-\paragraph{Built-in calendars for v2.0.}
+\paragraph{Built-in calendars for .}
 
 \begin{center}
 \begin{tabular}{|l|p{9cm}|}
@@ -1218,7 +1218,7 @@ type BusinessCalendar interface {
 \end{center}
 
 Custom calendar definitions (YAML-declared holiday lists referenced by a named ID) are
-\textbf{deferred to v2.1} as a future-work item.
+\textbf{deferred to a future release} as a future-work item.
 
 \paragraph{Timeout calculation at activation.}
 The key architectural decision for business-day timeouts is a \textbf{one-time conversion
@@ -1885,7 +1885,7 @@ find it absent from the reconstructed scope.
 \begin{tcolorbox}[colback=yellow!10,colframe=orange!60,title=Constraint: ephemeral variables and suspension]
 Steps that depend on ephemeral variables MUST appear before any \texttt{wait\_for\_event}
 or \texttt{approve} step that could suspend the run.  The schema validator SHOULD emit a
-load-time warning (not a hard error in v2.0) if an ephemeral variable is referenced in a
+load-time warning (not a hard error in ) if an ephemeral variable is referenced in a
 step that follows a suspendable step in the same runbook's execution path.
 \end{tcolorbox}
 
@@ -1900,8 +1900,8 @@ step that follows a suspendable step in the same runbook's execution path.
   \item The run state is checkpointed as \texttt{cancelled} (resumable).
 \end{enumerate}
 
-The cancellation contract does not invoke compensation handlers in v2.0. Saga/compensation
-(stepping backward through a compensation chain on failure) is deferred to v2.1 as specified
+The cancellation contract does not invoke compensation handlers in . Saga/compensation
+(stepping backward through a compensation chain on failure) is deferred to a future release as specified
 in §09 (Open Questions).
 
 \subsection{Crash Recovery}
@@ -1918,11 +1918,11 @@ Steps already recorded as completed in the trace are not re-executed.
 
 \subsection{Per-Process Run Isolation}
 
-The v2 runtime is \textbf{single-run-per-process}. Each \texttt{gert exec} invocation is a
+The runtime is \textbf{single-run-per-process}. Each \texttt{gert exec} invocation is a
 separate OS process. \texttt{gert serve} is the exception: it is a long-running process that
 may host multiple sequential runs (one at a time) for a single VS Code extension session.
 Concurrent runs within a single \texttt{gert serve} instance are explicitly out of scope
-for v2.0 (see §09).
+for the (see §09).
 
 \paragraph{Rationale.} Governance enforcement, file-level trace writes, and subprocess management
 are dramatically simpler with one run per process. Process isolation also provides a natural
@@ -1934,7 +1934,7 @@ Within a single run, the concurrency model is:
 
 \begin{itemize}
   \item \textbf{One goroutine per run:} the step execution loop runs on a single goroutine.
-        Steps execute sequentially; there is no goroutine-per-step parallelism in v2.0.
+        Steps execute sequentially; there is no goroutine-per-step parallelism in .
   \item \textbf{Event fan-out goroutine:} a second goroutine reads from an internal event
         buffer and writes to the \texttt{Events()} channel. This decouples event emission
         (which must be synchronous with step execution) from event consumption (which may
@@ -1965,7 +1965,7 @@ Within a single run, the concurrency model is:
 \texttt{gert serve} is the HTTP server that powers the VS Code extension, the embedded
 web preview, the MCP tools layer, and any future external client. It exposes a JSON-RPC 2.0
 endpoint at \texttt{POST /rpc} alongside REST and Server-Sent Events (SSE) endpoints. In the
-v2 architecture it is classified as an \textbf{adapter in the API/Adapter Layer}.
+The architecture it is classified as an \textbf{adapter in the API/Adapter Layer}.
 
 \subsection{Architectural Position}
 
@@ -2043,7 +2043,7 @@ The \textbf{Event Dispatcher} is a new runtime component that lives exclusively 
         keyed by \texttt{event.id}. Any component within the same \texttt{gert serve} process
         can post to a named channel via \texttt{EventDispatcher.Send(eventID, payload)}.
   \item \textbf{Message broker transport} — delegate to a pluggable \texttt{MessageBroker}
-        interface (implementation-defined for v2.0; a no-op stub ships by default). The
+        interface (implementation-defined for ; a no-op stub ships by default). The
         interface follows the same pattern as the \texttt{ToolTransport} plug-in model: a
         registered factory function keyed by broker type string.
   \item \textbf{Signal transport} — register \texttt{os/signal} handlers scoped to a specific

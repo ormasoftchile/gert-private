@@ -1,7 +1,7 @@
 \chapter{Extension Runtime}
 \label{ch:extension}
 
-The gert v2 extension runtime defines how external packages contribute tools,
+The gert extension runtime defines how external packages contribute tools,
 schema fields, governance policies, and input providers to a running gert host
 without requiring changes to the host binary.  Extensions run as child
 processes; they communicate with the host over JSON-RPC 2.0 and are governed
@@ -98,7 +98,7 @@ Table~\ref{tab:capabilities}.
   Cannot modify run state; does not imply the ability to emit output. \\
 \hline
 \end{tabular}
-\caption{Extension capability taxonomy (v2).}
+\caption{Extension capability taxonomy.}
 \label{tab:capabilities}
 \end{table}
 
@@ -115,7 +115,7 @@ and compatibility constraints.
 
 \begin{minted}{yaml}
 # gert-extension.yaml — Extension Manifest
-apiVersion: extension/v2
+apiVersion: extension/v1
 
 meta:
   name: acme.incident-pack          # Reverse-DNS namespaced identifier
@@ -193,7 +193,7 @@ extensions:
 The runbook \texttt{extensions:} field:
 
 \begin{minted}{yaml}
-apiVersion: runbook/v2
+apiVersion: runbook/v1
 meta:
   name: incident-triage
 extensions:

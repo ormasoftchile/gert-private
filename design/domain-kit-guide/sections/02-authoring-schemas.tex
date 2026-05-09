@@ -21,7 +21,7 @@ Key principles:
   \item A Kit schema is \textbf{additive}. It does not modify or remove core
     step types. It adds new types that will be lowered into core types.
   \item A Kit schema is \textbf{validated at parse time}. When a runbook
-    declares \texttt{apiVersion: runbook/v2+compliance/v1}, the gert parser
+    declares \texttt{apiVersion: runbook/v1+compliance/v1}, the gert parser
     loads the Kit schema and validates the runbook against it.
   \item A Kit schema is \textbf{domain-specific}. It should feel natural for
     authors working in that domain. A compliance Kit might define
@@ -231,7 +231,7 @@ file upload, or both).
 A runbook author using the compliance Kit might write:
 
 \begin{minted}{yaml}
-apiVersion: runbook/v2+compliance/v1
+apiVersion: runbook/v1+compliance/v1
 meta:
   title: "Quarterly access review"
   kit:

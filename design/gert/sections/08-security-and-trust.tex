@@ -1,7 +1,7 @@
 \chapter{Security and Trust}
 \label{ch:security}
 
-Gert v2 is designed to operate in regulated, high-trust environments where
+Gert is designed to operate in regulated, high-trust environments where
 operational actions must be auditable, accountable, and governed by explicit
 policy.  Security is not an add-on; it is foundational to the system's
 architecture.  This chapter defines the threat model, trust boundaries,
@@ -13,7 +13,7 @@ model, audit non-repudiation, and supply chain security.
 \label{sec:threat-model}
 % ─────────────────────────────────────────────────────────────────────────────
 
-Gert v2 addresses the following threat categories, which are common in
+Gert addresses the following threat categories, which are common in
 operational runbook systems and have real-world precedent in systems like AWS
 Systems Manager, PagerDuty Runbook Automation, and Rundeck~\cite{aws-ssm-runbooks,pagerduty-automation,rundeck-docs}.
 
@@ -52,7 +52,7 @@ Tool binary checksum verification before invocation &
 §\ref{sec:supply-chain} \\
 \hline
 \end{tabular}
-\caption{Threat model and mitigations for gert v2.}
+\caption{Threat model and mitigations for gert.}
 \label{tab:threat-model}
 \end{table}
 
@@ -161,7 +161,7 @@ Remote/signed extensions must include a \texttt{signature:} block in
 
 \begin{minted}{yaml}
 # gert-extension.yaml — signed extension
-apiVersion: extension/v2
+apiVersion: extension/v1
 
 meta:
   name: acme.incident-pack
@@ -289,7 +289,7 @@ signal), the host:
 \label{sec:credential-handling}
 % ─────────────────────────────────────────────────────────────────────────────
 
-Gert v2 does not store secrets.  It acts as a pass-through: secrets are
+Gert does not store secrets.  It acts as a pass-through: secrets are
 resolved from input providers at runtime, used for a single step invocation,
 and then discarded.  Secrets never appear in trace logs or captured output.
 
@@ -341,7 +341,7 @@ storage.  See §11 for the full redaction specification.
 
 \subsection{Secret Storage Policy}
 
-Gert v2 does NOT:
+Gert does NOT:
 
 \begin{itemize}
   \item Store secrets in the runbook YAML.
@@ -359,7 +359,7 @@ management systems (e.g., HashiCorp Vault, AWS Secrets Manager, 1Password).
 \label{sec:transport-security}
 % ─────────────────────────────────────────────────────────────────────────────
 
-Gert v2 supports two primary transport modes for JSON-RPC communication:
+Gert supports two primary transport modes for JSON-RPC communication:
 
 \begin{enumerate}
   \item \textbf{stdio}: JSON-RPC over stdin/stdout of a child process.  No
@@ -477,7 +477,7 @@ system initiates an action (run start, approval submission, cancellation).
 
 \subsection{Roles}
 
-Gert v2 defines three standard roles:
+Gert defines three standard roles:
 
 \paragraph{Viewer.}
 Read-only access.  Permissions:
@@ -663,7 +663,7 @@ end-to-end non-repudiation for the entire run.
 Tools and extensions are executable code distributed via package managers,
 repositories, or direct download.  Supply chain attacks (e.g., compromised
 binaries, backdoored dependencies) are a real threat in operational
-environments.  Gert v2 provides checksum verification and signature validation
+environments.  Gert provides checksum verification and signature validation
 to mitigate these risks.
 
 \subsection{Tool Binary Checksums}

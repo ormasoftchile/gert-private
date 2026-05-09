@@ -49,7 +49,7 @@ validates a specific error condition.
 
 \begin{minted}{yaml}
 # Test fixture: basic approval-request lowering
-apiVersion: runbook/v2+compliance/v1
+apiVersion: runbook/v1+compliance/v1
 meta:
   title: "Basic approval test"
   kit:
@@ -69,7 +69,7 @@ steps:
 \paragraph{Expected lowered output: \texttt{01-basic-approval.lowered.yaml}}
 
 \begin{minted}{yaml}
-apiVersion: runbook/v2
+apiVersion: runbook/v1
 meta:
   title: "Basic approval test"
   x-kit:lowered-from:
@@ -177,7 +177,7 @@ diff -u test/expected/04-invalid-missing-owner.errors.json /tmp/errors.json
 
 \begin{minted}{yaml}
 # Test fixture: missing owner (should fail validation)
-apiVersion: runbook/v2+compliance/v1
+apiVersion: runbook/v1+compliance/v1
 meta:
   title: "Invalid runbook: missing owner"
 

@@ -35,7 +35,7 @@ Runbooks reference a Kit in two places:
 \paragraph{1. In the \texttt{apiVersion} field:}
 
 \begin{minted}{yaml}
-apiVersion: runbook/v2+compliance/v1
+apiVersion: runbook/v1+compliance/v1
 \end{minted}
 
 The suffix (\texttt{compliance/v1}) tells gert which Kit schema to load. This
@@ -60,7 +60,7 @@ runbook.
 \label{sec:kit-discovery}
 % ============================================================
 
-When gert encounters a runbook with \texttt{apiVersion: runbook/v2+<suffix>},
+When gert encounters a runbook with \texttt{apiVersion: runbook/v1+<suffix>},
 it searches for the corresponding Kit in the following order:
 
 \begin{enumerate}

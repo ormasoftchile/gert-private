@@ -13,7 +13,7 @@
 \label{sec:kit-purpose}
 % ============================================================
 
-The gert v2 core runtime is deliberately domain-agnostic.  It executes steps,
+The gert core runtime is deliberately domain-agnostic.  It executes steps,
 enforces governance, captures evidence, and writes traces---but it carries no
 opinion about what kind of work a runbook describes.  This is a feature, not an
 omission: a domain-agnostic kernel is the prerequisite for a stable, long-lived
@@ -68,7 +68,7 @@ the engine does.
 \label{sec:kit-narrative}
 % ============================================================
 
-The v2 architecture draws a hard boundary between three concerns: what the
+The architecture draws a hard boundary between three concerns: what the
 engine executes (core runtime), what capabilities are available at runtime
 (extensions and tools), and what vocabulary authors use to express intent
 (Domain Kits).  The first two are well-defined in the existing design; the
@@ -130,10 +130,10 @@ Or equivalently, when integrated into the gert pipeline:
 
 \begin{enumerate}
   \item The user authors a runbook using Kit vocabulary (e.g.,
-    \texttt{apiVersion: runbook/v2+ops/v1}).
+    \texttt{apiVersion: runbook/v1+ops/v1}).
   \item The Kit's parser validates domain-specific fields and produces a
     Kit-level AST.
-  \item The Kit's compiler lowers the AST into a standard \texttt{runbook/v2}
+  \item The Kit's compiler lowers the AST into a standard \texttt{runbook/v1}
     document using only core step types.
   \item The core parser and planner process the lowered document normally.
   \item The runtime executes the plan with no knowledge that a Kit was
@@ -141,7 +141,7 @@ Or equivalently, when integrated into the gert pipeline:
 \end{enumerate}
 
 This is a compile-time transformation, not a runtime interception.  The lowered
-output is a valid \texttt{runbook/v2} document that can be inspected,
+output is a valid \texttt{runbook/v1} document that can be inspected,
 version-controlled, and executed without the Kit installed.  This property is
 critical for portability: a Kit-authored runbook can always be reduced to its
 core equivalent.
@@ -155,7 +155,7 @@ against lowered output remain stable across Kit versions.
 \label{sec:kit-layers}
 % ============================================================
 
-The v2 system has four distinct layers.  Each layer has a defined
+The system has four distinct layers.  Each layer has a defined
 responsibility boundary and a defined relationship to the others.
 
 \begin{table}[ht]
@@ -237,7 +237,7 @@ compatibility:
 
 schema:
   apiVersion-suffix: "workflow/v1"   # Runbooks authored with this Kit use
-                                     # apiVersion: runbook/v2+workflow/v1
+                                     # apiVersion: runbook/v1+workflow/v1
   json-schema: "./schemas/workflow-v1.json"  # Kit-specific JSON Schema overlay
 
 compiler:
@@ -278,7 +278,7 @@ projections:                         # Read models over trace data
 
   \item Breaking changes to a Kit's authoring schema require a Kit major
     version bump.  The \texttt{apiVersion-suffix} encodes the Kit's major
-    version (e.g., \texttt{workflow/v1} $\to$ \texttt{workflow/v2}).  This is
+    version (e.g., \texttt{workflow/v1} $\to$ \texttt{workflow/v2 (later major)}).  This is
     independent of the gert core version.
 
   \item Additive changes (new optional fields, new step types) within a Kit
@@ -490,7 +490,7 @@ A foundational kit exposes three integration surfaces:
 \end{enumerate}
 
 The shared infrastructure types live in
-\texttt{gert/v2/pkg/kitruntime}:
+\texttt{gert/pkg/kitruntime}:
 
 \begin{minted}{go}
 // StepCompilerFunc compiles one Kit-level step into core FlowNodes.
@@ -547,7 +547,7 @@ module github.com/ormasoftchile/gert-kit-home
 
 require (
     github.com/ormasoftchile/gert-kit-household v0.3.0
-    github.com/ormasoftchile/gert/v2             v2.1.0
+    github.com/ormasoftchile/gert/v1             .0
 )
 \end{minted}
 
@@ -796,7 +796,7 @@ func compileMorningRoutine(
 \end{minted}
 
   \item \textbf{Core planner boundary.}  The gert core planner accepts only
-    \texttt{runbook/v2} YAML.  Kit YAML is a pre-processing artefact that
+    \texttt{runbook/v1} YAML.  Kit YAML is a pre-processing artefact that
     never enters the planner.
 \end{enumerate}
 
@@ -815,7 +815,7 @@ func compileMorningRoutine(
 
 \begin{minted}{yaml}
 # casa-santiago.home.yaml
-apiVersion: runbook/v2+home/v1
+apiVersion: runbook/v1+home/v1
 id: morning-routine-weekday
 name: Weekday Morning Routine
 kind: reference
@@ -854,13 +854,13 @@ flow:
         message: "Morning routine complete"
 \end{minted}
 
-\subsubsection{Compiled Output (Core \texttt{runbook/v2} YAML)}
+\subsubsection{Compiled Output (Core \texttt{runbook/v1} YAML)}
 
 After compilation by \texttt{gert-kit-home}, no Kit types remain:
 
 \begin{minted}{yaml}
 # Compiled output — no kit types remain
-apiVersion: runbook/v2
+apiVersion: runbook/v1
 id: morning-routine-weekday
 name: Weekday Morning Routine
 kind: reference
@@ -960,12 +960,12 @@ func New() *Compiler {
     return &Compiler{registry: BuildRegistry()}
 }
 
-// Compile transforms a .home.yaml document into a core runbook/v2 document.
+// Compile transforms a .home.yaml document into a core runbook/v1 document.
 func (c *Compiler) Compile(ctx context.Context, input []byte) ([]byte, error) {
     // 1. Parse input as Home Kit AST.
     // 2. For each flow step, call c.registry.Dispatch(stepType, node, scope).
     // 3. Assemble schema.Runbook with the returned []schema.FlowNode.
-    // 4. Marshal to YAML and return (valid runbook/v2 YAML).
+    // 4. Marshal to YAML and return (valid runbook/v1 YAML).
 }
 \end{minted}
 
@@ -1064,7 +1064,7 @@ in scope:
     capture, and trace writing.  A Kit may influence what the runtime executes
     (via lowering), but it never participates in how execution proceeds.
 
-  \item[Kits do not replace the core schema.] The core \texttt{runbook/v2}
+  \item[Kits do not replace the core schema.] The core \texttt{runbook/v1}
     schema remains the stable contract between authors, the parser, and the
     runtime.  Kit schemas are overlays that compile down to core; they do not
     bypass or replace it.

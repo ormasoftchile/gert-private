@@ -1,7 +1,8 @@
 \chapter{Governance and Policy}
+\label{ch:governance}
 
 Governance is Gert's core differentiator: allowlists, denylists, environment variable blocking,
-output redaction, and approval gates. This section defines the v2 governance model, specifying
+output redaction, and approval gates. This section defines the governance model, specifying
 what policy fields survive from v1, how policy is evaluated at runtime, whether policy is
 host-enforced or extension-contributed, and how approval gates integrate with the event model.
 
@@ -23,7 +24,7 @@ non-empty, any command whose base name is not in the list is blocked before the 
 forked.
 
 \textbf{Semantics.} Path-stripping is applied before matching: \texttt{/usr/bin/curl} matches
-the allowlist entry \texttt{curl}. Glob patterns are \emph{not} supported in v2.0 (exact match
+the allowlist entry \texttt{curl}. Glob patterns are \emph{not} supported in the (exact match
 only). The empty list (\texttt{[]}) means all commands are permitted (permissive default).
 
 \textbf{Schema.}
@@ -161,7 +162,7 @@ A policy violation at any hard-block checkpoint writes the corresponding trace e
 returns an error from \texttt{RunHandle.Next()}. The run is placed in the
 \texttt{policy\_violation} terminal state. The operator must resolve the policy
 (e.g., add the command to the allowlist) and re-run; resumption from a policy violation
-is not supported in v2.0.
+is not supported in .
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Approval Gate Design}
@@ -291,15 +292,15 @@ the timeout to the approver.
 \section{Policy-as-Code Direction}
 % ─────────────────────────────────────────────────────────────────────────────
 
-\subsection{v2.0: Structured YAML Policy Blocks}
+\subsection{: Structured YAML Policy Blocks}
 
-For v2.0, gert uses \textbf{structured YAML policy blocks} embedded in the runbook's
+For , gert uses \textbf{structured YAML policy blocks} embedded in the runbook's
 \texttt{meta.governance} section. This is the approach inherited from v1, extended with the
 richer primitives defined in §\ref{sec:approval-gate}.
 
-\textbf{Rationale for v2.0:}
+\textbf{Rationale for :}
 \begin{itemize}
-  \item The policy vocabulary is small and closed (six primitives as of v2.0). A full policy
+  \item The policy vocabulary is small and closed (six primitives as of ). A full policy
         DSL would be over-engineered for this set.
   \item YAML policy blocks are self-contained: the runbook declares its own governance
         constraints without requiring external policy files or a running policy server.
@@ -309,14 +310,14 @@ richer primitives defined in §\ref{sec:approval-gate}.
         directly to structured blocks with no loss of expressiveness.
 \end{itemize}
 
-\subsection{v2.1+: OPA Integration Hooks}
+\subsection{+: OPA Integration Hooks}
 
 Dennis's research confirms that Open Policy Agent (OPA) is the CNCF standard for
-policy-as-code in operational tooling. For \textbf{v2.1}, gert will introduce OPA
+policy-as-code in operational tooling. For \textbf{}, gert will introduce OPA
 integration at the following evaluation hooks:
 
 \begin{minted}{go}
-// OPA evaluation hook interface (v2.1 target)
+// OPA evaluation hook interface (target)
 type PolicyEngine interface {
     // EvaluatePreStep is called before each step pre-flight.
     // The policy engine receives the full step context and returns
@@ -344,10 +345,10 @@ type PolicyDecision struct {
 }
 \end{minted}
 
-The \texttt{PolicyEngine} interface will have two implementations in v2.1:
+The \texttt{PolicyEngine} interface will have two implementations in a future release:
 \begin{enumerate}
   \item \textbf{Built-in:} evaluates the structured YAML policy blocks (backward-compatible
-        with v2.0 runbooks).
+        with the runbooks).
   \item \textbf{OPA:} calls an OPA bundle loaded from a project policy directory
         (\texttt{.gert/policy/*.rego}).
 \end{enumerate}
@@ -355,8 +356,8 @@ The \texttt{PolicyEngine} interface will have two implementations in v2.1:
 The two implementations compose: the built-in engine runs first; if it allows, the OPA engine
 runs second. A denial from either blocks the step.
 
-\textbf{Recommendation:} Do not block the v2.0 launch on OPA integration. Ship the structured
-YAML model first, then introduce OPA as an opt-in engine in v2.1. This allows the governance
+\textbf{Recommendation:} Do not block the the launch on OPA integration. Ship the structured
+YAML model first, then introduce OPA as an opt-in engine in a future release. This allows the governance
 interface to be designed correctly without the complexity of Rego authoring in the initial release.
 
 % ─────────────────────────────────────────────────────────────────────────────
@@ -369,12 +370,12 @@ Actor identity is established via the \texttt{--as <identity>} flag passed at in
 The identity string is an opaque label (conventionally an email address or a role name) recorded
 in the trace and used for approval gate matching.
 
-\textbf{v2.0 limitation:} Identity is not authenticated. The \texttt{--as} flag is
+\textbf{the limitation:} Identity is not authenticated. The \texttt{--as} flag is
 self-asserted; gert does not verify that the caller is who they claim to be. Enforcement
 of identity authenticity is the responsibility of the surrounding infrastructure (CI/CD
 pipeline, VS Code extension SSO, MCP server authentication).
 
-\textbf{v2.1 target:} An \texttt{IdentityProvider} interface will allow adapters to supply
+\textbf{target:} An \texttt{IdentityProvider} interface will allow adapters to supply
 verified identity tokens (e.g., OIDC tokens from VS Code GitHub Copilot authentication),
 replacing self-asserted identity for governed environments.
 
@@ -425,14 +426,14 @@ The primary redaction mechanism is pattern-based: operators declare RE2 regular 
 in \texttt{meta.governance.redact}. Redaction is applied eagerly: captured output is
 redacted \emph{before} any capture variable assignment or trace write.
 
-\subsection{Explicit Field Marking (v2.1)}
+\subsection{Explicit Field Marking ()}
 
-For structured tool outputs (JSON objects returned by MCP tools), v2.1 will introduce explicit
+For structured tool outputs (JSON objects returned by MCP tools), will introduce explicit
 field marking: a tool definition may declare that a returned field contains sensitive data.
 The runtime will redact the field value without requiring a regex pattern.
 
 \begin{minted}{yaml}
-# In .tool.yaml (v2.1 target)
+# In .tool.yaml (target)
 outputs:
   - name: api_key
     sensitive: true   # value redacted from trace and captures
@@ -470,7 +471,7 @@ is a first-class trace entry. The following governance events are guaranteed to 
 \texttt{governance/approvalTimedOut} & Approval timeout expires \\
 \texttt{governance/accessDenied} & RBAC check fails (run or step level) \\
 \texttt{governance/contractWarning} & Step contract risk level is critical \\
-\texttt{governance/policyViolation} & Generic policy violation (OPA engine, v2.1) \\
+\texttt{governance/policyViolation} & Generic policy violation (OPA engine, ) \\
 \end{tabular}
 \end{center}
 
@@ -530,8 +531,8 @@ type PolicyRule struct {
     ID          string       // unique within the extension's namespace
     Description string
     // Evaluate returns Deny if the rule blocks this step, Allow otherwise.
-    // Extensions communicate rules as static declarations (v2.0); dynamic
-    // rule evaluation via the extension RPC transport is v2.1.
+    // Extensions communicate rules as static declarations (); dynamic
+    // rule evaluation via the extension RPC transport is .
     StepKinds   []StepKind   // step types this rule applies to (empty = all)
     CommandGlob string       // if set, only applies to commands matching this glob
     Action      PolicyAction // Deny or Warn

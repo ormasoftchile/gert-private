@@ -1,7 +1,7 @@
 \chapter{Testing and Acceptance}
 \label{ch:testing}
 
-This section specifies the complete testing strategy for gert v2: the test framework, unit and contract test patterns, integration test strategy, the \texttt{gert test} feature, regression testing against the v1 runbook corpus, performance acceptance criteria, the extension test harness, and CI/CD gate requirements.
+This section specifies the complete testing strategy for gert: the test framework, unit and contract test patterns, integration test strategy, the \texttt{gert test} feature, regression testing against the v1 runbook corpus, performance acceptance criteria, the extension test harness, and CI/CD gate requirements.
 
 % ------------------------------------------------------------------ %
 \section{Test Framework}
@@ -9,7 +9,7 @@ This section specifies the complete testing strategy for gert v2: the test frame
 
 \subsection{Standard Library and testify}
 
-All gert v2 tests are written in Go using the standard \texttt{testing} package as the test runner and \texttt{github.com/stretchr/testify}~\cite{testify-library} for assertions:
+All gert tests are written in Go using the standard \texttt{testing} package as the test runner and \texttt{github.com/stretchr/testify}~\cite{testify-library} for assertions:
 
 \begin{itemize}
   \item \texttt{testify/assert} — non-fatal assertions; test continues on failure.
@@ -41,7 +41,7 @@ func TestGovernanceAllowlist(t *testing.T) {
 
 \subsection{Test Packages}
 
-Each Go package in the v2 module ships a co-located \texttt{\_test.go} file (white-box tests) and optionally an \texttt{<pkg>\_integration\_test.go} file (integration tests, gated by a build tag). The naming convention:
+Each Go package in the module ships a co-located \texttt{\_test.go} file (white-box tests) and optionally an \texttt{<pkg>\_integration\_test.go} file (integration tests, gated by a build tag). The naming convention:
 
 \begin{verbatim}
 pkg/engine/engine.go
@@ -100,13 +100,13 @@ The \texttt{trace} assertions match events in order of occurrence. The \texttt{d
 
 \subsection{v1 Scenario Compatibility}
 
-v1 scenario files (\texttt{commands}/\texttt{evidence} structure) are forward-compatible with v2 without modification. The v2 parser accepts both the v1 format and the extended v2 format (which adds the \texttt{assertions} block). Runbook authors can migrate incrementally by adding \texttt{test.yaml} alongside existing v1 scenarios.
+v1 scenario files (\texttt{commands}/\texttt{evidence} structure) are forward-compatible with this schema without modification. The parser accepts both the v1 format and the extended extended format (which adds the \texttt{assertions} block). Runbook authors can migrate incrementally by adding \texttt{test.yaml} alongside existing v1 scenarios.
 
 % ------------------------------------------------------------------ %
 \section{Contract Tests}
 % ------------------------------------------------------------------ %
 
-Contract tests verify the interface boundaries between v2's five components. Each contract test lives in the \emph{consumer} package and uses a conformance helper that validates any implementation satisfying the interface.
+Contract tests verify the interface boundaries between the schema's five components. Each contract test lives in the \emph{consumer} package and uses a conformance helper that validates any implementation satisfying the interface.
 
 \subsection{Core Runtime Contract}
 
@@ -137,7 +137,7 @@ func ConformanceTest(t *testing.T, rt Runtime) {
 \subsection{Schema Contract Tests}
 
 \begin{itemize}
-  \item Every \texttt{apiVersion: runbook/v2} document in \texttt{testdata/} must pass structural validation without errors.
+  \item Every \texttt{apiVersion: runbook/v1} document in \texttt{testdata/} must pass structural validation without errors.
   \item Every invalid fixture in \texttt{testdata/invalid/} must fail validation with a structured error (message + path).
   \item Structural and semantic validation are tested independently: a structurally valid document may fail semantic validation (e.g.\ referencing an undefined capture).
 \end{itemize}
@@ -241,16 +241,16 @@ func AssertNoEvent(t *testing.T, events []engine.DurableEvent,
 
 \subsection{v1 Runbook Corpus as Fixtures}
 
-The v1 runbook corpus (located in \texttt{examples/} and operator-contributed runbooks) serves as a regression suite for v2 compatibility. The regression test runner:
+The v1 runbook corpus (located in \texttt{examples/} and operator-contributed runbooks) serves as a regression suite for schema compatibility. The regression test runner:
 
 \begin{enumerate}
   \item Reads each v1 runbook from the corpus.
-  \item Runs \texttt{gert validate} (v2 schema) and asserts it passes (or passes after migration).
+  \item Runs \texttt{gert validate} (schema) and asserts it passes (or passes after migration).
   \item For runbooks with associated v1 scenario files, runs \texttt{gert test} and asserts the outcome matches the v1 golden output.
   \item Fails the build if any previously passing corpus runbook regresses.
 \end{enumerate}
 
-Migration compatibility is measured as: the percentage of v1 corpus runbooks that pass v2 \texttt{gert validate} without modification. The v2 launch target is $\geq$95\%.
+Migration compatibility is measured as: the percentage of v1 corpus runbooks that pass \texttt{gert validate} without modification. The schema launch target is $\geq$95\%.
 
 \subsection{Golden Trace Comparisons}
 
@@ -296,7 +296,7 @@ Performance benchmarks are written using Go's \texttt{testing.B} and run in CI w
 Extension developers can test their extension logic without spinning up the full gert runtime. The \texttt{pkg/exttest} package provides a test harness:
 
 \begin{minted}{go}
-import "github.com/ormasoftchile/gert/v2/pkg/exttest"
+import "github.com/ormasoftchile/gert/pkg/exttest"
 
 func TestMyExtension(t *testing.T) {
     h := exttest.NewHarness(t,
@@ -346,7 +346,7 @@ type InProcessTransport struct {
 \section{Acceptance Criteria}
 % ------------------------------------------------------------------ %
 
-The following acceptance criteria must be satisfied before a v2 release is considered shippable:
+The following acceptance criteria must be satisfied before a release is considered shippable:
 
 \begin{enumerate}[label=\arabic*.]
   \item Core runtime has no direct adapter dependencies — verified by the \texttt{no\_import} contract test.
@@ -367,7 +367,7 @@ The following acceptance criteria must be satisfied before a v2 release is consi
 
 \begin{enumerate}[label=\arabic*.]
   \item \textbf{Unit tests}: \texttt{go test ./...} (no build tags). Target: $<$60 s.
-  \item \textbf{Schema validation}: validate all YAML fixtures in \texttt{testdata/} against v2 JSON Schema. Target: $<$10 s.
+  \item \textbf{Schema validation}: validate all YAML fixtures in \texttt{testdata/} against JSON Schema. Target: $<$10 s.
   \item \textbf{Contract tests}: \texttt{go test -run Contract ./...}. Target: $<$30 s.
   \item \textbf{Linter}: \texttt{golangci-lint run} with the project's \texttt{.golangci.yaml} config.
   \item \textbf{Vet}: \texttt{go vet ./...}.

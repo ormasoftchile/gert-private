@@ -51,7 +51,7 @@ warnings to stdout.
 
 The validator receives the runbook as YAML on stdin. For parse-time validators,
 this is the Kit-authored runbook. For plan-time validators, this is the lowered
-\texttt{runbook/v2} document.
+\texttt{runbook/v1} document.
 
 \paragraph{Output contract:}
 
@@ -192,7 +192,7 @@ func hasError(messages []ValidationMessage) bool {
 % ============================================================
 
 Plan-time validators run \emph{after} lowering, when the planner is about to
-produce an ExecutionPlan. They see the lowered \texttt{runbook/v2} document
+produce an ExecutionPlan. They see the lowered \texttt{runbook/v1} document
 (core primitives only) and can enforce cross-step invariants.
 
 \paragraph{Use cases:}

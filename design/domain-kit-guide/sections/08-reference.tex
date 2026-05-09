@@ -47,7 +47,7 @@ This section provides a complete reference for all fields in the
 
 \texttt{compatibility.gert-core} & No & Semver range specifying compatible gert core versions (e.g., \texttt{">=2.0.0 <3.0.0"}). If omitted, Kit claims compatibility with all versions. \\
 
-\texttt{schema.apiVersion-suffix} & No & The suffix appended to \texttt{runbook/v2+} in runbooks authored with this Kit (e.g., \texttt{"compliance/v1"}). \\
+\texttt{schema.apiVersion-suffix} & No & The suffix appended to \texttt{runbook/v1+} in runbooks authored with this Kit (e.g., \texttt{"compliance/v1"}). \\
 
 \texttt{schema.json-schema} & No & Path (relative to Kit root) to the Kit's JSON Schema overlay (e.g., \texttt{"./schemas/compliance-v1.json"}). \\
 
@@ -114,7 +114,7 @@ convention:
 Kit-authored runbook YAML on stdin. Example:
 
 \begin{minted}{yaml}
-apiVersion: runbook/v2+compliance/v1
+apiVersion: runbook/v1+compliance/v1
 meta:
   title: "Example runbook"
 steps:
@@ -128,10 +128,10 @@ steps:
 
 \paragraph{On success (exit code 0):}
 
-Lowered \texttt{runbook/v2} YAML on stdout:
+Lowered \texttt{runbook/v1} YAML on stdout:
 
 \begin{minted}{yaml}
-apiVersion: runbook/v2
+apiVersion: runbook/v1
 meta:
   title: "Example runbook"
   x-kit:lowered-from:
@@ -165,7 +165,7 @@ JSON array of error messages on stdout:
 \subsection{Exit Codes}
 
 \begin{description}
-  \item[\texttt{0}] --- Success. Stdout contains valid \texttt{runbook/v2} YAML.
+  \item[\texttt{0}] --- Success. Stdout contains valid \texttt{runbook/v1} YAML.
   \item[\texttt{1}] --- Validation or lowering error. Stdout contains error JSON.
   \item[\texttt{2+}] --- Internal compiler error. Stderr may contain stack trace.
 \end{description}
@@ -186,7 +186,7 @@ echo $?  # Exit code: 0 = pass, 1 = errors
 
 \paragraph{Parse-time validators:} Kit-authored runbook YAML on stdin.
 
-\paragraph{Plan-time validators:} Lowered \texttt{runbook/v2} YAML on stdin.
+\paragraph{Plan-time validators:} Lowered \texttt{runbook/v1} YAML on stdin.
 
 \subsection{Output}
 
@@ -417,8 +417,8 @@ change → major version bump.
 
 \paragraph{Pitfall 5: Not testing lowered output against core schema}
 
-\textbf{Problem:} Compiler produces invalid \texttt{runbook/v2} YAML that gert
+\textbf{Problem:} Compiler produces invalid \texttt{runbook/v1} YAML that gert
 rejects.
 
 \textbf{Solution:} Always validate lowered output against the core
-\texttt{runbook/v2} JSON Schema as part of your test suite.
+\texttt{runbook/v1} JSON Schema as part of your test suite.

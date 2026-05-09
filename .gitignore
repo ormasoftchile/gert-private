@@ -1,0 +1,22 @@
+# OS
+.DS_Store
+
+# Squad runtime
+.squad/orchestration-log/
+.squad/log/
+.squad/decisions/inbox/
+.squad/sessions/
+.squad-workstream
+
+# LaTeX build artifacts
+design/_minted/
+design/**/build/
+design/**/_minted/
+design/gert.aux
+design/gert.bbl
+design/gert.blg
+design/gert.fdb_latexmk
+design/gert.fls
+design/gert.log
+design/gert.out
+design/gert.toc

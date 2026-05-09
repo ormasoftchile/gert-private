@@ -3,7 +3,7 @@
 
 Governance is Gert's core differentiator: allowlists, denylists, environment variable blocking,
 output redaction, and approval gates. This section defines the governance model, specifying
-what policy fields survive from v1, how policy is evaluated at runtime, whether policy is
+which policy fields are first-class, how policy is evaluated at runtime, whether policy is
 host-enforced or extension-contributed, and how approval gates integrate with the event model.
 
 Governance features are a first-class design requirement and must not be treated as optional
@@ -162,7 +162,7 @@ A policy violation at any hard-block checkpoint writes the corresponding trace e
 returns an error from \texttt{RunHandle.Next()}. The run is placed in the
 \texttt{policy\_violation} terminal state. The operator must resolve the policy
 (e.g., add the command to the allowlist) and re-run; resumption from a policy violation
-is not supported in .
+is not supported.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Approval Gate Design}
@@ -292,25 +292,25 @@ the timeout to the approver.
 \section{Policy-as-Code Direction}
 % ─────────────────────────────────────────────────────────────────────────────
 
-\subsection{: Structured YAML Policy Blocks}
+\subsection{Structured YAML Policy Blocks}
 
-For , gert uses \textbf{structured YAML policy blocks} embedded in the runbook's
-\texttt{meta.governance} section. This is the approach inherited from v1, extended with the
+Gert uses \textbf{structured YAML policy blocks} embedded in the runbook's
+\texttt{meta.governance} section. The block is extended with the
 richer primitives defined in §\ref{sec:approval-gate}.
 
-\textbf{Rationale for :}
+\textbf{Rationale:}
 \begin{itemize}
-  \item The policy vocabulary is small and closed (six primitives as of ). A full policy
+  \item The policy vocabulary is small and closed (six primitives at present). A full policy
         DSL would be over-engineered for this set.
   \item YAML policy blocks are self-contained: the runbook declares its own governance
         constraints without requiring external policy files or a running policy server.
   \item Structured blocks are straightforward to validate with JSON Schema at authoring time,
         giving operators early feedback in the VS Code extension.
-  \item The existing v1 governance model (allowlists, redaction, env blocking) translates
+  \item The governance model (allowlists, redaction, env blocking) translates
         directly to structured blocks with no loss of expressiveness.
 \end{itemize}
 
-\subsection{+: OPA Integration Hooks}
+\subsection{Future: OPA Integration Hooks}
 
 Dennis's research confirms that Open Policy Agent (OPA) is the CNCF standard for
 policy-as-code in operational tooling. For \textbf{}, gert will introduce OPA

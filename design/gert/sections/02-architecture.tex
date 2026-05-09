@@ -1885,7 +1885,7 @@ find it absent from the reconstructed scope.
 \begin{tcolorbox}[colback=yellow!10,colframe=orange!60,title=Constraint: ephemeral variables and suspension]
 Steps that depend on ephemeral variables MUST appear before any \texttt{wait\_for\_event}
 or \texttt{approve} step that could suspend the run.  The schema validator SHOULD emit a
-load-time warning (not a hard error in ) if an ephemeral variable is referenced in a
+load-time warning (not a hard error) if an ephemeral variable is referenced in a
 step that follows a suspendable step in the same runbook's execution path.
 \end{tcolorbox}
 
@@ -1900,7 +1900,7 @@ step that follows a suspendable step in the same runbook's execution path.
   \item The run state is checkpointed as \texttt{cancelled} (resumable).
 \end{enumerate}
 
-The cancellation contract does not invoke compensation handlers in . Saga/compensation
+The cancellation contract does not invoke compensation handlers. Saga/compensation
 (stepping backward through a compensation chain on failure) is deferred to a future release as specified
 in §09 (Open Questions).
 
@@ -1934,7 +1934,7 @@ Within a single run, the concurrency model is:
 
 \begin{itemize}
   \item \textbf{One goroutine per run:} the step execution loop runs on a single goroutine.
-        Steps execute sequentially; there is no goroutine-per-step parallelism in .
+        Steps execute sequentially; there is no goroutine-per-step parallelism.
   \item \textbf{Event fan-out goroutine:} a second goroutine reads from an internal event
         buffer and writes to the \texttt{Events()} channel. This decouples event emission
         (which must be synchronous with step execution) from event consumption (which may

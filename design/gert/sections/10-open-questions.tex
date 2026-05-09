@@ -8,29 +8,14 @@ before core contract freeze.
 
 \begin{enumerate}[label=\textbf{Q\arabic*.}]
 
-  \item \textbf{Can the runtime execute v1 runbooks without prior migration?}
-
-    \textit{Why it matters:} Existing gert users have production runbooks in \texttt{runbook/v0} and
-    \texttt{runbook/v1} format. If the runtime can only execute current-schema runbooks, adoption requires a
-    migration step that may be blocked by organizational change control. A compatibility execution mode
-    (``v1 shim'') removes this barrier but adds permanent maintenance cost to the parser.
-
-    \textit{Options:} (a)~Full compatibility mode: runtime transparently executes v1 runbooks by
-    internally upgrading them to schema at load time, with no schema file written. (b)~Migration
-    gate:, refuses to run v1 runbooks and provides a clear error pointing to \texttt{gert migrate}.
-    (c)~Opt-in compatibility flag: \texttt{--compat-legacy} enables the shim; production runs the new schema only.
-
-    \textit{Information needed:} A survey of how many v1-format runbooks exist in representative
-    deployments, and whether \texttt{gert migrate} can be made fully lossless for all v1 constructs.
-
   \item \textbf{What is the concurrency model for the core runtime?}
 
-    \textit{Why it matters:} The v1 runtime is single-run-per-process. Whether supports multiple
+    \textit{Why it matters:} Whether the runtime supports multiple
     concurrent runs in a single process affects the state isolation model, the trace writer design,
     the governance enforcer (is it per-run or global?), and whether \texttt{gert serve} can multiplex
     concurrent VS~Code sessions.
 
-    \textit{Options:} (a)~Single-run-per-process, matching v1 semantics; each \texttt{gert exec} or
+    \textit{Options:} (a)~Single-run-per-process; each \texttt{gert exec} or
     \texttt{gert tui} is a separate OS process. (b)~Multiple concurrent runs in-process, with
     run-scoped state isolation via Go context and per-run goroutine groups. (c)~Multiple runs via a
     long-lived daemon (\texttt{gert serve} as the host), with runs as logical sessions.
@@ -38,22 +23,6 @@ before core contract freeze.
     \textit{Information needed:} Whether the VS~Code extension use case requires concurrent runs in a
     single \texttt{gert serve} process (e.g., multiple open runbook panels), and what the goroutine
     safety requirements are for the trace writer and governance layer.
-
-  \item \textbf{Is the trace format backward-compatible with the v1 JSONL trace, or is it a new format?}
-
-    \textit{Why it matters:} Operators and compliance tools may have parsers, SIEM integrations, or
-    dashboards built against the v1 JSONL event schema. A breaking change in the trace format requires
-    those integrations to be updated before, can be rolled out. A backward-compatible superset format
-    avoids this but constrains the event schema design.
-
-    \textit{Options:} (a)~New format:, defines a clean JSONL schema with a required
-    \texttt{schema\_version} field; v1 trace parsers are unsupported. (b)~Backward-compatible superset:
-    trace events include all v1 fields plus new fields; existing parsers continue to work on the
-    subset they understand. (c)~Parallel trace output:, writes both a trace and an optional v1
-    compatibility trace (flag-enabled).
-
-    \textit{Information needed:} An inventory of known downstream trace consumers and whether the v1
-    format has fields that would be structurally incompatible with the event model.
 
   \item \textbf{How do extension-contributed policies compose with host-level governance policies?}
 
@@ -75,7 +44,7 @@ before core contract freeze.
 
   \item \textbf{Does the \texttt{.provider.yaml} input provider framework survive unchanged?}
 
-    \textit{Why it matters:} v1's input provider model (\texttt{.provider.yaml}, JSON-RPC resolution,
+    \textit{Why it matters:} The input provider model (\texttt{.provider.yaml}, JSON-RPC resolution,
     \texttt{from:} bindings, workspace config) is a complete and working framework. It must either be
     carried forward as-is, redesigned to fit the component model, or replaced by an extension-based
     resolution mechanism. The choice affects the schema (\S\ref{ch:schema}), the extension runtime
@@ -87,7 +56,7 @@ before core contract freeze.
     format is deprecated. (c)~Hybrid: \texttt{.provider.yaml} providers continue to work as a
     built-in extension type, with a migration path to the full extension protocol.
 
-    \textit{Information needed:} Whether any v1 provider binaries are in active production use that
+    \textit{Information needed:} Whether any existing provider binaries are in active production use that
     would be broken by a protocol change, and whether the extension handshake protocol can be made a
     strict superset of the provider JSON-RPC protocol.
 
@@ -95,16 +64,16 @@ before core contract freeze.
     evolutionary extension?}
 
     \textit{Why it matters:} The VS~Code extension consumes the \texttt{gert serve} JSON-RPC~2.0 API
-    over stdio. If, changes the method names, parameter shapes, or notification payloads, the
+    over stdio. If the runtime changes the method names, parameter shapes, or notification payloads, the
     extension must be updated simultaneously. A versioned negotiation protocol (client declares
     supported API version at handshake) allows the extension to evolve independently of the binary.
 
-    \textit{Options:} (a)~Hard break:, defines a new JSON-RPC method set; the VS~Code extension is
+    \textit{Options:} (a)~Hard break: define a new JSON-RPC method set; the VS~Code extension is
     updated as part of the launch. (b)~Versioned negotiation: the \texttt{initialize} handshake
     includes a protocol version field; the host advertises capabilities and the client selects a
-    compatible version. (c)~No change: the v1 JSON-RPC surface is preserved unchanged in the schema.
+    compatible version. (c)~No change: the current JSON-RPC surface is preserved unchanged.
 
-    \textit{Information needed:} A complete method inventory of the v1 JSON-RPC API surface (all
+    \textit{Information needed:} A complete method inventory of the JSON-RPC API surface (all
     methods and notification shapes currently used by the VS~Code extension), and a determination of
     which methods require changes to expose new features (e.g., saga events, OTel trace IDs).
 
@@ -146,7 +115,7 @@ before core contract freeze.
 
   \item \textbf{What is the parallel execution model for independent steps within a single run?}
 
-    \textit{Why it matters:} v1 executes all steps sequentially. Many real runbooks contain
+    \textit{Why it matters:} A purely sequential executor is the simplest model, but many real runbooks contain
     independent diagnostic steps that could execute in parallel, reducing total wall-clock time.
     However, parallelism complicates the trace ordering guarantee, the governance enforcer (can two
     parallel steps both consume the same approval token?), and the TUI rendering model.
@@ -156,7 +125,7 @@ before core contract freeze.
     (c)~Implicit parallelism inferred from the step dependency graph (steps with no data dependency
     on preceding steps execute concurrently).
 
-    \textit{Information needed:} Whether any v1 runbooks in active use have independent steps that
+    \textit{Information needed:} Whether any runbooks in active use have independent steps that
     would benefit from parallelism, and what the governance implications are for concurrent step
     execution (e.g., two CLI steps executing simultaneously under the same allowlist).
 
@@ -199,7 +168,7 @@ before core contract freeze.
 
   \item \textbf{What is the timeout and escalation model for human approval steps?}
 
-    \textit{Why it matters:} v1 approval gates block indefinitely waiting for a role-holder to
+    \textit{Why it matters:} Approval gates may block indefinitely waiting for a role-holder to
     approve. In production, a stalled approval can block an incident response indefinitely. SLA
     enforcement---timeout after N minutes, escalate to the next role, optionally auto-approve or
     auto-reject---is a standard pattern in ITIL emergency change processes and is implemented by

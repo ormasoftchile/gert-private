@@ -1,7 +1,7 @@
 \chapter{Testing and Acceptance}
 \label{ch:testing}
 
-This section specifies the complete testing strategy for gert: the test framework, unit and contract test patterns, integration test strategy, the \texttt{gert test} feature, regression testing against the v1 runbook corpus, performance acceptance criteria, the extension test harness, and CI/CD gate requirements.
+This section specifies the complete testing strategy for gert: the test framework, unit and contract test patterns, integration test strategy, the \texttt{gert test} feature, regression testing against the runbook corpus, performance acceptance criteria, the extension test harness, and CI/CD gate requirements.
 
 % ------------------------------------------------------------------ %
 \section{Test Framework}
@@ -97,10 +97,6 @@ assertions:
 \end{minted}
 
 The \texttt{trace} assertions match events in order of occurrence. The \texttt{data.*} dotted paths dereference into the event's \texttt{data} object.
-
-\subsection{v1 Scenario Compatibility}
-
-v1 scenario files (\texttt{commands}/\texttt{evidence} structure) are forward-compatible with this schema without modification. The parser accepts both the v1 format and the extended extended format (which adds the \texttt{assertions} block). Runbook authors can migrate incrementally by adding \texttt{test.yaml} alongside existing v1 scenarios.
 
 % ------------------------------------------------------------------ %
 \section{Contract Tests}
@@ -239,18 +235,18 @@ func AssertNoEvent(t *testing.T, events []engine.DurableEvent,
 \section{Regression Testing}
 % ------------------------------------------------------------------ %
 
-\subsection{v1 Runbook Corpus as Fixtures}
+\subsection{Runbook Corpus as Fixtures}
 
-The v1 runbook corpus (located in \texttt{examples/} and operator-contributed runbooks) serves as a regression suite for schema compatibility. The regression test runner:
+The runbook corpus (located in \texttt{examples/} and operator-contributed runbooks) serves as a regression suite for schema stability. The regression test runner:
 
 \begin{enumerate}
-  \item Reads each v1 runbook from the corpus.
-  \item Runs \texttt{gert validate} (schema) and asserts it passes (or passes after migration).
-  \item For runbooks with associated v1 scenario files, runs \texttt{gert test} and asserts the outcome matches the v1 golden output.
+  \item Reads each runbook from the corpus.
+  \item Runs \texttt{gert validate} (schema) and asserts it passes.
+  \item For runbooks with associated scenario files, runs \texttt{gert test} and asserts the outcome matches the golden output.
   \item Fails the build if any previously passing corpus runbook regresses.
 \end{enumerate}
 
-Migration compatibility is measured as: the percentage of v1 corpus runbooks that pass \texttt{gert validate} without modification. The schema launch target is $\geq$95\%.
+The schema acceptance target is $\geq$95\% of corpus runbooks passing \texttt{gert validate} unmodified between minor releases.
 
 \subsection{Golden Trace Comparisons}
 
@@ -354,7 +350,7 @@ The following acceptance criteria must be satisfied before a release is consider
   \item Capability violations fail fast with structured errors — verified by the governance contract test for each capability type.
   \item Adapters integrate using the same stable core contracts — verified by running each adapter's integration test against a mock core.
   \item Every step type (\texttt{cli}, \texttt{manual}, \texttt{tool}, \texttt{invoke}, \texttt{branch}, \texttt{iterate}) has $\geq$1 end-to-end integration test covering the happy path and at least one failure path.
-  \item The v1 runbook corpus passes \texttt{gert validate} at $\geq$95\% without modification.
+  \item The runbook corpus passes \texttt{gert validate} at $\geq$95\% without modification.
   \item All performance targets in \S~8.6 pass on the reference machine.
   \item \texttt{gert test} successfully replays all scenario fixtures in \texttt{testdata/scenarios/}.
 \end{enumerate}
@@ -379,7 +375,7 @@ All five gates must pass for a PR to be mergeable.
 
 \begin{enumerate}[label=\arabic*.]
   \item \textbf{Integration tests}: \texttt{go test -tags=integration ./...}. Target: $<$5 min.
-  \item \textbf{Regression corpus}: \texttt{gert test} against v1 corpus. Target: $<$2 min.
+  \item \textbf{Regression corpus}: \texttt{gert test} against the corpus. Target: $<$2 min.
   \item \textbf{Golden trace comparison}: normalised trace comparison for all deterministic fixtures.
 \end{enumerate}
 

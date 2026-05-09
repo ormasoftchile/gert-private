@@ -875,9 +875,8 @@ This allows collector steps to explicitly mark which fields serve as compliance 
 \subsection{Step Type: cli}
 \label{subsec:step-cli}
 
-Executes a local command directly.  In the runtime \texttt{cli} is the
-canonical command step; the v1 \texttt{with.argv} form is accepted in
-compatibility mode and rewritten to \texttt{cli} by the migration tool.
+Executes a local command directly.  \texttt{cli} is the
+canonical command step.
 
 \texttt{type: cli} supports two mutually exclusive input modes:
 
@@ -1453,7 +1452,7 @@ parseable as a specific structured data format:
   \item \texttt{format: json} — value must parse as valid JSON.
   \item \texttt{format: toml} — value must parse as valid TOML~.
         \emph{Note: TOML format validation is deferred to a future release;
-        declaring it is a validation warning in .}
+        declaring it is a validation warning.}
   \item No \texttt{format} (default) — plain text; no structural validation.
 \end{itemize}
 
@@ -3032,8 +3031,7 @@ fields (\texttt{delay}, \texttt{capture}, \texttt{when}, \texttt{timeout}).
 \subsection{Step Type: end}
 \label{subsec:step-end}
 
-Declares a terminal outcome and halts execution.  Renamed from \texttt{router}
-in v1.
+Declares a terminal outcome and halts execution.
 
 \begin{minted}{yaml}
 - step:
@@ -3663,13 +3661,12 @@ Each schema artifact carries a version manifest in its \texttt{\$id} and a
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.gert.dev/runbook/v1.json",
-  "x-gert-version": "2.0.0",
+  "x-gert-version": "1.0.0",
   "x-gert-released": "2026-04-18",
   "title": "gert runbook",
   ...
 }
 \end{minted}
 
-Automated compatibility testing (part of the gert CI pipeline) runs every
-v1 example runbook through the compatibility parser and asserts no regression,
-and runs every example through the exported JSON~Schema validator.
+Automated regression testing (part of the gert CI pipeline) runs every
+example runbook through the exported JSON~Schema validator.

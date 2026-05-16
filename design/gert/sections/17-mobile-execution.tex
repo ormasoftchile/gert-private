@@ -44,7 +44,7 @@ Runbooks are packaged as \textbf{kit bundles} for mobile deployment. A kit bundl
   \item Optional reference data (schemas, lookup tables) shared across runbooks.
 \end{itemize}
 
-Bundles are distributed via application bundle embedding, over-the-air update channels, or direct download from a registry. The SDK resolves bundle dependencies (platform kits, domain kits) at load time.
+Bundles are distributed via application bundle embedding, over-the-air update channels, or direct download from a registry. The SDK resolves bundle dependencies (platform kits) at load time.
 
 \subsection{Platform Kits}
 
@@ -111,7 +111,7 @@ The \texttt{manifest.json} file is the only new schema artefact introduced by th
     "value": "base64-encoded-signature"
   },
   "metadata": {
-    "description": "Home maintenance domain kit",
+    "description": "Home maintenance kit",
     "author": "Acme Corp",
     "published": "2026-04-18T10:00:00Z"
   }
@@ -152,17 +152,17 @@ The \texttt{runbook} field is a relative path within the bundle. The SDK resolve
 
 \subsection{Hierarchy Model}
 
-Kits are organised in a two-tier hierarchy:
+Kits compose linearly: a \textbf{platform kit} provides the device-capability tools (camera, GPS, NFC), and \textbf{application kits} declare runbooks that depend on those tools.
 
 \begin{verbatim}
 Platform Kit (gert-mobile-platform — shared mobile capability tools)
-  └── Domain Kit (e.g., home-domain)
+  └── Application Kit
         ├── pool-maintenance
         ├── lawn-mow
         └── irrigation-check
 \end{verbatim}
 
-The platform kit provides low-level tools that interact with device capabilities (camera, GPS, NFC). Domain kits depend on the platform kit and provide runbooks specific to a business domain (home maintenance, field service, asset inspection).
+The platform kit provides low-level tools that interact with device capabilities (camera, GPS, NFC). Application kits depend on the platform kit and provide runbooks specific to the deploying organisation.
 
 \subsection{Dependency Resolution}
 
@@ -316,11 +316,11 @@ A typical mobile deployment consists of:
 
 \begin{enumerate}
   \item One or more \textbf{platform kits} providing low-level tool implementations (camera, GPS, NFC). These are typically distributed by the gert project or the organisation's platform team.
-  \item One or more \textbf{domain kits} providing business-specific runbooks (field service, asset inspection, maintenance checklists). These depend on platform kits and are authored by domain teams.
+  \item One or more \textbf{application kits} providing runbooks (field service, asset inspection, maintenance checklists). These depend on platform kits and are authored by the deploying team.
   \item The mobile application binary, which embeds or downloads these kits at runtime.
 \end{enumerate}
 
-The SDK allows multiple domain kits to coexist. The application layer presents a unified runbook catalog combining all loaded kits.
+The SDK allows multiple application kits to coexist. The application layer presents a unified runbook catalog combining all loaded kits.
 
 % ------------------------------------------------------------------ %
 \section{Target Platform Compilation}

@@ -84,3 +84,17 @@ GERT is a governed, executable, traceable runbook engine (Go binary, local-first
 
 **User:** ormasoftchile
 **Session start:** 2026-06-03
+
+---
+
+## Session: 2026-06-04T02:50:37Z — Interactive Waiting Patterns & User Input Gate
+
+**Scribe consolidated 8 inbox items.**
+
+**Key outcomes for John:**
+- **Cosmos DB addition:** New `user_inputs` container (partition key `/runId`)
+- **Compute confirmed:** App Service P1v3 for A6; cost baseline $113/mo
+- **SignalR note:** In-process Hub for MVP; evaluate SignalR Service at scale
+- **Database strategy:** Serverless Cosmos for mutable state (run, approvals, user inputs); Blob for immutable traces
+- **Status:** Azure service selections finalized in decisions.md
+

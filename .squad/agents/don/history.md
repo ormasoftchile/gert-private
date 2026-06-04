@@ -2,6 +2,25 @@
 
 ## Learnings
 
+### 2026-06-03 — C# Governance Parity Design
+
+**Deliverable produced:** `design/web-platform/c-sharp-governance-parity.md`
+
+**Key design decisions made:**
+
+- **Pipeline mapping:** Full Go-to-C# interface mapping documented. `IRunHandle.NextAsync()` is the governance boundary — identical to Go's `RunHandle.Next()`. Every stage (Parser → Planner → Runtime → RunHandle) has a named C# equivalent with method signatures.
+- **IApprovalGate stubbed for A6/A8 swap:** Designed so `ServiceBusApprovalGate` (A6: held thread, Service Bus reply queue) can be swapped for `DurableApprovalGate` (A8: `WaitForExternalEvent`) without changing `IRunHandle` or the governance layer. The runbook contract sees only `IApprovalGate`.
+- **IStepRunner enforcement via `internal sealed`:** `IStepRunner` and all concrete runners (`CliStepRunner`, `ToolStepRunner`, etc.) are `internal` to `Gert.Runtime.Core`. No `InternalsVisibleTo` grants to adapter assemblies. Bypass is a compile error, not a code review finding. Two Roslyn analyzers (`GERT0001`, `GERT0002`) enforce this and the RE2 namespace restriction at build time.
+- **RE2 via `Google.Re2` NuGet:** All redaction evaluation uses `Google.Re2.Regex`, never `System.Text.RegularExpressions`. Patterns containing lookahead/lookbehind/possessive quantifiers will throw at startup (fail-fast). Named group syntax difference (`(?P<name>...)`) flagged as open question OQ-5.
+- **Template engine gap:** Go `text/template` has no C# equivalent. Option A (minimal port) is recommended for MVP. Option B (WASM compiled Go evaluator) is the fallback. 10 canonical test vectors defined (TV-TMPL-001..010).
+- **Trace synchronous write:** `IRunStore.WriteTraceAsync()` must complete before step dispatch. Call order in `RunHandleImpl.NextAsync()` is: governance check → emit event → **synchronous trace write** → step dispatch. Fire-and-forget is explicitly forbidden.
+- **Validation gate:** 10 gates (G-01..G-10) defined. Go `gert replay` on C#-generated traces (G-06) is the strongest parity check. No production promotion with any gate failing. Roslyn analyzers enforce G-08 and G-09 at build time.
+- **60 minimum test vectors** across 12 categories (allowlist, denylist, env blocking, redaction, approval gates, template evaluation).
+
+**Open questions filed:** OQ-1 (template strategy), OQ-2 (approval reply queue topology), OQ-3 (canonical Go test harness), OQ-4 (sequence counter strategy), OQ-5 (RE2 named group syntax).
+
+---
+
 ### 2026-06-03 — Execution Adapter Pattern Review
 
 **Patterns reviewed:** Queue-triggered worker, HTTP-triggered Container App, Durable execution (Azure Durable Functions), Sidecar/agent model.
@@ -57,9 +76,55 @@
 
 ---
 
+### 2026-06-03 — Choice Gate Runtime Contract
+
+**Deliverables produced:** `design/web-platform/c-sharp-governance-parity.md`, `.squad/decisions/inbox/don-choice-gate-contract.md`
+
+**Key learnings:**
+
+- **Choice waits are first-class gates:** Choice steps are not `SubmitEvidenceAsync()` payload collection; they suspend inside `IRunHandle.NextAsync()` exactly like approval waits, but the actor is the portal subject rather than a third-party approver.
+- **A6 durable source of truth:** For both choices and approvals, the portal/API callback must write the durable interaction row first. Worker polling, queue wake-up messages, or SignalR are accelerators only; they are never the authoritative contract.
+- **A8 parity point:** `WaitForExternalEvent` is the correct Durable mapping for both `IChoiceGate` and `IApprovalGate`, provided the same pre/post JSONL trace contract is preserved around the wait.
+- **Trace ordering matters for interactive steps too:** `choice_requested` / `approval_requested` must be written before blocking, and `choice_received` / `approval_received` after the response is durably observed.
+- **Analyzer gap identified:** Existing Roslyn analyzers protect `IStepRunner` visibility and RE2 usage, but they do not yet prove gate calls can only originate from `IRunHandle.NextAsync()`. That needs a new analyzer or architecture test before interactive steps ship.
+- **Timeout semantics split cleanly:** Choice waits should time out via cancellation and transition the run to `TimedOut`; approval waits may return `ApprovalDecision.TimedOut` while preserving the same `IRunHandle` contract.
+
+---
+
 ## Project Context
 
 GERT is a governed, executable, traceable runbook engine (Go binary, local-first). It has a VSCode extension, TUI runner, and mobile SDKs. The team focus is building a web execution platform on Azure — white-labeled customer portals where end-users run runbooks as part of business processes (applications, authorizations, compliance flows). Azure infra only (no k8s). Key concerns: queue-driven execution, webhook delivery, tenant isolation, audit traceability.
 
 **User:** ormasoftchile
 **Session start:** 2026-06-03
+
+
+---
+
+### 2026-06-03 — User Input Gate Correction
+
+**Deliverables produced:** `design/web-platform/c-sharp-governance-parity.md`, `.squad/decisions/inbox/don-user-input-gate-correction.md`
+
+**Key corrections applied:**
+
+- **Generalized the runtime primitive:** Replaced `IChoiceGate` with `IUserInputGate` so any blocking portal interaction (choice, text, confirmation, file upload, form) uses the same suspend/await/resume contract inside `IRunHandle.NextAsync()`.
+- **Trace contract broadened:** Interactive JSONL events are now `user_input_requested` / `user_input_received` and must carry `kind` so auditors can reconstruct the exact prompt category.
+- **A6/A8 resume parity clarified:** App Service workers and Durable orchestrations both resume on any valid `UserInputResponse`; SignalR, queue wake-ups, and in-memory wait handles remain accelerators only.
+- **Analyzer gap sharpened:** Follow-up enforcement now targets any resume path that bypasses `IUserInputGate`, not only choice-specific flows.
+- **Open question updated:** Replaced the old choice-specific enforcement question with a broader file-upload sizing/blob-storage question for `UserInputKind.FileUpload`.
+
+---
+
+## Session: 2026-06-04T02:50:37Z — Interactive Waiting Patterns & User Input Gate
+
+**Scribe consolidated 8 inbox items.**
+
+**Key outcomes for Don:**
+- **IUserInputGate contract:** `AwaitUserInputAsync(runId, stepId, UserInputRequest, CT) → UserInputResponse`
+- **Gate execution:** Both `IUserInputGate` and `IApprovalGate` fire inside `IRunHandle.NextAsync()` only
+- **C# governance parity:** 10 validation gates (G-01 through G-10) adopted
+- **Analyzers:** `GERT0001` (block IStepRunner refs), `GERT0002` (block System.Text.RegularExpressions)
+- **RE2 requirement:** Google.Re2 NuGet mandatory; confirm `(?P<name>...)` syntax support
+- **OQ-5:** Sequence counter behavior (in-memory atomic + checkpoint vs RunStore read)
+- **Status:** Decisions ratified and merged to decisions.md; implementation can proceed with OQ resolutions
+

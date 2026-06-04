@@ -21,3 +21,17 @@ GERT is a governed, executable, traceable runbook engine (Go binary, local-first
 
 **User:** ormasoftchile
 **Session start:** 2026-06-03
+
+---
+
+## Session: 2026-06-04T02:50:37Z — Interactive Waiting Patterns & User Input Gate
+
+**Scribe consolidated 8 inbox items.**
+
+**Key outcomes for David:**
+- **New webhook events:** `user_input_requested`, `user_input_received`, `user_input_timed_out`
+- **Approval events:** `approval.requested`, `approval.approved`, `approval.rejected`, `approval.timed_out`
+- **Event payload:** Summary events only (no full trace changes)
+- **Scope:** Same retry/backoff model (5 attempts over 24h)
+- **Status:** Event schema updated in decisions.md for integration planning
+

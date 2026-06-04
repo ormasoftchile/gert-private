@@ -1,0 +1,60 @@
+{
+  "agents": {
+    "barbara": {
+      "persistent_name": "Barbara",
+      "universe": "user-specified",
+      "role": "Lead / Architect",
+      "created_at": "2026-06-03T20:14:25Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "john": {
+      "persistent_name": "John",
+      "universe": "user-specified",
+      "role": "Azure Platform Engineer",
+      "created_at": "2026-06-03T20:14:25Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "don": {
+      "persistent_name": "Don",
+      "universe": "user-specified",
+      "role": "Backend Dev",
+      "created_at": "2026-06-03T20:14:25Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "leslie": {
+      "persistent_name": "Leslie",
+      "universe": "user-specified",
+      "role": "Frontend Dev",
+      "created_at": "2026-06-03T20:14:25Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "david": {
+      "persistent_name": "David",
+      "universe": "user-specified",
+      "role": "Integration Engineer",
+      "created_at": "2026-06-03T20:14:25Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "scribe": {
+      "persistent_name": "Scribe",
+      "universe": "exempt",
+      "role": "Session Logger",
+      "created_at": "2026-06-03T20:14:25Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "ralph": {
+      "persistent_name": "Ralph",
+      "universe": "exempt",
+      "role": "Work Monitor",
+      "created_at": "2026-06-03T20:14:25Z",
+      "legacy_named": false,
+      "status": "active"
+    }
+  }
+}

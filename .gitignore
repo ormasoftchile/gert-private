@@ -20,3 +20,5 @@ design/gert.fls
 design/gert.log
 design/gert.out
 design/gert.toc
+# Squad: ignore runtime state (logs, inbox, sessions)
+.squad/.scratch/

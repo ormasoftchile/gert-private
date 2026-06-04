@@ -109,29 +109,6 @@ actions:
         format: json
 \end{minted}
 
-\subsection{Per-Platform Implementation Blocks}
-\label{sec:tool-impl-blocks}
-
-For mobile execution (see Chapter~\ref{ch:mobile-execution}), tool definitions may declare an optional \texttt{impl:} block specifying platform-specific handler classes. Each platform entry maps to a native SDK handler:
-
-\begin{minted}{yaml}
-impl:
-  ios:
-    transport: native-sdk
-    handler: GertSDK.Camera.capture
-  android:
-    transport: native-sdk
-    handler: com.gert.tools.camera.CaptureHandler
-\end{minted}
-
-Platform identifiers are \texttt{ios} and \texttt{android}. The \texttt{handler} field references a class registered with the mobile SDK at initialisation time. The \texttt{transport: native-sdk} value instructs the runtime to dispatch the tool call to the native handler instead of spawning a process.
-
-\paragraph{Capability gating at load time.}
-If a tool declares \texttt{requires-capabilities} containing mobile-specific capabilities (\texttt{capability/camera}, \texttt{capability/location}, etc.) but lacks an \texttt{impl} block for the target platform, the SDK emits a \texttt{capability/unavailable} error at kit load time, not at runtime. This fail-early policy ensures that runbook execution never begins if required tools cannot be dispatched.
-
-\paragraph{Desktop execution behaviour.}
-The CLI and server executors ignore the \texttt{impl:} block entirely. Tools without a \texttt{transport:} declaration at the top level (stdio, stdio-jsonrpc, mcp) are unavailable on desktop; tools with a top-level transport are dispatched normally.
-
 \subsection{Transport-Specific Fields}
 
 \paragraph{stdio} The binary is spawned once per invocation.  The
@@ -298,27 +275,6 @@ Before dispatching any tool invocation the host checks two conditions:
         current execution mode.  A tool not listed for \texttt{dry-run} will be
         skipped (with a warning) when the run mode is dry-run.
 \end{enumerate}
-
-\subsection{Mobile Capability Tokens}
-
-The mobile execution model (Chapter~\ref{ch:mobile-execution}) introduces the following capability tokens for platform-specific device access:
-
-\begin{center}
-\begin{tabular}{ll}
-\hline
-\textbf{Capability} & \textbf{Description} \\
-\hline
-\texttt{capability/camera} & Access to device camera for photo evidence \\
-\texttt{capability/location} & Access to GPS location services \\
-\texttt{capability/nfc} & Access to NFC reader (equipment tag scanning) \\
-\texttt{capability/biometrics} & Access to Touch ID / Face ID / fingerprint \\
-\texttt{capability/bluetooth} & Access to Bluetooth LE scanning \\
-\texttt{capability/notifications} & Send local push notifications \\
-\hline
-\end{tabular}
-\end{center}
-
-These capabilities are enforced at the application layer via iOS entitlements and Android permissions. The mobile SDK grants capabilities based on the host application's permission state.
 
 \section{Output Capture}
 \label{sec:tool-output}

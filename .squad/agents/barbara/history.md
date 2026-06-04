@@ -8,6 +8,7 @@
 - **2026-06-03:** Key architectural decision: WHERE the Go binary runs determines isolation, blast radius, and governance preservation. Produced 5-option architecture menu. Recommended Thin Relay (Container Apps Jobs) for MVP with Sidecar Agent as enterprise endgame.
 - **2026-06-03:** Approval gates mid-execution are the hardest seam for the web platform. Jobs-based topologies need state serialization + resume; pool/sidecar topologies handle them naturally but at higher cost/complexity.
 - **2026-06-04:** Brainstorm output merged to decisions.md. Architectural recommendation (Thin Relay MVP → Sidecar endgame) recorded. Four related agent outputs (John, Don, David) synchronized cross-agent. Orchestration log created.
+- **2026-06-03:** Go-only constraint removed. User open to C# native runtime. Re-evaluated all 5 original topologies + 4 new C# options. Key insight: C# eliminates the binary lifecycle problem AND makes approval gates trivial (async/await vs checkpoint/resume). New MVP recommendation: B1 (App Service + BackgroundService) — zero cold start, trivial approval gates, single deployment, $55/mo. New enterprise endgame: B4 (App Service Per-Tenant) — same isolation as A4 Sidecar but without container orchestration complexity. Retired A2 (superseded by B2 Functions Isolated). Critical constraint: C# Runtime must be `internal sealed` to prevent governance bypass in shared-process topology. Don must validate governance parity. Decision output merged to decisions.md (2026-06-03T20:36:12). Orchestration log created.
 
 ---
 

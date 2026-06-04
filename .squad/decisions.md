@@ -434,6 +434,190 @@ These entries are output from the 2026-06-03 declaration-before-process brainsto
 
 ---
 
+## Campaign Architecture & White-Label Platform Decisions
+
+### 1. Shared White-Label Frontend as Default
+
+**Author:** Barbara (Lead / Architect)  
+**Date:** 2026-06-04T12:28:39.293-04:00  
+**Status:** Needs team ratification
+
+**Decision request:** Default to one shared Azure Static Web Apps frontend, fronted by Azure Front Door, with tenant branding/domain resolved by hostname. Do **not** provision one frontend deployment per tenant unless a tenant has explicit isolation, networking, or regulatory requirements.
+
+**Why it needs ratification:** This affects Leslie's frontend architecture, John's DNS/network plan, and cost/isolation expectations in sales conversations.
+
+### 2. Campaign Layer is a First-Class Platform Surface
+
+**Decision request:** Introduce explicit campaign entities and APIs: `Tenant`, `IdentityIntegration`, `Campaign`, `AudienceMember`, `Invitation`, `ContractArtifact`, `Run`, and `NotificationSubscription`.
+
+**Why it needs ratification:** Without this, each adapter will invent its own partial state model. This is an architecture seam, not an implementation detail.
+
+### 3. Invitation Token is Not Sufficient Identity Assurance
+
+**Decision request:** Require customer identity validation before contract review/acceptance steps open. Invitation link proves possession of email access; it does not replace identity verification.
+
+**Why it needs ratification:** This is a product/scope decision with major UX and legal consequences. If the team wants "email click only," it must be an explicit low-assurance mode, not an accidental default.
+
+### 4. Two-Stage Invitation Redemption
+
+**Decision request:** Implement invitation redemption as GET landing page + explicit POST redeem action, so email security scanners do not consume one-time links.
+
+**Why it needs ratification:** This changes portal behavior, token semantics, and support expectations. It is also the cleanest mitigation for enterprise mail gateway link prefetch.
+
+### 5. Customer Identity Validation Must Be Server-to-Server
+
+**Decision request:** The portal submits challenge answers to GERT API; App Service calls the customer identity endpoint server-to-server. Browser-direct calls into customer infrastructure are disallowed.
+
+**Why it needs ratification:** This drives CORS posture, secret handling, network topology, and the private connectivity story for enterprise customers.
+
+### 6. Notification Delivery = Signed Webhook + Pull Reconciliation
+
+**Decision request:** Customer completion notification must include both a signed webhook path and a pull reconciliation API. Webhook-only is insufficient.
+
+**Why it needs ratification:** David's outbound delivery design and customer integration contract depend on this. Operationally, this is the difference between "we sent it" and "they can recover truth."
+
+### 7. Pinned Contract Artifact Hash and Runbook Version Per Campaign
+
+**Decision request:** Every campaign launch must pin an immutable contract artifact version/hash and immutable runbook version. "Latest" pointers are forbidden for active campaigns.
+
+**Why it needs ratification:** This is required for auditability and legal defensibility. It also affects campaign authoring UX and deployment pipelines.
+
+### 8. Dedicated Networking/Infra Tier for Private Customer APIs
+
+**Decision request:** If a customer's identity endpoint is private, support it through a premium isolation/networking tier (for example App Service VNet integration + NAT/VPN/private routing), not as an ad hoc exception inside the shared baseline.
+
+**Why it needs ratification:** John needs a stable network product offering, and sales needs a clear answer on what is "standard" versus "premium."
+
+---
+
+## Integration Contracts & Event Delivery Decisions
+
+### 1. Identity Check Timeout + Circuit Breaker Thresholds
+
+**Author:** David (Integration Engineer)  
+**Date:** 2026-06-04T12:28:39.293-04:00  
+**Status:** Proposed
+
+**Proposal:** identity endpoint call budget is 8 seconds absolute; per-endpoint circuit breaker opens after 5 consecutive transient failures and stays open for 5 minutes.
+
+**Why it needs ratification:** this changes customer UX during link redemption and sets the operational boundary for partial outage handling.
+
+**Trade-off:** shorter timeout protects portal UX; longer timeout may improve success for slow customer APIs but increases abandoned sessions.
+
+### 2. Campaign Link Storage Shape in Cosmos DB
+
+**Proposal:** keep campaign links in the existing `campaigns` container as separate `campaign_link` documents, not embedded arrays inside a campaign root document.
+
+**Why it needs ratification:** it affects partitioning, hot-document risk, and future migration to a dedicated container.
+
+**Trade-off:** fastest path now, but high-scale campaigns may later need a dedicated `campaign_links` container.
+
+### 3. Webhook Registration Scope for Campaign Integrations
+
+**Proposal:** customer onboarding registers webhook endpoints at tenant/campaign scope even though the current adopted baseline says per-execution webhook in v1.0.
+
+**Why it needs ratification:** this is a product-surface decision, not just an implementation detail.
+
+**Trade-off:** tenant/campaign registration is operationally cleaner for recurring campaigns; per-execution registration is simpler for initial platform scope.
+
+### 4. Webhook Retry Schedule Interpretation
+
+**Proposal:** keep the adopted policy of 5 retries over 24 hours, implemented as immediate attempt plus retries at approximately +1m, +5m, +30m, +4h, and +18h with jitter.
+
+**Why it needs ratification:** existing notes say "5 attempts over 24h" but the sample intervals recorded elsewhere do not actually span 24 hours.
+
+**Trade-off:** longer tail protects against customer outages; shorter tail moves events to DLQ faster for manual replay.
+
+### 5. Default External Event Set
+
+**Proposal:** default subscriptions include `campaign.closed`, `user.started`, `user.completed`, and `user.failed`; `user.abandoned`, `user.identity_denied`, `user.identity_error`, and milestone events remain opt-in.
+
+**Why it needs ratification:** this determines the stable public contract and webhook volume customers must handle.
+
+**Trade-off:** smaller default set is easier for customers; larger default set gives better operational visibility.
+
+---
+
+## Local Development & Aspire Integration Decisions
+
+### 1. Adopt Hybrid Local Development for A6
+
+**Author:** John  
+**Date:** 2026-06-04T12:28:39.293-04:00  
+**Status:** Proposed
+
+**Decision:** Use Aspire for local orchestration of API/worker + Service Bus emulator + Blob/Azurite. Use Cosmos emulator only where it is stable on the developer machine; otherwise allow a real dev Cosmos account. Use real Azure dev resources for Entra External ID/B2C and Event Grid.
+
+### 2. Keep A6 Local SignalR as In-Process ASP.NET Core SignalR
+
+**Decision:** Do not force Azure SignalR into the local loop for MVP. Revisit only if cloud topology explicitly requires Azure SignalR beyond the current in-process hub model.
+
+### 3. Treat Aspire App Service Integration as Deployment Plumbing
+
+**Decision:** Local A6 development should run the ASP.NET Core app and BackgroundService directly. App Service modeling belongs to publish/deployment concerns.
+
+### 4. Define Two Supported Dev Modes
+
+**Decision:** Support two development modes:
+- **Fast inner loop:** local app + emulators + dev auth bypass.
+- **Cloud integration loop:** local app or deployed app + real External ID/Event Grid (+ optional real Cosmos/SignalR).
+
+### 5. Do Not Block on "100% Local Aspire Parity"
+
+**Decision:** Team should explicitly accept that some Azure services are cloud-only and that this is not a failure of the architecture.
+
+---
+
+## Portal Frontend & UX Design Decisions
+
+### 1. MVP Frontend Topology = Shared SWA
+
+**Author:** Leslie (Frontend Dev)  
+**Date:** 2026-06-04T12:28:39.293-04:00  
+**Status:** Needs team ratification
+
+**Proposal:** Use one Azure Static Web Apps Standard frontend for the shared portal shell, with tenant resolution by hostname and runtime config. Dedicated SWA only for enterprise/regulatory isolation needs.
+
+**Why:** Lowest operational overhead, one release train, branding without redeploys.
+
+### 2. Domain Strategy = Explicit Per-Tenant Custom Domains
+
+**Proposal:** Bind each tenant hostname explicitly in SWA (`acme.myservice.com`, `portal.customer.com`).
+
+**Why:** Cleaner onboarding/offboarding, clearer certificate ownership, less DNS ambiguity.
+
+**Open question:** Do we need wildcard support later for high-volume self-serve onboarding?
+
+### 3. CDN/WAF Strategy = SWA Edge First, Front Door Later
+
+**Proposal:** Rely on Static Web Apps built-in edge delivery for MVP. Escalate to Front Door when: WAF, multi-region routing, canary releases across SWAs, or centralized advanced domain strategy becomes necessary.
+
+### 4. Theme Storage = Cosmos DB Metadata + Blob Asset Storage
+
+**Proposal:** Store mutable portal config in Cosmos DB and logos/fonts/legal assets in Blob Storage.
+
+**Why:** Runtime rebranding without redeploys; matches platform split of mutable state vs large artifacts.
+
+### 5. Auth UX = Magic-Link-First
+
+**Proposal:** The invitation flow should not require end users to create an account or enter a password. After link validation, create a secure session transparently; if stronger proofing is needed, show a short secure verification interstitial.
+
+**Open question:** Should an optional authenticated records portal be part of MVP or explicitly Phase 2?
+
+### 6. Resume/Concurrency Model = Resumable Progress, Single Active Writer
+
+**Proposal:** Submitted progress persists server-side; unsaved drafts persist locally on the same device; only one device can actively submit at a time.
+
+**Why:** Safer than allowing concurrent submissions and easier for users to understand.
+
+### 7. Audit Branding Boundary
+
+**Ratification needed:** Must `Powered by GERT` or another audit-visible footer remain present in every white-label portal/completion/receipt experience?
+
+**Frontend recommendation:** If required, keep it subtle and consistent in the footer/receipt rather than in the primary action area.
+
+---
+
 # Declaration-Before-Process Scenario Taxonomy
 
 **Author:** Barbara (Lead / Architect)  

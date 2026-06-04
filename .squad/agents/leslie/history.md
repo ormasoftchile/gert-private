@@ -35,6 +35,27 @@
 
 **2026-06-04:** Brainstorm session in progress (Leslie continuing with white-label frontend research). Barbara's architecture topology proposal, John's Azure constraints, Don's governance red lines, and David's webhook baseline have been merged to decisions.md and orchestrated. Awaiting Leslie's white-label research completion.
 
+### White-Label Portal Hosting & UX Design (2026-06-04T12:28:39.293-04:00)
+
+**Hosting decisions:**
+- Recommend one shared Azure Static Web Apps Standard frontend for MVP, with tenant resolution by hostname and runtime config rather than one deployment per customer
+- Use explicit per-tenant SWA custom domains (`customer.myservice.com` or customer-owned vanity domains); do not make wildcard domain support a hard dependency for MVP
+- Use SWA edge delivery/CDN on day one; bring in Azure Front Door only for WAF, multi-region failover, or advanced traffic management
+- Keep backend/API single-region for MVP; frontend assets are edge-distributed already
+
+**Theming approach:**
+- Themeing should be runtime-loaded through a `ThemeProvider` using CSS variables and semantic design tokens, not per-tenant builds
+- Store mutable portal/theme metadata in Cosmos DB and brand assets (logos, fonts, legal copy packs) in Blob Storage
+- Customer-configurable surface includes logo, colors, fonts, portal copy, footer/support links, and step-type helper copy
+- Non-themeable surface includes GERT audit controls, accessibility baseline, error/safety semantics, and core step rendering behavior
+
+**UX patterns:**
+- Magic link flow should feel passwordless: click email link, brief secure validation, then immediate progression into the campaign
+- If Entra External ID is used post-validation, it should feel like a short “Securing your session…” handoff, not a visible login ceremony
+- Runbook steps should use non-optimistic advancement for auditable submissions: only move forward after server acknowledgement
+- Resume is a first-class behavior: submitted progress survives server-side, same-device drafts can restore locally, and expired sessions resume via a fresh link rather than forced account creation
+- Two-device behavior should allow only one active writer session to prevent double-submit confusion
+
 ---
 
 ## Project Context
@@ -102,3 +123,14 @@ Post-signature receipt flow: Server generates confirmation_id, creates QR code (
 Declaration flows are high-stakes UX (legal signatures, medical consent, financial liability). Small UX friction = abandonment; good UX = completion + regulatory compliance. Key insights: (1) Presentation enforcement is purely frontend—no gate logic needed; frees backend iteration. (2) Signature requires new gate kind to span typed/drawn/cert/otp spectrum. (3) Witness flows have two architectures (email async vs same-session real-time); email is low-effort starting point. (4) Attachments reuse FileUpload gate; optional OCR is value-add. (5) 60-min timeout is necessary for long docs; 15-min fails too fast. (6) Receipt/confirmation QR flow is immediate win for audit + customer trust. (7) White-label themeing is feasible except for audit watermark decision.
 
 Confident we can ship Phase 1 (presentation + signature + 60-min timeout + receipt) in 2-3 sprints. Phase 2 (same-session witness + save-draft + OCR) pending customer demand + team ratification on audit decisions.
+
+## Team Integration — White-Label Campaign Platform (2026-06-04)
+
+**Cross-agent coordination:**
+- **Barbara:** Campaign architecture drives portal topology; white-label platform needs shared SWA + Front Door with per-tenant domain binding; campaign layer entities (tenant, campaign, audience, invitation, contract artifact) are the data model Leslie's UX navigates
+- **John:** Aspire local dev enables Leslie to test portal locally with emulated service bus and blob storage; dev auth bypass supports fast UX iteration
+- **David:** Integration contracts define webhook/notification UX (when users receive completion emails); identity validation timeouts affect portal form submission UX
+- **Scribe:** 7 portal UX ratification items merged to decisions.md for team review
+
+**Key decisions:** Shared SWA MVP (dedicated SWA only for enterprise); explicit per-tenant custom domains; Static Web Apps built-in edge (Front Door later); Cosmos DB + Blob theme storage; magic-link-first auth (no password); resumable progress with single-writer concurrency; audit branding boundary decision pending.
+

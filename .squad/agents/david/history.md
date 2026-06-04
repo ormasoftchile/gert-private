@@ -13,6 +13,12 @@
 
 **2026-06-04:** Brainstorm output merged to decisions.md. Webhook & event delivery baseline documented with v1–v2 roadmap. Rollout plan recorded. Security checklist included. Orchestration log created.
 
+**2026-06-04T12:28:39.293-04:00 — Campaign Identity + Completion Integration Design**
+- Identity validation at magic-link click must be fail-closed, fast, and tenant-scoped: 8s absolute timeout, per-endpoint circuit breaker, no run start unless the customer endpoint returns a valid approved contract.
+- One-time magic links should be opaque tokens with Cosmos DB conditional state transitions (`issued -> redeeming -> redeemed|denied`) so concurrent clicks cannot double-start runs while transient failures can still recover safely.
+- Customer notifications should stay summary-first and at-least-once: Service Bus-backed delivery, stable idempotency key per semantic event, scheduled retries, DLQ + replay for prolonged endpoint outages.
+- Main integration risks in this scenario are contract drift at the customer identity API, webhook auth/config breakage, and ambiguous retry windows; these surfaced ratification items for timeout, retry schedule, webhook scope, and Cosmos storage shape.
+
 ---
 
 ## Project Context
@@ -127,7 +133,15 @@ Industries have different retention requirements:
 
 - **Phase 1 (MVP):** 4 core events (submitted, signed, completed, declined); evidence package URLs; idempotency implementation.
 - **Phase 2 (Robustness):** 5 edge case events; DLQ compliance-critical alerting; replay endpoint.
-- **Phase 3 (Scale):** Tenant-level webhooks; event filtering; Merkle tree batch job; long-term SLA compliance.
-
 ---
+
+## Team Integration — White-Label Campaign Platform (2026-06-04)
+
+**Cross-agent coordination:**
+- **Barbara:** Integration contracts ratify webhook delivery model (signed webhook + pull reconciliation) and identity validation requirements (server-to-server only); campaign layer defines notification subscription entities
+- **John:** Aspire local dev supports testing integration contracts in hybrid dev loop
+- **Leslie:** Portal UX determines when webhooks are triggered (completion, abandonment, identity denial); affects event schema design
+- **Scribe:** 5 integration contract ratification items merged to decisions.md for team review
+
+**Key decisions:** Identity endpoint timeout 8s absolute; circuit breaker opens after 5 failures (5 min); campaign links stored as separate Cosmos docs; webhook registration at tenant/campaign scope; 5 retries over 24h; default events (campaign.closed, user.started, user.completed, user.failed).
 

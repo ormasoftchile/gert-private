@@ -78,6 +78,17 @@
 
 ---
 
+### 2026-06-04T12:28:39.293-04:00 — Aspire Local Dev Reality Check for A6
+
+**Key findings:**
+- Aspire is a good fit for A6 local orchestration of **Service Bus**, **Blob Storage/Azurite**, and optionally **Cosmos DB**, but it does **not** fully localize the whole Azure stack.
+- **Service Bus** support is solid in Aspire (`Aspire.Hosting.Azure.ServiceBus`, `Aspire.Azure.Messaging.ServiceBus`) and is good for functional local work, but emulator behavior should not be treated as proof of production-grade session semantics under concurrency.
+- **Blob Storage** support is solid (`Aspire.Hosting.Azure.Storage`, `Aspire.Azure.Storage.Blobs`) and is the right local path for JSONL/append-blob trace work.
+- **Cosmos DB** support exists (`Aspire.Hosting.Azure.CosmosDB`, `Aspire.Microsoft.Azure.Cosmos`), but the emulator is not serverless, and on Mac the safer local path is often `RunAsPreviewEmulator()` or a cheap real dev Cosmos account.
+- **Azure SignalR** is supported in Aspire (`Aspire.Hosting.Azure.SignalR`), but the emulator only helps in **Serverless** mode. For current A6 MVP, the correct local dev story is still **in-process ASP.NET Core SignalR**, not Azure SignalR emulation.
+- There is no public official Aspire package/emulator story for **Event Grid**, **Static Web Apps**, or **Entra External ID/B2C**. These remain cloud-backed or separately tooled in local development.
+- Recommended team posture: **hybrid local dev** — Aspire for app + good emulators, real Azure dev resources for auth/eventing/cloud-only behaviors, and explicit dev auth bypass when not working on identity.
+
 ## Project Context
 
 GERT is a governed, executable, traceable runbook engine (Go binary, local-first). It has a VSCode extension, TUI runner, and mobile SDKs. The team focus is building a web execution platform on Azure — white-labeled customer portals where end-users run runbooks as part of business processes (applications, authorizations, compliance flows). Azure infra only (no k8s). Key concerns: queue-driven execution, webhook delivery, tenant isolation, audit traceability.
@@ -97,4 +108,14 @@ GERT is a governed, executable, traceable runbook engine (Go binary, local-first
 - **SignalR note:** In-process Hub for MVP; evaluate SignalR Service at scale
 - **Database strategy:** Serverless Cosmos for mutable state (run, approvals, user inputs); Blob for immutable traces
 - **Status:** Azure service selections finalized in decisions.md
+
+## Team Integration — White-Label Campaign Platform (2026-06-04)
+
+**Cross-agent coordination:**
+- **Barbara:** A6 architecture (App Service P1v3) is the compute foundation for campaign execution; user input gates (IUserInputGate) determine what John needs to orchestrate locally
+- **David:** Integration contracts define external dependency requirements (identity endpoints, webhook delivery) that affect dev environment setup
+- **Leslie:** Portal UX (magic-link auth, shared SWA) determines what local dev must simulate vs what can be stubbed in fast inner loop
+- **Scribe:** 5 Aspire local dev recommendations merged to decisions.md for team review
+
+**Key decisions:** Hybrid local dev with Aspire orchestration (API/worker + Service Bus emulator + Blob/Azurite); real Cosmos emulator optional (allow real dev account); real Entra ID/Event Grid; in-process SignalR for MVP; two dev modes (fast inner loop + cloud integration loop); skip 100% Aspire parity ambition.
 

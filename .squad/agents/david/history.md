@@ -35,3 +35,99 @@ GERT is a governed, executable, traceable runbook engine (Go binary, local-first
 - **Scope:** Same retry/backoff model (5 attempts over 24h)
 - **Status:** Event schema updated in decisions.md for integration planning
 
+
+## Learnings from Declaration & Consent Integration Analysis (2026-06-03)
+
+### Receiver Landscape: Five Industry Archetypes
+
+Declarations are not generic events; they are legal commitments with distinct downstream receivers:
+
+1. **Healthcare:** EHR, surgical scheduling, insurance pre-auth, medical archive. Require signed PDFs, witness verification, 7-year retention, immutable records. Cannot revoke post-procedure start.
+
+2. **Insurance:** Policy admin, underwriting, billing, agent portal. Require evidence of intent, strict ordering (no charge before consent), settlement finality. Billing system is particularly sensitive (recurring charge linkage).
+
+3. **Government:** Registry of acts, archival system, citizen portal. Strictest: registry capacity limits, 30-year archival, citizen notification within 5 min, reproducible audit trails.
+
+4. **Finance/KYC:** AML system, account opening, compliance archive. Compliance-first: silent drops = regulatory fines. Every KYC declaration version traceable. 10-year hold.
+
+5. **Employment:** HRIS, payroll, benefits enrollment. Tight batch windows (payroll deadline is immovable). Tax withholding election cannot be silent-dropped.
+
+**Implication:** Cannot use one-size-fits-all event schema. Must support evidence package depth (trace excerpt, hash chain, audit receipt) that allows receivers to independently verify immutability.
+
+### Evidence Package Shape
+
+Declarations require layered evidence beyond what transient events carry:
+
+- **Signed Document (PDF):** Time-limited SAS URL (7 days default) before seal, permanent after seal. Hash included for immutability proof.
+- **Trace Excerpt (NDJSON):** Not full execution trace; only form input + signature steps. Reduces payload; receiver can fetch full trace via declaration_id if audited.
+- **Hash Chain (Merkle Proof):** Daily batch Merkle tree proving declaration is in immutable archive (no post-hoc edits by system operator).
+- **Audit Receipt (PDF + QR):** Human-readable receipt + permanent QR link for declarant to print/file as proof.
+
+**Implication:** Evidence package is not inline in webhook. Webhook carries URLs; receiver pulls evidence on demand. Scales to large audiences without massive payloads.
+
+### Delivery Guarantee: At-Least-Once + Immutability
+
+V1.0 retry model is necessary but not sufficient. Declarations demand idempotency at the receiver level:
+
+- Receiver deduplicates on `idempotency_key` (not just event_id). Safe to retry declaration.completed for same declaration_id multiple times.
+- Replay endpoint (`GET /api/v1/declarations/{declaration_id}/replay?since=T`) for reconstruction if receiver crashes mid-processing.
+- Sealed archive notification (`declaration.sealed` event) signals: "Declaration is now in permanent immutable archive; all SAS URLs permanent; hash chain finalized."
+- Long-term retrieval SLA: Healthcare 7yr, Finance 10yr, Government 10–30yr. No expiration after seal.
+
+**Implication:** Webhook infrastructure must support replay + permanent SAS (or fallback retrieval mechanism) for receivers to comply with legal holds.
+
+### Edge Cases: Nine Declaration Event Types
+
+Declarations are not binary (completed or failed). Each path requires an event:
+
+1. **submitted:** Form filled, signature pending. Receiver audits; optional queue.
+2. **verified:** KYC/ID verification passed. Continue; optional status update.
+3. **signed:** Declarant signature captured (witness may still be pending).
+4. **completed:** FINAL; all signatures, all verification done. Trigger downstream: schedule surgery, bind policy, create compliance record.
+5. **declined:** Declarant actively rejected (clicked "Decline"). Cancel downstream; notify participant.
+6. **abandoned:** User didn't finish (inactivity, closed tab). Audit-log; may retry.
+7. **expired_unwitnessed:** Witness window passed. Retry or escalate.
+8. **sealed:** N days post-completion; immutable archive. Archive-ready; receiver downloads evidence package to long-term storage.
+9. **revoked:** Declarant/authorized party revoked consent post-completion. **CRITICAL:** Cancel downstream, reverse charges, halt procedure.
+
+**Implication:** V1.0 event family (execution lifecycle + user input) is too coarse. Declaration workflow needs a second event family with finer granularity.
+
+### Revocation Semantics: The Hardest Edge Case
+
+Post-hoc revocation is non-trivial. Declarant signed surgical consent, was placed on pre-op protocol, then calls to withdraw consent hours before surgery.
+
+- Receiver gets `declaration.revoked` event.
+- Receiver must be idempotent: revoking twice = safe no-op.
+- Receiver must cascade: cancel surgery, notify anesthesia team, halt pre-op protocol.
+- Audit trail critical: compliance must know who revoked, when, what cascade impact.
+
+**Implication:** Revocation is not handled at webhook registration time; it's a post-completion async action requiring playbook execution at receiver.
+
+### Retention SLA Complexity
+
+Industries have different retention requirements:
+- Healthcare: 7 years minimum (varies by jurisdiction).
+- Insurance: 5–10 years (product-dependent).
+- Government: 10–30 years (registry-dependent).
+- Finance/KYC: 10 years (regulatory).
+- Employment: 7 years (tax, labor law).
+
+**Implication:** Cannot have one DLQ retention policy. Declarations must be tagged with industry + retention tier. Compliance dashboard should show: "Healthcare declarations from 2020 still held; can purge finance declarations from 2019."
+
+### Open Questions for Next Sprint
+
+1. Idempotency key scope: `declaration_id` only, or `declaration_id + version`? (If revocation bumps version, idempotency_key changes?)
+2. Cascade notifications: When revocation happens, does GERT notify declarant/witness/surgeon directly, or only via webhook?
+3. Audit receipt: PDF with QR only, or support text QR body in email?
+4. SAS URL expiration before seal: 7 days? Configurable?
+5. Merkle tree scope: Daily batch per-tenant, or global daily batch?
+6. Revocation window: Can revoke indefinitely, or only within N days?
+
+### Next Session: Implementation Roadmap
+
+- **Phase 1 (MVP):** 4 core events (submitted, signed, completed, declined); evidence package URLs; idempotency implementation.
+- **Phase 2 (Robustness):** 5 edge case events; DLQ compliance-critical alerting; replay endpoint.
+- **Phase 3 (Scale):** Tenant-level webhooks; event filtering; Merkle tree batch job; long-term SLA compliance.
+
+---
+

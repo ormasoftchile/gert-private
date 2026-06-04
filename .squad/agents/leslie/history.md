@@ -43,3 +43,62 @@ GERT is a governed, executable, traceable runbook engine (Go binary, local-first
 
 **User:** ormasoftchile
 **Session start:** 2026-06-03
+
+## 2026-06-04 — Declaration/Consent UX Analysis
+
+### Learnings
+
+**Presentation Enforcement Requires Frontend-Only Tracking**
+Declaration disclosure patterns (scroll-to-bottom, time minimums, section expansion, TTS) are not gate-driven. They're 100% client-side validation; gate fires only when enforcement requirements are met. No server-side gate evaluation needed. This unblocks fast iteration—presentation rules can change per runbook metadata without backend changes.
+
+**Signature Requires New Gate Kind**
+Current system lacks signature-specific IUserInputGate.Kind. Proposed "Signature" gate with sub-types (typed | drawn | cert | otp) to model full spectrum of signing patterns. Drawn signatures need pressure data capture (PointerEvents API + SVG paths). Critical decision: Should typed signatures be legal-valid, or drawn-only? Medical/legal should be drawn; informational can allow typed.
+
+**Same-Session Witness Handoff is Distinct from Email Witness**
+Different UX semantics:
+- **Email-based** (different-session): Use existing IApprovalGate; witness gets email link + reviews asynchronously
+- **Same-session** (quick & device-handed): Requires new WitnessLinking gate or compound gate pattern; uses QR + verbal code linking + real-time side-by-side confirmation
+Current system doesn't model same-session handoff. IApprovalGate is sufficient for email workflow (low effort, high value); defer WitnessLinking gate pending customer demand.
+
+**Attachments Should Use FileUpload Gate with Optional Server-Side OCR**
+No new gate kind needed. FileUpload gate carries attachment metadata. Client-side UX decision: camera-first on mobile (native device camera, auto-edge-detection, perspective warp), file-picker on desktop. Server-side optional OCR validation (runbook metadata flag) validates extracted text against required fields (e.g., expiration date match). Post-signature attachment failures should allow "supplemental attachment" step (track attachment_phase metadata).
+
+**Declaration Timeout Should Extend Beyond 15 Minutes**
+Current 15-min user input timeout is too aggressive for declarations. Recommended extension: **60 minutes** for read-heavy flows. Rationale: Declarations require active reading; interruptions are common; 15 min fails too fast. Implementation: Add optional `timeoutSeconds` override to IUserInputGate (gate-level, not global). Keep 15 min for fast-turnaround fields (time-sensitive appointments, etc.).
+
+**Save-Draft Pattern Requires Checkpoint Events, Not Gate Firing**
+Forms can be resumed after interruption. Proposed pattern: User clicks "Continue Later" → client posts resumable_checkpoint → server saves form state + issues resume_token (JWT, 24h expiry). On resume: token validated, form state hydrated, user completes + re-signs. Implementation: New "CheckpointRequest" event type (separate from gate.NextAsync()). Can use server DB + optional client localStorage for redundancy. No new gate kind; existing Form gate carries the checkpoint state.
+
+**White-Label Themeing is Feasible; "Powered by GERT" Audit Decision Pending**
+Logo, color, font, signature style are themeable via Static Web Apps Standard + ThemeProvider component. Typography, color scheme, button styles all customizable. Non-themeable: error states (red, safety), accessibility floor (WCAG AA contrast non-negotiable), camera UI (native device, consistent). Pending decision: Does "Powered by GERT" watermark remain visible in all white-label declarations? Current assumption: Yes (audit/compliance), but needs team ratification.
+
+**Receipt/Confirmation Should Issue QR-Verified PDF**
+Post-signature receipt flow: Server generates confirmation_id, creates QR code (encodes confirmation_id + document hash + issuer_id). On-screen: confirmation ID + QR + download/email CTAs. PDF generation server-side; include embedded QR, optional digital signature (X.509), watermark. QR verification endpoint (/verify?qr=ABC123) returns public info (name, timestamp) only; no PII. Immediate implementation possible; low risk. Digital signature (enterprise tier) deferred.
+
+### System Gaps Identified
+1. IUserInputGate.Kind missing "Signature" variant (typed, drawn, cert, otp sub-types)
+2. Same-session witness linking not modeled (WitnessLinking gate deferred; use IApprovalGate for now)
+3. Declaration timeout hardcoded to 15 min (should extend to 60+ min; gate-level override needed)
+4. Checkpoint event type missing (required for save-draft pattern)
+5. Presentation enforcement rules not gate-driven (100% frontend; acceptable per Leslie's charter)
+6. OCR validation for attachments not yet integrated with FileUpload gate (optional server logic)
+7. "Powered by GERT" watermark visibility unresolved (audit vs white-label aesthetic—team decision needed)
+
+### Design Decisions Requiring Team Ratification
+1. Should "Powered by GERT" remain visible in all white-label declarations?
+2. Is same-session witness (QR) immediate priority, or defer to Phase 2?
+3. Is typed signature legal-valid for medical/legal flows?
+4. Should save-draft be Phase 1, or defer pending customer demand?
+5. Should declarations get 60-min timeout, or keep 15-min default?
+
+### Immediate Next Steps for Frontend
+- Implement DeclarationPresentation component (scroll-to-bottom + time enforcement)
+- Create Signature gate kind + SignatureCanvas (drawn) + TypedSignature variants
+- Extend IUserInputGate.timeoutSeconds for gate-level override
+- Build ConfirmationScreen + QR receipt flow
+- Integrate camera capture with FileUpload gate (auto-edge-detection)
+
+### Reflection
+Declaration flows are high-stakes UX (legal signatures, medical consent, financial liability). Small UX friction = abandonment; good UX = completion + regulatory compliance. Key insights: (1) Presentation enforcement is purely frontend—no gate logic needed; frees backend iteration. (2) Signature requires new gate kind to span typed/drawn/cert/otp spectrum. (3) Witness flows have two architectures (email async vs same-session real-time); email is low-effort starting point. (4) Attachments reuse FileUpload gate; optional OCR is value-add. (5) 60-min timeout is necessary for long docs; 15-min fails too fast. (6) Receipt/confirmation QR flow is immediate win for audit + customer trust. (7) White-label themeing is feasible except for audit watermark decision.
+
+Confident we can ship Phase 1 (presentation + signature + 60-min timeout + receipt) in 2-3 sprints. Phase 2 (same-session witness + save-draft + OCR) pending customer demand + team ratification on audit decisions.

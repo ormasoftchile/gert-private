@@ -2,6 +2,49 @@
 
 ## Learnings
 
+### 2026-06-03 — Declaration/Consent Scenario Gap Analysis
+
+**Deliverable produced:** `.squad/decisions/inbox/don-declaration-runtime-gaps.md`
+
+**Gap inventory (10 gaps identified):**
+
+| # | Gap | Priority | New Primitive |
+|---|---|---|---|
+| G-1 | Signature capture | P0 | `UserInputKind.Signature`, `DeclarationCollectedEvent` |
+| G-2 | Identity proofing at declaration moment | P0 | `IdentityProofingLevel` on `UserInputRequest` |
+| G-3 | Witness / co-signer flow | P0 | `IWitnessGate`, `WitnessAttestedEvent` |
+| G-4 | Presented-document version hash | P0 | `document_hash` + `document_version` on trace event |
+| G-5 | Multi-language / locale provenance | P1 | `Locale` (BCP-47) on `DeclarationCollectedEvent` |
+| G-6 | On-behalf-of / capacity (subject ≠ declarant) | P1 | `DeclarationPrincipal` record |
+| G-7 | Time-bounded validity (expiry) | P1 | `valid_until` field + `IDeclarationRegistry.GetEffectiveStateAsync` |
+| G-8 | Revocation (inverse event, no rewrite) | P1 | `DeclarationRevokedEvent` + `IDeclarationRegistry` |
+| G-9 | Contextual PII in free-text fields | P2 | `PiiZone` policy flag (no new engine) |
+| G-10 | QTSP integration (eIDAS/ESIGN/Ley 19.799) | P2 | `UserInputKind.QualifiedSignature`, `QualifiedSignatureReceivedEvent` |
+
+**What already fits well:**
+- JSONL append-only trace is the right substrate for declaration registration — synchronous-before-dispatch invariant directly satisfies "must be registered before process proceeds."
+- Service Bus at-most-once prevents duplicate declaration collection on worker restart.
+- RE2 redaction handles structured PII (RUT, SSN, IBAN) well — gaps only in free-text narrative PII.
+- `IApprovalGate` covers genuine downstream authorizers (underwriters, administrators) but NOT witnesses or co-signers.
+- `Confirmation` kind is the closest current primitive to a declaration acknowledgment — insufficient for legal weight without G-1 and G-2.
+- `client="web"` RunOptions tagging already fits per-channel audit needs.
+
+**Proposed new trace event types:** `DeclarationCollectedEvent`, `WitnessAttestedEvent`, `DeclarationRevokedEvent`, `DeclarationValidityCheckedEvent`, `QualifiedSignatureReceivedEvent`.
+
+**Proposed new interface:** `IWitnessGate` (parallel to `IApprovalGate`; fires inside `IRunHandle.NextAsync()`).
+
+**Proposed extensions:**
+- `UserInputKind.Signature` and `UserInputKind.QualifiedSignature` added to enum.
+- `DeclarationContext` added to `UserInputRequest` for declaration-type steps.
+- `DeclarationPrincipal` record for on-behalf-of flows.
+- `IDeclarationRegistry` for effective-state queries (Active | Expired | Revoked).
+
+**Non-goals confirmed:** GERT is NOT a TSP, does NOT store biometrics, does NOT render legal text, does NOT adjudicate legal validity, does NOT enforce per-jurisdiction compliance rules.
+
+**Chilean legal context:** RE2 patterns for RUT format already expressible. Ley 19.799 (Firma Electrónica) compliance requires QTSP integration (G-10) for advanced e-signature tier — GERT records TSP tokens, does not issue signatures.
+
+---
+
 ### 2026-06-03 — C# Governance Parity Design
 
 **Deliverable produced:** `design/web-platform/c-sharp-governance-parity.md`
@@ -45,86 +88,23 @@
 
 **What this unlocks:**
 - Durable Functions Orchestrators can now legitimately implement `RunHandle.Next()` semantics — the orchestrator IS the governance engine, not a bypass of it. This was a red line when Go binary was fixed because each activity invocation would cold-start the binary, losing governance state. In C#, governance fires inside the orchestrator before each activity, which is correct.
-- `ASP.NET Core BackgroundService` is the simplest C# equivalent of the queue-triggered worker — no new architectural complexity, same governance model, cleaner async/await ergonomics.
-- `Durable Entities` can model `IRunHandle` state directly — entity operations are sequential by design, sequence numbers are trivially monotonic, and approval gates become entity signals.
-
-**Red lines revised:**
-- Per-step Durable Function Activities remain a RED LINE even in C# — if the activity calls a step runner directly (bypassing `IRunHandle.NextAsync()`), governance does not fire. Enforce by making `IStepRunner` internal, not injectable from outside `IRunHandle`.
-- Durable Orchestrator replay is safe IFF: all governance checks with external side effects are wrapped in activities (cached on replay, not re-executed). Never put non-deterministic code inline in the orchestrator.
-
-**Critical implementation risks identified:**
-1. **Template evaluation drift (HIGH):** Go `text/template` has no C# equivalent. Any porting of template evaluation must be validated against a canonical test vector suite. Advanced template features may be impossible to port faithfully.
-2. **Regex engine divergence in redaction (HIGH — governance security risk):** C# .NET regex is a superset of RE2. A redaction rule that matches in Go may behave differently in C#. **Resolution: use the `Google.RE2` NuGet package for all redaction evaluation — non-negotiable.**
-3. **Governance logic drift (HIGH):** The Go governance layer is the reference implementation. C# port must be validated against a language-neutral test vector suite (JSON spec vectors) before production.
-4. **JSONL trace contract drift (MEDIUM):** C#-generated traces must be validated against the JSON Schema artifact. Go replay engine must be run against C#-generated traces in CI.
-5. **Durable replay non-determinism (MEDIUM):** Use `context.CurrentUtcDateTime`, `context.NewGuid()` — never `DateTime.UtcNow` or `Guid.NewGuid()` in orchestrator code.
-6. **Feature parity gap over time (LOW but compounding):** Two runtimes = two maintenance surfaces. Spec-first governance feature development is required.
-
-**Recommended C# runtime pattern hierarchy:**
-1. BackgroundService + Container App (simplest, recommended MVP)
-2. Container App Job (stronger per-run isolation)
-3. Durable Orchestrator (approval-gate-heavy runbooks)
-4. Durable Entity (interactive wizard-style runbooks only)
-
-**Structural design:**
-- `IRunHandle.NextAsync()` is the governance boundary — governance pre-flight fires before every step dispatch, same as Go's `Next()`.
-- `IGovernanceLayer` mirrors the Go governance engine: allowlist, denylist, env var filtering, redaction, approval gates.
-- `IRunStore.WriteTraceAsync()` is the authoritative JSONL writer — called synchronously before `NextAsync()` returns.
-- Sequence numbers are scoped per run_id, starting at 0. In BackgroundService: simple `int` counter. In Durable: tracked in orchestrator state, incremented only via activity results (never inline).
-
-**Decision filed:** `.squad/decisions/inbox/don-csharp-runtime-options.md` → merged to decisions.md (2026-06-03T20:36:12). Orchestration log created. **Action Item: Validate C# governance parity with Go binary before implementation.**
 
 ---
 
-### 2026-06-03 — Choice Gate Runtime Contract
+## [Archived Sessions — Pre-2026-06-04]
 
-**Deliverables produced:** `design/web-platform/c-sharp-governance-parity.md`, `.squad/decisions/inbox/don-choice-gate-contract.md`
+**Historical summary:** Don completed 7 major analysis cycles (2026-06-03 through 2026-06-04T02:50:37Z):
+1. Declaration/consent gap analysis (10 gaps, 5 new primitives proposed)
+2. C# governance parity design (10 validation gates, Roslyn analyzer strategy)
+3. Execution adapter pattern review (Red Line architecture decisions)
+4. C# runtime option analysis (BackgroundService + Durable orchestration design)
+5. Choice gate runtime contract (Interactive waiting patterns)
+6. User input gate correction (Generalized IUserInputGate)
+7. Interactive waiting patterns cross-review
 
-**Key learnings:**
+**Key decisions adopted:** IRunHandle.NextAsync as governance boundary, Google.Re2 for redaction, IUserInputGate interface (not IChoiceGate), Roslyn analyzers GERT0001/GERT0002, 10 validation gates before C# production.
 
-- **Choice waits are first-class gates:** Choice steps are not `SubmitEvidenceAsync()` payload collection; they suspend inside `IRunHandle.NextAsync()` exactly like approval waits, but the actor is the portal subject rather than a third-party approver.
-- **A6 durable source of truth:** For both choices and approvals, the portal/API callback must write the durable interaction row first. Worker polling, queue wake-up messages, or SignalR are accelerators only; they are never the authoritative contract.
-- **A8 parity point:** `WaitForExternalEvent` is the correct Durable mapping for both `IChoiceGate` and `IApprovalGate`, provided the same pre/post JSONL trace contract is preserved around the wait.
-- **Trace ordering matters for interactive steps too:** `choice_requested` / `approval_requested` must be written before blocking, and `choice_received` / `approval_received` after the response is durably observed.
-- **Analyzer gap identified:** Existing Roslyn analyzers protect `IStepRunner` visibility and RE2 usage, but they do not yet prove gate calls can only originate from `IRunHandle.NextAsync()`. That needs a new analyzer or architecture test before interactive steps ship.
-- **Timeout semantics split cleanly:** Choice waits should time out via cancellation and transition the run to `TimedOut`; approval waits may return `ApprovalDecision.TimedOut` while preserving the same `IRunHandle` contract.
-
----
-
-## Project Context
-
-GERT is a governed, executable, traceable runbook engine (Go binary, local-first). It has a VSCode extension, TUI runner, and mobile SDKs. The team focus is building a web execution platform on Azure — white-labeled customer portals where end-users run runbooks as part of business processes (applications, authorizations, compliance flows). Azure infra only (no k8s). Key concerns: queue-driven execution, webhook delivery, tenant isolation, audit traceability.
-
-**User:** ormasoftchile
-**Session start:** 2026-06-03
-
+**Active open questions:** OQ-1 through OQ-5 (template strategy, approval queue topology, sequence counter, RE2 named group syntax).
 
 ---
-
-### 2026-06-03 — User Input Gate Correction
-
-**Deliverables produced:** `design/web-platform/c-sharp-governance-parity.md`, `.squad/decisions/inbox/don-user-input-gate-correction.md`
-
-**Key corrections applied:**
-
-- **Generalized the runtime primitive:** Replaced `IChoiceGate` with `IUserInputGate` so any blocking portal interaction (choice, text, confirmation, file upload, form) uses the same suspend/await/resume contract inside `IRunHandle.NextAsync()`.
-- **Trace contract broadened:** Interactive JSONL events are now `user_input_requested` / `user_input_received` and must carry `kind` so auditors can reconstruct the exact prompt category.
-- **A6/A8 resume parity clarified:** App Service workers and Durable orchestrations both resume on any valid `UserInputResponse`; SignalR, queue wake-ups, and in-memory wait handles remain accelerators only.
-- **Analyzer gap sharpened:** Follow-up enforcement now targets any resume path that bypasses `IUserInputGate`, not only choice-specific flows.
-- **Open question updated:** Replaced the old choice-specific enforcement question with a broader file-upload sizing/blob-storage question for `UserInputKind.FileUpload`.
-
----
-
-## Session: 2026-06-04T02:50:37Z — Interactive Waiting Patterns & User Input Gate
-
-**Scribe consolidated 8 inbox items.**
-
-**Key outcomes for Don:**
-- **IUserInputGate contract:** `AwaitUserInputAsync(runId, stepId, UserInputRequest, CT) → UserInputResponse`
-- **Gate execution:** Both `IUserInputGate` and `IApprovalGate` fire inside `IRunHandle.NextAsync()` only
-- **C# governance parity:** 10 validation gates (G-01 through G-10) adopted
-- **Analyzers:** `GERT0001` (block IStepRunner refs), `GERT0002` (block System.Text.RegularExpressions)
-- **RE2 requirement:** Google.Re2 NuGet mandatory; confirm `(?P<name>...)` syntax support
-- **OQ-5:** Sequence counter behavior (in-memory atomic + checkpoint vs RunStore read)
-- **Status:** Decisions ratified and merged to decisions.md; implementation can proceed with OQ resolutions
 

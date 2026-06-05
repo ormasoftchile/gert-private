@@ -2,6 +2,21 @@
 
 ## Learnings
 
+### 2026-06-04 — Go-Style Expression Evaluation Audit
+
+**Deliverables produced:** `design/gert/expression-evaluation-audit.md`, `.squad/decisions/inbox/don-go-expression-audit.md`, `.squad/skills/expression-evaluation-audit/SKILL.md`
+
+**Key findings:**
+- The repository snapshot did not include Go runtime source files or `go.mod`, so implementation-level evaluator calls could not be inspected.
+- Spec/docs expose two author-facing evaluator families: `expr-lang/expr` for `when`/`condition`/`until`, and Go `text/template` for interpolation in titles, args, tool argv, display content, and assertion operands.
+- Conditional syntax currently exposes Go/C-style operators (`&&`, `||`, `!`, `==`, comparisons). The spec calls the intended vocabulary portable, but fixtures still use non-normative `expr` infix `contains`.
+- There are contract conflicts: global expression docs say conditional fields use `expr`, while branch and collector tables still describe some guard fields as Go templates.
+- Capture paths are not Go-style but are underspecified (`json.items[0].metadata.name`, `json.items | length`, `stdout.incident.id`), creating cross-runtime parity risk.
+
+**Portability red line:** authored runbook semantics must be rejected or normalized at parse/plan time before `RunHandle.Next`; runtime adapters must not paper over evaluator drift.
+
+---
+
 ### 2026-06-03 — Declaration/Consent Scenario Gap Analysis
 
 **Deliverable produced:** `.squad/decisions/inbox/don-declaration-runtime-gaps.md`

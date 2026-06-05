@@ -1,11 +1,196 @@
 ﻿# Squad Decisions
 
-**Last Updated:** 2026-06-04T20:14:36-07:00
+**Last Updated:** 2026-06-05T08:07:31.8271575-07:00
 **Inbox Merged:** 7 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; user directive)
 
 ---
 
 ## Phase 1 Active Decisions
+### 2026-06-05T07:28:56-07:00: GIS Optional-Chaining (`?.`) — Ratified
+**By:** ormasoftchile (via Copilot)
+**Status:** Approved — implementation cleared
+**Proposal:** `design/gert/proposals/gis-optional-chaining.md`
+
+## Ratified Decisions
+
+| # | Decision | Value |
+|---|----------|-------|
+| Default value for missing optional path | **Empty string `""`** |
+| Short-circuit semantics | **JS/TS-compatible full-tail** — once any `?.` segment misses, entire remaining chain → `""` |
+| Scope | **GIS `${...}` only** — does NOT extend to GXL boolean expressions or GCP captures |
+| `?.[N]` optional bracket indexing | **IN** — consistency with field-access tolerance; avoids partial-tolerance footgun |
+| `??` nullish-coalescing | **OUT** (deferred) — `vars:` and `capture.default:` already cover the use case |
+| Existing fixture migration | **None** — opt-in only, no auto-addition of `?.` |
+| Hard-error default unchanged | **Confirmed** — plain `${a.b.c}` still raises `GIS-PATH-MISSING` on any miss |
+| `${?.root}` (optional on root identifier) | **Illegal** — root is always mandatory; would mask variable-name typos |
+| Audit trace on optional miss | **Defer to runtime design phase** — semantic locked here, tracing is implementation |
+| Stdlib call propagation | **No propagation** — GDP resolves first; functions receive `""` if chain short-circuits |
+
+## What's Missing (Not in This Decision)
+- The semantics of `?.` inside GXL expressions (out of scope here; revisit when type system warrants)
+- Nullish-coalescing `??` (deferred — not in this extension)
+- JSONL audit-trace event format (separate concern; addressed in runtime design phase)
+- Schema-driven warnings when `?.` is used on known-required paths (future enhancement; non-blocking)
+
+## Next Actions
+- **Edith** → edit `design/gert/grammar/gis.ebnf` and append a normative section to `design/gert/sections/03b-interpolation-syntax.tex`
+- **Tess** → create `design/gert/conformance/tv-gis-path.yaml` with the 13 vectors enumerated in proposal §6
+
+
+# Decision: GIS Optional-Chaining Extension
+
+**Author:** Barbara — Lead / Architect  
+**Date:** 2026-06-05T07:28:56-07:00  
+**Status:** PROPOSED — awaiting ormasoftchile review  
+**Proposal:** `design/gert/proposals/gis-optional-chaining.md`
+
+---
+
+## Headline Picks
+
+| # | Decision | Value |
+|---|----------|-------|
+| 1 | Default value for missing optional path | **Empty string `""`** (locked by user directive) |
+| 2 | Short-circuit semantics | **Full-tail JS/TS-compatible** — once any `?.` segment misses, entire remaining chain → `""` |
+| 3 | Scope | **GIS `${...}` only** — does NOT extend to GXL boolean expressions or GCP captures |
+| 4 | `?.[N]` optional bracket indexing | **IN** (recommended) — consistency with field access tolerance |
+| 5 | `??` nullish-coalescing | **OUT** (deferred) — existing `vars:` and `capture.default:` mechanisms cover the use case |
+| 6 | Existing fixture migration | **None** — opt-in only, no auto-addition of `?.` |
+| 7 | Hard-error default unchanged | **Confirmed** — plain `${a.b.c}` still raises `GIS-PATH-MISSING` on any miss |
+
+## Rationale
+
+- Empty string as identity element in string concatenation composes cleanly and avoids "null" literal in user-facing text.
+- JS/TS semantics chosen because authors already know the rules — no new mental model needed.
+- GIS-only scope avoids type-theoretic complications in GXL boolean expressions (`""` in comparisons is ambiguous).
+- `?.[N]` inclusion prevents a "partial tolerance" footgun where field access is optional but array access isn't.
+
+## Open Questions (Need User Input)
+
+- **OQ-OC-1:** Confirm `?.[N]` is IN.
+- **OQ-OC-2:** Confirm `${?.root}` is illegal (root is always mandatory, but `${root?.field}` is legal).
+- **OQ-OC-3:** Should optional-miss emit an info-level audit trace? (Defer to runtime phase?)
+- **OQ-OC-4:** Confirm `?.` does NOT propagate through stdlib function calls (GDP resolves first, function receives `""`).
+
+## Impact
+
+- Grammar: additive change to `gxl.ebnf` GDP production (new `PathSegment` alternatives)
+- Spec: additive section in `03b-interpolation-syntax.tex`
+- Conformance: new `tv-gis-path.yaml` file (13+ vectors proposed)
+- Runtime: parser + evaluator changes in both Go and C# implementations
+- No breaking changes to existing behavior
+
+---
+
+*Pending ratification. Implementation blocked until user confirms open questions.*
+
+
+# 2026-06-05T07:28:56.273-07:00 — GIS Optional-Chaining EBNF Applied
+
+**By:** Barbara — Lead / Architect  
+**Status:** Applied  
+**Scope:** `design/gert/grammar/gis.ebnf` only
+
+## Exact Lines / Productions Changed
+
+- `design/gert/grammar/gis.ebnf:106-142` — updated `GISExpression = Expression ;` commentary to identify the GIS-only GDP extension, add optional-chain examples, and add explicit rejected forms including `${?.root}`.
+- `design/gert/grammar/gis.ebnf:145-187` — added GIS-only optional-chaining GDP extension:
+  - `GDP = IDENT { GISPathSegment } ;`
+  - `GISPathSegment = DotAccess | OptionalDotAccess | BracketAccess | OptionalBracketAccess ;`
+  - `DotAccess = DOT IDENT ;`
+  - `OptionalDotAccess = OPTIONAL_DOT IDENT ;`
+  - `BracketAccess = LBRACKET INTEGER RBRACKET ;`
+  - `OptionalBracketAccess = OPTIONAL_BRACKET_OPEN INTEGER RBRACKET ;`
+  - `OPTIONAL_DOT = '?.' ;`
+  - `OPTIONAL_BRACKET_OPEN = '?.[' ;`
+- `design/gert/grammar/gis.ebnf:285-297` — changed §4.3 from unconditional unresolved-variable hard errors to hard-by-default with explicit optional-chain miss handling.
+
+## Tokenization / Precedence Subtleties Encoded
+
+- `?.[` is longest-match and is emitted as `OPTIONAL_BRACKET_OPEN` before `OPTIONAL_DOT` is considered.
+- `?.` is emitted as one token (`OPTIONAL_DOT`), never as `?` followed by `DOT`; standalone `?` remains invalid in GDP paths.
+- `.`, `?.`, `[N]`, and `?.[N]` have identical path-segment precedence and are evaluated left-to-right under `Primary` GDP resolution.
+- The first GDP segment remains `IDENT`; `${?.root}` is syntactically illegal so optionality cannot hide root variable-name typos.
+
+## Proposal / Existing Grammar Style Reconciliation
+
+- The proposal described an additive GDP change against `gxl.ebnf`, but the ratified scope is GIS-only and this task explicitly forbade editing GXL/GCP grammar. I reconciled that by documenting a GIS-only override of the imported `GDP` production inside `gis.ebnf` rather than changing `gxl.ebnf`.
+- The existing GIS grammar imported full GXL by reference instead of repeating GXL productions. I preserved that style for `Expression` and added only the local GDP delta plus explanatory comments.
+- The proposal examples contain tension around whether `user?.name` masks a missing root; the ratification explicitly says the root identifier is mandatory. The grammar therefore keeps `GDP = IDENT ...` and rejects `${?.root}`.
+
+# Edith — GIS Optional-Chaining Spec Summary
+
+**Date:** 2026-06-05T07:28:56.273-07:00  
+**Requested by:** ormasoftchile  
+**Status:** Delivered
+
+## Section Added
+
+- Appended `Optional Path Chaining` to `design/gert/sections/03b-interpolation-syntax.tex` after `Error Class Catalog`; it will render as the next numbered section in the GIS chapter.
+- Subsections added: Syntax; Evaluation Semantics; Composition with GXL Expressions; Relationship to `capture.default:`; Examples; Out of Scope.
+
+## Labels Created
+
+- `sec:gis:optional-chaining`
+- `subsec:gis:optional-chaining:syntax`
+- `subsec:gis:optional-chaining:semantics`
+- `subsec:gis:optional-chaining:composition`
+- `subsec:gis:optional-chaining:capture-default`
+- `subsec:gis:optional-chaining:examples`
+- `subsec:gis:optional-chaining:out-of-scope`
+
+## Cross-Reference Needs Flagged
+
+- Tess can cite `subsec:gis:optional-chaining:semantics` for short-circuit/default behavior and `subsec:gis:optional-chaining:syntax` for `?.` / `?.[N]` parse vectors.
+- A glossary term for `optional path chaining` may be useful if the terminology glossary is later centralized.
+- The ratified decision is currently cited from `.squad/decisions/inbox/copilot-gis-optional-chaining-ratified.md`; Scribe should merge it into `.squad/decisions.md` so the decision-ledger citation resolves to the permanent ledger.
+
+## Normative-Wording Subtleties
+
+- `${?.root}` is syntactically illegal because GDP still begins with `IDENT`; `${root?.field}` remains legal.
+- A missing root identifier can still resolve to `""` when the first hop is optional, e.g. `${user?.name}`; plain `${user.name}` remains a hard error.
+- `?.` does not propagate through stdlib calls: `${str.toLower(user?.name)}` calls `str.toLower("")` if the optional GDP resolves to empty string.
+- `capture.default:` is described as a capture-layer mechanism, not a GIS rendering-layer substitute.
+
+
+# Tess — GIS Optional-Chaining Path Vectors
+
+**Date:** 2026-06-05T07:28:56.273-07:00  
+**Author:** Tess — Conformance Tester  
+**Requested by:** ormasoftchile
+
+## Summary
+
+Created `design/gert/conformance/tv-gis-path.yaml` for the ratified GIS optional-chaining contract.
+
+## Vector ID Range
+
+- `TV-GIS-PATH-001` .. `TV-GIS-PATH-015`
+
+## Coverage
+
+- `TV-GIS-PATH-001` .. `TV-GIS-PATH-014` encode the ratified optional-chaining runtime cases:
+  - simple miss
+  - deep miss
+  - full-tail short-circuit
+  - mixed mandatory/optional paths, including mandatory-prefix hard error
+  - null vs empty string vs false vs zero vs empty array
+  - optional bracket indexing success, out-of-bounds, and missing collection
+  - stdlib composition / no propagation through function calls
+- `TV-GIS-PATH-015` encodes `${?.root}` rejection.
+
+## Cases Beyond the Enumerated Runtime Set
+
+- Added `TV-GIS-PATH-015` for `${?.root}` parse rejection because `gis.ebnf §2.4` explicitly rejects optional root syntax and no separate `TV-GIS-PARSE` file exists yet.
+- Split the mixed-path bullet into two vectors (`TV-GIS-PATH-004` and `TV-GIS-PATH-005`) because hard-error mandatory-prefix behavior and optional-tail short-circuit behavior are distinct contracts.
+
+## Encoding Notes
+
+- Kept the parse-error case inline in `tv-gis-path.yaml`; it should move to a future `tv-gis-parse.yaml` if/when that file is created.
+- No runtime case was blocked.
+- Updated `design/gert/conformance/schema.json` so GIS path errors can express the grammar catalog code `GIS-PATH-MISSING`.
+
+
 ### 2026-06-04T20:14:36.949-07:00: Stream E  Removal Completed (Don, Backend Dev)
 
 **By:** ormasoftchile (via Copilot)

@@ -69,6 +69,35 @@ Don is the runtime/tooling engineer. Work spans fixture normalization (Stream D)
 - OQ-4: Sequence counter strategy
 - OQ-5: RE2 named group syntax difference ((?P<name>...) vs. C# (?<name>...))
 
+## GIS Optional-Chaining (`?.`) — Phase 2 Ready (2026-06-05T07:28:56.273-07:00)
+
+**Status: Spec & Conformance Locked** — Runtime implementation ready to begin
+
+The GIS optional-chaining extension (`?.` and `?.[N]`) has been ratified and all normative specification, grammar, and conformance vectors are committed:
+- **Grammar:** `design/gert/grammar/gis.ebnf` (lines 106-187, 285-297) — new GDP productions for optional-dot and optional-bracket
+- **Spec:** `design/gert/sections/03b-interpolation-syntax.tex` — normative "Optional Path Chaining" section with semantics and examples
+- **Conformance:** `design/gert/conformance/tv-gis-path.yaml` (15 test vectors TV-GIS-PATH-001..015)
+
+### Key Design Decisions (Locked)
+| Decision | Value |
+|----------|-------|
+| Default missing value | **`""` (empty string)** |
+| Short-circuit semantics | **JS/TS-compatible full-tail** — once any `?.` segment misses, entire remaining chain → `""` |
+| Scope | **GIS `${...}` only** — no extension to GXL or GCP |
+| `?.[N]` optional bracket indexing | **IN** — consistency with field-access tolerance |
+| `${?.root}` optional root | **Illegal** — root identifier always mandatory |
+| No propagation through stdlib calls | **Confirmed** — GDP resolves first; functions receive `""` if chain short-circuits |
+
+### Implementation Scope (Go + C# runtimes)
+1. **Lexer/Parser:** Recognize `?.` and `?.[` tokens; update GDP production rules
+2. **Evaluator:** Implement short-circuit logic — on first missing optional hop, assign `""` to entire expression
+3. **Error handling:** `${a.b.c}` still raises `GIS-PATH-MISSING` on miss (no `?.`); optional paths return `""` instead
+4. **Conformance:** All 15 vectors in `tv-gis-path.yaml` must pass
+
+### Phase 2 Dependency
+- This is independent of other Phase 2 work; can be implemented in parallel with template/approval/adapter work.
+
 ## Learnings
 - 2026-06-04T20:14:36.949-07:00 - Stream E was reversed cleanly after Day 2 shipped: no production runbooks means no migration target, and a migrator would imply a legacy mode GERT does not have.
 - 2026-06-04T20:14:36.949-07:00 - Dogfooding a tool against the source-of-truth corpus remains a valuable regression pattern; the specific migrator skill was removed, but future agents can re-derive the pattern when a real tool surface exists.
+- 2026-06-05T07:28:56.273-07:00 - Ratification meetings lock complex cross-language decisions efficiently when open questions are pre-identified. `?.` coverage across both runtimes can now proceed in parallel without alignment risk.

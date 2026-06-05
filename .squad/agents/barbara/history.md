@@ -38,3 +38,16 @@ Barbara is the spec editor and architecture specialist for the GERT web platform
 
 ## Session: 2026-06-04T02:50:37Z
 Consolidated 8 inbox items. Ratified IUserInputGate (Choice/Text/Confirmation/FileUpload/Form), A6 architecture, campaign layer, white-label portal UX.
+
+## 2026-06-04T20:14:36-07:00 — Stream E Removed (Scribe notification)
+
+**Status Update:** User directive executed. Stream E (migrator tooling) removed entirely per scope decision. Rationale: GERT has no production runbooks, so migration solves a non-problem.
+
+**Impact on Phase 1 Plan:**
+- Stream E is completely removed from the plan
+- Phase 1 closes with Streams A/B/C/D/F only
+- C# runtime can begin once spec is frozen (no migration dependency)
+
+**Cleanup Note:** Grammar files (gis.ebnf, gcp.ebnf) retained migration-tool comments as "do-not-touch" per directive. Team should decide whether to remove these in a grammar-owned follow-up.
+
+**Decisions:** Merged to `.squad/decisions.md` (timestamp 2026-06-04T20:14:36-07:00)

@@ -1,11 +1,77 @@
-# Squad Decisions
+﻿# Squad Decisions
 
-**Last Updated:** 2026-06-05T00:14:04-04:00  
-**Inbox Merged:** 5 files (edith, tess, barbara streams B/C/F; OI ratification)
+**Last Updated:** 2026-06-04T20:14:36-07:00
+**Inbox Merged:** 7 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; user directive)
 
 ---
 
 ## Phase 1 Active Decisions
+### 2026-06-04T20:14:36.949-07:00: Stream E  Removal Completed (Don, Backend Dev)
+
+**By:** ormasoftchile (via Copilot)
+**Status:** Completed  migrator tooling and dependencies removed per directive.
+
+## Deleted
+- cmd/gert/cmd/migrateexpr.go
+- cmd/gert/cmd/root.go
+- cmd/gert/cmd/ (became empty)
+- internal/migrateexpr/translate.go, traverse.go, translate_test.go, traverse_test.go
+- internal/migrateexpr/testdata/ (expr_rules_input.yaml, gis_interp_input.yaml, misc_rules_input.yaml)
+- .squad/skills/migrator-dogfood-regression/SKILL.md
+
+## Kept
+- Stream A grammar files (design/gert/grammar/*.ebnf)  not edited per directive
+- Conformance vectors (design/gert/conformance/)  not edited
+- Stream D fixtures (design/gert/testdata/runbooks/)  not touched
+- now() stdlib addition  remains intact
+- GXL/GIS/GCP spec content, coverage matrix, parse-time enforcement, open questions
+
+## Dependencies
+- Dropped github.com/spf13/cobra (CLI shell and migrator only)
+- Dropped gopkg.in/yaml.v3 (docs/history mentions only, no Go imports)
+- Dropped transitive mousetrap and pflag entries
+- Simplified cmd/gert/main.go to minimal entry point
+
+## Spec Changes
+- Removed design/gert/expression-language-proposal.md 5 Migration Plan
+- Removed Appendix A migration examples and renumbered precedence appendix
+- Reworded structured-data subsection (no migration target implications)
+- Removed migration-note sections from 03a/03b/03c/03d .tex files
+- Replaced migration language with upgrade/change/rollout terminology
+
+## Verification
+- No migrateexpr/migrate-expr references in Go source
+- No migration wording in .tex files or proposal
+- cobra and yaml.v3 no longer referenced by Go source
+
+## Follow-ups
+- Grammar comments: Stream E migration comments remain in gis.ebnf and gcp.ebnf (do-not-touch per directive). Defer cleanup to Barbara/Edith.
+- Dogfood pattern: remains useful with real tool surface. Removed migrator-specific skill.
+
+---
+### 2026-06-04T20:14:36-07:00: User directive — No migrator
+**By:** ormasoftchile (via Copilot)
+**What:** Remove the `gert migrate-expr` tool entirely. GERT has no production runbooks in the wild, so there is no legacy expr/template syntax to migrate FROM. The migrator is solving a non-problem and adds maintenance + a contract surface that future runtimes would otherwise have to reason about.
+**Why:** User scope decision. Stream D already converted the fixture corpus by hand once; future authoring is GXL/GIS/GCP from day one. A migration tool implies a "legacy mode" exists — it does not.
+**Scope to remove:**
+- `cmd/gert/cmd/migrateexpr.go` and the cobra command registration in `cmd/gert/cmd/root.go`
+- `internal/migrateexpr/` (all files including translate.go, traverse.go, tests, testdata)
+- `.squad/skills/migrator-dogfood-regression/` (skill specific to the migrator)
+- Migration plan sections in `design/gert/expression-language-proposal.md` (§5 Migration Plan, Appendix A "Before/After" migration examples) — keep grammar/coverage/parse-time enforcement sections.
+- If cobra/yaml.v3 dependencies in go.mod were ONLY for the migrator, remove them.
+**Scope to keep:**
+- All Stream A grammar files (gxl.ebnf, gis.ebnf, gcp.ebnf)
+- All Stream B/C/F spec sections (03a/03b/03c/03d)
+- All conformance vectors (tv-gxl-eval.yaml, tv-gxl-parse.yaml, tv-gxl-path.yaml) — these are runtime parity tests, not migrator tests
+- All Stream D-migrated fixtures (`design/gert/testdata/runbooks/`) — they ARE the source-of-truth corpus now
+- The `now()` stdlib addition
+**Phase 1 plan impact:**
+- Stream E (migrator) is REMOVED from the plan entirely
+- Phase 1 Day 3 was going to be Stream E completion; instead, Phase 1 closes with whatever remains in Streams A/B/C/D/F
+- C# runtime can begin once spec is frozen (no migration dependency)
+
+
+---
 
 ### 2026-06-05T00:14:04-04:00: User directive — GXL Stream A open issue ratifications
 

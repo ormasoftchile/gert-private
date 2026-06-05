@@ -129,3 +129,13 @@
 ## Integrated to Main (2026-06-05T00:27:12-04:00)
 
 ✅ **Day 2 memo merged to `.squad/decisions.md`** under section "GXL Phase 1 Day 2 — GIS/GCP Specs, Eval+Path Vectors, Conflict Arbitration". All deliverables, ratifications, discrepancies, and follow-ups captured. PJVM canonical home established at `03b §sec:gis:portable-json` per Stream B Day 2 memo.
+
+## 2026-06-04T20:14:36-07:00 — Stream E Removed (Scribe notification)
+
+**Action Item:** §5 Migration Plan (design/gert/expression-language-proposal.md) has been removed per user directive. Appendix A migration examples also removed and precedence appendix renumbered.
+
+**Spec Sections Affected:**
+- No changes to 03a/03b/03c/03d content — migration references/language removed, but semantics intact
+- All GXL/GIS/GCP spec sections remain authoritative
+
+**Decision:** Merged to `.squad/decisions.md` (timestamp 2026-06-04T20:14:36-07:00)

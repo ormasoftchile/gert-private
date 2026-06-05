@@ -145,3 +145,11 @@ The keyword-prefix identifier pattern (`andthing`, `ornot`, `trueish`, `nullPtr`
 ## Integrated to Main (2026-06-05T00:27:12-04:00)
 
 ✅ **Day 2 memo merged to `.squad/decisions.md`** under section "GXL Phase 1 Day 2 — GIS/GCP Specs, Eval+Path Vectors, Conflict Arbitration". Corpus now 205 vectors (past ≥200 target). Four TESS-AMBIG items (3, 4, 5, 6) flagged as open arbitrations; 4 vectors remain TBD pending Barbara decision. Phase 1 status: 03a/03b/03c/03d all complete; Stream D unblocked.
+
+## 2026-06-04T20:14:36-07:00 — Stream E Removed (Scribe notification)
+
+**Conformance Scope Reduced:** The migration-tool conformance vectors (dogfood-regression skill) have been removed. No action needed — your 205-vector corpus for GXL/GIS/GCP evaluation and path testing remains the authoritative conformance set.
+
+**Coverage:** Your corpus covers the runtime contracts for Streams A/B/C/D/F. Phase 2 runtimes (Go, C#, and future) will be validated against this body of work, not a migration tool.
+
+**Decision:** Merged to `.squad/decisions.md` (timestamp 2026-06-04T20:14:36-07:00)

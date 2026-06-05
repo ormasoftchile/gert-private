@@ -44,7 +44,7 @@ flow:
       title: Capture deployment environment
       command: echo
       args:
-        - "{{ .environment }}"
+        - "${environment}"
       capture:
         # Store the echoed value as 'environment' variable for downstream steps
         environment: stdout
@@ -116,7 +116,7 @@ flow:
       title: Deployment complete
       command: echo
       args:
-        - "Deployment to {{ .environment }} complete"
+        - "Deployment to ${environment} complete"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

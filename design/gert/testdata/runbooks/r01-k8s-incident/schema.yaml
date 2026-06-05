@@ -57,12 +57,12 @@ governance:
 
 flow:
   # Step 1: Detect Alert
-  # INTENT: Pause execution until Prometheus fires an alert webhook for pod {{ .pod_name }}.
+  # INTENT: Pause execution until Prometheus fires an alert webhook for pod ${pod_name}.
   # Previously: type: extension (incorrect)
   - step:
       id: detect_alert
       type: wait_for_event
-      title: "Wait for Prometheus alert webhook for pod {{ .pod_name }}"
+      title: "Wait for Prometheus alert webhook for pod ${pod_name}"
       event:
         source: webhook
         id: prometheus.alert.firing
@@ -89,14 +89,14 @@ flow:
             - step:
                 id: get_pod_json
                 type: cli
-                title: "Get pod JSON: {{ .pod_name }}"
+                title: "Get pod JSON: ${pod_name}"
                 command: kubectl
                 args:
                   - get
                   - pod
-                  - "{{ .pod_name }}"
+                  - "${pod_name}"
                   - "-n"
-                  - "{{ .namespace }}"
+                  - "${namespace}"
                   - "-o"
                   - json
                 capture:
@@ -109,14 +109,14 @@ flow:
             - step:
                 id: describe_pod
                 type: cli
-                title: "Describe pod: {{ .pod_name }}"
+                title: "Describe pod: ${pod_name}"
                 command: kubectl
                 args:
                   - describe
                   - pod
-                  - "{{ .pod_name }}"
+                  - "${pod_name}"
                   - "-n"
-                  - "{{ .namespace }}"
+                  - "${namespace}"
                 capture:
                   pod_describe: stdout
                 contract:
@@ -127,13 +127,13 @@ flow:
             - step:
                 id: get_logs
                 type: cli
-                title: "Get logs: {{ .pod_name }}"
+                title: "Get logs: ${pod_name}"
                 command: kubectl
                 args:
                   - logs
-                  - "{{ .pod_name }}"
+                  - "${pod_name}"
                   - "-n"
-                  - "{{ .namespace }}"
+                  - "${namespace}"
                   - "--tail=100"
                 capture:
                   pod_logs: stdout
@@ -149,7 +149,7 @@ flow:
       type: branch
       title: Analyze pod failure mode
       branches:
-        - condition: 'pod_json contains "CrashLoopBackOff" || pod_json contains "ImagePullBackOff"'
+        - condition: 'str.contains(pod_json, "CrashLoopBackOff") or str.contains(pod_json, "ImagePullBackOff")'
           label: Config Issue
           steps:
             # Branch: Fix Config (Steps 4a-4d)
@@ -163,7 +163,7 @@ flow:
                   - "--oneline"
                   - "--since=1 hour ago"
                   - "--"
-                  - "k8s/{{ .namespace }}/{{ .pod_name }}.yaml"
+                  - "k8s/${namespace}/${pod_name}.yaml"
                 capture:
                   recent_changes: stdout
 
@@ -172,9 +172,9 @@ flow:
                 type: collector
                 title: "Approve pod restart with config rollback"
                 prompt: |
-                  Pod {{ .pod_name }} is in CrashLoopBackOff or ImagePullBackOff.
+                  Pod ${pod_name} is in CrashLoopBackOff or ImagePullBackOff.
                   Recent config changes:
-                  {{ .recent_changes }}
+                  ${recent_changes}
                   
                   Approve restarting with previous config?
                 fields:
@@ -198,7 +198,7 @@ flow:
                 args:
                   - apply
                   - "-f"
-                  - "k8s/{{ .namespace }}/{{ .pod_name }}.yaml.previous"
+                  - "k8s/${namespace}/${pod_name}.yaml.previous"
                 contract:
                   effects: ["k8s.write"]
 
@@ -210,16 +210,16 @@ flow:
                 args:
                   - wait
                   - "--for=condition=Ready"
-                  - "pod/{{ .pod_name }}"
+                  - "pod/${pod_name}"
                   - "-n"
-                  - "{{ .namespace }}"
+                  - "${namespace}"
                   - "--timeout=120s"
                 retry:
                   max: 3
                   interval: 10s
                   backoff: linear
 
-        - condition: 'pod_json contains "OOMKilled"'
+        - condition: 'str.contains(pod_json, "OOMKilled")'
           label: Resource Limit Issue
           steps:
             # Branch: Scale Resources (Steps 5a-5c)
@@ -228,8 +228,8 @@ flow:
                 type: collector
                 title: Approve memory limit increase
                 prompt: |
-                  Pod {{ .pod_name }} was OOMKilled.
-                  Current limits: {{ .pod_json }}
+                  Pod ${pod_name} was OOMKilled.
+                  Current limits: ${pod_json}
                   
                   Approve doubling memory limit?
                 fields:
@@ -253,9 +253,9 @@ flow:
                 args:
                   - patch
                   - deployment
-                  - "{{ .pod_name }}"
+                  - "${pod_name}"
                   - "-n"
-                  - "{{ .namespace }}"
+                  - "${namespace}"
                   - "--patch"
                   - '{"spec":{"template":{"spec":{"containers":[{"name":"main","resources":{"limits":{"memory":"2Gi"}}}]}}}}'
                 contract:
@@ -271,16 +271,16 @@ flow:
                   - "--for=condition=Ready"
                   - "pod"
                   - "-l"
-                  - "app={{ .pod_name }}"
+                  - "app=${pod_name}"
                   - "-n"
-                  - "{{ .namespace }}"
+                  - "${namespace}"
                   - "--timeout=120s"
                 retry:
                   max: 3
                   interval: 10s
                   backoff: linear
 
-        - condition: 'pod_json contains "NodeNotReady"'
+        - condition: 'str.contains(pod_json, "NodeNotReady")'
           label: Node Health Issue
           steps:
             # Branch: Check Node Health (Steps 6a-6c)
@@ -290,7 +290,7 @@ flow:
                 title: Check node health
                 command: ssh
                 args:
-                  - "{{ .node_name }}"
+                  - "${node_name}"
                   - "uptime && df -h && free -m"
                 capture:
                   node_health: stdout
@@ -301,7 +301,7 @@ flow:
                 title: Collect node kubelet logs
                 command: ssh
                 args:
-                  - "{{ .node_name }}"
+                  - "${node_name}"
                   - "journalctl -u kubelet --since '10 minutes ago'"
                 capture:
                   node_logs: stdout
@@ -311,9 +311,9 @@ flow:
                 type: collector
                 title: Escalate to infrastructure team
                 prompt: |
-                  Node {{ .node_name }} is unhealthy.
-                  Health check: {{ .node_health }}
-                  Logs: {{ .node_logs }}
+                  Node ${node_name} is unhealthy.
+                  Health check: ${node_health}
+                  Logs: ${node_logs}
                 fields:
                   - name: escalation_notes
                     type: multiline
@@ -339,8 +339,8 @@ flow:
                   action: trigger-alert
                   args:
                     severity: high
-                    title: "Pod {{ .pod_name }} unhealthy - unknown cause"
-                    details: "{{ .pod_describe }}"
+                    title: "Pod ${pod_name} unhealthy - unknown cause"
+                    details: "${pod_describe}"
                 capture:
                   incident_id: json.incident_id
                 contract:
@@ -352,7 +352,7 @@ flow:
                 type: collector
                 title: Wait for on-call acknowledgment
                 prompt: |
-                  PagerDuty incident {{ .incident_id }} created.
+                  PagerDuty incident ${incident_id} created.
                   Acknowledge to proceed with investigation.
                 fields:
                   - name: acknowledged
@@ -374,7 +374,7 @@ flow:
       command: tar
       args:
         - czf
-        - "/evidence/{{ .alert_id }}-{{ .pod_name }}.tar.gz"
+        - "/evidence/${alert_id}-${pod_name}.tar.gz"
         - "-C"
         - "/tmp"
         - "pod_diagnostics"
@@ -390,8 +390,8 @@ flow:
       args:
         - s3
         - cp
-        - "{{ .evidence_path }}"
-        - "s3://incidents/{{ .timestamp }}-{{ .pod_name }}.tar.gz"
+        - "${evidence_path}"
+        - "s3://incidents/${timestamp}-${pod_name}.tar.gz"
 
   # Step 10: Close Alert
   - step:
@@ -402,7 +402,7 @@ flow:
         name: alertmanager-notify
         action: resolve-alert
         args:
-          alert_id: "{{ .alert_id }}"
+          alert_id: "${alert_id}"
       contract:
         effects: [alertmanager.write]
         reads: [alert_id]
@@ -416,7 +416,7 @@ flow:
         action: send-message
         args:
           channel: "#incidents"
-          message: "Incident resolved for pod {{ .pod_name }}"
+          message: "Incident resolved for pod ${pod_name}"
       contract:
         effects: [slack.write]
         reads: [pod_name]

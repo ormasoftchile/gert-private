@@ -60,7 +60,7 @@ flow:
                 type: cli
                 title: Deploy to development
                 command: echo
-                args: ["Deploying {{ .version }} to DEVELOPMENT"]
+                args: ["Deploying ${version} to DEVELOPMENT"]
                 capture:
                   deploy_result: stdout
 
@@ -79,7 +79,7 @@ flow:
                 type: cli
                 title: Deploy to staging
                 command: echo
-                args: ["Deploying {{ .version }} to STAGING"]
+                args: ["Deploying ${version} to STAGING"]
                 capture:
                   deploy_result: stdout
 
@@ -95,7 +95,7 @@ flow:
                 type: collector
                 title: Staging verification approval
                 prompt: |
-                  Staging deployment complete for {{ .version }}.
+                  Staging deployment complete for ${version}.
                   Verify the deployment before proceeding.
                 fields:
                   - name: staging_verified
@@ -111,7 +111,7 @@ flow:
                 type: collector
                 title: Production deployment approval
                 prompt: |
-                  Ready to deploy {{ .version }} to PRODUCTION.
+                  Ready to deploy ${version} to PRODUCTION.
                   This is a critical operation. Approve to proceed.
                 fields:
                   - name: prod_approved
@@ -130,7 +130,7 @@ flow:
                 title: Deploy to production
                 when: 'prod_approved'
                 command: echo
-                args: ["Deploying {{ .version }} to PRODUCTION"]
+                args: ["Deploying ${version} to PRODUCTION"]
                 capture:
                   deploy_result: stdout
 
@@ -140,7 +140,7 @@ flow:
                 title: Enable production monitoring
                 when: 'enable_monitoring'
                 command: echo
-                args: ["Enabling enhanced monitoring for {{ .version }}"]
+                args: ["Enabling enhanced monitoring for ${version}"]
 
   # Step 3: Send notifications
   - step:
@@ -149,7 +149,7 @@ flow:
       title: Send deployment notifications
       when: 'notification_emails != ""'
       command: echo
-      args: ["Sending notifications to: {{ .notification_emails }}"]
+      args: ["Sending notifications to: ${notification_emails}"]
 
   # Step 4: Complete
   - step:
@@ -157,4 +157,4 @@ flow:
       type: cli
       title: Deployment complete
       command: echo
-      args: ["Deployment to {{ .environment }} complete for version {{ .version }}"]
+      args: ["Deployment to ${environment} complete for version ${version}"]

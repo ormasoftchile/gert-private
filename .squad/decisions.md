@@ -162,8 +162,8 @@ Sections: Informative intro, reference to grammar, lexical structure, syntactic 
 | **A** | Reference Grammar | ✅ Complete (Barbara) |
 | **B** | Spec Rewrite (03a/03b/03c) | ✅ Complete (Edith) |
 | **C** | Conformance Corpus (205 vectors) | ✅ Complete (Tess) — target ≥200 HIT |
-| **D** | Fixture Migration | 🔄 Unblocked (awaits corpus) |
-| **E** | Migration Tooling | 🔄 Unblocked (awaits corpus) |
+| **D** | Fixture Migration | ✅ Complete (Don) — 21 fixtures migrated, 1 deferred on now() stdlib |
+| **E** | Migration Tooling | 🔄 Unblocked (awaits Stream D signoff) |
 | **F** | Parser Gate Spec (03d) | ✅ Complete (Barbara) |
 
 **Queued Follow-Ups (Stream B/C):**
@@ -173,6 +173,64 @@ Sections: Informative intro, reference to grammar, lexical structure, syntactic 
 3. **FU-B2-3:** `main.tex` wiring for 03a/03b/03c (deferred to Stream B integration).
 4. **FU-B2-4:** `decisions.md` OI-GCP-02 example amendment: change `http.body` to `json`.
 5. **Arbitration required:** TESS-AMBIG-3/4/5/6 vectors remain TBD until Barbara decision (4 vectors pending).
+
+---
+
+### 2026-06-05T18:30:00-04:00: Stream D — Fixture Migration Complete (Don, Backend Dev)
+
+**Status:** ✅ DELIVERED — 21 runbook fixtures migrated; 20 complete, 1 deferred ({{ now }} → GXL stdlib)
+
+**Day 1 (Audit):** Completed fixture migration audit. Found **388 total violations** across 21 runbooks requiring migration (r01–r11, r13–r22; r12 already clean):
+- 368× `{{ .var }}` template syntax
+- 6× `&&`/`||` boolean operators  
+- 9× `!` prefix negations
+- 3× infix `contains` (non-method)
+- 1× `$.` jq-style root
+- 1× template pipe `| func`
+
+**Day 2 (Migration & Resolution):** Completed all 21 runbook migrations with 100% compliance to GXL/GIS/GCP-canonical syntax:
+- **Batch 1:** r16, r18, r13, r21, r14, r11 (pure template → GIS substitution)
+- **Batch 2:** r17, r15, r19, r06, r09 (medium volume, no expression violations)
+- **Batch 3:** r22, r08, r05, r04 (high volume, pure substitution)
+- **Batch 4:** r02, r07, r10, r01, r03 (expression violations resolved: `&&`→`and`, `||`→`or`, `!`→`not`, infix `contains`→`str.contains()`)
+
+**Template Substitutions Applied:** ~368 replacements; `{{ .var }}`→`${var}` (GIS portable interpolation); `{{ .X.Y }}`→`${X.Y}` (GDP); `{{ .X[N] }}`→`${X[N]}` (array index).
+
+**Expression Normalizations Applied:**
+- All `&&`/`||` → `and`/`or` (GXL binary operators)
+- All `!var` → `not var` (GXL unary operator)
+- All infix `contains` → `str.contains(var, "str")` (stdlib method call)
+
+**Structural Migrations:**
+- r11: `over: "$.services"` → `over: services` (bare GDP identifier per GCP spec)
+- r20 (RISK-002 resolution by Germán): added `inputs.env: {type: string, default: "dev"}` + replaced `{{ .env | default "dev" }}` with `${env}`
+- r07 (RISK-005 noted): `${{ .amount }}` correctly becomes `$${amount}` (literal `$` + GIS interpolation block)
+
+**Exit Criteria Verification:**
+
+| Criterion | Target | Result |
+|-----------|--------|--------|
+| `{{ }}` occurrences in P1 (non-comment value lines) | 0 | ⚠️ 1 (deferred) |
+| `&&`/`||` in expression-position fields (P2) | 0 | ✅ 0 |
+| `!` prefix in `when:` fields (P3) | 0 | ✅ 0 |
+| Infix `contains` in expression-position (P4) | 0 | ✅ 0 |
+| `$.` jq-style in non-comment lines (P5) | 0 | ✅ 0 |
+
+**Deferred Item (DEFERRED-001):** `design/gert/testdata/runbooks/r04-soc2-evidence/schema.yaml:285` — line `completion_date: "{{ now }}"` deferred. `{{ now }}` is a Go Sprig template function (not a variable access). Unresolved at Day 2 checkpoint.
+
+**Decision Ratified:** **Add `now()` to GXL stdlib** (per Germán call). Returns UTC ISO-8601 string; spec to be defined by Barbara. This resolves DEFERRED-001 and unblocks r04 patch (Barbara handling grammar/spec/fixture update in parallel).
+
+**Stream D Status:** ✅ **COMPLETE (pending Barbara's now() + r04 patch).** All 21 runbooks passed exit criteria P2–P5 at zero; 20 fixtures fully delivered; r04 deferred on now() stdlib availability.
+
+**Tools & Extensions:** All 12 tool fixture files remain clean (untouched). Extension file (`hello-ext/gert-extension.yaml`) remains clean (untouched).
+
+**Notable Risk Resolutions:**
+- RISK-002 (r20 `env` semantics): Germán confirmed `env` is a runbook input with default "dev".
+- RISK-003 (r09 `!acknowledged`): 8× negation replacements applied to both `iterate:` blocks and step-level `when:` fields.
+- RISK-004 (r01 infix `contains`): Converted `pod_json contains "X"` → `str.contains(pod_json, "X")`.
+- RISK-005 (r07 `${{ .amount }}`): Documented as correct (literal dollar + interpolation) — no change needed.
+
+**Conformance Artifacts:** Exit-criteria lint script provided in Day 2 memo. Full migration audit memo (Day 1) + execution report (Day 2) stored in `.squad/decisions/inbox/` (to be merged into decisions.md post-approval).
 
 ---
 

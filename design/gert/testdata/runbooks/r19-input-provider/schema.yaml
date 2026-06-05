@@ -89,8 +89,8 @@ flow:
       type: cli
       title: Verify env provider resolved API key
       run: |
-        echo "API Key resolved: {{ .api_key }}"
-        if [ -z "{{ .api_key }}" ]; then
+        echo "API Key resolved: ${api_key}"
+        if [ -z "${api_key}" ]; then
           echo "ERROR: api_key was not resolved from env.GERT_TEST_API_KEY"
           exit 1
         fi
@@ -105,7 +105,7 @@ flow:
       type: cli
       title: Verify file provider resolved database host
       run: |
-        echo "Database host: {{ .database_host }}"
+        echo "Database host: ${database_host}"
         # Should be value from testdata/config.json or "localhost"
       contract:
         effects: []
@@ -118,7 +118,7 @@ flow:
       type: cli
       title: Verify workspace provider resolved default region
       run: |
-        echo "Default region: {{ .default_region }}"
+        echo "Default region: ${default_region}"
       contract:
         effects: []
         reads: [default_region]
@@ -130,7 +130,7 @@ flow:
       type: cli
       title: Greet operator using prompt-resolved name
       run: |
-        echo "Hello, {{ .operator_name }}! Welcome to r19."
+        echo "Hello, ${operator_name}! Welcome to r19."
         echo "You are running the Input Provider Framework test fixture."
       contract:
         effects: []
@@ -144,7 +144,7 @@ flow:
   #     type: collector
   #     title: Collect deployment details with dynamic options
   #     prompt: |
-  #       Provide deployment configuration for {{ .default_region }}
+  #       Provide deployment configuration for ${default_region}
   #     fields:
   #       - name: instance_type
   #         type: select
@@ -167,16 +167,16 @@ flow:
       title: Assert all inputs resolved successfully
       assert:
         - type: not-empty
-          subject: "{{ .api_key }}"
+          subject: "${api_key}"
           message: "api_key must be resolved from env provider"
         - type: not-empty
-          subject: "{{ .database_host }}"
+          subject: "${database_host}"
           message: "database_host must be resolved from file provider or default"
         - type: not-empty
-          subject: "{{ .default_region }}"
+          subject: "${default_region}"
           message: "default_region must be resolved from workspace or prompt"
         - type: not-empty
-          subject: "{{ .operator_name }}"
+          subject: "${operator_name}"
           message: "operator_name must be resolved from prompt or default"
 
   # Step 7: Completion

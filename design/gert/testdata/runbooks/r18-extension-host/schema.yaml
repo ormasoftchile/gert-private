@@ -32,7 +32,7 @@ flow:
         name: gert.hello
         action: greet
         args:
-          name: "{{ .greeting_name }}"
+          name: "${greeting_name}"
       capture:
         greeting_result: json.result
 
@@ -43,8 +43,8 @@ flow:
       title: Verify hello extension response
       assert:
         - type: contains
-          subject: "{{ .greeting_result }}"
-          expected: "{{ .greeting_name }}"
+          subject: "${greeting_result}"
+          expected: "${greeting_name}"
           message: "Greeting must contain the provided name"
 
   # Step 3: Completion

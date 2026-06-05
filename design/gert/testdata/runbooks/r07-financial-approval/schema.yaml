@@ -89,10 +89,10 @@ flow:
       title: Manager approval — justify business need
       prompt: |
         Purchase request for review:
-        - Item: {{ .item_description }}
-        - Vendor: {{ .vendor_name }}
-        - Amount: ${{ .amount }}
-        - Justification: {{ .business_justification }}
+        - Item: ${item_description}
+        - Vendor: ${vendor_name}
+        - Amount: $${amount}
+        - Justification: ${business_justification}
         
         Approve purchase as necessary for business?
       fields:
@@ -120,10 +120,10 @@ flow:
       title: Finance review — budget verification
       prompt: |
         Finance review for purchase:
-        - Item: {{ .item_description }}
-        - Amount: ${{ .amount }}
-        - Budget line: {{ .budget_line_item }}
-        - Manager approved: {{ .manager_approved }}
+        - Item: ${item_description}
+        - Amount: $${amount}
+        - Budget line: ${budget_line_item}
+        - Manager approved: ${manager_approved}
         
         Confirm budget availability and procurement policy compliance?
       fields:
@@ -158,7 +158,7 @@ flow:
       title: Route to appropriate approval tier
       branches:
         # NOTE: Numeric comparison expects amount to be a number.
-        - condition: 'amount > 50000 && amount < 100000'
+        - condition: 'amount > 50000 and amount < 100000'
           label: Director Approval (50k-100k)
           steps:
             # Step 5: Director Approval
@@ -169,8 +169,8 @@ flow:
                 title: Director approval
                 prompt: |
                   Purchase request for director review:
-                  - Item: {{ .item_description }}
-                  - Amount: ${{ .amount }}
+                  - Item: ${item_description}
+                  - Amount: $${amount}
                   
                   Approve this purchase?
                 fields:
@@ -186,7 +186,7 @@ flow:
                   on_timeout: escalate
                   escalate_to: [vp]
 
-        - condition: 'amount >= 100000 && amount < 500000'
+        - condition: 'amount >= 100000 and amount < 500000'
           label: VP Approval (100k-500k)
           steps:
             # Step 6: VP Approval
@@ -196,8 +196,8 @@ flow:
                 title: VP approval
                 prompt: |
                   Purchase for VP review:
-                  - Item: {{ .item_description }}
-                  - Amount: ${{ .amount }}
+                  - Item: ${item_description}
+                  - Amount: $${amount}
                   
                   Approve this purchase?
                 fields:
@@ -223,8 +223,8 @@ flow:
                 title: CFO approval
                 prompt: |
                   Large purchase for CFO review:
-                  - Item: {{ .item_description }}
-                  - Amount: ${{ .amount }}
+                  - Item: ${item_description}
+                  - Amount: $${amount}
                   
                   Approve this purchase?
                 fields:
@@ -248,9 +248,9 @@ flow:
                 when: 'amount >= 1000000'
                 prompt: |
                   Purchase requires board approval:
-                  - Item: {{ .item_description }}
-                  - Amount: ${{ .amount }}
-                  - Business justification: {{ .business_justification }}
+                  - Item: ${item_description}
+                  - Amount: $${amount}
+                  - Business justification: ${business_justification}
                   
                   Board quorum: 3 of 5 board members must approve.
                   Approve this capital expenditure?
@@ -276,10 +276,10 @@ flow:
         name: procurement-system
         action: create-po
         args:
-          vendor: "{{ .vendor_name }}"
-          item: "{{ .item_description }}"
-          amount: "{{ .amount }}"
-          delivery_date: "{{ .requested_delivery_date }}"
+          vendor: "${vendor_name}"
+          item: "${item_description}"
+          amount: "${amount}"
+          delivery_date: "${requested_delivery_date}"
       capture:
         po_number: json.po_number
 
@@ -289,7 +289,7 @@ flow:
       type: collector
       title: Upload signed contract and vendor quote
       prompt: |
-        Upload the signed contract and vendor quote for PO {{ .po_number }}.
+        Upload the signed contract and vendor quote for PO ${po_number}.
       fields:
         - name: signed_contract
           type: file
@@ -316,9 +316,9 @@ flow:
         name: finance-system
         action: record-transaction
         args:
-          po_number: "{{ .po_number }}"
-          amount: "{{ .amount }}"
-          budget_line: "{{ .budget_line_item }}"
+          po_number: "${po_number}"
+          amount: "${amount}"
+          budget_line: "${budget_line_item}"
       capture:
         transaction_id: json.transaction_id
 
@@ -331,9 +331,9 @@ flow:
         name: email-sender
         action: send
         args:
-          to: "{{ .requester_email }}"
-          subject: "Purchase Approved - PO {{ .po_number }}"
-          body: "Your purchase request has been approved. PO number: {{ .po_number }}. Expected delivery: {{ .requested_delivery_date }}"
+          to: "${requester_email}"
+          subject: "Purchase Approved - PO ${po_number}"
+          body: "Your purchase request has been approved. PO number: ${po_number}. Expected delivery: ${requested_delivery_date}"
 
   # Step 12: Close Approval Workflow
   - step:
@@ -345,7 +345,7 @@ flow:
         action: close
         args:
           status: approved
-          transaction_id: "{{ .transaction_id }}"
+          transaction_id: "${transaction_id}"
 
   - step:
       id: complete

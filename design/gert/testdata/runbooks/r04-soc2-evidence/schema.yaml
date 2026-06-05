@@ -44,10 +44,10 @@ flow:
       type: cli
       title: Initialize audit package directory
       run:
-        bash: "mkdir -p /audit/{{ .audit_id }} && echo '{}' > /audit/{{ .audit_id }}/manifest.json"
+        bash: "mkdir -p /audit/${audit_id} && echo '{}' > /audit/${audit_id}/manifest.json"
         pwsh: |
-          New-Item -ItemType Directory -Force -Path C:\audit\{{ .audit_id }} | Out-Null
-          Set-Content -Path C:\audit\{{ .audit_id }}\manifest.json -Value '{}'
+          New-Item -ItemType Directory -Force -Path C:\audit\${audit_id} | Out-Null
+          Set-Content -Path C:\audit\${audit_id}\manifest.json -Value '{}'
       capture:
         audit_dir: stdout
 
@@ -62,9 +62,9 @@ flow:
       include:
         runbook: soc2/cc1.1-access-reviews.yaml
         with:
-          audit_id: "{{ .audit_id }}"
-          period_start: "{{ .audit_period_start }}"
-          period_end: "{{ .audit_period_end }}"
+          audit_id: "${audit_id}"
+          period_start: "${audit_period_start}"
+          period_end: "${audit_period_end}"
       capture:
         cc1_1_evidence: outputs.evidence_path
 
@@ -75,8 +75,8 @@ flow:
       include:
         runbook: soc2/cc1.2-password-policy.yaml
         with:
-          audit_id: "{{ .audit_id }}"
-          period_start: "{{ .audit_period_start }}"
+          audit_id: "${audit_id}"
+          period_start: "${audit_period_start}"
       capture:
         cc1_2_evidence: outputs.evidence_path
 
@@ -117,8 +117,8 @@ flow:
       include:
         runbook: soc2/cc3.1-security-monitoring.yaml
         with:
-          audit_id: "{{ .audit_id }}"
-          period_start: "{{ .audit_period_start }}"
+          audit_id: "${audit_id}"
+          period_start: "${audit_period_start}"
       capture:
         cc3_1_evidence: outputs.evidence_path
 
@@ -129,8 +129,8 @@ flow:
       include:
         runbook: soc2/cc4.1-change-management.yaml
         with:
-          audit_id: "{{ .audit_id }}"
-          period_start: "{{ .audit_period_start }}"
+          audit_id: "${audit_id}"
+          period_start: "${audit_period_start}"
       capture:
         cc4_1_evidence: outputs.evidence_path
 
@@ -141,8 +141,8 @@ flow:
       include:
         runbook: soc2/cc5.1-incident-response.yaml
         with:
-          audit_id: "{{ .audit_id }}"
-          period_start: "{{ .audit_period_start }}"
+          audit_id: "${audit_id}"
+          period_start: "${audit_period_start}"
       capture:
         cc5_1_evidence: outputs.evidence_path
 
@@ -155,8 +155,8 @@ flow:
       include:
         runbook: soc2/cc6-access-controls-bundle.yaml
         with:
-          audit_id: "{{ .audit_id }}"
-          period_start: "{{ .audit_period_start }}"
+          audit_id: "${audit_id}"
+          period_start: "${audit_period_start}"
       capture:
         cc6_evidence: outputs.evidence_path
 
@@ -169,8 +169,8 @@ flow:
       args:
         - "-c"
         - |
-          tar czf /audit/audit-evidence-{{ .audit_id }}.tar.gz -C /audit/{{ .audit_id }} . &&
-          sha256sum /audit/audit-evidence-{{ .audit_id }}.tar.gz
+          tar czf /audit/audit-evidence-${audit_id}.tar.gz -C /audit/${audit_id} . &&
+          sha256sum /audit/audit-evidence-${audit_id}.tar.gz
       capture:
         evidence_archive: stdout
         evidence_hash: stdout
@@ -185,8 +185,8 @@ flow:
         action: generate-html
         args:
           template: soc2-audit-report
-          manifest: "/audit/{{ .audit_id }}/manifest.json"
-          audit_id: "{{ .audit_id }}"
+          manifest: "/audit/${audit_id}/manifest.json"
+          audit_id: "${audit_id}"
       capture:
         audit_report_path: json.report_path
 
@@ -198,8 +198,8 @@ flow:
       prompt: |
         Review the audit report and attest that evidence is complete and accurate.
         
-        Audit ID: {{ .audit_id }}
-        Evidence archive SHA256: {{ .evidence_hash }}
+        Audit ID: ${audit_id}
+        Evidence archive SHA256: ${evidence_hash}
       fields:
         - name: all_controls_evidenced
           type: boolean
@@ -252,8 +252,8 @@ flow:
       args:
         - s3
         - cp
-        - "/audit/audit-evidence-{{ .audit_id }}.tar.gz"
-        - "s3://compliance-evidence/{{ .audit_id }}/audit-evidence.tar.gz"
+        - "/audit/audit-evidence-${audit_id}.tar.gz"
+        - "s3://compliance-evidence/${audit_id}/audit-evidence.tar.gz"
         - "--sse"
         - "aws:kms"
       # GAP: object lock (WORM, 7-year retention) requires separate S3 API call not expressible here
@@ -268,8 +268,8 @@ flow:
         action: send
         args:
           to: "auditor@auditfirm.com"
-          subject: "SOC2 Audit Evidence - {{ .audit_id }}"
-          body: "Audit evidence package ready. SHA256: {{ .evidence_hash }}"
+          subject: "SOC2 Audit Evidence - ${audit_id}"
+          body: "Audit evidence package ready. SHA256: ${evidence_hash}"
           # GAP: presigned URL generation not natively supported; would require additional step
 
   # Step 15: Record Audit Completion
@@ -281,9 +281,9 @@ flow:
         name: compliance-tracker
         action: record-completion
         args:
-          audit_id: "{{ .audit_id }}"
+          audit_id: "${audit_id}"
           completion_date: "{{ now }}"
-          evidence_location: "s3://compliance-evidence/{{ .audit_id }}/"
+          evidence_location: "s3://compliance-evidence/${audit_id}/"
 
   - step:
       id: complete

@@ -41,19 +41,19 @@ flow:
       title: Pre-flight checks
       assert:
         - type: eq
-          subject: "{{ .migration_file_exists }}"
+          subject: "${migration_file_exists}"
           expected: "true"
           message: "Migration script must exist"
         - type: eq
-          subject: "{{ .staging_db_reachable }}"
+          subject: "${staging_db_reachable}"
           expected: "true"
           message: "Staging database must be reachable"
         - type: eq
-          subject: "{{ .prod_db_reachable }}"
+          subject: "${prod_db_reachable}"
           expected: "true"
           message: "Production database must be reachable"
         - type: eq
-          subject: "{{ .backup_recent }}"
+          subject: "${backup_recent}"
           expected: "true"
           message: "Backup must be completed within past 24h"
 
@@ -67,7 +67,7 @@ flow:
         - "-h"
         - "staging-db"
         - "-f"
-        - "{{ .migration_file }}"
+        - "${migration_file}"
       capture:
         dry_run_output: stdout
         dry_run_errors: stderr
@@ -106,13 +106,13 @@ flow:
       type: collector
       title: DBA approval for production migration
       prompt: |
-        Migration: {{ .migration_description }}
-        File: {{ .migration_file }}
+        Migration: ${migration_description}
+        File: ${migration_file}
         
-        Dry-run output: {{ .dry_run_output }}
-        Estimated duration: {{ .estimated_duration }}
+        Dry-run output: ${dry_run_output}
+        Estimated duration: ${estimated_duration}
         
-        ⚠️ This will acquire a table lock for ~{{ .estimated_duration }}
+        ⚠️ This will acquire a table lock for ~${estimated_duration}
         
         Approve production migration?
       fields:
@@ -163,7 +163,7 @@ flow:
       command: bash
       args:
         - "-c"
-        - "echo 'Waiting for maintenance window: {{ .maintenance_start }}'"
+        - "echo 'Waiting for maintenance window: ${maintenance_start}'"
       # GAP: actual sleep-until-datetime not expressible; runtime would need to implement this
 
   # Step 8: Take Pre-Migration Snapshot
@@ -232,7 +232,7 @@ flow:
         - "-h"
         - "prod-db"
         - "-f"
-        - "{{ .migration_file }}"
+        - "${migration_file}"
       timeout: 30m
       retry:
         max: 2
@@ -342,7 +342,7 @@ flow:
         - step:
             id: health_check_iteration
             type: cli
-            title: "Application health check (iteration {{ .iteration }}/30)"
+            title: "Application health check (iteration ${iteration}/30)"
             command: curl
             args:
               - "-f"
@@ -367,8 +367,8 @@ flow:
       title: DBA confirms migration stable
       prompt: |
         Migration results:
-        - Output: {{ .migration_output }}
-        - Validation: {{ .prod_validation }}
+        - Output: ${migration_output}
+        - Validation: ${prod_validation}
         - Health check: passing
         
         Confirm migration is stable?
@@ -404,7 +404,7 @@ flow:
         - "-h"
         - "prod-db"
         - "-c"
-        - "INSERT INTO schema_versions (migration_file, applied_at) VALUES ('{{ .migration_file }}', NOW());"
+        - "INSERT INTO schema_versions (migration_file, applied_at) VALUES ('${migration_file}', NOW());"
 
   # Step 17: Delete Pre-Migration Snapshot (conditional)
   - step:

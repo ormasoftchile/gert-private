@@ -24,7 +24,7 @@ flow:
         name: echo
         action: echo
         args:
-          message: "{{ .test_message }}"
+          message: "${test_message}"
       capture:
         echo_result: stdout
 
@@ -34,8 +34,8 @@ flow:
       title: Verify stdio echo output
       assert:
         - type: eq
-          subject: "{{ .echo_result }}"
-          expected: "{{ .test_message }}"
+          subject: "${echo_result}"
+          expected: "${test_message}"
           message: "Echo stdout must match input message"
 
   # Test 2: stdio-jsonrpc transport with jsonrpc-server
@@ -56,7 +56,7 @@ flow:
       title: Verify JSON-RPC ping response
       assert:
         - type: eq
-          subject: "{{ .jsonrpc_result }}"
+          subject: "${jsonrpc_result}"
           expected: "pong"
           message: "JSON-RPC ping must return pong"
 
@@ -80,7 +80,7 @@ flow:
       title: Verify JSON-RPC add result
       assert:
         - type: eq
-          subject: "{{ .add_result }}"
+          subject: "${add_result}"
           expected: "12"
           message: "JSON-RPC add must return correct sum"
 
@@ -102,7 +102,7 @@ flow:
       title: Verify MCP ping response
       assert:
         - type: eq
-          subject: "{{ .mcp_ping_result }}"
+          subject: "${mcp_ping_result}"
           expected: "pong"
           message: "MCP ping must return pong"
 
@@ -125,7 +125,7 @@ flow:
       title: Verify MCP lookup response
       assert:
         - type: contains
-          subject: "{{ .mcp_lookup_result }}"
+          subject: "${mcp_lookup_result}"
           expected: "test-id-123"
           message: "MCP lookup must return the requested ID"
 
@@ -149,7 +149,7 @@ flow:
       title: Verify builtin stub response
       assert:
         - type: eq
-          subject: "{{ .stub_result }}"
+          subject: "${stub_result}"
           expected: "ok"
           message: "Builtin stub must return status ok"
 

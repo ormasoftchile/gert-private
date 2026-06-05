@@ -43,7 +43,7 @@ flow:
       type: cli
       title: Deploy new version
       command: echo
-      args: ["Deploying version {{ .target_version }}"]
+      args: ["Deploying version ${target_version}"]
       capture:
         deploy_output: stdout
 
@@ -54,11 +54,11 @@ flow:
       title: Verify deployment output
       assert:
         - type: eq
-          subject: "{{ .deploy_output }}"
-          expected: "Deploying version {{ .target_version }}"
+          subject: "${deploy_output}"
+          expected: "Deploying version ${target_version}"
           message: "Deployment output must match expected message"
         - type: contains
-          subject: "{{ .deploy_output }}"
+          subject: "${deploy_output}"
           expected: "Deploying"
           message: "Output must contain 'Deploying'"
 
@@ -79,7 +79,7 @@ flow:
       title: Verify health check passed
       assert:
         - type: contains
-          subject: "{{ .health_status }}"
+          subject: "${health_status}"
           expected: "passed"
           message: "Health check must report as passed"
 

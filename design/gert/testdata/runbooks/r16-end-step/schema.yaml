@@ -20,7 +20,7 @@ flow:
       type: cli
       title: Initialize task
       command: echo
-      args: ["Initializing task: {{ .task_name }}"]
+      args: ["Initializing task: ${task_name}"]
       capture:
         init_output: stdout
 
@@ -30,7 +30,7 @@ flow:
       type: cli
       title: Execute task
       command: echo
-      args: ["Executing {{ .task_name }}"]
+      args: ["Executing ${task_name}"]
       capture:
         exec_output: stdout
 
@@ -40,7 +40,7 @@ flow:
       type: cli
       title: Verify task completion
       command: echo
-      args: ["Task {{ .task_name }} completed successfully"]
+      args: ["Task ${task_name} completed successfully"]
       capture:
         verify_output: stdout
 

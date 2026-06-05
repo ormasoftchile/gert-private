@@ -47,15 +47,15 @@ flow:
       title: Pre-deployment assertions
       assert:
         - type: eq
-          subject: "{{ .git_tag_exists }}"
+          subject: "${git_tag_exists}"
           expected: "true"
           message: "Git tag must exist"
         - type: eq
-          subject: "{{ .docker_image_exists }}"
+          subject: "${docker_image_exists}"
           expected: "true"
           message: "Docker image must exist"
         - type: eq
-          subject: "{{ .staging_tests_passed }}"
+          subject: "${staging_tests_passed}"
           expected: "true"
           message: "Staging tests must pass"
 
@@ -65,10 +65,10 @@ flow:
       type: collector
       title: Approve production deployment
       prompt: |
-        Deploy {{ .docker_tag }} to production?
+        Deploy ${docker_tag} to production?
         
-        Git changelog: {{ .git_changelog }}
-        Docker digest: {{ .docker_digest }}
+        Git changelog: ${git_changelog}
+        Docker digest: ${docker_digest}
       fields:
         - name: approved
           type: text
@@ -89,7 +89,7 @@ flow:
         name: datadog
         action: create-event
         args:
-          title: "Deployment started: {{ .docker_tag }}"
+          title: "Deployment started: ${docker_tag}"
           tags: ["deployment", "canary"]
       capture:
         deployment_id: json.deployment_id
@@ -110,7 +110,7 @@ flow:
               args:
                 - patch
                 - service
-                - "{{ .deployment_name }}"
+                - "${deployment_name}"
                 - "--patch"
                 - '{"spec":{"weights":[{"name":"prod","weight":100},{"name":"canary","weight":0}]}}'
 
@@ -129,7 +129,7 @@ flow:
               args:
                 - delete
                 - deployment
-                - "{{ .deployment_name }}-canary"
+                - "${deployment_name}-canary"
 
   # Step 5: Deploy Canary (parallel)
   - step:
@@ -149,7 +149,7 @@ flow:
                   - "-f"
                   - "manifests/canary-deployment.yaml"
                 env:
-                  IMAGE_TAG: "{{ .docker_tag }}"
+                  IMAGE_TAG: "${docker_tag}"
                 contract:
                   effects: ["k8s.deployment.create"]
 
@@ -163,7 +163,7 @@ flow:
                 args:
                   - patch
                   - service
-                  - "{{ .deployment_name }}"
+                  - "${deployment_name}"
                   - "--patch"
                   - '{"spec":{"weights":[{"name":"prod","weight":90},{"name":"canary","weight":10}]}}'
                 contract:
@@ -181,7 +181,7 @@ flow:
       args:
         - wait
         - "--for=condition=Available"
-        - "deployment/{{ .deployment_name }}-canary"
+        - "deployment/${deployment_name}-canary"
         - "--timeout=120s"
       retry:
         max: 5
@@ -197,7 +197,7 @@ flow:
         - step:
             id: query_error_rate
             type: tool
-            title: "Query Prometheus: error rate (iteration {{ .iteration }})"
+            title: "Query Prometheus: error rate (iteration ${iteration})"
             tool:
               name: prometheus
               action: query
@@ -209,7 +209,7 @@ flow:
         - step:
             id: query_p95_latency
             type: tool
-            title: "Query Prometheus: p95 latency (iteration {{ .iteration }})"
+            title: "Query Prometheus: p95 latency (iteration ${iteration})"
             tool:
               name: prometheus
               action: query
@@ -223,7 +223,7 @@ flow:
             type: branch
             title: Check if metrics within SLO
             branches:
-              - condition: 'error_rate > 0.05 || p95_latency > 0.5'
+              - condition: 'error_rate > 0.05 or p95_latency > 0.5'
                 label: Metrics unhealthy
                 steps:
                   - step:
@@ -247,7 +247,7 @@ flow:
       type: branch
       title: Evaluate canary health
       branches:
-        - condition: 'error_rate < 0.01 && p95_latency < 0.2'
+        - condition: 'error_rate < 0.01 and p95_latency < 0.2'
           label: Metrics healthy — promote
           steps:
             # Step 9: Promote Branch
@@ -257,8 +257,8 @@ flow:
                 title: Approve promotion to 100%
                 prompt: |
                   Canary metrics summary:
-                  - Error rate: {{ .error_rate }}%
-                  - P95 latency: {{ .p95_latency }}ms
+                  - Error rate: ${error_rate}%
+                  - P95 latency: ${p95_latency}ms
                   
                   Promote canary to 100% traffic?
                 fields:
@@ -281,7 +281,7 @@ flow:
                 args:
                   - patch
                   - service
-                  - "{{ .deployment_name }}"
+                  - "${deployment_name}"
                   - "--patch"
                   - '{"spec":{"weights":[{"name":"canary","weight":100}]}}'
 
@@ -293,7 +293,7 @@ flow:
                 args:
                   - delete
                   - deployment
-                  - "{{ .deployment_name }}-prod"
+                  - "${deployment_name}-prod"
 
             - step:
                 id: rename_canary
@@ -303,9 +303,9 @@ flow:
                 args:
                   - patch
                   - deployment
-                  - "{{ .deployment_name }}-canary"
+                  - "${deployment_name}-canary"
                   - "--patch"
-                  - '{"metadata":{"name":"{{ .deployment_name }}-prod"}}'
+                  - '{"metadata":{"name":"${deployment_name}-prod"}}'
 
             - step:
                 id: tag_success
@@ -315,7 +315,7 @@ flow:
                   name: datadog
                   action: update-event
                   args:
-                    event_id: "{{ .deployment_id }}"
+                    event_id: "${deployment_id}"
                     status: success
 
         - else: true
@@ -330,7 +330,7 @@ flow:
                 args:
                   - patch
                   - service
-                  - "{{ .deployment_name }}"
+                  - "${deployment_name}"
                   - "--patch"
                   - '{"spec":{"weights":[{"name":"prod","weight":100},{"name":"canary","weight":0}]}}'
 
@@ -349,7 +349,7 @@ flow:
                 args:
                   - delete
                   - deployment
-                  - "{{ .deployment_name }}-canary"
+                  - "${deployment_name}-canary"
 
             - step:
                 id: tag_rollback
@@ -359,7 +359,7 @@ flow:
                   name: datadog
                   action: update-event
                   args:
-                    event_id: "{{ .deployment_id }}"
+                    event_id: "${deployment_id}"
                     status: rolled_back
 
             - step:
@@ -371,7 +371,7 @@ flow:
                   action: send-message
                   args:
                     channel: "#deployments"
-                    message: "Deployment {{ .docker_tag }} rolled back due to unhealthy metrics"
+                    message: "Deployment ${docker_tag} rolled back due to unhealthy metrics"
 
   # Step 11: Post-Deployment Verification
   - step:
@@ -382,7 +382,7 @@ flow:
       args:
         - get
         - deployment
-        - "{{ .deployment_name }}-prod"
+        - "${deployment_name}-prod"
         - "-o"
         - "jsonpath={.status.conditions[?(@.type=='Available')].status}"
       capture:

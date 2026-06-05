@@ -38,7 +38,7 @@ flow:
       type: collector
       title: QA attestation — design verification per IEC 62304
       prompt: |
-        Attest that design verification testing is complete for software version {{ .software_version }}.
+        Attest that design verification testing is complete for software version ${software_version}.
       fields:
         - name: unit_tests_passed
           type: text
@@ -78,7 +78,7 @@ flow:
       type: collector
       title: Risk management attestation per ISO 14971
       prompt: |
-        Attest that risk analysis is complete for software version {{ .software_version }}.
+        Attest that risk analysis is complete for software version ${software_version}.
       fields:
         - name: hazard_analysis_complete
           type: text
@@ -115,7 +115,7 @@ flow:
       title: Clinical validation attestation
       when: 'affects_clinical_functionality == "yes"'
       prompt: |
-        Attest that clinical validation demonstrates safety and efficacy for v{{ .software_version }}.
+        Attest that clinical validation demonstrates safety and efficacy for v${software_version}.
       fields:
         - name: clinical_study_complete
           type: text
@@ -151,7 +151,7 @@ flow:
       type: collector
       title: Cybersecurity attestation per FDA guidance
       prompt: |
-        Attest that cybersecurity risks are mitigated for v{{ .software_version }}.
+        Attest that cybersecurity risks are mitigated for v${software_version}.
       fields:
         - name: threat_modeling_complete
           type: text
@@ -191,7 +191,7 @@ flow:
       type: choice
       title: Regulatory submission determination
       prompt: |
-        Determine the regulatory submission requirement for software v{{ .software_version }}.
+        Determine the regulatory submission requirement for software v${software_version}.
         Review: design verification, risk analysis, clinical validation, cybersecurity.
         
         Select submission type:
@@ -226,7 +226,7 @@ flow:
                 title: Record no-submission determination
                 command: echo
                 args:
-                  - "No FDA submission required for v{{ .software_version }}. Exempt per FDA guidance."
+                  - "No FDA submission required for v${software_version}. Exempt per FDA guidance."
 
         # Branch: Letter to File
         - condition: 'submission_type == "letter_to_file"'
@@ -240,7 +240,7 @@ flow:
                   name: document-generator
                   action: generate-ltf
                   args:
-                    version: "{{ .software_version }}"
+                    version: "${software_version}"
                 capture:
                   ltf_document_path: json.document_path
 
@@ -250,7 +250,7 @@ flow:
                 title: Upload letter to file to document control
                 prompt: |
                   Upload the generated letter to file to the document control system.
-                  Document path: {{ .ltf_document_path }}
+                  Document path: ${ltf_document_path}
                 fields:
                   - name: ltf_uploaded
                     type: text
@@ -265,7 +265,7 @@ flow:
                 type: collector
                 title: Quality manager signature on LTF
                 prompt: |
-                  Quality manager signature required on Letter to File for v{{ .software_version }}.
+                  Quality manager signature required on Letter to File for v${software_version}.
                 fields:
                   - name: ltf_approved
                     type: text
@@ -285,7 +285,7 @@ flow:
                 type: collector
                 title: Prepare 510(k) submission package
                 prompt: |
-                  Compile 510(k) submission per FDA template for v{{ .software_version }}.
+                  Compile 510(k) submission per FDA template for v${software_version}.
                 fields:
                   - name: software_description
                     type: file
@@ -319,7 +319,7 @@ flow:
                 type: collector
                 title: Quality manager review of 510(k)
                 prompt: |
-                  Quality manager review of 510(k) submission package for v{{ .software_version }}.
+                  Quality manager review of 510(k) submission package for v${software_version}.
                 fields:
                   - name: qm_approved
                     type: text
@@ -336,7 +336,7 @@ flow:
                 title: CEO signature as legally responsible party
                 prompt: |
                   CEO signature required as legally responsible party for FDA 510(k) submission.
-                  Version: {{ .software_version }}
+                  Version: ${software_version}
                 fields:
                   - name: ceo_signed
                     type: text
@@ -355,7 +355,7 @@ flow:
                   name: fda-estar
                   action: submit-510k
                   args:
-                    version: "{{ .software_version }}"
+                    version: "${software_version}"
                 capture:
                   fda_submission_id: json.submission_id
                 contract:
@@ -370,7 +370,7 @@ flow:
                 type: collector
                 title: Monitor FDA review and await clearance
                 prompt: |
-                  FDA Submission ID: {{ .fda_submission_id }}
+                  FDA Submission ID: ${fda_submission_id}
                   
                   Monitor FDA review status at: https://www.accessdata.fda.gov/
                   
@@ -403,8 +403,8 @@ flow:
         name: document-management
         action: archive-dhf
         args:
-          version: "{{ .software_version }}"
-          submission_type: "{{ .submission_type }}"
+          version: "${software_version}"
+          submission_type: "${submission_type}"
 
   # Step 10: Manufacturing Release Approval (dual: QM + CEO)
   - step:
@@ -412,8 +412,8 @@ flow:
       type: collector
       title: Manufacturing release approval (Quality Manager + CEO)
       prompt: |
-        All attestations complete for software v{{ .software_version }}.
-        Submission type: {{ .submission_type }}
+        All attestations complete for software v${software_version}.
+        Submission type: ${submission_type}
         
         BOTH Quality Manager AND CEO must approve release to manufacturing.
       fields:
@@ -450,7 +450,7 @@ flow:
       command: bash
       args:
         - "-c"
-        - "./build-release.sh {{ .software_version }}"
+        - "./build-release.sh ${software_version}"
       capture:
         release_artifact_path: stdout
         release_artifact_hash: stdout
@@ -464,9 +464,9 @@ flow:
         name: manufacturing-notify
         action: release
         args:
-          version: "{{ .software_version }}"
-          artifact_path: "{{ .release_artifact_path }}"
-          artifact_hash: "{{ .release_artifact_hash }}"
+          version: "${software_version}"
+          artifact_path: "${release_artifact_path}"
+          artifact_hash: "${release_artifact_hash}"
       contract:
         effects: ["manufacturing.release"]
 
@@ -479,7 +479,7 @@ flow:
         name: telemetry-config
         action: configure-version-monitoring
         args:
-          version: "{{ .software_version }}"
+          version: "${software_version}"
 
   # Step 15: Close Release Record
   - step:
@@ -490,8 +490,8 @@ flow:
         name: plm-system
         action: close-release-record
         args:
-          version: "{{ .software_version }}"
-          submission_id: "{{ .fda_submission_id }}"
+          version: "${software_version}"
+          submission_id: "${fda_submission_id}"
           # GAP: 10-year retention policy not expressible in schema; handled by PLM system externally
 
   - step:

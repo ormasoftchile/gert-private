@@ -27,25 +27,25 @@ flow:
   # Step 2: Iterate over each service
   - iterate:
       id: service_loop
-      over: "$.services"
+      over: services
       as: svc
       max: 100
       collect:
-        last_service: "{{ .svc }}"
+        last_service: "${svc}"
       steps:
         - step:
             id: log_service
             type: cli
-            title: "Log service: {{ .svc }}"
+            title: "Log service: ${svc}"
             command: echo
-            args: ["Checking service: {{ .svc }}"]
+            args: ["Checking service: ${svc}"]
 
         - step:
             id: check_health
             type: cli
-            title: "Check health endpoint for {{ .svc }}"
+            title: "Check health endpoint for ${svc}"
             command: echo
-            args: ["Health OK for {{ .svc }}"]
+            args: ["Health OK for ${svc}"]
             capture:
               health_status: stdout
 
@@ -55,4 +55,4 @@ flow:
       type: cli
       title: Report sweep complete
       command: echo
-      args: ["Service sweep complete. Last checked: {{ .last_service }}"]
+      args: ["Service sweep complete. Last checked: ${last_service}"]

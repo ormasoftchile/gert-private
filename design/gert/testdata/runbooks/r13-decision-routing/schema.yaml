@@ -78,7 +78,7 @@ flow:
                 type: cli
                 title: Log unexpected environment selection
                 command: echo
-                args: ["Unexpected environment: {{ .chosen_env }}"]
+                args: ["Unexpected environment: ${chosen_env}"]
 
   # Step 4: Post-deploy notification
   - step:
@@ -86,7 +86,7 @@ flow:
       type: cli
       title: Deployment complete
       command: echo
-      args: ["Deployment pipeline finished for {{ .chosen_env }}"]
+      args: ["Deployment pipeline finished for ${chosen_env}"]
 
   # Step 5: Abort path (reachable via decision goto)
   - step:

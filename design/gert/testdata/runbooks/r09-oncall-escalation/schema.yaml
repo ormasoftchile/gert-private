@@ -54,7 +54,7 @@ flow:
         name: pagerduty
         action: get-oncall-schedule
         args:
-          service: "{{ .affected_service }}"
+          service: "${affected_service}"
       capture:
         primary_oncall: json.primary
         secondary_oncall: json.secondary
@@ -75,13 +75,13 @@ flow:
         - step:
             id: page_primary
             type: extension
-            title: "Page primary on-call (attempt {{ .iteration }}/3)"
+            title: "Page primary on-call (attempt ${iteration}/3)"
             extension:
               name: pagerduty
               action: page-engineer
               args:
-                engineer: "{{ .primary_oncall }}"
-                alert_id: "{{ .alert_id }}"
+                engineer: "${primary_oncall}"
+                alert_id: "${alert_id}"
                 urgency: high
             capture:
               pagerduty_incident_id: json.incident_id
@@ -101,7 +101,7 @@ flow:
               name: pagerduty
               action: get-incident-status
               args:
-                incident_id: "{{ .pagerduty_incident_id }}"
+                incident_id: "${pagerduty_incident_id}"
             capture:
               acknowledged: json.acknowledged
               acknowledger: json.acknowledger
@@ -126,18 +126,18 @@ flow:
       id: try_secondary
       max: 3
       over: null
-      when: '!acknowledged'
+      when: 'not acknowledged'
       steps:
         - step:
             id: page_secondary
             type: extension
-            title: "Page secondary on-call (attempt {{ .iteration }}/3)"
+            title: "Page secondary on-call (attempt ${iteration}/3)"
             extension:
               name: pagerduty
               action: page-engineer
               args:
-                engineer: "{{ .secondary_oncall }}"
-                alert_id: "{{ .alert_id }}"
+                engineer: "${secondary_oncall}"
+                alert_id: "${alert_id}"
                 urgency: high
 
         - step:
@@ -155,7 +155,7 @@ flow:
               name: pagerduty
               action: get-incident-status
               args:
-                incident_id: "{{ .pagerduty_incident_id }}"
+                incident_id: "${pagerduty_incident_id}"
             capture:
               acknowledged: json.acknowledged
               acknowledger: json.acknowledger
@@ -173,25 +173,25 @@ flow:
                       type: cli
                       title: Mark acknowledged
                       command: echo
-                      args: ["Acknowledged by {{ .acknowledger }}"]
+                      args: ["Acknowledged by ${acknowledger}"]
                       continue_on_fail: false
 
   - iterate:
       id: try_manager
       max: 2
       over: null
-      when: '!acknowledged'
+      when: 'not acknowledged'
       steps:
         - step:
             id: page_manager
             type: extension
-            title: "Page manager on-call (attempt {{ .iteration }}/2)"
+            title: "Page manager on-call (attempt ${iteration}/2)"
             extension:
               name: pagerduty
               action: page-engineer
               args:
-                engineer: "{{ .manager_oncall }}"
-                alert_id: "{{ .alert_id }}"
+                engineer: "${manager_oncall}"
+                alert_id: "${alert_id}"
                 urgency: high
 
         - step:
@@ -209,7 +209,7 @@ flow:
               name: pagerduty
               action: get-incident-status
               args:
-                incident_id: "{{ .pagerduty_incident_id }}"
+                incident_id: "${pagerduty_incident_id}"
             capture:
               acknowledged: json.acknowledged
               acknowledger: json.acknowledger
@@ -234,18 +234,18 @@ flow:
       id: try_director
       max: 2
       over: null
-      when: '!acknowledged'
+      when: 'not acknowledged'
       steps:
         - step:
             id: page_director
             type: extension
-            title: "Page director on-call (attempt {{ .iteration }}/2)"
+            title: "Page director on-call (attempt ${iteration}/2)"
             extension:
               name: pagerduty
               action: page-engineer
               args:
-                engineer: "{{ .director_oncall }}"
-                alert_id: "{{ .alert_id }}"
+                engineer: "${director_oncall}"
+                alert_id: "${alert_id}"
                 urgency: critical
 
         - step:
@@ -263,7 +263,7 @@ flow:
               name: pagerduty
               action: get-incident-status
               args:
-                incident_id: "{{ .pagerduty_incident_id }}"
+                incident_id: "${pagerduty_incident_id}"
             capture:
               acknowledged: json.acknowledged
               acknowledger: json.acknowledger
@@ -289,19 +289,19 @@ flow:
       id: emergency_broadcast
       type: extension
       title: Emergency broadcast to all on-call engineers
-      when: '!acknowledged'
+      when: 'not acknowledged'
       extension:
         name: pagerduty
         action: broadcast-all
         args:
-          alert_id: "{{ .alert_id }}"
-          service: "{{ .affected_service }}"
+          alert_id: "${alert_id}"
+          service: "${affected_service}"
 
   - step:
       id: create_war_room
       type: extension
       title: Create war room Zoom meeting
-      when: '!acknowledged'
+      when: 'not acknowledged'
       extension:
         name: zoom
         action: create-meeting
@@ -314,30 +314,30 @@ flow:
       id: slack_critical_alert
       type: extension
       title: Alert critical-alerts Slack channel
-      when: '!acknowledged'
+      when: 'not acknowledged'
       extension:
         name: slack
         action: send-message
         args:
           channel: "#critical-alerts"
-          message: "CRITICAL incident unacknowledged for 30 minutes. War room: {{ .war_room_url }}"
+          message: "CRITICAL incident unacknowledged for 30 minutes. War room: ${war_room_url}"
 
   # Step 8: Wait for Any Acknowledgment (polling loop, 60 minutes)
   - iterate:
       id: wait_any_ack
       max: 60
       over: null
-      when: '!acknowledged'
+      when: 'not acknowledged'
       steps:
         - step:
             id: check_ack_broadcast
             type: extension
-            title: "Check for any acknowledgment (minute {{ .iteration }}/60)"
+            title: "Check for any acknowledgment (minute ${iteration}/60)"
             extension:
               name: pagerduty
               action: get-incident-status
               args:
-                incident_id: "{{ .pagerduty_incident_id }}"
+                incident_id: "${pagerduty_incident_id}"
             capture:
               acknowledged: json.acknowledged
               acknowledger: json.acknowledger
@@ -362,7 +362,7 @@ flow:
                       type: cli
                       title: Mark acknowledged
                       command: echo
-                      args: ["Acknowledged by {{ .acknowledger }}"]
+                      args: ["Acknowledged by ${acknowledger}"]
                       continue_on_fail: false
 
   # Step 9: Executive Escalation
@@ -370,13 +370,13 @@ flow:
       id: executive_escalation
       type: extension
       title: Escalate to CTO and CEO
-      when: '!acknowledged'
+      when: 'not acknowledged'
       extension:
         name: pagerduty
         action: executive-escalation
         args:
-          alert_id: "{{ .alert_id }}"
-          service: "{{ .affected_service }}"
+          alert_id: "${alert_id}"
+          service: "${affected_service}"
 
   # Step 10: Record Acknowledgment
   - step:
@@ -387,8 +387,8 @@ flow:
         name: incident-tracker
         action: record-ack
         args:
-          alert_id: "{{ .alert_id }}"
-          acknowledger: "{{ .acknowledger }}"
+          alert_id: "${alert_id}"
+          acknowledger: "${acknowledger}"
 
   - step:
       id: invoke_incident_response
@@ -398,8 +398,8 @@ flow:
       include:
         runbook: incident-response/generic-incident-response.yaml
         with:
-          alert_id: "{{ .alert_id }}"
-          service: "{{ .affected_service }}"
+          alert_id: "${alert_id}"
+          service: "${affected_service}"
 
   # Step 11: Post-Incident Escalation Report
   - step:
@@ -410,8 +410,8 @@ flow:
         name: report-generator
         action: generate-escalation-report
         args:
-          alert_id: "{{ .alert_id }}"
-          acknowledger: "{{ .acknowledger }}"
+          alert_id: "${alert_id}"
+          acknowledger: "${acknowledger}"
 
   - step:
       id: complete

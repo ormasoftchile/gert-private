@@ -52,7 +52,7 @@ flow:
       title: Capture build environment variable
       command: echo
       args:
-        - "{{ .build_env }}"
+        - "${build_env}"
       capture:
         # Captured stdout becomes evidence in step/completed event
         build_env: stdout
@@ -62,7 +62,7 @@ flow:
   # Expected evidence: step/completed.evidence[0] = {
   #   "name": "artifact_file",
   #   "kind": "attachment",
-  #   "path": "build-artifact-{{ .build_id }}.txt",
+  #   "path": "build-artifact-${build_id}.txt",
   #   "sha256": "<hex>",
   #   "size": <bytes>
   # }
@@ -75,17 +75,17 @@ flow:
       args:
         - "-c"
         - |
-          echo "Build ID: {{ .build_id }}" > build-artifact-{{ .build_id }}.txt
-          echo "Environment: {{ .build_env }}" >> build-artifact-{{ .build_id }}.txt
-          echo "Timestamp: 2026-04-20T12:00:00Z" >> build-artifact-{{ .build_id }}.txt
-          cat build-artifact-{{ .build_id }}.txt
+          echo "Build ID: ${build_id}" > build-artifact-${build_id}.txt
+          echo "Environment: ${build_env}" >> build-artifact-${build_id}.txt
+          echo "Timestamp: 2026-04-20T12:00:00Z" >> build-artifact-${build_id}.txt
+          cat build-artifact-${build_id}.txt
       capture:
         artifact_content: stdout
       # Runtime should detect output file and attach it to evidence
       evidence:
         - name: artifact_file
           kind: attachment
-          path: "build-artifact-{{ .build_id }}.txt"
+          path: "build-artifact-${build_id}.txt"
 
   # ────────────────────────────────────────────────────────────────────────────
   # STEP 3: Verify artifact hash (deterministic hash for replay)
@@ -98,7 +98,7 @@ flow:
       command: bash
       args:
         - "-c"
-        - "sha256sum build-artifact-{{ .build_id }}.txt | awk '{print $1}'"
+        - "sha256sum build-artifact-${build_id}.txt | awk '{print $1}'"
       capture:
         artifact_hash: stdout
 
@@ -121,7 +121,7 @@ flow:
                 title: Deploy to production
                 command: echo
                 args:
-                  - "Deploying build {{ .build_id }} to PRODUCTION"
+                  - "Deploying build ${build_id} to PRODUCTION"
                 capture:
                   deploy_result: stdout
 
@@ -131,7 +131,7 @@ flow:
                 title: Verify production deployment
                 command: echo
                 args:
-                  - "Production deployment verified for {{ .build_id }}"
+                  - "Production deployment verified for ${build_id}"
                 capture:
                   verify_result: stdout
 
@@ -145,7 +145,7 @@ flow:
                 title: Deploy to staging
                 command: echo
                 args:
-                  - "Deploying build {{ .build_id }} to STAGING"
+                  - "Deploying build ${build_id} to STAGING"
                 capture:
                   deploy_result: stdout
 
@@ -159,7 +159,7 @@ flow:
                 title: Unknown environment error
                 command: echo
                 args:
-                  - "ERROR: Unknown environment {{ .build_env }}"
+                  - "ERROR: Unknown environment ${build_env}"
 
   # ────────────────────────────────────────────────────────────────────────────
   # STEP 5: Environment snapshot capture (evidence kind: env snapshot)
@@ -177,15 +177,15 @@ flow:
       args:
         - "-c"
         - |
-          echo "BUILD_ID={{ .build_id }}"
-          echo "BUILD_ENV={{ .build_env }}"
-          echo "DEPLOY_RESULT={{ .deploy_result }}"
+          echo "BUILD_ID=${build_id}"
+          echo "BUILD_ENV=${build_env}"
+          echo "DEPLOY_RESULT=${deploy_result}"
       capture:
         env_snapshot: stdout
       evidence:
         - name: env_snapshot
           kind: text
-          value: "{{ .env_snapshot }}"
+          value: "${env_snapshot}"
 
   # ────────────────────────────────────────────────────────────────────────────
   # STEP 6: Completion marker (uses all captured variables)
@@ -196,7 +196,7 @@ flow:
       title: Deployment complete
       command: echo
       args:
-        - "Deployment complete: {{ .build_id }} to {{ .build_env }}, hash {{ .artifact_hash }}"
+        - "Deployment complete: ${build_id} to ${build_env}, hash ${artifact_hash}"
       capture:
         completion_message: stdout
 

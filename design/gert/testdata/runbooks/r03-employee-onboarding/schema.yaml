@@ -98,11 +98,11 @@ flow:
       title: Manager confirmation of hire
       prompt: |
         Confirm new hire details:
-        - Name: {{ .full_name }}
-        - Email: {{ .email }}
-        - Start date: {{ .start_date }}
-        - Department: {{ .department }}
-        - Job title: {{ .job_title }}
+        - Name: ${full_name}
+        - Email: ${email}
+        - Start date: ${start_date}
+        - Department: ${department}
+        - Job title: ${job_title}
         
         Approve this hire?
       fields:
@@ -123,7 +123,7 @@ flow:
       type: collector
       title: Verify background check
       prompt: |
-        Verify background check status in HireRight portal for {{ .full_name }}.
+        Verify background check status in HireRight portal for ${full_name}.
       fields:
         - name: background_check_completed
           type: boolean
@@ -156,14 +156,14 @@ flow:
             - step:
                 id: create_okta_account
                 type: tool
-                title: "Create Okta user: {{ .email }}"
+                title: "Create Okta user: ${email}"
                 tool:
                   name: okta
                   action: create-user
                   args:
-                    email: "{{ .email }}"
-                    first_name: "{{ .full_name }}"
-                    department: "{{ .department }}"
+                    email: "${email}"
+                    first_name: "${full_name}"
+                    department: "${department}"
                 capture:
                   okta_user_id: json.id
                 contract:
@@ -175,12 +175,12 @@ flow:
             - step:
                 id: create_github_account
                 type: tool
-                title: "Invite to GitHub: {{ .email }}"
+                title: "Invite to GitHub: ${email}"
                 tool:
                   name: github
                   action: invite-user
                   args:
-                    email: "{{ .email }}"
+                    email: "${email}"
                     org: company
                 capture:
                   github_invitation_id: json.invitation_id
@@ -193,12 +193,12 @@ flow:
             - step:
                 id: create_slack_account
                 type: tool
-                title: "Invite to Slack: {{ .email }}"
+                title: "Invite to Slack: ${email}"
                 tool:
                   name: slack
                   action: invite-user
                   args:
-                    email: "{{ .email }}"
+                    email: "${email}"
                     channels: ["#general", "#announcements"]
                 capture:
                   slack_user_id: json.user_id
@@ -213,10 +213,10 @@ flow:
                 type: collector
                 title: Order laptop in IT procurement system
                 prompt: |
-                  Order laptop for {{ .full_name }}.
+                  Order laptop for ${full_name}.
                   
-                  Department: {{ .department }}
-                  Location: {{ .office_location }}
+                  Department: ${department}
+                  Location: ${office_location}
                 fields:
                   - name: laptop_model
                     type: text
@@ -248,7 +248,7 @@ flow:
                 type: collector
                 title: Schedule IT onboarding call
                 prompt: |
-                  Schedule 30-minute IT onboarding call on {{ .full_name }}'s first day.
+                  Schedule 30-minute IT onboarding call on ${full_name}'s first day.
                 fields:
                   - name: calendar_invite_sent
                     type: boolean
@@ -273,7 +273,7 @@ flow:
       type: collector
       title: Complete security training
       prompt: |
-        {{ .full_name }} must complete security training in the LMS.
+        ${full_name} must complete security training in the LMS.
       fields:
         - name: security_training_completed
           type: boolean
@@ -310,7 +310,7 @@ flow:
                   name: access-provisioner
                   action: provision-engineering
                   args:
-                    user_id: "{{ .okta_user_id }}"
+                    user_id: "${okta_user_id}"
                     systems: ["github", "aws-dev", "datadog"]
                 retry:
                   max: 3
@@ -328,7 +328,7 @@ flow:
                   name: access-provisioner
                   action: provision-sales
                   args:
-                    user_id: "{{ .okta_user_id }}"
+                    user_id: "${okta_user_id}"
                     systems: ["salesforce", "hubspot"]
                 retry:
                   max: 3
@@ -346,7 +346,7 @@ flow:
                   name: access-provisioner
                   action: provision-marketing
                   args:
-                    user_id: "{{ .okta_user_id }}"
+                    user_id: "${okta_user_id}"
                     systems: ["google-ads", "mailchimp"]
                 retry:
                   max: 3
@@ -364,7 +364,7 @@ flow:
                   name: access-provisioner
                   action: provision-finance
                   args:
-                    user_id: "{{ .okta_user_id }}"
+                    user_id: "${okta_user_id}"
                     systems: ["netsuite", "billdotcom"]
                 retry:
                   max: 3
@@ -377,8 +377,8 @@ flow:
       type: collector
       title: Manager confirms access is appropriate
       prompt: |
-        Provisioned access for {{ .full_name }}:
-        - Department: {{ .department }}
+        Provisioned access for ${full_name}:
+        - Department: ${department}
         - Systems: (based on department)
         
         Confirm access is appropriate for employee's role?
@@ -402,12 +402,12 @@ flow:
         name: email-sender
         action: send-template
         args:
-          to: "{{ .email }}"
+          to: "${email}"
           template: welcome_employee
           variables:
-            name: "{{ .full_name }}"
-            start_date: "{{ .start_date }}"
-            manager: "{{ .manager }}"
+            name: "${full_name}"
+            start_date: "${start_date}"
+            manager: "${manager}"
 
   # Step 10: Compliance Attestation (dual approval)
   - step:
@@ -418,11 +418,11 @@ flow:
         Attest that onboarding completed per company policy.
         
         Summary:
-        - Employee: {{ .full_name }}
-        - Manager approved: {{ .manager_approved }}
-        - Background check: {{ .background_check_completed }}
+        - Employee: ${full_name}
+        - Manager approved: ${manager_approved}
+        - Background check: ${background_check_completed}
         - Accounts created: Okta, GitHub, Slack
-        - Security training: {{ .security_training_completed }}
+        - Security training: ${security_training_completed}
       fields:
         - name: attestation
           type: text
@@ -443,7 +443,7 @@ flow:
         name: jira
         action: transition-issue
         args:
-          issue_key: "{{ .onboarding_ticket_id }}"
+          issue_key: "${onboarding_ticket_id}"
           status: Done
 
   - step:
@@ -455,7 +455,7 @@ flow:
         action: send-message
         args:
           channel: "#hr-it"
-          message: "Onboarding complete for {{ .full_name }}"
+          message: "Onboarding complete for ${full_name}"
 
   - step:
       id: complete

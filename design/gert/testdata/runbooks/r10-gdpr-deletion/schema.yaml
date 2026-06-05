@@ -43,8 +43,8 @@ flow:
         name: compliance-db
         action: log-deletion-request
         args:
-          email: "{{ .customer_email }}"
-          request_id: "{{ .deletion_request_id }}"
+          email: "${customer_email}"
+          request_id: "${deletion_request_id}"
       capture:
         request_timestamp: json.timestamp
 
@@ -54,8 +54,8 @@ flow:
       type: collector
       title: Verify customer identity
       prompt: |
-        Verify identity for deletion request {{ .deletion_request_id }}.
-        Customer email: {{ .customer_email }}
+        Verify identity for deletion request ${deletion_request_id}.
+        Customer email: ${customer_email}
       fields:
         - name: verification_email_responded
           type: text
@@ -81,8 +81,8 @@ flow:
       type: collector
       title: Legal review and approval
       prompt: |
-        Legal review for GDPR deletion request {{ .deletion_request_id }}.
-        Customer: {{ .customer_email }}
+        Legal review for GDPR deletion request ${deletion_request_id}.
+        Customer: ${customer_email}
         
         Check for legal holds before approving deletion.
       fields:
@@ -127,7 +127,7 @@ flow:
                   - "-c"
                   - "SELECT id FROM users WHERE email=current_setting('app.search_email');"
                 env:
-                  PGPASSWORD: "{{ .db_password }}"
+                  PGPASSWORD: "${db_password}"
                 capture:
                   db_user_id: stdout
                 contract:
@@ -160,7 +160,7 @@ flow:
                   name: elasticsearch
                   action: search
                   args:
-                    query: "email:{{ .customer_email }}"
+                    query: "email:${customer_email}"
                 capture:
                   log_entries: json.hits.total.value
 
@@ -174,7 +174,7 @@ flow:
                   name: mixpanel
                   action: get-user-profile
                   args:
-                    email: "{{ .customer_email }}"
+                    email: "${customer_email}"
                 capture:
                   analytics_profile_exists: json.found
 
@@ -188,7 +188,7 @@ flow:
                   name: salesforce
                   action: search-account
                   args:
-                    email: "{{ .customer_email }}"
+                    email: "${customer_email}"
                 capture:
                   crm_account_id: json.account_id
 
@@ -202,7 +202,7 @@ flow:
                   name: zendesk
                   action: search-tickets
                   args:
-                    email: "{{ .customer_email }}"
+                    email: "${customer_email}"
                 capture:
                   zendesk_ticket_ids: json.ticket_ids
       join:
@@ -215,12 +215,12 @@ flow:
       type: collector
       title: DPO confirms deletion scope
       prompt: |
-        Data inventory for customer {{ .customer_email }}:
-        - Database user ID: {{ .db_user_id }}
+        Data inventory for customer ${customer_email}:
+        - Database user ID: ${db_user_id}
         - S3 objects: found
-        - Log entries: {{ .log_entries }}
-        - Analytics profile: {{ .analytics_profile_exists }}
-        - CRM account: {{ .crm_account_id }}
+        - Log entries: ${log_entries}
+        - Analytics profile: ${analytics_profile_exists}
+        - CRM account: ${crm_account_id}
         - Zendesk tickets: found
         
         WARNING: Deletion is PERMANENT and cannot be undone.
@@ -269,7 +269,7 @@ flow:
                   name: aws
                   action: delete-s3-objects
                   args:
-                    keys: "{{ .s3_keys }}"
+                    keys: "${s3_keys}"
                 contract:
                   effects: ["data.delete"]
 
@@ -284,7 +284,7 @@ flow:
                   name: elasticsearch
                   action: redact-pii
                   args:
-                    email: "{{ .customer_email }}"
+                    email: "${customer_email}"
                     replace_with: "[DELETED]"
                 contract:
                   effects: ["data.redact"]
@@ -299,7 +299,7 @@ flow:
                   name: mixpanel
                   action: delete-user
                   args:
-                    email: "{{ .customer_email }}"
+                    email: "${customer_email}"
                 contract:
                   effects: ["data.delete"]
 
@@ -313,7 +313,7 @@ flow:
                   name: salesforce
                   action: delete-account
                   args:
-                    account_id: "{{ .crm_account_id }}"
+                    account_id: "${crm_account_id}"
                 contract:
                   effects: ["data.delete"]
 
@@ -327,8 +327,8 @@ flow:
                   name: zendesk
                   action: redact-tickets
                   args:
-                    ticket_ids: "{{ .zendesk_ticket_ids }}"
-                    email: "{{ .customer_email }}"
+                    ticket_ids: "${zendesk_ticket_ids}"
+                    email: "${customer_email}"
                 contract:
                   effects: ["data.redact"]
       join:
@@ -346,13 +346,13 @@ flow:
         - step:
             id: process_backup
             type: extension
-            title: "Process backup day {{ .iteration }} of 30"
+            title: "Process backup day ${iteration} of 30"
             extension:
               name: backup-manager
               action: redact-or-recreate
               args:
-                backup_day_offset: "{{ .iteration }}"
-                customer_id: "{{ .db_user_id }}"
+                backup_day_offset: "${iteration}"
+                customer_id: "${db_user_id}"
 
   # Step 8: Verification Loop (5 attempts with 1-hour interval for replication lag)
   - iterate:
@@ -363,7 +363,7 @@ flow:
         - step:
             id: verify_db_deletion
             type: cli
-            title: "Verify database deletion (attempt {{ .iteration }}/5)"
+            title: "Verify database deletion (attempt ${iteration}/5)"
             command: psql
             args:
               - "-h"
@@ -381,7 +381,7 @@ flow:
               name: mixpanel
               action: get-user-profile
               args:
-                email: "{{ .customer_email }}"
+                email: "${customer_email}"
             capture:
               analytics_still_exists: json.found
 
@@ -390,7 +390,7 @@ flow:
             type: branch
             title: Check if all verifications pass
             branches:
-              - condition: 'db_count == "0" && !analytics_still_exists'
+              - condition: 'db_count == "0" and not analytics_still_exists'
                 label: All deletions verified
                 steps:
                   - step:
@@ -417,8 +417,8 @@ flow:
         name: certificate-generator
         action: generate-gdpr-certificate
         args:
-          request_id: "{{ .deletion_request_id }}"
-          customer_email: "{{ .customer_email }}"
+          request_id: "${deletion_request_id}"
+          customer_email: "${customer_email}"
           # GAP: Cryptographic signing of PDF certificate not natively supported in schema
       capture:
         certificate_path: json.certificate_path
@@ -429,8 +429,8 @@ flow:
       type: collector
       title: DPO attestation of completed deletion
       prompt: |
-        Deletion request {{ .deletion_request_id }} completed.
-        Certificate: {{ .certificate_path }}
+        Deletion request ${deletion_request_id} completed.
+        Certificate: ${certificate_path}
         
         Attest that data deletion is complete and verified?
       fields:
@@ -451,9 +451,9 @@ flow:
         name: email-sender
         action: send-with-attachment
         args:
-          to: "{{ .customer_email }}"
+          to: "${customer_email}"
           subject: "Your data deletion request has been completed"
-          attachment: "{{ .certificate_path }}"
+          attachment: "${certificate_path}"
 
   # Step 12: Update Compliance Log
   - step:
@@ -464,8 +464,8 @@ flow:
         name: compliance-db
         action: record-completion
         args:
-          request_id: "{{ .deletion_request_id }}"
-          request_timestamp: "{{ .request_timestamp }}"
+          request_id: "${deletion_request_id}"
+          request_timestamp: "${request_timestamp}"
           # GAP: Schema cannot natively compute request duration and compare to 30-day SLA
           # GAP: SLA violation flag (deletion took >30 days) requires runtime computation
 
@@ -478,7 +478,7 @@ flow:
         name: compliance-db
         action: close-request
         args:
-          request_id: "{{ .deletion_request_id }}"
+          request_id: "${deletion_request_id}"
           status: completed
 
   - step:
@@ -490,7 +490,7 @@ flow:
         action: send-message
         args:
           channel: "#privacy-team"
-          message: "GDPR deletion request {{ .deletion_request_id }} completed for {{ .customer_email }}"
+          message: "GDPR deletion request ${deletion_request_id} completed for ${customer_email}"
 
   - step:
       id: complete

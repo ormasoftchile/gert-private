@@ -99,8 +99,8 @@ flow:
       type: choice
       title: Security officer severity assessment
       prompt: |
-        Security alert received: {{ .alert_description }}
-        Affected systems: {{ .affected_systems }}
+        Security alert received: ${alert_description}
+        Affected systems: ${affected_systems}
         
         Assess breach severity:
       options:
@@ -138,8 +138,8 @@ flow:
                 prompt: |
                   ⚠️ WARNING: This will cause a PRODUCTION OUTAGE ⚠️
                   
-                  Alert: {{ .alert_description }}
-                  Affected systems: {{ .affected_systems }}
+                  Alert: ${alert_description}
+                  Affected systems: ${affected_systems}
                   
                   Approve full system lockdown?
                 fields:
@@ -197,7 +197,7 @@ flow:
                             name: aws
                             action: revoke-sg-ingress
                             args:
-                              systems: "{{ .affected_systems }}"
+                              systems: "${affected_systems}"
                           contract:
                             effects: ["security.isolate"]
                             reads: [affected_systems]
@@ -212,7 +212,7 @@ flow:
                             name: aws
                             action: stop-instances
                             args:
-                              systems: "{{ .affected_systems }}"
+                              systems: "${affected_systems}"
                           contract:
                             effects: ["security.isolate"]
                             reads: [affected_systems]
@@ -227,7 +227,7 @@ flow:
                             name: palo-alto
                             action: block-ips
                             args:
-                              alert_id: "{{ .alert_id }}"
+                              alert_id: "${alert_id}"
                           contract:
                             effects: ["security.isolate"]
                             reads: [alert_id]
@@ -317,7 +317,7 @@ flow:
                             name: aws
                             action: create-ebs-snapshots
                             args:
-                              systems: "{{ .affected_systems }}"
+                              systems: "${affected_systems}"
                           contract:
                             effects: [aws.snapshot]
                             reads: [affected_systems]
@@ -378,7 +378,7 @@ flow:
                   name: okta
                   action: suspend-accounts
                   args:
-                    alert_id: "{{ .alert_id }}"
+                    alert_id: "${alert_id}"
                 contract:
                   effects: [credentials.revoke]
                   reads: [alert_id]
@@ -391,7 +391,7 @@ flow:
                   name: credential-revoker
                   action: revoke-for-alert
                   args:
-                    alert_id: "{{ .alert_id }}"
+                    alert_id: "${alert_id}"
                 contract:
                   effects: [credentials.revoke]
                   reads: [alert_id]
@@ -404,7 +404,7 @@ flow:
                   name: aws
                   action: restrict-sg-egress
                   args:
-                    systems: "{{ .affected_systems }}"
+                    systems: "${affected_systems}"
                 contract:
                   effects: ["security.isolate"]
                   reads: [affected_systems]
@@ -418,7 +418,7 @@ flow:
                 type: collector
                 title: Investigate suspicious activity in SIEM
                 prompt: |
-                  Investigate the suspicious activity: {{ .alert_description }}
+                  Investigate the suspicious activity: ${alert_description}
                 fields:
                   - name: login_history_reviewed
                     type: text
@@ -458,7 +458,7 @@ flow:
                             name: okta
                             action: suspend-accounts
                             args:
-                              alert_id: "{{ .alert_id }}"
+                              alert_id: "${alert_id}"
                           contract:
                             effects: [credentials.revoke]
                             reads: [alert_id]
@@ -474,7 +474,7 @@ flow:
                 command: bash
                 args:
                   - "-c"
-                  - "echo 'FALSE_POSITIVE alert_id={{ .alert_id }} timestamp={{ .alert_timestamp }}' >> /var/log/gert/false_positives.log"
+                  - "echo 'FALSE_POSITIVE alert_id=${alert_id} timestamp=${alert_timestamp}' >> /var/log/gert/false_positives.log"
 
             - step:
                 id: close_pagerduty_low
@@ -484,7 +484,7 @@ flow:
                   name: pagerduty-notify
                   action: resolve-alert
                   args:
-                    incident_id: "{{ .incident_id }}"
+                    incident_id: "${incident_id}"
                 contract:
                   effects: [pagerduty.write]
                   reads: [incident_id]
@@ -515,7 +515,7 @@ flow:
                   name: splunk
                   action: search-iocs
                   args:
-                    alert_id: "{{ .alert_id }}"
+                    alert_id: "${alert_id}"
                 capture:
                   ioc_report: json.report_path
                 contract:
@@ -576,8 +576,8 @@ flow:
         name: email-notify
         action: send
         args:
-          alert_id: "{{ .alert_id }}"
-          severity: "{{ .severity }}"
+          alert_id: "${alert_id}"
+          severity: "${severity}"
           recipients: ["ciso@company.com", "cto@company.com", "ceo@company.com", "legal@company.com"]
       contract:
         effects: [email.write]
@@ -589,8 +589,8 @@ flow:
       type: collector
       title: Legal breach notification assessment
       prompt: |
-        Severity: {{ .severity }}
-        Affected systems: {{ .affected_systems }}
+        Severity: ${severity}
+        Affected systems: ${affected_systems}
         
         Is breach notification required (GDPR, CCPA, state laws)?
       fields:
@@ -676,7 +676,7 @@ flow:
         name: incident-tracker
         action: close
         args:
-          incident_id: "{{ .incident_id }}"
+          incident_id: "${incident_id}"
           status: contained
           create_followup: true
       contract:
@@ -692,7 +692,7 @@ flow:
         action: send-message
         args:
           channel: "#security-incidents"
-          message: "Incident {{ .alert_id }} contained. Severity: {{ .severity }}"
+          message: "Incident ${alert_id} contained. Severity: ${severity}"
       contract:
         effects: [slack.write]
         reads: [alert_id, severity]

@@ -7,6 +7,12 @@ description: |
   Designed to be driven via exec/start + exec/next calls.
   Tests step-by-step execution, condition evaluation, and variable capture.
 
+inputs:
+  env:
+    type: string
+    description: Deployment environment
+    default: "dev"
+
 flow:
   # Step 1: Setup — capture environment variable
   - step:
@@ -14,7 +20,7 @@ flow:
       type: cli
       title: Capture deployment environment
       command: echo
-      args: ["{{ .env | default \"dev\" }}"]
+      args: ["${env}"]
       capture:
         environment: stdout
 
@@ -73,4 +79,4 @@ flow:
       type: cli
       title: Deployment complete
       command: echo
-      args: ["Deployment to {{ .environment }} complete"]
+      args: ["Deployment to ${environment} complete"]

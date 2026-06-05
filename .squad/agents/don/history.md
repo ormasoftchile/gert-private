@@ -2,6 +2,50 @@
 
 ## Learnings
 
+## Learnings
+
+### 2026-06-06 — Stream E Day 1 Complete: `gert migrate-expr` Tool
+
+**Deliverables:** Subcommand scaffolded, 11 translation rules implemented, 31 tests passing.
+
+**Architecture:**
+- CLI via `github.com/spf13/cobra` v1.8.1
+- Position-aware YAML traversal with `gopkg.in/yaml.v3` v3.0.1 for comment/style preservation
+- Expression-position detection by YAML key name (`when`, `condition`, `until`, `iterate.over`)
+- Non-string tag guard (skip `!!int`, `!!bool`, etc.)
+
+**Translation Rules (11):**
+- **E-001/002/003:** GIS interpolation templates (`{{ .X }}` → `${X}`, etc.)
+- **E-004/005/006:** GXL binary operators (`&&`/`||`/`!` → `and`/`or`/`not`)
+- **E-007:** Infix `contains` → `str.contains()` stdlib call
+- **E-008:** jq-style root path `$.X` → bare GDP identifier
+- **E-009:** Old escape style `$${...}` → OI-GIS-01 canonical `\${...}`
+- **E-010:** Template pipes — emit WARN, no auto-translate (e.g., `{{ .env | default "dev" }}`)
+- **E-011:** `{{ now }}` → `${now()}` (Barbara's GXL stdlib decision)
+
+**Test Coverage:**
+- 26 unit tests (rules, heuristic guards, edge cases)
+- 5 integration tests (full-file YAML transformations)
+- All passing; `go test ./...` clean
+
+**Flags:**
+- `--dry-run`: compute without writing
+- `--diff`: show unified diffs
+- `--report <file>`: JSON per-file counts + warnings
+- `--strict`: exit non-zero if any pattern cannot be auto-translated
+
+**Known Gaps (Day 2 actions):**
+- E-007 `contains` heuristic: assumes string; lists need `list.contains()`. Day 2: emit per-occurrence warning in `--report`.
+- E-006 parenthesized negation `!(EXPR)`: regex does not match. Day 2: extend to detect and warn.
+- YAML style normalization: `gopkg.in/yaml.v3` may normalize indentation. Day 2: document in migration guide.
+
+**Day 2 Plan:** Dogfood on already-migrated fixtures (expect zero diff); enhance E-007 warnings; extend E-006 regex; add `--report` summary + deferred patterns list; validate r04-soc2-evidence with Barbara's `now()` patch via `gert validate`.
+
+**Ratified decisions baked in:**
+- OI-GIS-01 (canonical escape `\${`)
+- OI-GCP-02 (bare-root GDP captures allowed)
+- Barbara's now() spec (E-011 rule)
+
 ### 2026-06-04 — Go-Style Expression Evaluation Audit
 
 **Deliverables produced:** `design/gert/expression-evaluation-audit.md`, `.squad/decisions/inbox/don-go-expression-audit.md`, `.squad/skills/expression-evaluation-audit/SKILL.md`

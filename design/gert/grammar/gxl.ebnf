@@ -70,8 +70,9 @@ KW_AND   = "and" ;
 KW_OR    = "or" ;
 KW_NOT   = "not" ;
 
-(* Top-level builtin *)
+(* Top-level builtins *)
 KW_LEN   = "len" ;
+KW_NOW   = "now" ;
 
 (* Reserved namespace prefixes — also may not be identifiers *)
 KW_STR   = "str" ;
@@ -80,7 +81,7 @@ KW_REGEX = "regex" ;
 KW_MATH  = "math" ;    (* reserved for v2; no methods in v1 *)
 
 KEYWORD  = KW_TRUE | KW_FALSE | KW_NULL
-          | KW_AND  | KW_OR   | KW_NOT | KW_LEN
+          | KW_AND  | KW_OR   | KW_NOT | KW_LEN | KW_NOW
           | KW_STR  | KW_LIST | KW_REGEX | KW_MATH ;
 
 
@@ -258,18 +259,36 @@ UnaryMinus   = OP_MINUS UnaryMinus
                 Unary '+' is not supported (GXL-PARSE-007). *)
 
 (* --- Level 8: Primary Expressions --- *)
-Primary      = LenCall
+Primary      = NowCall
+             | LenCall
              | NamespaceCall
              | GDP
              | Literal
              | LPAREN Expression RPAREN
              ;
-             (* PEG ordered alternation: LenCall and NamespaceCall are
-                tried before GDP to resolve the 'len(...)' and
+             (* PEG ordered alternation: NowCall, LenCall, and NamespaceCall are
+                tried before GDP to resolve the 'now()', 'len(...)' and
                 'str.method(...)' ambiguity with path access. *)
 
 
 (* --- Function Calls --- *)
+
+NowCall      = KW_NOW LPAREN [ ArgList ] RPAREN ;
+               (* now() is a zero-argument top-level builtin.
+                  Returns the current UTC timestamp as a string:
+                  "YYYY-MM-DDTHH:MM:SSZ" (ISO-8601, no fractional seconds,
+                  Z suffix mandatory).
+                  Determinism: per-evaluation — each call site yields an
+                  independent fresh timestamp (consistent with Go's
+                  time.Now()). Implementations requiring a stable snapshot
+                  across a run MUST capture the value once via a capture step.
+                  Arity: exactly zero arguments. If ArgList is non-empty,
+                  GXL-TYPE-004 is raised at parse time (arity is statically
+                  known to be zero).
+                  Bare 'now' without parentheses cannot match NowCall (LPAREN
+                  required) and cannot match GDP ('now' is a KEYWORD, not
+                  IDENT) → GXL-PARSE-001 (unexpected token).
+                  See stdlib reference §4.1b. *)
 
 LenCall      = KW_LEN LPAREN Expression RPAREN ;
                (* len() is a top-level builtin — not a namespace.
@@ -329,8 +348,9 @@ NullLiteral  = KW_NULL ;
 (* ============================================================
    SECTION 4 — STANDARD LIBRARY NAMESPACE REFERENCE
    
-   All function calls MUST go through a namespace or the 'len'
-   builtin. Bare function calls (other than 'len') are GXL-PARSE-007.
+   All function calls MUST go through a namespace or one of the
+   top-level builtins ('len', 'now'). Bare function calls other
+   than these are GXL-PARSE-007.
    Signatures use the notation: name(param: type, ...) → return_type.
    Types: string, number, bool, null, list, scalar (string|number|bool).
    camelCase method names are mandated by Q3 resolution.
@@ -345,6 +365,34 @@ NullLiteral  = KW_NULL ;
 
    len(l: list) → number
      Element count. Empty list → 0. Null argument → GXL-TYPE-003.
+
+   4.1b now (top-level builtin)
+   ─────────────────────────────
+   now() → string
+     Returns the current UTC timestamp in ISO-8601 format:
+     "YYYY-MM-DDTHH:MM:SSZ" (no fractional seconds; Z suffix mandatory).
+     The format is a strict subset of RFC 3339.
+
+   Arity: exactly zero arguments. Any argument raises GXL-TYPE-004
+   at parse time (arity is statically known).
+
+   Determinism: per-evaluation. Each occurrence of now() in an
+   expression yields an independent fresh timestamp. Implementations
+   that require a stable snapshot timestamp across a run MUST capture
+   the value once via a capture step.
+
+   Portability reference implementations:
+     Go:   time.Now().UTC().Format(time.RFC3339)
+               → "2006-01-02T15:04:05Z" (RFC3339 without sub-seconds when
+                  truncated; note: time.RFC3339 may include sub-seconds if
+                  present — use Format("2006-01-02T15:04:05Z") explicitly)
+     C#:   DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+     JS:   new Date().toISOString().replace(/\.\d+/, '')
+               → strips fractional seconds from ISO string
+
+   Use-case examples:
+     completion_date: "${now()}"   — SOC2 audit completion timestamp
+     created_at: "${now()}"        — evidence record audit field
 
    4.2  str namespace
    ──────────────────

@@ -1,0 +1,74 @@
+# E-004/E-005/E-006/E-007: expression-position rules
+$schema: "https://schemas.gert.dev/runbook/v2.json"
+apiVersion: runbook/v2
+id: test-expr-rules
+name: Test expression-position rules
+
+inputs:
+  error_rate:
+    type: number
+  p95_latency:
+    type: number
+  pod_json:
+    type: string
+  acknowledged:
+    type: boolean
+
+flow:
+  - step:
+      id: s1
+      type: cli
+      title: Check canary
+      command: echo
+      args: ["check"]
+      when: 'error_rate > 0.05 || p95_latency > 0.5'
+
+  - step:
+      id: s2
+      type: cli
+      title: Rollback
+      command: echo
+      args: ["rollback"]
+      when: 'error_rate < 0.01 && p95_latency < 0.2'
+
+  - step:
+      id: s3
+      type: cli
+      title: Skip if acknowledged
+      command: echo
+      args: ["skip"]
+      when: '!acknowledged'
+
+  - step:
+      id: s4
+      type: cli
+      title: Combined negation and boolean
+      command: echo
+      args: ["combined"]
+      condition: 'db_count == "0" && !analytics_still_exists'
+
+  - step:
+      id: s5
+      type: cli
+      title: Contains check
+      command: kubectl
+      args: ["get", "pod", "-o", "json"]
+      capture:
+        pod_json: stdout
+    branches:
+      - condition: 'pod_json contains "CrashLoopBackOff" || pod_json contains "ImagePullBackOff"'
+        steps:
+          - step:
+              id: s5a
+              type: cli
+              title: Crash loop detected
+              command: echo
+              args: ["crash"]
+      - condition: 'pod_json contains "OOMKilled"'
+        steps:
+          - step:
+              id: s5b
+              type: cli
+              title: OOM detected
+              command: echo
+              args: ["oom"]

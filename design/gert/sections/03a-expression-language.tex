@@ -123,6 +123,7 @@ identifier with error \texttt{GXL-PARSE-010}.
 \texttt{or}     & Logical OR operator \\
 \texttt{not}    & Logical NOT operator \\
 \texttt{len}    & Top-level length builtin \\
+\texttt{now}    & Top-level UTC timestamp builtin \\
 \texttt{str}    & Namespace prefix (string helpers) \\
 \texttt{list}   & Namespace prefix (list helpers) \\
 \texttt{regex}  & Namespace prefix (regex helpers) \\
@@ -427,9 +428,80 @@ and non-array indexing, see \S\ref{sec:gxl:semantics:paths}.
 \subsection{Function Calls}
 \label{subsec:gxl:calls}
 
-GXL provides exactly two call forms:
-the top-level \texttt{len} builtin and namespace-qualified method calls.
+GXL provides exactly three call forms:
+the top-level \texttt{now} builtin, the top-level \texttt{len} builtin,
+and namespace-qualified method calls.
 All other function-call forms MUST be rejected as \texttt{GXL-PARSE-007}.
+
+\subsubsection{now (top-level builtin)}
+\label{subsubsec:gxl:now-call}
+
+\begin{minted}{text}
+NowCall = "now" "(" [ ArgList ] ")" ;
+\end{minted}
+
+\texttt{now} takes exactly zero arguments and returns a \texttt{string}
+containing the current UTC timestamp in ISO-8601 format:
+\texttt{YYYY-MM-DDTHH:MM:SSZ} (no fractional seconds; \texttt{Z} suffix
+mandatory).  Any argument provided raises \texttt{GXL-TYPE-004} at parse
+time (arity is statically known to be zero).
+
+\texttt{now} is NOT a namespace; it MUST be written as \texttt{now()},
+not \texttt{now.\ldots(\ldots)}.  A bare \texttt{now} without parentheses
+cannot match \texttt{NowCall} (parentheses required) and cannot match a GDP
+variable path (\texttt{now} is a reserved keyword, not \texttt{IDENT}); the
+correct error is \texttt{GXL-PARSE-001} (unexpected token).
+
+\paragraph{Return format.}
+The returned string satisfies the grammar:
+
+\begin{minted}{text}
+year  "-" month "-" day "T" hour ":" minute ":" second "Z"
+
+where year   = 4DIGIT
+      month  = 2DIGIT  (* 01..12 *)
+      day    = 2DIGIT  (* 01..31 *)
+      hour   = 2DIGIT  (* 00..23 *)
+      minute = 2DIGIT  (* 00..59 *)
+      second = 2DIGIT  (* 00..60, allowing leap second *)
+\end{minted}
+
+Equivalently, the value MUST match the regular expression:
+\texttt{\textasciicircum\textbackslash d\{4\}-\textbackslash d\{2\}-\textbackslash d\{2\}T\textbackslash d\{2\}:\textbackslash d\{2\}:\textbackslash d\{2\}Z\$}.
+
+\paragraph{Determinism semantics.}
+\texttt{now()} is \emph{per-evaluation}: each call site yields an
+independent fresh timestamp at the moment of evaluation.  This matches
+the semantics of Go's \texttt{time.Now()} and avoids the complexity of a
+per-run snapshot registry.  Implementations that require a stable timestamp
+across an entire run MUST capture the value once via a capture step and
+reference the variable thereafter.
+
+\paragraph{Portability reference implementations.}
+
+\begin{itemize}
+  \item Go: \texttt{time.Now().UTC().Format("2006-01-02T15:04:05Z")}
+    (use the explicit layout string, not \texttt{time.RFC3339}, which
+    may emit sub-second precision depending on the \texttt{time.Time}
+    value).
+  \item C\#: \texttt{DateTime.UtcNow.ToString("yyyy-MM-dd\textbackslash{}THH:mm:ss\textbackslash{}Z")}
+  \item JS: \texttt{new Date().toISOString().replace(/\textbackslash.\textbackslash d+/, '')}
+    (strips fractional seconds from the ISO string).
+\end{itemize}
+
+\paragraph{Use-case examples.}
+\texttt{now()} is intended for evidence timestamps and audit fields where
+the current wall-clock time must be embedded at evaluation time:
+
+\begin{minted}{yaml}
+# SOC2 audit completion timestamp
+completion_date: "${now()}"
+
+# Evidence record audit field
+created_at: "${now()}"
+\end{minted}
+
+(Source: \texttt{gxl.ebnf} \S4.1b.)
 
 \subsubsection{len (top-level builtin)}
 \label{subsubsec:gxl:len-call}
@@ -530,8 +602,9 @@ GXL defines two unary operators:
 \label{sec:gxl:stdlib}
 % ─────────────────────────────────────────────────────────────────────────────
 
-All function calls in GXL MUST go through the \texttt{len} builtin or one of
-the permitted namespaces (\texttt{str}, \texttt{list}, \texttt{regex}).
+All function calls in GXL MUST go through one of the top-level builtins
+(\texttt{len}, \texttt{now}) or one of the permitted namespaces
+(\texttt{str}, \texttt{list}, \texttt{regex}).
 Method names use camelCase
 (decisions.md ``GXL/GIS/GCP --- Open question resolutions''~Q3).
 The type notation used in the signatures below is:
@@ -562,6 +635,58 @@ or \texttt{bool}).
 A \texttt{null} argument to \texttt{len} MUST raise \texttt{GXL-TYPE-003}.
 
 (Source: \texttt{gxl.ebnf} \S4.1.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{\texttt{now} --- Top-Level Builtin}
+\label{subsec:gxl:stdlib:now}
+
+\begin{center}
+\begin{tabular}{p{5.5cm}p{1.5cm}p{6cm}}
+\hline
+\textbf{Signature} & \textbf{Return} & \textbf{Description} \\
+\hline
+\texttt{now()} & \texttt{string}
+  & Current UTC timestamp in ISO-8601 format
+    \texttt{YYYY-MM-DDTHH:MM:SSZ}.
+    No fractional seconds; \texttt{Z} suffix always present. \\
+\hline
+\end{tabular}
+\end{center}
+
+\texttt{now()} takes exactly zero arguments.
+Passing any argument raises \texttt{GXL-TYPE-004} at parse time.
+
+\paragraph{Return format.}
+The returned value MUST match the regular expression
+\texttt{\textasciicircum\textbackslash d\{4\}-\textbackslash d\{2\}-\textbackslash d\{2\}T\textbackslash d\{2\}:\textbackslash d\{2\}:\textbackslash d\{2\}Z\$}.
+The format is a strict subset of RFC~3339 / ISO-8601.
+
+\paragraph{Determinism.}
+\texttt{now()} is \emph{per-evaluation}: each occurrence of \texttt{now()}
+in an expression is evaluated independently and may return a different
+timestamp if sufficient time elapses between evaluations.
+Implementations that require a stable snapshot value across a single run
+MUST capture the result once via a capture step and reference the captured
+variable thereafter.
+Rationale: per-evaluation semantics match the natural behaviour of
+\texttt{time.Now()} in Go and require no per-run state registry.
+
+\paragraph{Portability.}
+Conforming implementations across execution environments MUST produce
+output in the exact format specified above:
+
+\begin{itemize}
+  \item Go: \texttt{time.Now().UTC().Format("2006-01-02T15:04:05Z")}
+  \item C\#: \texttt{DateTime.UtcNow.ToString("yyyy-MM-dd\textbackslash{}THH:mm:ss\textbackslash{}Z")}
+  \item JS: \texttt{new Date().toISOString().replace(/\textbackslash.\textbackslash d+/, '')}
+\end{itemize}
+
+\paragraph{Use cases.}
+Evidence timestamps, audit-trail fields, and SOC2 completion records
+where the current wall-clock time must be embedded at evaluation time:
+\texttt{completion\_date: "\$\{now()\}"}, \texttt{created\_at: "\$\{now()\}"}.
+
+(Source: \texttt{gxl.ebnf} \S4.1b.)
 
 % ─────────────────────────────────────────────────────────────────────────────
 \subsection{\texttt{str} Namespace}

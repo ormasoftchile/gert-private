@@ -315,6 +315,66 @@ See §8 for full descriptions.
 
 ---
 
+## 2026-06-05 — now() stdlib + Stream E Day 1
+
+**By:** Barbara (now() spec), Don (migrate-expr tool)  
+**Status:** Delivered and ratified
+
+### now() Added to GXL Stdlib
+
+**Decision:** `now() → string` (ISO-8601 `YYYY-MM-DDTHH:MM:SSZ`)
+
+**Key specs:**
+- Per-evaluation determinism (each call yields independent fresh timestamp)
+- Arity error reuses **GXL-TYPE-004** (no new error code)
+- Bare `now` (no parens) raises GXL-PARSE-001 (unexpected token)
+
+**Patch scope:**
+- `design/gert/grammar/gxl.ebnf` (+42 lines): `KW_NOW` keyword, `NowCall` production, stdlib entry
+- `design/gert/sections/03a-expression-language.tex` (+72 lines): keywords table, function intro, stdlib subsection
+- `design/gert/conformance/tv-gxl-eval.yaml` (+33 lines): TV-GXL-EVAL-088/089/090 (return type, arity, bare keyword)
+- `design/gert/testdata/runbooks/r04-soc2-evidence/schema.yaml` (1 line patched): `{{ now }}` → `${now()}` (DEFERRED-001 resolution)
+
+**Conformance corpus:** 205 → **208 vectors** (+3 for now())
+
+**Stream D Status:** ✅ **FULLY COMPLETE** — All P1..P5 exit criteria at zero; DEFERRED-001 closed; r04 patched clean.
+
+---
+
+### Stream E Day 1 — Subcommand + Translation Engine
+
+**Status:** Delivered — 11 rules implemented, 31 tests passing
+
+**Deliverables:**
+- `cmd/gert/cmd/migrateexpr.go` + root command registration
+- `internal/migrateexpr/translate.go` (11 rules: E-001..E-011)
+- `internal/migrateexpr/traverse.go` (position-aware YAML tree walker)
+- 26 unit tests + 5 integration tests (all passing)
+
+**Translation rules implemented:**
+| Rule | Input | Output | Authority |
+|------|-------|--------|-----------|
+| **E-001/002/003** | `{{ .X }}`/`{{ .A.B }}`/`{{ .A[N] }}` | `${X}`/`${A.B}`/`${A[N]}` | GIS/GDP spec |
+| **E-004/005/006** | `&&`/`\|\|`/`!` | `and`/`or`/`not` | GXL binary ops |
+| **E-007** | `X contains "Y"` | `str.contains(X, "Y")` | GXL stdlib |
+| **E-008** | `over: "$.IDENT"` | `over: IDENT` | GCP subtree iteration |
+| **E-009** | `$${...}` (old escape) | `\${...}` | OI-GIS-01 canonical form |
+| **E-010** | `{{ .x \| default }}` | **WARN** (no auto-translate) | Template pipes (RISK-002) |
+| **E-011** | `{{ now }}` | `${now()}` | GXL stdlib decision |
+
+**Position-aware traversal features:**
+- `gopkg.in/yaml.v3` Node API for comment/style preservation
+- Expression-position detection by YAML mapping key (`when`, `condition`, `until`)
+- Non-string tag guard (skip `!!int`, `!!bool`, etc.)
+
+**Day 2 Plan:** Dogfood on already-migrated fixtures (expect zero diff); emit warnings for `contains` ambiguity (string vs list); extend E-006 to detect parenthesized negation `!(...)`.
+
+**Dependencies added:**
+- `github.com/spf13/cobra` v1.8.1
+- `gopkg.in/yaml.v3` v3.0.1
+
+---
+
 ## Previous Decisions (Archived)
 
 **Archive:** `.squad/archive/decisions-20260605-042704.md` (2825 lines, 154,277 bytes)

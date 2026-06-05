@@ -932,3 +932,42 @@ vectors:
       value: true
     note: "OI-GXL-05: GDP path in argument position is resolved first, then passed to function. Confirms resolution order."
     tags: [stdlib, str, gdp-in-arg, OI-GXL-05]
+
+  # --- now() stdlib (ratified 2026-06-05; resolves DEFERRED-001) ---
+  # gxl.ebnf §4.1b: now() is a zero-argument top-level builtin returning
+  # the current UTC timestamp as "YYYY-MM-DDTHH:MM:SSZ".
+
+  - id: TV-GXL-EVAL-088
+    category: GXL-EVAL
+    description: "now() returns a string matching ISO-8601 UTC format YYYY-MM-DDTHH:MM:SSZ."
+    input: 'now()'
+    variables: {}
+    expected:
+      type: string
+      assert: regex
+      pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'
+    note: "gxl.ebnf §4.1b: now() returns current UTC timestamp as string. Fixed format: YYYY-MM-DDTHH:MM:SSZ, no fractional seconds, Z suffix mandatory. Assertion is a regex match because the exact value is non-deterministic (per-evaluation semantics). Conformance harness MUST verify the value matches the pattern, not an exact string equality."
+    tags: [stdlib, now, timestamp, iso8601]
+
+  - id: TV-GXL-EVAL-089
+    category: GXL-EVAL
+    description: "now(1) raises GXL-TYPE-004 at parse time — arity violation (now takes zero arguments)."
+    input: 'now(1)'
+    variables: {}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-004
+      timing: parse-time
+    note: "gxl.ebnf §4.1b: now() takes exactly zero arguments. GXL-TYPE-004 (wrong argument count) is raised at parse time because arity is statically known to be zero. Providing any argument is a compile-time wrong-argument-count error, consistent with the treatment of len() called with zero args."
+    tags: [stdlib, now, wrong-arity, type-error, parse-time]
+
+  - id: TV-GXL-EVAL-090
+    category: GXL-EVAL
+    description: "now (bare keyword, no parens) raises GXL-PARSE-001 — unexpected token."
+    input: 'now'
+    variables: {}
+    expected:
+      error_class: GXL-PARSE
+      error_code: GXL-PARSE-001
+    note: "gxl.ebnf §4.1b and §2.2: 'now' is a reserved keyword (KW_NOW). A bare 'now' without parentheses cannot match NowCall (LPAREN required). 'now' as a KEYWORD cannot match IDENT, so GDP also fails. Under PEG ordered alternation all Primary alternatives fail → GXL-PARSE-001 (unexpected token). Analogous to 'str.foo' without parens → GXL-PARSE-001 (see gxl.ebnf §3 note on NamespaceCall). GXL-PARSE-010 does NOT apply here because 'now' is not being used as an identifier name; it simply appears in a position where no production matches."
+    tags: [stdlib, now, bare-keyword, parse-error, GXL-PARSE-001]

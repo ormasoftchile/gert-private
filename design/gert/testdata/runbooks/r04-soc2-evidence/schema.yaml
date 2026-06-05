@@ -282,7 +282,7 @@ flow:
         action: record-completion
         args:
           audit_id: "${audit_id}"
-          completion_date: "{{ now }}"
+          completion_date: "${now()}"
           evidence_location: "s3://compliance-evidence/${audit_id}/"
 
   - step:

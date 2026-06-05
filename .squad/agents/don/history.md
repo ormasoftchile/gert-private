@@ -97,6 +97,30 @@ The GIS optional-chaining extension (`?.` and `?.[N]`) has been ratified and all
 ### Phase 2 Dependency
 - This is independent of other Phase 2 work; can be implemented in parallel with template/approval/adapter work.
 
+## Phase 2 — Go Runtime Implementation
+
+### Day 1 — Scope, Plan, Scaffold (2026-06-05T09:25:14.584-07:00)
+- Read normative GXL/GIS/GCP grammar files, spec sections, parse-gate section, schema, and all current conformance files.
+- Confirmed current conformance corpus count: 223 vectors total (`tv-gxl-eval.yaml` 90, `tv-gxl-parse.yaml` 83, `tv-gxl-path.yaml` 35, `tv-gis-path.yaml` 15).
+- Created `design/gert/phase2-go-runtime-plan.md` with package layout, PJVM model choice, implementation stream order, conformance harness plan, proposed API signatures, day-by-day breakdown, risks, and open questions.
+- Scaffolded `internal/eval` with per-grammar packages (`gxl`, `gis`, `gcp`) and shared `core` package.
+- Added initial PJVM type definitions in `internal/eval/core/value.go` using a struct-with-kind representation.
+- Added `internal/eval/conformance_test.go` to discover `design/gert/conformance/tv-*.yaml`, load vectors via `gopkg.in/yaml.v3`, print corpus summary, and create skipped subtests for every vector.
+- Added `gopkg.in/yaml.v3 v3.0.1` to `go.mod`/`go.sum`; this is for the runtime conformance harness, not the removed migrator.
+- Dropped decision summary at `.squad/decisions/inbox/don-phase2-day1-scaffold.md`.
+- Extracted reusable scaffold pattern to `.squad/skills/go-conformance-scaffold/SKILL.md`.
+- Verification note: `go` is not on PATH in this environment (`where.exe go` failed), so `go build ./...`, `go test ./... -run TestConformance`, and `go mod tidy` could not be executed locally. Coordinator should run them in a Go-enabled environment.
+
+### Phase 2 Day-by-Day Plan
+- Day 2: PJVM constructors/validation, YAML-to-PJVM conversion, conformance harness dispatch and expected-result comparison stubs.
+- Day 3: GXL lexer/parser; target `tv-gxl-parse.yaml` green.
+- Day 4: GXL evaluator, stdlib, arithmetic, comparison, and short-circuit behavior; target `tv-gxl-eval.yaml` green.
+- Day 5: GXL GDP traversal and path errors; target `tv-gxl-path.yaml` green.
+- Day 6: GIS baseline parser/renderer, escapes, embedded GXL, PJVM string coercion, hard-error path propagation.
+- Day 7: GIS optional chaining; target all current 223 vectors green.
+- Day 8: GCP parser/resolver once GCP vectors are available.
+- Day 9: Parse gate, grammar version pinning, structured diagnostics, and `ValidatedPlan` no-bypass runtime boundary.
+
 ## Learnings
 - 2026-06-04T20:14:36.949-07:00 - Stream E was reversed cleanly after Day 2 shipped: no production runbooks means no migration target, and a migrator would imply a legacy mode GERT does not have.
 - 2026-06-04T20:14:36.949-07:00 - Dogfooding a tool against the source-of-truth corpus remains a valuable regression pattern; the specific migrator skill was removed, but future agents can re-derive the pattern when a real tool surface exists.

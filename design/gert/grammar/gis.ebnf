@@ -282,14 +282,14 @@ GISExpression  = Expression ;
    SECTION 6 — STREAM A OPEN ISSUES
 
    OI-GIS-01: Escape convention divergence from proposal
-     The original proposal (expression-language-proposal.md §2.6)
-     specified '$${' as the escape for literal '${' (dollar doubling).
-     This grammar specifies '\${' instead, as directed by the Stream A
-     task specification. The two conventions are incompatible.
-     Impact: Any runbook containing '$$' (doubled dollar) will need
-     a migration note. The migration tool (Stream E) must handle both
-     conventions. RECOMMEND: Team ratification of '\${' as canonical;
-     the proposal's '$$' convention should be formally deprecated.
+     ## RATIFIED 2026-06-05T00:14:04-04:00 (ormasoftchile via Copilot)
+     ## See: .squad/decisions/inbox/copilot-directive-gxl-oi-ratification.md
+     '\${' is the canonical escape for literal '${'. This grammar is
+     authoritative. The original proposal (expression-language-proposal.md
+     §2.6) specified '$${' (dollar doubling) — that convention is formally
+     DEPRECATED. The migration tool (Stream E) MUST convert any historical
+     '$${' occurrences to '\${'. Edith (Stream B) must amend proposal §2.6
+     to reflect this ratification. No further team input required.
 
    OI-GIS-02: Bare '$' in tool argv coexistence
      Tool definitions that contain '${ENV_VAR}' environment-variable

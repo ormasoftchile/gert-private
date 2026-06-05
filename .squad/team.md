@@ -17,6 +17,8 @@
 | Don | Backend Dev | `.squad/agents/don/charter.md` | active |
 | Leslie | Frontend Dev | `.squad/agents/leslie/charter.md` | active |
 | David | Integration Engineer | `.squad/agents/david/charter.md` | active |
+| Edith | Spec Editor | `.squad/agents/edith/charter.md` | active |
+| Tess | Conformance Tester | `.squad/agents/tess/charter.md` | active |
 | Scribe | Session Logger | `.squad/agents/scribe/charter.md` | active |
 | Ralph | Work Monitor | — | active |
 

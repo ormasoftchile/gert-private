@@ -154,3 +154,18 @@ Both are documented in grammar files. Consider adding to today's decision record
 
 **Orchestration log:** `.squad/orchestration-log/2026-06-04T23-56-26-barbara.md`
 
+---
+
+## 2026-06-05T00:14:04-04:00 — Phase 1 Day 1 Streams B, C, F Complete — Stream D Ready for Design
+
+**Update:** Streams B, C, F completed successfully. For Stream D (Fixture Migration), the following are now available:
+- **Spec Foundation:** `design/gert/sections/03a-expression-language.tex` (GXL spec) + `design/gert/sections/03d-parse-time-enforcement.tex` (parse gate spec) — Edith & Barbara
+- **Conformance Corpus:** `design/gert/conformance/schema.json` + `design/gert/conformance/tv-gxl-parse.yaml` (83 parse vectors) — Tess
+- **Grammar Patches:** `design/gert/grammar/gis.ebnf` + `design/gert/grammar/gcp.ebnf` updated per OI-GIS-01, OI-GCP-02 ratifications
+
+**You can now start:** Stream D (Fixture Migration) design phase. Grammar constraints, spec definitions, and conformance corpus all locked. OI-GIS-01 (`\${` canonical) and OI-GCP-02 (bare-root captures allowed) ratified and encoded.
+
+**Outstanding blockers for Phase 2:** OPQ-GATE-01 (Germán decision needed on in-flight grammar version upgrade strategy — blocks OPQ-GATE-05 plan storage). No blockers for Stream D kickoff.
+
+**Orchestration logs:** `.squad/orchestration-log/20260605-042704-{edith,tess,barbara}.md`
+

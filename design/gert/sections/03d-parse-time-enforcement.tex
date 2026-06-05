@@ -1,0 +1,586 @@
+%% ============================================================
+%% Section 03d — Parse-Time Enforcement (Parser/Planner Gate)
+%% Author:     Barbara — Lead / Architect
+%% Date:       2026-06-05T00:14:04-04:00
+%% Stream:     F — Parser/Planner Gate Specification (Phase 1)
+%% Status:     Normative draft — Phase 2 runtime implementors are
+%%             bound by this section.
+%% References:
+%%   design/gert/grammar/gxl.ebnf   (GXL error codes, §6)
+%%   design/gert/grammar/gis.ebnf   (GIS error codes, §5)
+%%   design/gert/grammar/gcp.ebnf   (GCP error codes, §7)
+%%   design/gert/expression-language-proposal.md §4
+%%   design/web-platform/c-sharp-governance-parity.md §4
+%%   .squad/decisions.md (OI-GIS-01 ratification, OI-GCP-02 ratification)
+%% ============================================================
+
+\section{Parse-Time Enforcement}
+\label{sec:parse-gate}
+
+\subsection{Governance Rationale}
+\label{sec:parse-gate:rationale}
+
+The words \textbf{MUST}, \textbf{MUST NOT}, \textbf{REQUIRED}, \textbf{SHALL},
+\textbf{SHALL NOT}, \textbf{SHOULD}, \textbf{SHOULD NOT}, \textbf{RECOMMENDED},
+\textbf{MAY}, and \textbf{OPTIONAL} in this section are to be interpreted as
+described in RFC~2119.
+
+GERT's value proposition rests on three pillars: governance by construction,
+audit trail integrity, and cross-runtime parity.  None of these properties
+survives a runtime that begins executing steps before every expression in the
+runbook has been inspected against the canonical grammars.
+
+\begin{description}
+  \item[Cross-runtime parity.]
+    A runbook that runs on the Go reference implementation
+    \emph{must} produce identical observable behaviour on the C\# runtime and
+    on any future runtime.  That guarantee is only achievable if every runtime
+    parses the same canonical grammars---\texttt{gxl.ebnf},
+    \texttt{gis.ebnf}, \texttt{gcp.ebnf}---before committing to an execution
+    plan.  Lazy or runtime-only parsing creates a window in which one
+    implementation accepts an expression another rejects, silently diverging
+    audit trails.
+
+  \item[Audit trail integrity.]
+    The JSONL trace is the authoritative, tamper-evident record of every
+    runbook execution.  Trace integrity requires that the set of expressions
+    executed is \emph{exactly} the set that was validated.  An expression
+    discovered to be invalid mid-execution cannot be cleanly rolled back; the
+    run is in an undefined state and the trace is untrustworthy.
+
+  \item[Replay determinism.]
+    GERT supports evidence replay.  A trace recorded in environment~A must
+    produce the same step sequence when replayed in environment~B.  Replay
+    determinism requires that expression syntax is fixed at plan time, not
+    discovered dynamically.  If an expression is invalid, the replay must fail
+    at the plan gate, not partway through re-execution.
+\end{description}
+
+For these reasons, parse-time enforcement is \textbf{non-negotiable} and is the
+\emph{single} governance checkpoint for expression validity.  There are no
+alternative paths, no fast paths, and no deferred-validation modes.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{The Parse-Time Contract}
+\label{sec:parse-gate:contract}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\paragraph{Definition: Validated Runbook.}
+A runbook is \emph{validated} if and only if:
+
+\begin{enumerate}
+  \item Every field that carries a GXL boolean expression---\texttt{when},
+    \texttt{condition}, \texttt{until}, \texttt{iterate.until},
+    \texttt{branches[\,].condition}, \texttt{include.when},
+    \texttt{collector.fields[\,].when}---has been successfully parsed against
+    the GXL grammar (\texttt{gxl.ebnf}, Version~1.0.0-draft or later) with no
+    parse errors.
+
+  \item Every field that carries a GIS template string---\texttt{title},
+    \texttt{args}, \texttt{stdin}, \texttt{tool.argv[\,]},
+    \texttt{display.content}, \texttt{assert[\,].subject},
+    \texttt{assert[\,].expected}, artifact paths, \texttt{include.with}
+    values---has been successfully parsed against the GIS grammar
+    (\texttt{gis.ebnf}, Version~1.0.0-draft or later) with no parse
+    \emph{errors} (GIS-PARSE-002 warnings do not block validation; all other
+    GIS error codes do).
+
+  \item Every capture path in every \texttt{capture:} map has been
+    successfully parsed against the GCP grammar (\texttt{gcp.ebnf},
+    Version~1.0.0-draft or later) with no parse errors.
+
+  \item Every semantic precondition checked by the Planner
+    (Section~\ref{sec:parse-gate:validated-plan}) has passed.
+\end{enumerate}
+
+\paragraph{MUST: No step execution from an unvalidated plan.}
+\texttt{RunHandle.Next()} (Go) and \texttt{IRunHandle.NextAsync()} (C\#)---and
+their equivalent in any future runtime---\textbf{MUST NOT} execute any step
+from a plan that has not passed the full validation pipeline described in this
+section.  A runtime that receives anything other than a
+\texttt{ValidatedPlan}~(\S\ref{sec:parse-gate:validated-plan}) as input to its
+run-start function \textbf{MUST} refuse with a hard error before any step
+dispatches.
+
+\paragraph{MUST: Validation is performed once, at plan time.}
+Validation \textbf{MUST} be performed in full before the first step dispatches.
+Lazy parsing---deferring expression parsing until the step that contains the
+expression is about to execute---is \textbf{MUST NOT}.  The rationale is
+audit trail integrity: a mid-execution parse failure leaves the run in an
+undefined state whose trace cannot be replayed.
+
+The validation pipeline sequence is:
+
+\begin{enumerate}
+  \item \textbf{YAML Load:} structural parsing of the runbook YAML; JSON Schema
+    / structural validation.
+  \item \textbf{GXL Parse:} all boolean-expression fields parsed by the GXL
+    parser.
+  \item \textbf{GIS Parse:} all string-template fields parsed by the GIS
+    parser.
+  \item \textbf{GCP Parse:} all capture paths parsed by the GCP parser.
+  \item \textbf{Semantic validation (Planner):} variable scope analysis,
+    undefined-capture detection, type inference, subtree-default prohibition
+    (\texttt{GCP-DEFAULT-SUBTREE}), grammar-version recording.
+\end{enumerate}
+
+If \emph{any} step fails, the pipeline \textbf{MUST} stop, accumulate all
+errors from the failed stage, and return them to the caller.  No
+\texttt{ValidatedPlan} is produced.  No \texttt{RunHandle} is created.
+
+\paragraph{MUST: Validation result recorded in trace.}
+When a runbook is successfully validated, the runtime \textbf{MUST} emit the
+event \texttt{plan.validated} as the \emph{first} event after plan load and
+before any step event.  The event payload \textbf{MUST} include at minimum:
+
+\begin{itemize}
+  \item \texttt{runbook\_id} and \texttt{runbook\_hash} (content hash of the
+    source file).
+  \item \texttt{grammar\_versions} as recorded in the
+    \texttt{ValidatedPlan}~(\S\ref{sec:parse-gate:validated-plan}).
+  \item \texttt{validated\_at} timestamp.
+  \item \texttt{expression\_count} summary (GXL, GIS, GCP expression counts).
+\end{itemize}
+
+The trace event schema for \texttt{plan.validated} is defined in
+\texttt{design/gert/sections/07-runtime-events.tex}.  Implementations \textbf{MUST}
+reference that schema for the full event envelope.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{The \texttt{ValidatedPlan} Type Contract}
+\label{sec:parse-gate:validated-plan}
+% ─────────────────────────────────────────────────────────────────────────────
+
+A \texttt{ValidatedPlan} is the \emph{only} value accepted by the run-start
+function of any GERT runtime.  It is a closed, opaque product of the validation
+pipeline; it cannot be constructed by caller code directly.
+
+\paragraph{Normative field specification.}
+Every \texttt{ValidatedPlan} value \textbf{MUST} expose the following fields
+(field names \textbf{MAY} follow language naming conventions---\texttt{camelCase}
+for C\#, \texttt{snake\_case} for Go---but the semantics and types \textbf{MUST}
+be equivalent):
+
+\begin{center}
+\begin{tabular}{lll}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\hline
+\texttt{runbook\_id}      & string    & Unique identifier of the runbook \\
+\texttt{runbook\_hash}    & string    & SHA-256 hex digest of the source file \\
+\texttt{grammar\_versions}& struct    & Grammar versions used during validation \\
+\quad\texttt{.gxl}        & string    & e.g., \texttt{"1.0.0-draft"} \\
+\quad\texttt{.gis}        & string    & e.g., \texttt{"1.0.0-draft"} \\
+\quad\texttt{.gcp}        & string    & e.g., \texttt{"1.0.0-draft"} \\
+\texttt{validated\_at}    & timestamp & RFC~3339 UTC timestamp of validation \\
+\texttt{expression\_count}& struct    & Count of successfully parsed expressions \\
+\quad\texttt{.gxl}        & int       & Number of GXL expression fields \\
+\quad\texttt{.gis}        & int       & Number of GIS template fields \\
+\quad\texttt{.gcp}        & int       & Number of GCP capture paths \\
+\texttt{errors}           & list      & \textbf{MUST} be empty (see below) \\
+\hline
+\end{tabular}
+\end{center}
+
+The \texttt{errors} field \textbf{MUST} be empty for any \texttt{ValidatedPlan}
+that is accepted by the runtime.  A plan with a non-empty \texttt{errors} list
+is an invalid plan; it \textbf{MUST} be rejected and \textbf{MUST NOT} be
+stored in any persistent plan store.  The type invariant is: if
+\texttt{errors} is non-empty, the value is not a \texttt{ValidatedPlan}---it
+is an error report.
+
+\paragraph{Language-specific implementation notes.}
+Go implementations \textbf{MUST} represent \texttt{ValidatedPlan} as an
+unexported struct with no exported constructor other than the planner's
+\texttt{Plan()} function.  C\# implementations \textbf{MUST} represent
+\texttt{ValidatedPlan} as an \texttt{internal sealed record} accessible only
+via \texttt{IRunbookPlanner.PlanAsync()}.  No adapter, controller, or external
+caller \textbf{MAY} construct a \texttt{ValidatedPlan} by any means other than
+the canonical planner.  See
+\texttt{design/web-platform/c-sharp-governance-parity.md~\S1.2} for the
+normative C\# pipeline class mapping.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Error Code Catalog}
+\label{sec:parse-gate:error-codes}
+% ─────────────────────────────────────────────────────────────────────────────
+
+This subsection is the \textbf{normative master error-code list} for all three
+grammar parsers and the parse gate.  Phase~2 implementors \textbf{MUST} emit
+exactly these codes.  Error codes from individual grammar files are reproduced
+here for completeness; the grammar files remain authoritative for parse-stage
+codes.
+
+\subsubsection{GXL Parser Error Codes}
+\label{sec:parse-gate:error-codes:gxl}
+
+Source: \texttt{design/gert/grammar/gxl.ebnf~\S6}.
+Raised by: GXL Parser (plan time unless noted).
+
+\begin{center}\small
+\begin{tabular}{p{3.5cm}p{1.8cm}p{5.5cm}p{3.5cm}}
+\hline
+\textbf{Code} & \textbf{Raised By} & \textbf{Condition} & \textbf{Remediation} \\
+\hline
+\texttt{GXL-PARSE-001} & Parser & Unexpected token & Check expression syntax \\
+\texttt{GXL-PARSE-002} & Parser & Unterminated string literal & Close the quote \\
+\texttt{GXL-PARSE-003} & Parser & Invalid number literal (leading zeros, NaN, Infinity) & Use finite decimal form \\
+\texttt{GXL-PARSE-004} & Parser & Invalid escape sequence & Use supported escapes (\textbackslash\textbackslash, \textbackslash n, \textbackslash t, \textbackslash r, \textbackslash u, \textbackslash U) \\
+\texttt{GXL-PARSE-005} & Parser & Unknown namespace (\texttt{math.*} in v1) & Remove \texttt{math.*} calls \\
+\texttt{GXL-PARSE-006} & Parser & Unknown namespace method & Check stdlib reference \\
+\texttt{GXL-PARSE-007} & Parser & Forbidden syntax: \texttt{\&\&}, \texttt{||}, \texttt{!}, \texttt{|}, ternary, infix \texttt{contains}/\texttt{startsWith}/\texttt{matches}, assignment, string concat, array/object construction, negative index & Use GXL equivalents \\
+\texttt{GXL-PARSE-008} & Parser & Unmatched parenthesis & Balance parentheses \\
+\texttt{GXL-PARSE-009} & Parser & Chained comparison (\texttt{a < b < c}) & Use \texttt{a < b and b < c} \\
+\texttt{GXL-PARSE-010} & Parser & Keyword used as identifier & Rename the variable \\
+\texttt{GXL-TYPE-001}  & Parser/Planner & Type mismatch in comparison & Use same-type operands \\
+\texttt{GXL-TYPE-002}  & Parser/Planner & Non-bool in boolean position & Ensure expression resolves to bool \\
+\texttt{GXL-TYPE-003}  & Evaluator & Argument type mismatch / arithmetic on non-number & Check argument types \\
+\texttt{GXL-TYPE-004}  & Parser & Wrong argument count & Check function signature \\
+\texttt{GXL-PATH-001}  & Evaluator & Variable or path segment not found & Declare variable or use \texttt{when:} guard \\
+\texttt{GXL-PATH-002}  & Evaluator & Array index out of bounds & Guard with \texttt{len()} check \\
+\texttt{GXL-PATH-003}  & Evaluator & Index on non-array & Check capture type \\
+\texttt{GXL-EVAL-001}  & Evaluator & Variable resolution failure (catch-all) & Inspect context map \\
+\texttt{GXL-EVAL-002}  & Evaluator & Division/modulo by zero & Guard divisor \\
+\texttt{GXL-EVAL-003}  & Evaluator & Invalid RE2 regex pattern & Use RE2 syntax \\
+\texttt{GXL-EVAL-004}  & Evaluator & Null in ordered comparison & Use \texttt{!= null} guard \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsubsection{GIS Parser Error Codes}
+\label{sec:parse-gate:error-codes:gis}
+
+Source: \texttt{design/gert/grammar/gis.ebnf~\S5}.
+Raised by: GIS Parser (plan time) or GIS Evaluator (runtime).
+
+\begin{center}\small
+\begin{tabular}{p{3.5cm}p{1.8cm}p{5.5cm}p{3.5cm}}
+\hline
+\textbf{Code} & \textbf{Raised By} & \textbf{Condition} & \textbf{Remediation} \\
+\hline
+\texttt{GIS-PARSE-001}    & Parser & Unclosed interpolation block (\texttt{\$\{} without \texttt{\}}) & Add closing \texttt{\}} \\
+\texttt{GIS-PARSE-002}    & Parser & Unknown escape sequence (WARNING only, not hard error) & Use supported escapes or literal \textbackslash\$\{ \\
+\texttt{GIS-PARSE-003}    & Parser & Invalid GXL expression inside \texttt{\$\{...\}} & Fix embedded GXL; sub-error code included \\
+\texttt{GIS-PARSE-004}    & Parser & Empty interpolation block (\texttt{\$\{\}}) & Provide variable name \\
+\texttt{GIS-PATH-MISSING} & Evaluator & GXL expression raised \texttt{GXL-PATH-001} & Declare variable or use \texttt{when:} guard \\
+\texttt{GIS-TYPE-001}     & Evaluator & NaN or Infinity in string coercion & Ensure capture yields finite number \\
+\texttt{GIS-TYPE-002}     & Evaluator & GXL type error propagated from embedded expression & Fix GXL expression type \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsubsection{GCP Parser Error Codes}
+\label{sec:parse-gate:error-codes:gcp}
+
+Source: \texttt{design/gert/grammar/gcp.ebnf~\S7}.
+Raised by: GCP Parser (plan time) or GCP Evaluator (runtime).
+
+\begin{center}\small
+\begin{tabular}{p{3.5cm}p{1.8cm}p{5.5cm}p{3.5cm}}
+\hline
+\textbf{Code} & \textbf{Raised By} & \textbf{Condition} & \textbf{Remediation} \\
+\hline
+\texttt{GCP-PARSE-001}      & Parser   & Unknown source prefix (e.g., \texttt{xml.*}) & Use a supported prefix \\
+\texttt{GCP-PARSE-002}      & Parser   & Invalid path suffix (e.g., \texttt{exit\_code.extra}) & Remove suffix \\
+\texttt{GCP-PARSE-003}      & Parser   & Negative array index & Use non-negative index \\
+\texttt{GCP-PARSE-004}      & Parser   & Empty path segment (double dot or trailing dot) & Remove extra dot \\
+\texttt{GCP-PARSE-005}      & Parser   & Invalid header name & Use lowercase alphanumeric with hyphens \\
+\texttt{GCP-PARSE-006}      & Planner  & \texttt{step.\{id\}.*} references undefined step ID & Correct step ID \\
+\texttt{GCP-RESOLVE-001}    & Evaluator & Referenced step not yet executed or was skipped & Re-order steps or guard with \texttt{when:} \\
+\texttt{GCP-RESOLVE-002}    & Evaluator & Path segment not found in object & Check step output structure \\
+\texttt{GCP-RESOLVE-003}    & Evaluator & Array index out of bounds / index on non-array & Guard with \texttt{len()} \\
+\texttt{GCP-RESOLVE-004}    & Evaluator & Output not parseable as declared format (json/yaml) & Check step output format \\
+\texttt{GCP-RESOLVE-005}    & Evaluator & Header absent (returns null, not error, by design) & Use \texttt{capture.default:} if required \\
+\texttt{GCP-DEFAULT-SUBTREE}& Planner  & \texttt{capture.default:} declared for subtree capture & Use \texttt{when: var != null} guard \\
+\texttt{GCP-TYPE-001}       & Planner  & Default value type incompatible with capture path & Match default type to capture type \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsubsection{Parse-Gate Error Codes (Plan Level)}
+\label{sec:parse-gate:error-codes:plan}
+
+The following codes are raised by the \textbf{Planner} (semantic validation
+layer) after all three parsers have succeeded, or by the gate layer itself.
+They are \emph{new in Stream~F} and do not originate from any grammar file.
+They are proposed in
+\texttt{.squad/decisions/inbox/barbara-stream-f-error-codes.md} and included
+here as normative.
+
+\begin{center}\small
+\begin{tabular}{p{2.8cm}p{1.8cm}p{6.0cm}p{3.7cm}}
+\hline
+\textbf{Code} & \textbf{Raised By} & \textbf{Condition} & \textbf{Remediation} \\
+\hline
+\texttt{PLAN-001} & Parser / Planner & Runbook contains a field with an unparseable expression (wrapper; includes sub-error from grammar) & Fix the flagged expression field \\
+\texttt{PLAN-002} & Planner & Runbook references an undefined capture variable in an expression (variable not produced by any reachable predecessor step) & Ensure the variable is captured before use \\
+\texttt{PLAN-003} & Planner & \texttt{capture.default:} declared on a subtree capture (alias for \texttt{GCP-DEFAULT-SUBTREE}; retained for plan-level reporting) & Use \texttt{when: var != null} guard \\
+\texttt{PLAN-004} & Parser  & Forbidden Go-template syntax \texttt{\{\{\ \}\}} detected in a GIS field & Replace with \texttt{\$\{...\}} interpolation \\
+\texttt{PLAN-005} & Parser  & Forbidden infix operator (\texttt{\&\&}, \texttt{||}, \texttt{!}, \texttt{contains} used as infix) detected in a GXL field & Replace with \texttt{and}, \texttt{or}, \texttt{not}, \texttt{str.contains()} \\
+\texttt{PLAN-006} & Parser  & Forbidden pipe expression in a GCP capture path (\texttt{|\ length} or similar) & Replace with \texttt{len()} in a GXL expression after scalar capture \\
+\texttt{PLAN-007} & Planner & Grammar version mismatch: recorded \texttt{grammar\_versions} in a stored plan are incompatible with the validating runtime's grammar versions & Re-validate the runbook against the current grammar \\
+\texttt{PLAN-008} & Planner & Keyword used as a capture variable name (e.g., \texttt{capture: and: ...}) & Rename the capture variable (\texttt{GXL-PARSE-010} for GXL context) \\
+\texttt{PLAN-009} & Planner & Runbook references a \texttt{step.X.*} capture path where step~X is not statically reachable from the declaring step (conditional branch exclusion) & Re-order steps or use \texttt{when:} guard \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent\textit{Note:} \texttt{PLAN-004}, \texttt{PLAN-005}, and
+\texttt{PLAN-006} are migration-era codes designed to catch runbooks that have
+not yet been processed by the Stream~E migration tooling.  Once all fixtures
+are migrated, these codes remain active as defensive guards against accidental
+re-introduction of deprecated syntax.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Error Message Format}
+\label{sec:parse-gate:error-format}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Every error emitted by the validation pipeline \textbf{MUST} conform to the
+following structured format.  Implementations \textbf{MUST NOT} emit
+unstructured string messages as the primary error representation.
+
+\begin{center}\small
+\begin{tabular}{p{2.8cm}p{2.2cm}p{7.5cm}}
+\hline
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\hline
+\texttt{code}     & string  & Error code from the catalog in~\S\ref{sec:parse-gate:error-codes} \\
+\texttt{message}  & string  & Human-readable description in English \\
+\texttt{location} & struct  & Source location of the offending token or field \\
+\quad\texttt{.file}       & string & Runbook or tool file path (relative to runbook root) \\
+\quad\texttt{.line}       & int    & 1-based line number \\
+\quad\texttt{.column}     & int    & 1-based column (code-point offset, not byte offset) \\
+\quad\texttt{.span\_length} & int  & Length in code points of the highlighted span \\
+\texttt{snippet}    & string & The offending source slice, extracted verbatim \\
+\texttt{suggestion} & string & OPTIONAL machine-generated remediation hint \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{Example (PLAN-004, forbidden Go-template syntax):}
+
+\begin{verbatim}
+{
+  "code": "PLAN-004",
+  "message": "Go-template syntax '{{ }}' is not supported in GIS fields.
+               Use '${...}' interpolation instead.",
+  "location": { "file": "schema.yaml", "line": 66, "column": 12,
+                "span_length": 13 },
+  "snippet": "{{ .pod_name }}",
+  "suggestion": "Replace '{{ .pod_name }}' with '${pod_name}'"
+}
+\end{verbatim}
+
+\paragraph{Example (PLAN-005, forbidden infix operator):}
+
+\begin{verbatim}
+{
+  "code": "PLAN-005",
+  "message": "Infix '||' is not a valid GXL operator.",
+  "location": { "file": "schema.yaml", "line": 152, "column": 28,
+                "span_length": 2 },
+  "snippet": "error_rate > 0.05 || p95_latency > 0.5",
+  "suggestion": "Replace '||' with 'or'"
+}
+\end{verbatim}
+
+When errors are recorded in the execution trace (for runs that fail at the
+plan gate before any steps execute), they \textbf{MUST} be embedded in a
+\texttt{plan.failed} trace event whose schema is defined in
+\texttt{design/gert/sections/07-runtime-events.tex}.  Each error in the array
+\textbf{MUST} use the structured format above.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{No-Bypass Guarantees}
+\label{sec:parse-gate:no-bypass}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The parse gate is the \textbf{single} checkpoint for expression validity.
+There are no alternative paths, no opt-out flags, no ``fast path'' modes that
+skip validation.  This is enforced structurally, not by convention.
+
+\paragraph{Go runtime.}
+The Go runtime \textbf{MUST} expose no exported function that constructs a
+\texttt{RunHandle} from anything other than a \texttt{*ValidatedPlan} returned
+by the canonical planner.  The type system enforces this: \texttt{ValidatedPlan}
+is an unexported type producible only by \texttt{Planner.Plan()}.  No package
+outside the planner package may forge a \texttt{ValidatedPlan}.
+
+\paragraph{C\# runtime (Go-equivalent enforcement).}
+The C\# runtime \textbf{MUST} enforce the same constraint via the
+\texttt{internal sealed} pattern documented in
+\texttt{design/web-platform/c-sharp-governance-parity.md~\S4.1}:
+
+\begin{itemize}
+  \item \texttt{ValidatedPlan} is an \texttt{internal sealed record} in
+    assembly \texttt{Gert.Runtime.Core}.
+  \item \texttt{IRunHandle} is the only public execution surface.
+  \item \texttt{IGertRuntime.StartAsync()} requires a \texttt{ValidatedPlan};
+    no overload exists that accepts a raw \texttt{ParsedRunbook} or an
+    unvalidated schema.
+  \item \texttt{IStepRunner} and all concrete runners remain
+    \texttt{internal sealed}---invisible to adapter code.
+\end{itemize}
+
+\paragraph{Roslyn analyzers (\texttt{GERT0001} / \texttt{GERT0002}).}
+The existing Roslyn analyzers defined in
+\texttt{design/web-platform/c-sharp-governance-parity.md} enforce
+\texttt{IStepRunner} inaccessibility and RE2 regex compliance.  These are
+necessary but not sufficient for parse-gate enforcement.  Every runtime
+\textbf{MUST} additionally ensure:
+
+\begin{enumerate}
+  \item No adapter assembly has \texttt{InternalsVisibleTo} access to
+    \texttt{Gert.Runtime.Core}.
+  \item CI build verification tests \textbf{MUST} assert that
+    \texttt{IGertRuntime.StartAsync} is the only code path that produces
+    a live \texttt{IRunHandle}, and that it is unreachable without a
+    \texttt{ValidatedPlan} argument.
+  \item Equivalent static analysis \textbf{MUST} exist for the Go runtime:
+    no Go build tag or conditional compilation path may bypass the
+    \texttt{ValidatedPlan} type constraint.
+\end{enumerate}
+
+\noindent
+The parse gate is not a policy choice.  It is a structural property of every
+conformant GERT runtime.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Grammar Version Pinning}
+\label{sec:parse-gate:version-pinning}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Each grammar file declares a \texttt{Version} header in its first comment
+block.  At the time of this writing the canonical versions are:
+
+\begin{itemize}
+  \item \texttt{gxl.ebnf}: \texttt{1.0.0-draft}
+  \item \texttt{gis.ebnf}: \texttt{1.0.0-draft}
+  \item \texttt{gcp.ebnf}: \texttt{1.0.0-draft}
+\end{itemize}
+
+\paragraph{MUST: Record grammar versions in \texttt{ValidatedPlan}.}
+The Planner \textbf{MUST} read the \texttt{Version} header from each grammar
+file (or from the compiled parser version constant that corresponds to a
+specific grammar file revision) and record the three versions in the
+\texttt{grammar\_versions} field of the produced \texttt{ValidatedPlan}.
+
+\paragraph{MUST: Reject on version mismatch.}
+When a runtime loads a \texttt{ValidatedPlan} from persistent storage (e.g.,
+re-validation or replay), it \textbf{MUST} compare the recorded
+\texttt{grammar\_versions} against its own compiled grammar versions.  If any
+version is incompatible (different major version, or a minor version with a
+documented breaking change), the runtime \textbf{MUST} refuse to execute and
+\textbf{MUST} raise \texttt{PLAN-007}.
+
+\paragraph{Compatibility policy.}
+The draft-to-release transition from \texttt{1.0.0-draft} to
+\texttt{1.0.0} is a breaking change requiring re-validation.  Within a stable
+major version, backward-compatible additions (new error codes, new optional
+grammar productions) \textbf{SHOULD} increment the minor version; plans
+validated against an older minor version \textbf{SHOULD} be re-validated as a
+best practice but \textbf{MAY} be accepted if the runtime can confirm no
+breaking production changes affect the stored plan.
+
+\paragraph{Open governance question.}
+What happens to in-flight executions when grammar versions are upgraded
+mid-run?  This scenario---a run that starts on grammar \texttt{1.0.0}
+and is mid-checkpoint when the runtime upgrades to \texttt{1.1.0}---is
+not resolved in Phase~1.  It is surfaced as a Phase~2 governance decision
+(\S\ref{sec:parse-gate:open-issues}, OPQ-GATE-01).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Open Issues for Phase~2}
+\label{sec:parse-gate:open-issues}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The following issues were surfaced during Stream~F authoring.  They do not
+block Phase~1 deliverables but \textbf{MUST} be resolved before Phase~2
+runtime implementation begins.  Each is assigned an identifier for tracking.
+
+\begin{description}
+  \item[\texttt{OPQ-GATE-01} — In-flight grammar version upgrade.]
+    What is the correct behaviour when the runtime's grammar version changes
+    while a run is mid-execution (e.g., mid-approval-gate checkpoint)?  Two
+    options:
+
+    \textbf{Option~A (strict):} The run is suspended at the next
+    \texttt{RunHandle.Next()} call, \texttt{PLAN-007} is raised, and the run
+    is marked \texttt{VersionMismatch}.  The operator must re-validate and
+    replay or cancel.
+
+    \textbf{Option~B (sticky):} The run retains the grammar version it was
+    validated against for its lifetime; grammar upgrades only affect new runs.
+    The runtime maintains a version registry mapping run~IDs to grammar
+    versions.
+
+    \textit{Trade-off:} Option~A is safer (eliminates mixed-version execution)
+    but operationally disruptive for long-running approval flows.  Option~B is
+    operationally friendlier but requires version registry infrastructure and
+    complicates the conformance corpus.
+
+    \textbf{Recommendation:} Surface to Germán for decision before Phase~2
+    begins.  Memo at \texttt{.squad/decisions/inbox/barbara-stream-f-complete.md}.
+
+  \item[\texttt{OPQ-GATE-02} — Statically reachable step set definition
+    (OI-GCP-03).]
+    \texttt{GCP-PARSE-006} and \texttt{PLAN-009} require the Planner to know
+    which steps are statically reachable.  For runbooks with conditional
+    branches (\texttt{branch} steps) or optional includes
+    (\texttt{include.when:}), the reachable step set is not a single sequence
+    but a DAG.  The Planner \textbf{MUST} define ``statically reachable'' for
+    the purposes of cross-step capture validation (\texttt{step.\{id\}.*}).
+    Phase~2 must specify the reachability algorithm (conservative over-
+    approximation recommended).
+
+  \item[\texttt{OPQ-GATE-03} — GIS-PARSE-004 empty interpolation as
+    error vs.\ PLAN-001.]
+    \texttt{GIS-PARSE-004} (empty interpolation block) is currently a pure
+    GIS parse error.  Should it also produce \texttt{PLAN-001} as a wrapper?
+    The error catalog consolidation in~\S\ref{sec:parse-gate:error-codes:plan}
+    treats \texttt{PLAN-001} as the top-level wrapper for any parse failure.
+    Phase~2 must clarify the aggregation strategy for multi-error plans.
+
+  \item[\texttt{OPQ-GATE-04} — GIS-PARSE-002 warning and
+    \texttt{plan.validated} event.]
+    \texttt{GIS-PARSE-002} (unknown escape sequence) is a warning, not a hard
+    error.  The \texttt{plan.validated} event does not currently carry a
+    \texttt{warnings} list.  Phase~2 must decide whether warnings are
+    included in the \texttt{plan.validated} event and how they appear in the
+    JSONL trace.
+
+  \item[\texttt{OPQ-GATE-05} — Plan storage and re-validation policy.]
+    The spec does not yet define how \texttt{ValidatedPlan} values are
+    persisted, versioned, and invalidated in the web platform's plan store
+    (Blob Storage, Cosmos DB).  Phase~2 must specify retention, eviction,
+    and forced re-validation triggers (e.g., grammar upgrade, runbook source
+    change, admin override).
+
+  \item[\texttt{OPQ-GATE-06} — Conformance corpus coverage for gate-level
+    codes.]
+    Stream~C (Tess) must add test vectors for \texttt{PLAN-001} through
+    \texttt{PLAN-009} to the conformance corpus.  Stream~F does not define
+    these vectors; they are a Phase~2 corpus deliverable.  The gate-level
+    codes that require migration-era negative vectors are \texttt{PLAN-004}
+    (Go-template detection), \texttt{PLAN-005} (forbidden infix), and
+    \texttt{PLAN-006} (pipe capture).
+
+  \item[\texttt{OPQ-GATE-07} — OI-GXL-01 through OI-GXL-07 and
+    OI-GIS-02 through OI-GIS-05 (grammar open issues).]
+    The 12~open issues from \texttt{gxl.ebnf~\S7} and
+    \texttt{gis.ebnf~\S6} that were not resolved in Stream~A are queued for
+    Phase~2.  The parse gate is not directly affected by them, but the
+    conformance corpus and evaluator implementations must account for them.
+    The most gate-relevant are:
+    \begin{itemize}
+      \item \texttt{OI-GXL-04} (\texttt{not null} behaviour / \texttt{defined()}
+        builtin request): may produce a new \texttt{GXL-PARSE-011} in v2.
+      \item \texttt{OI-GIS-04} (nested \texttt{\$\{...\}} inside GXL string
+        literals): requires parser coordination not yet specified.
+      \item \texttt{OI-GCP-03} (statically reachable step set, also
+        \texttt{OPQ-GATE-02} above).
+      \item \texttt{OI-GCP-05} (\texttt{http.*} scope lifetime): affects
+        \texttt{PLAN-009} reachability semantics.
+    \end{itemize}
+\end{description}

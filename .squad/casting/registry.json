@@ -55,6 +55,22 @@
       "created_at": "2026-06-03T20:14:25Z",
       "legacy_named": false,
       "status": "active"
+    },
+    "edith": {
+      "persistent_name": "Edith",
+      "universe": "user-specified",
+      "role": "Spec Editor",
+      "created_at": "2026-06-05T00:14:04Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "tess": {
+      "persistent_name": "Tess",
+      "universe": "user-specified",
+      "role": "Conformance Tester",
+      "created_at": "2026-06-05T00:14:04Z",
+      "legacy_named": false,
+      "status": "active"
     }
   }
 }

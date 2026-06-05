@@ -116,12 +116,20 @@ StepText       = ( "stdout" | "stderr" ) [ GDP ] ;
                     GDP presence → structured capture (subtree or scalar
                     depending on the path resolution result). *)
 
-StepStructured = ( "json" | "yaml" ) GDP ;
-                 (* Returns: PJVM value at path (see gis.ebnf §4.1).
-                    GDP is REQUIRED: you MUST specify a path into the
-                    parsed document. To capture the entire parsed root,
-                    use a single segment that is an existing top-level key,
-                    or use the 'stdout' variant without GDP to get raw text.
+StepStructured = ( "json" | "yaml" ) [ GDP ] ;
+                 (* Returns: PJVM value.
+                    ## RATIFIED 2026-06-05T00:14:04-04:00 (OI-GCP-02)
+                    ## See: .squad/decisions/inbox/copilot-directive-gxl-oi-ratification.md
+                    GDP is now OPTIONAL. When GDP is absent, the ENTIRE
+                    parsed root value (object, array, or scalar) is captured
+                    as a subtree. This is a bare-root capture.
+                      json          → entire parsed stdout as PJVM root
+                      json.items[0] → first element of 'items' array
+                    Bare-root capture is semantically equivalent to a
+                    subtree capture (§5.1.2). The 'capture.default:'
+                    prohibition for subtree captures (§6, GCP-DEFAULT-SUBTREE)
+                    applies to bare-root captures when the root resolves to
+                    an object or array.
                     ## Note: 'json' vs 'yaml' source parity
                     Both 'json' and 'yaml' parse the step stdout as the
                     named format. If the text is not valid JSON (or YAML),
@@ -232,10 +240,11 @@ LocalText      = ( "stdout" | "stderr" ) [ GDP ] ;
                  (* Returns: string (if GDP absent) or PJVM value (if
                     GDP present, treating stdout as JSON). *)
 
-LocalStructured = ( "json" | "yaml" ) GDP ;
-                  (* Returns: PJVM value at path.
-                     'json' and 'yaml' parse stdout as the named format.
-                     GDP is required. *)
+LocalStructured = ( "json" | "yaml" ) [ GDP ] ;
+                  (* Returns: PJVM value.
+                     GDP is OPTIONAL (ratified OI-GCP-02). When GDP is
+                     absent, the entire parsed root is captured (bare-root).
+                     'json' and 'yaml' parse stdout as the named format. *)
 
 
 (* ============================================================
@@ -487,14 +496,18 @@ IndexSegment   = "[" INTEGER "]" ;
    │ stdout.{gdp}                  │ PJVM       │ cli, tool steps    │
    │ stderr                        │ string     │ cli, tool steps    │
    │ stderr.{gdp}                  │ PJVM       │ cli, tool steps    │
+   │ json                          │ PJVM root  │ cli, tool steps    │
    │ json.{gdp}                    │ PJVM       │ cli, tool steps    │
+   │ yaml                          │ PJVM root  │ cli, tool steps    │
    │ yaml.{gdp}                    │ PJVM       │ cli, tool steps    │
    ├───────────────────────────────┼────────────┼────────────────────┤
    │ step.{id}.exit_code           │ number     │ any step type      │
    │ step.{id}.stdout              │ string     │ any step type      │
    │ step.{id}.stdout.{gdp}        │ PJVM       │ any step type      │
    │ step.{id}.stderr              │ string     │ any step type      │
+   │ step.{id}.json                │ PJVM root  │ any step type      │
    │ step.{id}.json.{gdp}          │ PJVM       │ any step type      │
+   │ step.{id}.yaml                │ PJVM root  │ any step type      │
    │ step.{id}.yaml.{gdp}          │ PJVM       │ any step type      │
    ├───────────────────────────────┼────────────┼────────────────────┤
    │ http.status                   │ number     │ http_call steps    │
@@ -534,15 +547,12 @@ IndexSegment   = "[" INTEGER "]" ;
      GCP-PARSE-001.
 
    OI-GCP-02: Root JSON capture without path
-     The current grammar requires a GDP path after 'json' and 'yaml'
-     sources (e.g., 'json.root' to capture the entire root object).
-     If the root IS the array/object (i.e., the step outputs bare JSON
-     like '[1,2,3]' or '{"key":"val"}'), authors cannot naturally
-     write 'json' without a path to capture the root.
-     Proposed: allow 'json' (no GDP) to capture the entire parsed root.
-     This is a GCP-PARSE-001 under the current grammar. Flagging for
-     Stream C (conformance corpus) to add a test vector and for team
-     to ratify the rule.
+     ## RATIFIED 2026-06-05T00:14:04-04:00 (ormasoftchile via Copilot)
+     ## See: .squad/decisions/inbox/copilot-directive-gxl-oi-ratification.md
+     Bare 'json' or 'yaml' (no GDP path) is ALLOWED and captures the
+     entire parsed root as a subtree. Grammar updated: StepStructured
+     and LocalStructured now have [ GDP ] (optional). Tess must write
+     TV-GCP-PARSE-ROOT-* conformance vectors for this case.
 
    OI-GCP-03: Capture path validation against step scope
      GCP-PARSE-006 (StepId not found) requires the planner to know

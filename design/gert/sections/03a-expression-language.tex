@@ -1,0 +1,940 @@
+% ============================================================
+% §03a — GXL: GERT Expression Language (Normative)
+% Author:  Edith — Spec Editor
+% Created: 2026-06-05
+% Source of truth: design/gert/grammar/gxl.ebnf (v1.0.0-draft)
+% ============================================================
+%
+% RFC 2119 normative language used throughout:
+%   MUST / MUST NOT  — absolute requirements for conforming implementations.
+%   SHOULD / SHOULD NOT — recommended but not mandatory.
+%   MAY              — optional; permitted but not required.
+%
+% Grammar production citations take the form: gxl.ebnf §<section>.<subsection>.
+% Decision ledger citations take the form: decisions.md "<section-heading>" <key>.
+
+% Local definition — remove if \TODO is promoted to the main preamble.
+\providecommand{\TODO}[1]{\textbf{\textcolor{red}{[TODO:~#1]}}}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{GXL\,---\,GERT Expression Language}
+\label{sec:gxl}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{quote}
+\noindent\textbf{Informative introduction.}
+GXL (GERT Expression Language) is the GERT-native boolean expression language.
+It is a small, deterministic, side-effect-free language designed to be
+implementable from its grammar alone in any host language.
+GXL is evaluated at every boolean-typed field in a runbook document:
+\texttt{when}, \texttt{condition}, \texttt{until}, \texttt{iterate.until},
+\texttt{branches[].condition}, \texttt{include.when}, and
+\texttt{collector.fields[].when}.
+Its design goals are portability across Go, C\#, and browser runtimes;
+auditability by non-developer operators; and strict governance
+(no implicit coercion, no side effects, no dynamic dispatch).
+GXL replaces the prior \texttt{expr-lang/expr} evaluation surface;
+see \S\ref{sec:gxl:migration} for the migration note.
+\end{quote}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Normative Reference to the Grammar}
+\label{sec:gxl:normref}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The file \texttt{design/gert/grammar/gxl.ebnf} (version~1.0.0-draft) is the
+authoritative grammar for GXL.  This chapter is normative prose \emph{about}
+that grammar; it does not supersede it.  Where this prose and the grammar
+conflict, \textbf{the grammar wins} and the prose is in error.  Conforming
+implementations MUST derive their parsers from \texttt{gxl.ebnf}, not from
+this chapter alone.
+
+This grammar uses ISO EBNF with PEG alternation semantics:
+ordered alternation (\texttt{|}) chooses the first matching alternative,
+which eliminates all ambiguity
+(\texttt{gxl.ebnf} \S1).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Lexical Structure}
+\label{sec:gxl:lexical}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The GXL lexer operates character-by-character over a Unicode string
+(the field value as decoded from the YAML document).
+Tokens are produced in the order they appear;
+whitespace and comments are discarded before the parser sees any token.
+All productions in this section correspond to \texttt{gxl.ebnf} \S2.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Whitespace}
+\label{subsec:gxl:whitespace}
+
+Whitespace characters --- U+0020~SPACE, U+0009~CHARACTER~TABULATION,
+U+000A~LINE~FEED, and U+000D~CARRIAGE~RETURN --- are insignificant between
+tokens.
+Conforming lexers MUST silently discard all inter-token whitespace.
+Whitespace inside string literals is \emph{not} discarded (see
+\S\ref{subsec:gxl:strings}).
+YAML block scalars (\texttt{|} and \texttt{>}) preserve newlines in the field
+value; because newlines are GXL whitespace, multiline expressions are valid.
+
+\begin{minted}{text}
+WHITESPACE = { ' ' | '\t' | '\n' | '\r' } ;
+\end{minted}
+
+(Source: \texttt{gxl.ebnf} \S2.1.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Comments}
+\label{subsec:gxl:comments}
+
+GXL supports shell-style single-line comments beginning with \texttt{\#}.
+A comment extends from the \texttt{\#} character to (but not including)
+the next newline.
+Conforming lexers MUST discard comments in the same pass as whitespace.
+The \texttt{\#} character is NOT supported inside string literals.
+
+\begin{minted}{text}
+LINE_COMMENT = '#' { ANY_CHAR_EXCEPT_NEWLINE } NEWLINE ;
+\end{minted}
+
+The \texttt{\#} comment character was chosen over \texttt{//}
+for YAML-author familiarity.
+
+(Source: \texttt{gxl.ebnf} \S2.1.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Keywords}
+\label{subsec:gxl:keywords}
+
+The following identifiers are reserved as keywords and MUST NOT be used as
+variable names.  Conforming parsers MUST reject any keyword used as an
+identifier with error \texttt{GXL-PARSE-010}.
+
+\begin{center}
+\begin{tabular}{ll}
+\hline
+\textbf{Keyword} & \textbf{Role} \\
+\hline
+\texttt{true}   & Boolean literal \\
+\texttt{false}  & Boolean literal \\
+\texttt{null}   & Null literal \\
+\texttt{and}    & Logical AND operator \\
+\texttt{or}     & Logical OR operator \\
+\texttt{not}    & Logical NOT operator \\
+\texttt{len}    & Top-level length builtin \\
+\texttt{str}    & Namespace prefix (string helpers) \\
+\texttt{list}   & Namespace prefix (list helpers) \\
+\texttt{regex}  & Namespace prefix (regex helpers) \\
+\texttt{math}   & Reserved namespace prefix (v2; no methods in v1) \\
+\hline
+\end{tabular}
+\end{center}
+
+(Source: \texttt{gxl.ebnf} \S2.2.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Identifiers}
+\label{subsec:gxl:identifiers}
+
+GXL identifiers are ASCII-only.  An identifier begins with a letter or
+underscore (\texttt{[a-zA-Z\_]}) and continues with zero or more letters,
+decimal digits, or underscores (\texttt{[a-zA-Z0-9\_]}).
+
+\begin{minted}{text}
+IDENT_START = 'a'..'z' | 'A'..'Z' | '_' ;
+IDENT_CONT  = 'a'..'z' | 'A'..'Z' | '0'..'9' | '_' ;
+RAW_IDENT   = IDENT_START { IDENT_CONT } ;
+IDENT       = (* RAW_IDENT that is NOT a KEYWORD *) ;
+\end{minted}
+
+\noindent\textbf{Rationale for ASCII-only restriction.}
+Variable names originate from capture path declarations and step IDs,
+which are YAML keys and are ASCII by GERT authoring convention.
+Unicode identifiers admit visual-spoofing attacks (Cyrillic look-alike
+characters), which in runbook governance contexts constitute a compliance risk.
+
+Conforming parsers MUST reject any keyword used in identifier position with
+error \texttt{GXL-PARSE-010}.
+
+(Source: \texttt{gxl.ebnf} \S2.3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{String Literals}
+\label{subsec:gxl:strings}
+
+String literals are delimited by matching quotation marks.
+Both double-quoted and single-quoted forms are supported.
+The opening and closing delimiter MUST be the same character.
+The alternate quote character requires no escaping inside a literal
+(e.g., \texttt{"it's fine"} and \texttt{'say "hello"'} are both valid).
+
+\begin{minted}{text}
+STRING        = DQUOTE_STRING | SQUOTE_STRING ;
+DQUOTE_STRING = '"' { DQUOTE_CHAR } '"' ;
+SQUOTE_STRING = "'" { SQUOTE_CHAR } "'" ;
+DQUOTE_CHAR   = ESCAPE_SEQ | (* any Unicode except '"', '\', LF, CR *) ;
+SQUOTE_CHAR   = ESCAPE_SEQ | (* any Unicode except "'", '\', LF, CR *) ;
+\end{minted}
+
+\noindent Newlines (LF, CR) MUST NOT appear unescaped inside a string literal;
+encountering end-of-line before the closing delimiter is error
+\texttt{GXL-PARSE-002}.
+
+The following escape sequences are recognized:
+
+\begin{center}
+\begin{tabular}{ll}
+\hline
+\textbf{Sequence} & \textbf{Meaning} \\
+\hline
+\texttt{\textbackslash\textbackslash} & U+005C REVERSE SOLIDUS \\
+\texttt{\textbackslash"} & U+0022 QUOTATION MARK \\
+\texttt{\textbackslash'} & U+0027 APOSTROPHE \\
+\texttt{\textbackslash n} & U+000A LINE FEED \\
+\texttt{\textbackslash r} & U+000D CARRIAGE RETURN \\
+\texttt{\textbackslash t} & U+0009 CHARACTER TABULATION \\
+\texttt{\textbackslash 0} & U+0000 NULL \\
+\texttt{\textbackslash u}$XXXX$ & Unicode code point U+$XXXX$ (exactly 4 hex digits) \\
+\texttt{\textbackslash U}$XXXXXXXX$ & Unicode code point U+$XXXXXXXX$ (exactly 8 hex digits) \\
+\hline
+\end{tabular}
+\end{center}
+
+Any other character following \texttt{\textbackslash} is error
+\texttt{GXL-PARSE-004}.
+Implementations MUST NOT invent additional escape sequences.
+
+(Source: \texttt{gxl.ebnf} \S2.4.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Number Literals}
+\label{subsec:gxl:numbers}
+
+\begin{minted}{text}
+NUMBER  = INTEGER [ FRAC ] [ EXP ] ;
+INTEGER = '0' | ( '1'..'9' { '0'..'9' } ) ;
+FRAC    = '.' '0'..'9' { '0'..'9' } ;
+EXP     = ( 'e' | 'E' ) [ '+' | '-' ] '0'..'9' { '0'..'9' } ;
+\end{minted}
+
+Conforming implementations MUST treat all GXL numbers as IEEE~754
+double-precision float64.
+Integer literals are representable exactly for values up to $2^{53}$;
+values beyond this range are silently rounded to the nearest representable
+double (this is not an error;
+see open issue OI-GXL-02 in \texttt{gxl.ebnf} \S7).
+
+The following number formats are supported:
+integers (\texttt{42}),
+decimal fractions (\texttt{3.14}),
+and scientific notation (\texttt{1.5e10}, \texttt{2E-3}).
+
+The following formats are \emph{not} supported and MUST be rejected at parse time:
+hexadecimal (\texttt{0xFF}),
+octal (\texttt{0o77}),
+binary (\texttt{0b1010}),
+leading-zero integers (\texttt{007} is error \texttt{GXL-PARSE-003}),
+\texttt{NaN}, and
+\texttt{Infinity}.
+Negative number values are produced by the \texttt{UnaryMinus} rule
+(\S\ref{subsec:gxl:unary}), not by the lexer;
+the \texttt{NUMBER} token itself is always non-negative.
+
+(Source: \texttt{gxl.ebnf} \S2.5.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Operators and Punctuation}
+\label{subsec:gxl:operators}
+
+The following operator and punctuation tokens are recognized:
+
+\begin{center}
+\begin{tabular}{ll}
+\hline
+\textbf{Token(s)} & \textbf{Role} \\
+\hline
+\texttt{==}~\texttt{!=}~\texttt{<}~\texttt{<=}~\texttt{>}~\texttt{>=}
+  & Comparison operators \\
+\texttt{+}~\texttt{-} & Additive arithmetic operators \\
+\texttt{*}~\texttt{/}~\texttt{\%} & Multiplicative arithmetic operators \\
+\texttt{(}~\texttt{)} & Grouping delimiters \\
+\texttt{[}~\texttt{]} & Array-index delimiters (in GDP paths) \\
+\texttt{,}          & Argument separator in function calls \\
+\texttt{.}          & Path segment separator (in GDP) and namespace separator \\
+\hline
+\end{tabular}
+\end{center}
+
+(Source: \texttt{gxl.ebnf} \S2.6.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Forbidden Tokens}
+\label{subsec:gxl:forbidden-tokens}
+
+The following tokens MUST be rejected by conforming parsers with error
+\texttt{GXL-PARSE-007}.
+Their appearance in any expression field is unconditionally invalid,
+regardless of context.
+
+\begin{center}
+\begin{tabular}{ll}
+\hline
+\textbf{Forbidden token or construct} & \textbf{Rationale} \\
+\hline
+\texttt{\&\&} \texttt{||} \texttt{!} & Go/C-style logical operators \\
+\texttt{|} & Pipe operator \\
+\texttt{?} \texttt{:} & Ternary operator tokens \\
+\texttt{:=} \texttt{=} & Assignment operators \\
+\texttt{in} (infix) & Membership test infix form \\
+\texttt{contains} (infix) & Substring/membership infix form \\
+\texttt{+} (on strings) & String concatenation (\texttt{+} is numeric only) \\
+Array/object construction & \texttt{\{key:~value\}} and \texttt{[a,~b]} literal forms \\
+Bare function calls & Any call of form \texttt{f()} not matching \texttt{len()} \\
+Negative array index & \texttt{items[-1]} \\
+Unary \texttt{+} & \texttt{+expr} \\
+\hline
+\end{tabular}
+\end{center}
+
+(Source: \texttt{gxl.ebnf} \S2.6, \S3 comments.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Syntactic Structure}
+\label{sec:gxl:syntactic}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The GXL parser is a recursive-descent PEG parser.
+There is no left-recursion in the grammar; the grammar is safe for PEG parsers
+and LL parsers alike.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Operator Precedence and Associativity}
+\label{subsec:gxl:precedence}
+
+Operator precedence and associativity are encoded by the grammar's production
+hierarchy.
+Table~\ref{tab:gxl-precedence} lists all levels from lowest to highest binding.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{clll}
+\hline
+\textbf{Level} & \textbf{Operator / Form} & \textbf{Associativity} & \textbf{Grammar rule} \\
+\hline
+1 (lowest) & \texttt{or}                        & Left  & \texttt{OrExpr}    \\
+2          & \texttt{and}                       & Left  & \texttt{AndExpr}   \\
+3          & \texttt{not} (unary prefix)        & Right & \texttt{NotExpr}   \\
+4          & \texttt{==}~\texttt{!=}~\texttt{<}~\texttt{<=}~\texttt{>}~\texttt{>=}
+                                                & \emph{Non-assoc.} & \texttt{Comparison} \\
+5          & \texttt{+}~\texttt{-}              & Left  & \texttt{Addition}  \\
+6          & \texttt{*}~\texttt{/}~\texttt{\%}  & Left  & \texttt{Multiply}  \\
+7          & \texttt{-} (unary prefix)          & Right & \texttt{UnaryMinus} \\
+8 (highest) & Literals, paths, calls, \texttt{()} & ---  & \texttt{Primary}   \\
+\hline
+\end{tabular}
+\caption{GXL operator precedence and associativity (lowest to highest).
+  Source: \texttt{gxl.ebnf} \S3 precedence table.}
+\label{tab:gxl-precedence}
+\end{table}
+
+\noindent\textbf{Non-associativity of comparisons.}
+Comparison operators are non-associative: chaining them is a parse error.
+The expression \texttt{a < b < c} is error \texttt{GXL-PARSE-009};
+authors MUST write \texttt{a < b and b < c} instead.
+
+(Source: \texttt{gxl.ebnf} \S3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Complete Expression Grammar}
+\label{subsec:gxl:grammar}
+
+\begin{minted}{text}
+Expression   = OrExpr ;
+OrExpr       = AndExpr { "or" AndExpr } ;
+AndExpr      = NotExpr { "and" NotExpr } ;
+NotExpr      = "not" NotExpr | Comparison ;
+Comparison   = Addition [ CompOp Addition ] ;
+CompOp       = "==" | "!=" | "<=" | ">=" | "<" | ">" ;
+Addition     = Multiply { ("+" | "-") Multiply } ;
+Multiply     = UnaryMinus { ("*" | "/" | "%") UnaryMinus } ;
+UnaryMinus   = "-" UnaryMinus | Primary ;
+Primary      = LenCall
+             | NamespaceCall
+             | GDP
+             | Literal
+             | "(" Expression ")"
+             ;
+\end{minted}
+
+(Source: \texttt{gxl.ebnf} \S3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Literal Expressions}
+\label{subsec:gxl:literals}
+
+\begin{minted}{text}
+Literal      = STRING | NUMBER | BoolLiteral | NullLiteral ;
+BoolLiteral  = "true" | "false" ;
+NullLiteral  = "null" ;
+\end{minted}
+
+The four GXL literal types are:
+
+\begin{itemize}
+  \item \textbf{String}: single- or double-quoted Unicode text
+    (see \S\ref{subsec:gxl:strings}).
+  \item \textbf{Number}: IEEE~754 float64 value
+    (see \S\ref{subsec:gxl:numbers}).
+  \item \textbf{Boolean}: the keywords \texttt{true} and \texttt{false}.
+  \item \textbf{Null}: the keyword \texttt{null},
+    representing an absent or unset value.
+\end{itemize}
+
+(Source: \texttt{gxl.ebnf} \S3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{GERT Dotted Path (GDP) Variable Access}
+\label{subsec:gxl:gdp}
+
+GDP (GERT Dotted Path) is the syntax for reading values from the run
+variable context map.
+
+\begin{minted}{text}
+GDP = IDENT { "." IDENT | "[" INTEGER "]" } ;
+\end{minted}
+
+The first \texttt{IDENT} is the variable name; it MUST exist in the run
+variable context at the time of evaluation.
+Subsequent segments navigate into the resolved value:
+a dotted segment selects a named field from an object,
+and a bracketed integer selects an element from an array (zero-based).
+
+\noindent Examples:
+
+\begin{minted}{text}
+hostname              -- top-level variable
+config.region         -- field "region" of captured object "config"
+items[0].metadata     -- index 0 of array "items", then field "metadata"
+\end{minted}
+
+For the normative error behavior of missing segments, out-of-bounds indices,
+and non-array indexing, see \S\ref{sec:gxl:semantics:paths}.
+
+(Source: \texttt{gxl.ebnf} \S3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Function Calls}
+\label{subsec:gxl:calls}
+
+GXL provides exactly two call forms:
+the top-level \texttt{len} builtin and namespace-qualified method calls.
+All other function-call forms MUST be rejected as \texttt{GXL-PARSE-007}.
+
+\subsubsection{len (top-level builtin)}
+\label{subsubsec:gxl:len-call}
+
+\begin{minted}{text}
+LenCall = "len" "(" Expression ")" ;
+\end{minted}
+
+\texttt{len} accepts exactly one argument of type \texttt{string} or
+\texttt{list} and returns a \texttt{number}.
+A call with zero or more than one argument is error \texttt{GXL-TYPE-004}.
+\texttt{len} is NOT a namespace; it MUST be written as \texttt{len(\ldots)},
+not \texttt{len.\ldots(\ldots)}.
+
+\subsubsection{Namespace method calls}
+\label{subsubsec:gxl:ns-call}
+
+\begin{minted}{text}
+NamespaceCall = Namespace "." Method "(" ArgList ")" ;
+Namespace     = "str" | "list" | "regex" ;
+Method        = IDENT ;
+ArgList       = [ Expression { "," Expression } ] ;
+\end{minted}
+
+The namespace prefix MUST be one of \texttt{str}, \texttt{list}, or
+\texttt{regex}.
+Referencing an unknown namespace is error \texttt{GXL-PARSE-005}.
+Referencing an unknown method within a valid namespace is error
+\texttt{GXL-PARSE-006}.
+Referencing the \texttt{math} namespace in v1 is error \texttt{GXL-PARSE-005}
+(\texttt{math} is reserved for v2; no methods are defined in this version).
+
+(Source: \texttt{gxl.ebnf} \S3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Unary Operators}
+\label{subsec:gxl:unary}
+
+GXL defines two unary operators:
+
+\begin{itemize}
+  \item \textbf{Logical NOT} (\texttt{not}):
+    Precedence level~3 (see Table~\ref{tab:gxl-precedence}).
+    Requires a \texttt{bool} operand; applying it to any other type is
+    error \texttt{GXL-TYPE-002}.
+    \texttt{not} binds tighter than \texttt{and}/\texttt{or}:
+    \texttt{not a and b} parses as \texttt{(not a) and b}.
+
+  \item \textbf{Unary minus} (\texttt{-}):
+    Precedence level~7.
+    Requires a \texttt{number} operand; applying it to any other type is
+    error \texttt{GXL-TYPE-003}.
+    Unary \texttt{+} is not supported and MUST be rejected as
+    \texttt{GXL-PARSE-007}.
+\end{itemize}
+
+(Source: \texttt{gxl.ebnf} \S3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Binary Operators}
+\label{subsec:gxl:binary}
+
+\begin{itemize}
+  \item \textbf{Logical OR / AND}:
+    Left-associative (levels~1 and~2 respectively).
+    Both operators short-circuit; see \S\ref{sec:gxl:semantics:short-circuit}.
+
+  \item \textbf{Comparison operators}
+    (\texttt{==}, \texttt{!=}, \texttt{<}, \texttt{<=}, \texttt{>}, \texttt{>=}):
+    Non-associative (level~4).
+    Strict typing rules apply; see \S\ref{sec:gxl:semantics:types}.
+
+  \item \textbf{Arithmetic operators}
+    (\texttt{+}, \texttt{-}, \texttt{*}, \texttt{/}, \texttt{\%}):
+    Addition and subtraction at level~5 (left-associative);
+    multiplication, division, and modulo at level~6 (left-associative).
+    The \texttt{+} operator is numeric addition only;
+    string concatenation is NOT supported and MUST be rejected as
+    \texttt{GXL-PARSE-007}.
+    Division-by-zero and modulo-by-zero rules are in
+    \S\ref{sec:gxl:semantics:arithmetic}.
+\end{itemize}
+
+(Source: \texttt{gxl.ebnf} \S3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Standard Library Namespace Functions}
+\label{sec:gxl:stdlib}
+% ─────────────────────────────────────────────────────────────────────────────
+
+All function calls in GXL MUST go through the \texttt{len} builtin or one of
+the permitted namespaces (\texttt{str}, \texttt{list}, \texttt{regex}).
+Method names use camelCase
+(decisions.md ``GXL/GIS/GCP --- Open question resolutions''~Q3).
+The type notation used in the signatures below is:
+\texttt{string}, \texttt{number}, \texttt{bool}, \texttt{null},
+\texttt{list}, and \texttt{scalar} (meaning \texttt{string}, \texttt{number},
+or \texttt{bool}).
+
+(Source: \texttt{gxl.ebnf} \S4.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{\texttt{len} --- Top-Level Builtin}
+\label{subsec:gxl:stdlib:len}
+
+\begin{center}
+\begin{tabular}{p{5.5cm}p{1.5cm}p{6cm}}
+\hline
+\textbf{Signature} & \textbf{Return} & \textbf{Description} \\
+\hline
+\texttt{len(s:\ string)} & \texttt{number}
+  & UTF-8 character count (code points, not bytes).
+    Empty string returns~0. \\
+\texttt{len(l:\ list)} & \texttt{number}
+  & Element count. Empty list returns~0. \\
+\hline
+\end{tabular}
+\end{center}
+
+A \texttt{null} argument to \texttt{len} MUST raise \texttt{GXL-TYPE-003}.
+
+(Source: \texttt{gxl.ebnf} \S4.1.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{\texttt{str} Namespace}
+\label{subsec:gxl:stdlib:str}
+
+\begin{center}
+\begin{tabular}{p{5.5cm}p{1.5cm}p{6cm}}
+\hline
+\textbf{Signature} & \textbf{Return} & \textbf{Description} \\
+\hline
+\texttt{str.contains(s,\ substr:\ string)} & \texttt{bool}
+  & True if \texttt{s} contains \texttt{substr} as a substring.
+    Empty \texttt{substr} always returns \texttt{true}. \\
+\texttt{str.startsWith(s,\ prefix:\ string)} & \texttt{bool}
+  & True if \texttt{s} begins with \texttt{prefix}.
+    Empty \texttt{prefix} always returns \texttt{true}. \\
+\texttt{str.endsWith(s,\ suffix:\ string)} & \texttt{bool}
+  & True if \texttt{s} ends with \texttt{suffix}.
+    Empty \texttt{suffix} always returns \texttt{true}. \\
+\texttt{str.toLower(s:\ string)} & \texttt{string}
+  & Unicode full case-fold to lowercase. \\
+\texttt{str.toUpper(s:\ string)} & \texttt{string}
+  & Unicode full case-fold to uppercase. \\
+\texttt{str.trim(s:\ string)} & \texttt{string}
+  & Remove leading and trailing Unicode whitespace
+    (U+0009, U+000A, U+000D, U+0020, and Unicode Zs category). \\
+\texttt{str.trimPrefix(s,\ prefix:\ string)} & \texttt{string}
+  & Remove \texttt{prefix} from \texttt{s} if present; otherwise return \texttt{s}. \\
+\texttt{str.trimSuffix(s,\ suffix:\ string)} & \texttt{string}
+  & Remove \texttt{suffix} from \texttt{s} if present; otherwise return \texttt{s}. \\
+\texttt{str.length(s:\ string)} & \texttt{number}
+  & Alias for \texttt{len(s)}. Provided for namespace consistency. \\
+\hline
+\end{tabular}
+\end{center}
+
+A \texttt{null} argument to any \texttt{str.*} function MUST raise
+\texttt{GXL-TYPE-003}.
+
+(Source: \texttt{gxl.ebnf} \S4.2.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{\texttt{list} Namespace}
+\label{subsec:gxl:stdlib:list}
+
+\begin{center}
+\begin{tabular}{p{5.5cm}p{1.5cm}p{6cm}}
+\hline
+\textbf{Signature} & \textbf{Return} & \textbf{Description} \\
+\hline
+\texttt{list.contains(l:\ list,\ item:\ scalar)} & \texttt{bool}
+  & True if \texttt{l} contains an element strictly equal to \texttt{item}
+    (same type, same value).
+    A cross-type \texttt{item} raises \texttt{GXL-TYPE-003}.
+    \texttt{null}~\texttt{item} returns \texttt{false}
+    (null is never in a list). \\
+\texttt{list.indexOf(l:\ list,\ item:\ scalar)} & \texttt{number}
+  & Zero-based index of the first element equal to \texttt{item},
+    or $-1$ if not found.
+    Cross-type \texttt{item} raises \texttt{GXL-TYPE-003}.
+    \texttt{null}~\texttt{item} always returns $-1$. \\
+\texttt{list.length(l:\ list)} & \texttt{number}
+  & Alias for \texttt{len(l)}. Provided for namespace consistency. \\
+\hline
+\end{tabular}
+\end{center}
+
+A \texttt{null} list argument (\texttt{l}) to any \texttt{list.*} function
+MUST raise \texttt{GXL-TYPE-003}.
+
+(Source: \texttt{gxl.ebnf} \S4.3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{\texttt{regex} Namespace}
+\label{subsec:gxl:stdlib:regex}
+
+\begin{center}
+\begin{tabular}{p{5.5cm}p{1.5cm}p{6cm}}
+\hline
+\textbf{Signature} & \textbf{Return} & \textbf{Description} \\
+\hline
+\texttt{regex.match(s,\ pattern:\ string)} & \texttt{bool}
+  & True if \texttt{s} matches the RE2 regular expression
+    \texttt{pattern}.
+    Pattern MUST be valid RE2 syntax; no PCRE, no backreferences.
+    An invalid pattern raises \texttt{GXL-EVAL-003} at evaluation time.
+    Either argument \texttt{null} raises \texttt{GXL-TYPE-003}. \\
+\hline
+\end{tabular}
+\end{center}
+
+(Source: \texttt{gxl.ebnf} \S4.4.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{\texttt{math} Namespace (Reserved --- v2)}
+\label{subsec:gxl:stdlib:math}
+
+The \texttt{math} namespace is reserved for a future version (v2).
+No methods are defined in this version.
+Any expression referencing \texttt{math.*} in a v1 context MUST be rejected
+with error \texttt{GXL-PARSE-005}.
+
+(Source: \texttt{gxl.ebnf} \S4.5.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Semantics}
+\label{sec:gxl:semantics}
+% ─────────────────────────────────────────────────────────────────────────────
+
+GXL expressions are \emph{pure}: they produce no I/O, perform no variable
+mutation, and invoke no dynamic dispatch.
+The same expression evaluated twice against the same context map MUST produce
+the same result.
+
+(Source: \texttt{gxl.ebnf} \S5.6.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Type System}
+\label{sec:gxl:semantics:types}
+% ─────────────────────────────────────────────────────────────────────────────
+
+GXL uses the GERT Portable JSON Value Model (PJVM), which defines six value
+types:
+
+\begin{center}
+\begin{tabular}{lp{10cm}}
+\hline
+\textbf{Type}   & \textbf{Description} \\
+\hline
+\texttt{null}   & Absent or unset value.
+                  Represented by the literal \texttt{null}. \\
+\texttt{bool}   & Boolean value: \texttt{true} or \texttt{false}. \\
+\texttt{number} & IEEE~754 double-precision float64. \\
+\texttt{string} & Immutable sequence of Unicode code points. \\
+\texttt{list}   & Ordered sequence of PJVM values.
+                  Lists are accessible only through \texttt{list.*}
+                  and \texttt{len()}; direct indexing via \texttt{[N]}
+                  in GDP paths is supported for captured subtrees. \\
+\texttt{object} & Key-value map of string keys to PJVM values.
+                  Accessible via GDP field segments (\texttt{.field}). \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent\textbf{No implicit coercion.}
+GXL performs no implicit type conversions.
+Comparing values of incompatible types MUST raise \texttt{GXL-TYPE-001}
+at evaluation time (or at plan time where statically inferrable).
+Authors MUST NOT rely on implicit truthiness:
+a bare string or number identifier used where a \texttt{bool} is required
+MUST raise \texttt{GXL-TYPE-002}.
+
+\noindent The following null-comparison rules apply
+(\texttt{gxl.ebnf} \S5.2):
+
+\begin{itemize}
+  \item \texttt{null == null} evaluates to \texttt{true} (no error).
+  \item \texttt{null != null} evaluates to \texttt{false} (no error).
+  \item \texttt{x == null} evaluates to \texttt{true} if \texttt{x} is null,
+    \texttt{false} otherwise (no error, regardless of \texttt{x}'s type).
+  \item \texttt{x != null} evaluates to \texttt{true} if \texttt{x} is not null,
+    \texttt{false} otherwise (no error).
+  \item Using \texttt{null} with any ordered comparison operator
+    (\texttt{<}, \texttt{<=}, \texttt{>}, \texttt{>=}) MUST raise
+    \texttt{GXL-EVAL-004}.
+  \item \texttt{not null} MUST raise \texttt{GXL-TYPE-002}.
+  \item \texttt{null} in arithmetic position MUST raise \texttt{GXL-TYPE-003}.
+\end{itemize}
+
+(Source: \texttt{gxl.ebnf} \S5.2, \S5.5.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Short-Circuit Evaluation}
+\label{sec:gxl:semantics:short-circuit}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\noindent\textbf{Source:} \texttt{gxl.ebnf} \S5.1;
+decisions.md ``GXL/GIS/GCP --- Open question resolutions''~OQ1.
+
+GXL \texttt{and} and \texttt{or} operators MUST use lazy (short-circuit)
+evaluation.
+
+\begin{itemize}
+  \item \textbf{OrExpr}: The evaluator MUST evaluate the left operand first.
+    If the left operand is \texttt{true}, the evaluator MUST return
+    \texttt{true} immediately without evaluating the right operand.
+    If the left operand is \texttt{false}, the evaluator MUST then evaluate
+    and return the right operand.
+
+  \item \textbf{AndExpr}: The evaluator MUST evaluate the left operand first.
+    If the left operand is \texttt{false}, the evaluator MUST return
+    \texttt{false} immediately without evaluating the right operand.
+    If the left operand is \texttt{true}, the evaluator MUST then evaluate
+    and return the right operand.
+\end{itemize}
+
+As a direct consequence of short-circuit evaluation: a missing variable or
+type error in the right-hand operand of \texttt{and}/\texttt{or} MUST NOT
+raise an error if the left-hand operand short-circuits.
+This is intentional; it enables defensive guards such as:
+
+\begin{minted}{text}
+has_result and result.status == "ok"
+\end{minted}
+
+\noindent where \texttt{has\_result} prevents evaluation of
+\texttt{result.status} when the capture did not run.
+
+When multiple operands are chained, short-circuit applies at each pairwise
+step from left to right:
+
+\begin{minted}{text}
+a and b and c   -- evaluates as: (a and b) and c
+a or  b or  c   -- evaluates as: (a or  b) or  c
+\end{minted}
+
+Conformance test category: \texttt{TV-GXL-EVAL} (short-circuit vectors).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Path Access (GDP)}
+\label{sec:gxl:semantics:paths}
+% ─────────────────────────────────────────────────────────────────────────────
+
+A GDP expression (\S\ref{subsec:gxl:gdp}) is evaluated against the run
+variable context map as follows:
+
+\begin{enumerate}
+  \item The first \texttt{IDENT} is looked up in the context map.
+    If not found, the evaluator MUST raise \texttt{GXL-PATH-001}.
+  \item Each subsequent dotted segment (\texttt{.field}) is applied to the
+    current value.
+    If the current value is not an object, or if the field name is not present
+    in the object, the evaluator MUST raise \texttt{GXL-PATH-001}.
+  \item Each subsequent indexed segment (\texttt{[N]}) is applied to the
+    current value.
+    If the current value is not a list, the evaluator MUST raise
+    \texttt{GXL-PATH-003}.
+    If the index \texttt{N} is greater than or equal to the list length,
+    the evaluator MUST raise \texttt{GXL-PATH-002}.
+\end{enumerate}
+
+Silent substitution of empty strings or null values for missing paths is
+\textbf{forbidden}.
+Every missing reference is a hard error.
+Authors MUST use \texttt{when:} guards (exploiting short-circuit evaluation,
+\S\ref{sec:gxl:semantics:short-circuit}) or capture defaults
+(GCP grammar, \S\ref{sec:gxl:semantics:paths}) to handle optional values.
+
+A bare GDP path in \emph{boolean position} (as the top-level expression,
+or directly following \texttt{and}/\texttt{or}/\texttt{not}) MUST resolve
+to a value of type \texttt{bool}.
+A non-\texttt{bool} value in boolean position MUST raise
+\texttt{GXL-TYPE-002}.
+
+(Source: \texttt{gxl.ebnf} \S3, \S5.3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Arithmetic}
+\label{sec:gxl:semantics:arithmetic}
+% ─────────────────────────────────────────────────────────────────────────────
+
+All arithmetic operations (\texttt{+}, \texttt{-}, \texttt{*},
+\texttt{/}, \texttt{\%}) require both operands to be of type \texttt{number}.
+Applying arithmetic to a non-\texttt{number} operand MUST raise
+\texttt{GXL-TYPE-003}.
+All arithmetic is performed in IEEE~754 double-precision float64.
+Integer values are representable exactly up to $2^{53}$;
+larger values incur silent rounding (not an error).
+
+\noindent\textbf{Division and modulo by zero.}
+The expressions \texttt{x / 0} and \texttt{x \% 0} MUST raise
+\texttt{GXL-EVAL-002} at evaluation time.
+No IEEE~754 Infinity or NaN value is ever produced as a GXL result.
+Integer-like division uses float64 semantics: \texttt{5 / 2 = 2.5}.
+
+\begin{quote}
+\noindent\textit{Non-normative note.}
+The \texttt{\%} operator follows IEEE~754 floating-point remainder
+(\texttt{fmod}) semantics: the result has the sign of the dividend.
+For example, \texttt{-7 \% 3 = -1.0}.
+This matches Go's behavior but differs from Python's modulo,
+which always returns a non-negative result when the divisor is positive.
+Conformance corpus MUST include negative-operand modulo test vectors
+before this behavior can be considered fully specified.
+(Open issue OI-GXL-03: \texttt{gxl.ebnf} \S7.)
+\end{quote}
+
+(Source: \texttt{gxl.ebnf} \S5.2, \S5.4.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Error Classes}
+\label{sec:gxl:errors}
+% ─────────────────────────────────────────────────────────────────────────────
+
+GXL defines two timing categories for errors:
+\emph{parse errors} are raised at runbook load/plan time, before any step
+executes;
+\emph{evaluation errors} are raised at runtime when the expression is
+evaluated for a specific step context.
+A runbook containing a parse error MUST NOT enter execution.
+An evaluation error causes the affected step to transition to the
+\texttt{failed} state; execution halts unless \texttt{continue\_on\_fail:~true}
+is set on that step.
+
+Table~\ref{tab:gxl-errors} enumerates every GXL error code.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{p{3.0cm}p{3.0cm}p{7.0cm}}
+\hline
+\textbf{Code} & \textbf{Raised by} & \textbf{Description} \\
+\hline
+\multicolumn{3}{l}{\textit{Parse errors (raised at load/plan time)}} \\
+\hline
+\texttt{GXL-PARSE-001} & Lexer/parser & Unexpected token: does not fit any production. \\
+\texttt{GXL-PARSE-002} & Lexer & Unterminated string literal: EOF or newline before closing quote. \\
+\texttt{GXL-PARSE-003} & Lexer & Invalid number literal: leading zeros (\texttt{007}), \texttt{NaN}, \texttt{Infinity}, or other malformed numeric token. \\
+\texttt{GXL-PARSE-004} & Lexer & Invalid escape sequence: unrecognized character after \texttt{\textbackslash}. \\
+\texttt{GXL-PARSE-005} & Parser & Unknown namespace: prefix not in the allowlist (\texttt{str}, \texttt{list}, \texttt{regex}), or \texttt{math} referenced in v1. \\
+\texttt{GXL-PARSE-006} & Parser & Unknown namespace method: e.g., \texttt{str.explode()} is not a known method of the \texttt{str} namespace. \\
+\texttt{GXL-PARSE-007} & Parser/Lexer & Forbidden syntax: \texttt{\&\&}, \texttt{||}, \texttt{!}, \texttt{|}, ternary, infix \texttt{contains}/\texttt{startsWith}/\texttt{matches}, assignment, string concatenation, array/object construction, negative array index, unary \texttt{+}, or bare function call. \\
+\texttt{GXL-PARSE-008} & Parser & Unmatched parenthesis. \\
+\texttt{GXL-PARSE-009} & Parser & Chained comparison: e.g., \texttt{a < b < c}. \\
+\texttt{GXL-PARSE-010} & Parser & Keyword used as identifier. \\
+\hline
+\multicolumn{3}{l}{\textit{Type errors (parse time where inferrable; otherwise evaluation time)}} \\
+\hline
+\texttt{GXL-TYPE-001} & Type checker & Type mismatch in comparison: comparing values of incompatible types (e.g., string~\texttt{==}~number). \\
+\texttt{GXL-TYPE-002} & Type checker & Non-\texttt{bool} in boolean position: a non-bool value used as the final expression result where \texttt{bool} is required. \\
+\texttt{GXL-TYPE-003} & Evaluator & Argument type mismatch: wrong type passed to a stdlib function, or arithmetic applied to a non-\texttt{number}. \\
+\texttt{GXL-TYPE-004} & Evaluator & Wrong argument count: function called with incorrect number of arguments. \\
+\hline
+\multicolumn{3}{l}{\textit{Path errors (raised at evaluation time)}} \\
+\hline
+\texttt{GXL-PATH-001} & Evaluator & Variable or path segment not found: first \texttt{IDENT} not in context map, or intermediate segment missing in object. \\
+\texttt{GXL-PATH-002} & Evaluator & Array index out of bounds: index $\geq$ array length. \\
+\texttt{GXL-PATH-003} & Evaluator & Index applied to a non-array value: e.g., \texttt{"hello"[0]} or traversal through a null or scalar intermediate. \\
+\hline
+\multicolumn{3}{l}{\textit{Evaluation errors (raised at evaluation time)}} \\
+\hline
+\texttt{GXL-EVAL-001} & Evaluator & Variable resolution failure not otherwise covered by \texttt{GXL-PATH-*} codes. \\
+\texttt{GXL-EVAL-002} & Evaluator & Division or modulo by zero (\texttt{x/0}, \texttt{x\%0}). \\
+\texttt{GXL-EVAL-003} & Evaluator & Invalid regex pattern: \texttt{regex.match} called with a pattern that is not valid RE2 syntax. \\
+\texttt{GXL-EVAL-004} & Evaluator & Null in ordered comparison: \texttt{null} used with \texttt{<}, \texttt{>}, \texttt{<=}, or \texttt{>=}. \\
+\hline
+\end{tabular}
+\caption{GXL error class catalog.
+  Source: \texttt{gxl.ebnf} \S6.}
+\label{tab:gxl-errors}
+\end{table}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Migration Note}
+\label{sec:gxl:migration}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{quote}
+\noindent\textbf{Informative.}
+This section is not normative.
+\end{quote}
+
+GXL replaces the prior \texttt{expr-lang/expr} evaluation surface that was
+used for all boolean-typed fields (\texttt{when}, \texttt{condition},
+\texttt{until}, and related fields) in earlier versions of the GERT schema.
+The key authoring differences are:
+
+\begin{itemize}
+  \item Logical operators change from \texttt{\&\&}/\texttt{||}/\texttt{!}
+    to the keywords \texttt{and}/\texttt{or}/\texttt{not}.
+  \item Infix \texttt{contains} (e.g., \texttt{pod\_json contains "Crash"})
+    is removed; authors MUST use \texttt{str.contains(pod\_json, "Crash")}.
+  \item Member access on variables (e.g., \texttt{config.region}) is now
+    formalized as GDP path syntax and is explicitly supported.
+  \item Implicit truthiness is removed; a bare variable in \texttt{when:}
+    MUST be of type \texttt{bool}.
+  \item Silent empty-string substitution for missing variables is removed;
+    every missing path is a hard error.
+\end{itemize}
+
+A full deprecation appendix, including a migration guide and rewrite rules for
+existing fixtures, will be added in a later Stream~B task.
+The existing spec sections that still reference \texttt{expr-lang/expr}
+syntax (including \texttt{design/gert/sections/03-schema-vnext.tex} and
+\texttt{design/gert/sections/02-architecture.tex}) are identified for
+rewrite in the Stream~B backlog; they remain in their current form until
+those follow-up tasks are completed.

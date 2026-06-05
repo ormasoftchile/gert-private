@@ -165,3 +165,15 @@ The keyword-prefix identifier pattern (`andthing`, `ornot`, `trueish`, `nullPtr`
 **Schema note:** Updated `design/gert/conformance/schema.json` to admit the GIS path error family and catalog code `GIS-PATH-MISSING`, which `gis.ebnf` defines as a named error rather than a numeric `GIS-PATH-###` code.
 
 **Decision memo:** Dropped `.squad/decisions/inbox/tess-gis-path-vectors.md` for Scribe integration.
+
+## 2026-06-05T09:25:14.584-07:00 — GCP Capture Path Vectors
+
+**Status:** Delivered `design/gert/conformance/tv-gcp-path.yaml` for the missing GCP corpus authorized by Phase 2 Day 1 Q1.
+
+**Vector range:** `TV-GCP-PATH-001` .. `TV-GCP-PATH-041`.
+
+**Coverage:** Local `stdout`/`stderr`/`exit_code`/`json`/`yaml`, snake-case-only `exit_code`, JSON/YAML GDP paths, bare-root captures, legacy `stdout.*` JSON dot paths, subtree object/array captures, missing/out-of-bounds/runtime parse failures, malformed syntax, HTTP/event/cross-step sources, and default-policy hard errors.
+
+**Schema note:** Updated `design/gert/conformance/schema.json` to admit GCP resolver/type/default error families: `GCP-RESOLVE-###`, `GCP-TYPE-###`, and `GCP-DEFAULT-SUBTREE`.
+
+**Encoding limits:** Current single-input vector shape cannot cleanly encode multiple captures from the same path (OI-GCP-04) or execution-order source-unavailable state (`GCP-RESOLVE-001`). Flagged both in `.squad/decisions/inbox/tess-gcp-vectors.md` for Don/Scribe.

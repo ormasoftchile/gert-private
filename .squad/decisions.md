@@ -1,7 +1,7 @@
 ﻿# Squad Decisions
 
-**Last Updated:** 2026-06-05T08:07:31.8271575-07:00
-**Inbox Merged:** 7 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; user directive)
+**Last Updated:** 2026-06-05T09:25:14.584-07:00
+**Inbox Merged:** 8 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; user directive)
 
 ---
 
@@ -623,6 +623,68 @@ See §8 for full descriptions.
 **Dependencies added:**
 - `github.com/spf13/cobra` v1.8.1
 - `gopkg.in/yaml.v3` v3.0.1
+
+---
+
+### 2026-06-05T09:25:14.584-07:00: Phase 2 Go Runtime Scaffold
+**By:** Don — Backend Dev
+
+## Package layout chosen
+
+`internal/eval` with shared `core` plus per-grammar packages:
+
+- `internal/eval/core` — PJVM value model and shared contracts
+- `internal/eval/gxl` — GXL parser/evaluator
+- `internal/eval/gis` — GIS template renderer and GIS-only optional chaining
+- `internal/eval/gcp` — GCP capture path parser/resolver
+
+**Why:** This preserves grammar boundaries and prevents GIS-only `?.` semantics from leaking into GXL/GCP, while keeping PJVM and diagnostics centralized for parity.
+
+## PJVM Go representation chosen
+
+Struct-with-kind typed sum:
+
+```go
+type Value struct {
+    Kind   Kind
+    Bool   bool
+    Number float64
+    String string
+    Array  []Value
+    Object map[string]Value
+}
+```
+
+**Why:** `interface{}` would admit host-language values and scatter type assertions. A typed sum gives one shared representation for Go/C#/TS parity and leaves a clean place for Day 2 constructors to reject NaN/Infinity.
+
+## Implementation stream order
+
+1. PJVM + conformance harness — build the measuring stick first.
+2. GXL parser — GIS embeds GXL; parse vectors are the fastest feedback.
+3. GXL evaluator + GDP paths — validates strict typing, stdlib, and short-circuit behavior.
+4. GIS baseline rendering — uses GXL and PJVM string coercion.
+5. GIS optional chaining — isolated GIS-only extension after baseline GXL.
+6. GCP parser/resolver — capture path runtime after expression/interpolation corpus is green.
+7. Parse-gate integration — no-bypass `ValidatedPlan` boundary after grammar surfaces pass.
+
+## Day-by-day plan
+
+- Day 2: PJVM constructors/validation, YAML-to-PJVM conversion, conformance harness dispatch.
+- Day 3: GXL lexer/parser; `tv-gxl-parse.yaml` green.
+- Day 4: GXL evaluator, stdlib, arithmetic, comparison, short-circuit; `tv-gxl-eval.yaml` green.
+- Day 5: GXL GDP traversal and path errors; `tv-gxl-path.yaml` green.
+- Day 6: GIS parser/renderer, escapes, full embedded GXL, string coercion.
+- Day 7: GIS optional chaining; all current 223 vectors green.
+- Day 8: GCP parser/resolver once GCP vectors are available.
+- Day 9: Parse gate, grammar version pinning, structured diagnostics, `ValidatedPlan` no-bypass boundary.
+
+## Open questions before/near Day 2
+
+1. The kickoff names GCP as in scope, but the current corpus files are GXL/GIS only. Confirm when GCP vectors land and whether they gate Phase 2 done in addition to the 223 current vectors.
+2. Confirm how `now()` conformance should be asserted: regex matcher, injected clock, or no fixed-value vectors.
+3. Confirm whether Day 2 should add JSON Schema validation for corpus files or keep YAML struct validation only until parser work starts.
+4. Parse-gate OPQs still need decisions: in-flight grammar upgrades, statically reachable step set, warning trace shape, plan persistence, and PLAN-* corpus coverage.
+
 
 ---
 

@@ -1,7 +1,7 @@
 ﻿# Squad Decisions
 
-**Last Updated:** 2026-06-05T13:29:45.398-07:00
-**Inbox Merged:** 11 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; user directive; phase2-day1-open-questions-resolved; tess-gcp-vectors; don-phase2-day2)
+**Last Updated:** 2026-06-05T16:16:27.961-07:00
+**Inbox Merged:** 12 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; user directive; phase2-day1-open-questions-resolved; tess-gcp-vectors; don-phase2-day2; don-phase2-day3)
 
 ---
 
@@ -975,3 +975,54 @@ The no-op pass exposed a real idempotency bug: migrated r07 strings such as `Amo
 - `gert migrate-expr --dry-run --diff=false .\design\gert\testdata\runbooks` -> 0 translations, clean verification.
 - `go test ./...` -> passing.
 
+
+---
+
+# Phase 2 Day 3  GXL Lexer & Recursive-Descent Parser
+
+**Author:** Don  Backend Developer  
+**Date:** 2026-06-05T16:16:27.961-07:00  
+**Status:** Completed  	v-gxl-parse.yaml 83/83 green  
+**Work Item:** GXL lexer + recursive-descent parser per gxl.ebnf precedence
+
+## Package Layout
+
+- internal/eval/gxl/lexer.go - Lex(input string) ([]Token, error), token kinds, source Position, and structured ParseError codes
+- internal/eval/gxl/ast.go - AST contracts and concrete node types
+- internal/eval/gxl/parser.go - Parse(input string) (Node, error) recursive-descent parser
+- internal/eval/gxl/*_test.go - lexer/parser unit coverage
+- internal/eval/conformance_test.go - gxlParseRunner now calls gxl.Parse; other runners remain Day 4-8 stubs
+
+## AST Design
+
+- Node interface exposes Pos() and is implemented by concrete nodes
+- LiteralNode carries kind, raw lexeme, decoded string/number/bool/null value text
+- UnaryNode handles 
+ot and unary -
+- BinaryNode handles logical, comparison, arithmetic, multiply/divide/modulo operators
+- PathNode models GDP roots plus field/index PathSegments
+- CallNode models top-level builtins (len, 
+ow) and closed namespace calls (str, list, egex)
+
+## Vector Status
+
+- **GXL parse status:** 83 of 83 	v-gxl-parse.yaml vectors green
+- Other vectors remain intentional 
+ot implemented runners: 	v-gxl-eval.yaml, 	v-gxl-path.yaml, 	v-gis-path.yaml, 	v-gcp-path.yaml
+
+## Ambiguities & Ratification Notes
+
+- Scientific notation required per ratified gxl.ebnf and 	v-gxl-parse.yaml (updated from original brief)
+- 1.2.3 follows Tess/Barbara vector behavior: lex as 1.2, ., 3, then fail parse with GXL-PARSE-001
+- str.foo without parentheses follows arbitration: GXL-PARSE-001, not keyword-as-identifier and not unknown-method
+
+## Day 4 Dependencies
+
+- Evaluator can start from AST without parser rewrites
+- Type semantics, stdlib behavior, path resolution, and clock-injected 
+ow() remain Day 4 scope
+- Remaining corpora will transition from stubs to full evaluation as evaluator implementation progresses
+
+---
+
+**Status:**  Merged to .squad/decisions.md 

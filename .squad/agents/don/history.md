@@ -127,3 +127,30 @@
 
 **Leslie uses he/him pronouns.** All team members and the coordinator must refer to Leslie with he/him going forward.
 
+---
+
+## 2026-06-04T23:56:26-04:00 — Stream A (Grammar Files) Complete — Ready for Stream C/D
+
+**Update:** Barbara's Stream A (reference EBNF grammar files) is complete. Delivered:
+- `design/gert/grammar/gxl.ebnf` (~25 KB)
+- `design/gert/grammar/gis.ebnf` (~16 KB)
+- `design/gert/grammar/gcp.ebnf` (~26 KB)
+
+**Critical decisions now binding:**
+- OQ1 (short-circuit `and`/`or`) — ratified by ormasoftchile
+- OQ2 (`capture.default:` scalars only) — ratified by ormasoftchile
+- OQ3 (Portable JSON Value Model) — specified by Barbara
+- OQ4 (`list.indexOf` stdlib) — added to grammar
+
+**You can now start:**
+1. **Stream C (Conformance Corpus)** — error codes and semantics locked. Begin writing ≥200 test vectors.
+2. **Stream D (Fixture Migration)** — grammar constraints are clear. Can begin migrating 22 runbook + 12 tool fixtures.
+
+**Outstanding team ratifications needed:**
+- OI-GIS-01: `\${` escape convention (deviation from original `$${` proposal)
+- OI-GCP-02: Root JSON capture without path (`json` keyword currently parse error)
+
+Both are documented in grammar files. Consider adding to today's decision record.
+
+**Orchestration log:** `.squad/orchestration-log/2026-06-04T23-56-26-barbara.md`
+

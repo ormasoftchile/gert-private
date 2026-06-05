@@ -33,8 +33,7 @@ GXL is evaluated at every boolean-typed field in a runbook document:
 Its design goals are portability across Go, C\#, and browser runtimes;
 auditability by non-developer operators; and strict governance
 (no implicit coercion, no side effects, no dynamic dispatch).
-GXL replaces the prior \texttt{expr-lang/expr} evaluation surface;
-see \S\ref{sec:gxl:migration} for the migration note.
+GXL is the only supported expression surface for these fields.
 \end{quote}
 
 % ─────────────────────────────────────────────────────────────────────────────
@@ -1037,39 +1036,3 @@ Table~\ref{tab:gxl-errors} enumerates every GXL error code.
   Source: \texttt{gxl.ebnf} \S6.}
 \label{tab:gxl-errors}
 \end{table}
-
-% ─────────────────────────────────────────────────────────────────────────────
-\section{Migration Note}
-\label{sec:gxl:migration}
-% ─────────────────────────────────────────────────────────────────────────────
-
-\begin{quote}
-\noindent\textbf{Informative.}
-This section is not normative.
-\end{quote}
-
-GXL replaces the prior \texttt{expr-lang/expr} evaluation surface that was
-used for all boolean-typed fields (\texttt{when}, \texttt{condition},
-\texttt{until}, and related fields) in earlier versions of the GERT schema.
-The key authoring differences are:
-
-\begin{itemize}
-  \item Logical operators change from \texttt{\&\&}/\texttt{||}/\texttt{!}
-    to the keywords \texttt{and}/\texttt{or}/\texttt{not}.
-  \item Infix \texttt{contains} (e.g., \texttt{pod\_json contains "Crash"})
-    is removed; authors MUST use \texttt{str.contains(pod\_json, "Crash")}.
-  \item Member access on variables (e.g., \texttt{config.region}) is now
-    formalized as GDP path syntax and is explicitly supported.
-  \item Implicit truthiness is removed; a bare variable in \texttt{when:}
-    MUST be of type \texttt{bool}.
-  \item Silent empty-string substitution for missing variables is removed;
-    every missing path is a hard error.
-\end{itemize}
-
-A full deprecation appendix, including a migration guide and rewrite rules for
-existing fixtures, will be added in a later Stream~B task.
-The existing spec sections that still reference \texttt{expr-lang/expr}
-syntax (including \texttt{design/gert/sections/03-schema-vnext.tex} and
-\texttt{design/gert/sections/02-architecture.tex}) are identified for
-rewrite in the Stream~B backlog; they remain in their current form until
-those follow-up tasks are completed.

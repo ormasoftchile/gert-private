@@ -89,7 +89,7 @@ to the \texttt{apiVersion} major component:
 \begin{itemize}
   \item \textbf{Major increment} (e.g.\ \texttt{runbook/v1} → \texttt{runbook/v1}):
         A breaking change.  The parser \emph{must not} silently accept the old
-        format.  Automated migration is provided via \texttt{gert migrate}.
+        format.
   \item \textbf{Minor/patch changes within a major}: Additive, backward-compatible.
         New optional fields may be added.  Existing fields may not be removed or
         renamed.  The JSON~Schema artifact version tracks these with a semver

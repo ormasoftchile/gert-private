@@ -1,11 +1,11 @@
 # Don — Project History (Summarized)
 
 ## Overview
-Don is the migration/tooling and runtime engineer. Work spans fixture migration (Stream D), migration tool construction (Stream E), declaration runtime gaps, C# governance parity, and execution adapter validation.
+Don is the runtime/tooling engineer. Work spans fixture normalization (Stream D), the removed Stream E migrator, declaration runtime gaps, C# governance parity, and execution adapter validation.
 
 ## Key Milestones (Phase 1)
 
-### Stream E — Migration Tool & Idempotency (Days 1-2 — COMPLETE)
+### Stream E — Migration Tool & Idempotency (Days 1-2 — REMOVED BY USER DIRECTIVE)
 - **Day 1:** gert migrate-expr scaffolded with 11 translation rules (E-001..011), 31 tests passing
   - CLI via cobra, position-aware YAML traversal (gopkg.in/yaml.v3), expression-position detection (when/condition/until/iterate.over)
   - Rules: GIS templates (E-001..003), GXL operators (E-004..006), contains → stdlib (E-007), jq-style paths (E-008), legacy escapes (E-009), template pipes warn (E-010), now() fix (E-011)
@@ -15,7 +15,8 @@ Don is the migration/tooling and runtime engineer. Work spans fixture migration 
   - **E-007 contains ambiguity:** String-like → str.contains(), list-like → list.contains(), ambiguous → warning (heuristic only, no auto-rewrite)
   - **E-006 extended:** Quote-aware negation scanner covers !X, !(X), !(X && Y), !!(X || (Y && Z)), !!X
   - **Validation:** gert migrate-expr --dry-run on testdata: 0 translations, go test ./... passing
-- **Stream E criteria:** Idempotent ✓, ambiguous rewrites warning-only ✓, strict mode coverage TBD, docs/help match behavior TBD
+- **Stream E reversal (2026-06-04T20:14:36.949-07:00):** Removed by ormasoftchile directive after Day 2 shipped because GERT has no production runbooks in the wild, so there is no legacy syntax target to migrate from. Keeping the tool would imply a legacy mode and create a contract surface future runtimes would have to reason about.
+- **Phase 1 status:** Stream E is removed from the plan. Phase 1 closes around the remaining A/B/C/D/F work; grammar, conformance, Stream D fixtures, and the independent `now()` stdlib addition remain intact.
 
 ### Stream D — Fixture Migration (COMPLETE)
 - **Audit:** 22 runbooks, 12 tool files, 1 extension. 388 violations identified (368 templates, 6 and/or, 9 !, 3 contains, 1 jq, 1 pipe)
@@ -67,3 +68,7 @@ Don is the migration/tooling and runtime engineer. Work spans fixture migration 
 - OQ-3: Canonical Go test harness
 - OQ-4: Sequence counter strategy
 - OQ-5: RE2 named group syntax difference ((?P<name>...) vs. C# (?<name>...))
+
+## Learnings
+- 2026-06-04T20:14:36.949-07:00 - Stream E was reversed cleanly after Day 2 shipped: no production runbooks means no migration target, and a migrator would imply a legacy mode GERT does not have.
+- 2026-06-04T20:14:36.949-07:00 - Dogfooding a tool against the source-of-truth corpus remains a valuable regression pattern; the specific migrator skill was removed, but future agents can re-derive the pattern when a real tool surface exists.

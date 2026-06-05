@@ -287,9 +287,9 @@ GISExpression  = Expression ;
      '\${' is the canonical escape for literal '${'. This grammar is
      authoritative. The original proposal (expression-language-proposal.md
      §2.6) specified '$${' (dollar doubling) — that convention is formally
-     DEPRECATED. The migration tool (Stream E) MUST convert any historical
-     '$${' occurrences to '\${'. Edith (Stream B) must amend proposal §2.6
-     to reflect this ratification. No further team input required.
+     REMOVED. '$${' is not a recognized escape and parsers MUST reject it
+     with a parse error. Edith (Stream B) must amend proposal §2.6 to
+     reflect this ratification. No further team input required.
 
    OI-GIS-02: Bare '$' in tool argv coexistence
      Tool definitions that contain '${ENV_VAR}' environment-variable
@@ -298,9 +298,8 @@ GISExpression  = Expression ;
      ambiguous. Currently the grammar treats ALL '${...}' as GIS
      interpolation. If a tool argv value must contain a literal shell
      '${ENV_VAR}' reference that should NOT be GIS-interpolated, the
-     author must use '\${ENV_VAR}'. This behavior should be confirmed
-     by the Stream D fixture migration (an affected tool was identified
-     in Don's audit: echo.tool.yaml, jsonrpc-server.tool.yaml).
+     author must use '\${ENV_VAR}'. Affected tools identified in Don's
+     audit: echo.tool.yaml, jsonrpc-server.tool.yaml.
 
    OI-GIS-03: Maximum interpolation depth
      A GXL expression inside '${...}' may reference a list or object

@@ -244,18 +244,11 @@ INTEGER        = DIGIT { DIGIT } ;
 - ❌ Default/fallback syntax (`${var:-default}`)
 - ❌ Arithmetic inside interpolation
 
-### 2.8 Migration from `fromJSON` / `fromYAML`
+### 2.8 Structured Data Access
 
-The current pattern:
-```yaml
-args: ['{{ $cfg := fromJSON .service_config }}{{ $cfg.region }}']
-```
+Structured data must be declared at capture time so the runtime stores a typed value in the variable map. Interpolation then uses dotted paths, for example `${service_config.region}`.
 
-Becomes a two-phase approach:
-1. **At capture time:** declare the capture as `format: json` so the runtime parses it into a structured value in the variable map.
-2. **At interpolation time:** use dotted path: `${service_config.region}`
-
-This forces structured data to be declared at the point of capture, not inline during rendering. The runbook is more auditable and the variable map is self-describing.
+This keeps parsing at the point of capture, not inline during rendering. The runbook is more auditable and the variable map is self-describing.
 
 ---
 
@@ -414,71 +407,7 @@ ERROR [SEM-007] schema.yaml:88 — Variable reference error
 
 ---
 
-## 5. Migration Plan
-
-### 5.1 Spec Sections Requiring Rewrites
-
-| File | Line Range | What Changes |
-|------|-----------|--------------|
-| `design/gert/sections/03-schema-vnext.tex` | 412–426 | Remove `expr-lang/expr` reference. Replace with GXL description. |
-| `design/gert/sections/03-schema-vnext.tex` | 435–440 | Replace `&&`/`||`/`!` operator table with `and`/`or`/`not` |
-| `design/gert/sections/03-schema-vnext.tex` | 454–473 | Update examples to use `and`/`or`/`not` |
-| `design/gert/sections/03-schema-vnext.tex` | 475–560 | `str.*` section — largely intact but remove `expr-lang` references, add note about forbidden infix |
-| `design/gert/sections/03-schema-vnext.tex` | 562–591 | **DELETE ENTIRELY.** Remove "String interpolation: still Go templates" paragraph and `fromJSON`/`fromYAML` section. Replace with GIS specification. |
-| `design/gert/sections/03-schema-vnext.tex` | 593–598 | Update error model to reference GXL, not `condition`/`when`/`until` with expr |
-| `design/gert/sections/03-schema-vnext.tex` | 886–913 | CLI step: replace "templates expanded" with "GIS interpolated" |
-| `design/gert/sections/03-schema-vnext.tex` | 1250–1262 | Collector `fields[].when`: change "Go template" to "GXL expression" |
-| `design/gert/sections/03-schema-vnext.tex` | 2144 | `tool.args`: change "templates expanded" to "GIS interpolated" |
-| `design/gert/sections/03-schema-vnext.tex` | 2518–2532 | Branch: change "Go template evaluating to true/false" to "GXL boolean expression" |
-| `design/gert/sections/03-schema-vnext.tex` | 2615–2669 | Iterate: update `until` to GXL, `over` to bare identifier / GIS path |
-| `design/gert/sections/03-schema-vnext.tex` | 3154–3165 | Tool argv: remove "Go templates", replace with GIS |
-| `design/gert/sections/03-schema-vnext.tex` | 3317–3337 | Tool rendering: remove Go template references |
-| `design/gert/sections/03-schema-vnext.tex` | 3530–3574 | Semantic validation: update to reference GIS variable references |
-| `design/gert/sections/02-architecture.tex` | 467–477 | CLI interpolation: update to GIS |
-| `design/gert/sections/02-architecture.tex` | 586–587, 1385–1412 | Display content: update to GIS |
-| `design/gert/sections/06-tool-runtime.tex` | 112–117 | argv rendering: update to GIS |
-| `design/gert/sections/06-tool-runtime.tex` | 282–299 | Capture paths: formalize as GCP |
-
-### 5.2 Fixture Migration
-
-| Fixture | Changes Required |
-|---------|-----------------|
-| `r01-k8s-incident/schema.yaml` | Replace `contains` infix → `str.contains()`; Replace `\|\|` → `or`; Replace all `{{ .var }}` → `${var}` |
-| `r02-canary-deploy/schema.yaml` | Replace `&&` → `and`, `\|\|` → `or`; Replace all `{{ .var }}` → `${var}` |
-| `r03-employee-onboarding/schema.yaml` | Replace all `{{ .var }}` → `${var}` |
-| `r04-soc2-evidence/schema.yaml` | Replace all `{{ .var }}` → `${var}` including artifact paths |
-| `r06-db-migration/schema.yaml` | Replace `{{ .var }}` → `${var}` |
-| `r07-financial-approval/schema.yaml` | Replace `&&` → `and`; Replace `{{ .var }}` → `${var}` |
-| `r08-fda-release/schema.yaml` | Replace `{{ .var }}` → `${var}` |
-| `r09-oncall-escalation/schema.yaml` | Replace `!acknowledged` → `not acknowledged`; Replace `{{ .var }}` → `${var}` |
-| `r10-gdpr-deletion/schema.yaml` | Replace `&&` → `and`, `!` → `not`; Replace `{{ .var }}` → `${var}` |
-| `r11-iterate-loop/schema.yaml` | Replace `$.services` → bare identifier `services`; Replace `{{ .var }}` → `${var}` |
-| `r13-decision-routing/schema.yaml` | Replace `{{ .var }}` → `${var}` |
-| `r14-assert-compensate/schema.yaml` | Replace `{{ .var }}` → `${var}` |
-| `r15-branch-collector/schema.yaml` | No operator changes needed (uses `==` which stays); no templates found needing migration |
-| `r16-end-step/schema.yaml` | Replace `{{ .var }}` → `${var}` |
-| `r17-tool-transport/schema.yaml` | Replace `{{ .var }}` → `${var}` |
-| `r18-extension-host/schema.yaml` | Replace `{{ .var }}` → `${var}` |
-| `r19-input-provider/schema.yaml` | Replace `{{ .var }}` → `${var}` |
-| `r20-serve-rpc/schema.yaml` | Replace `{{ .env \| default "dev" }}` → use `vars:` default + `${env}`; Replace `{{ .var }}` → `${var}` |
-| `r21-gert-run/schema.yaml` | Same as r20: remove pipe/default pattern; Replace `{{ .var }}` → `${var}` |
-| `r22-evidence-replay/schema.yaml` | Replace `{{ .build_id }}` → `${build_id}` in artifact paths; Replace `{{ .var }}` → `${var}` |
-| `r05-security-breach/schema.yaml` | Audit for templates (likely present); migrate to GIS |
-| `r12-approval-quorum/schema.yaml` | No expression syntax found — no migration needed |
-
-### 5.3 Backward Compatibility Stance
-
-**Decision:** Clean break. No compatibility shim.
-
-**Rationale:**
-1. **GERT has no shipped production runtime with external consumers yet.** The runbook corpus is design-phase test fixtures. There is no installed base to break.
-2. **A compat shim would mean maintaining two parsers** — the old Go template parser (for "warning" mode) and the new GXL/GIS parser. That doubles the attack surface and the conformance test burden for C#/TS runtimes.
-3. **Migration is mechanical.** `{{ .x }}` → `${x}` and `&&` → `and` can be done with a sed script. No semantic judgment required.
-4. **The whole point of this decision is to establish a clean contract.** A "warning period" implies the old syntax still works somewhere, which means the C# runtime would need to support it too — defeating the purpose.
-
-**Migration tooling:** A one-shot CLI command (`gert migrate-syntax`) that rewrites a runbook in-place. This is a convenience, not a runtime feature — it runs once during the transition.
-
-### 5.4 Conformance Test Corpus
+## 5. Conformance Test Corpus
 
 For a non-Go runtime (C#, TypeScript) to claim GXL/GIS parity, it MUST pass:
 
@@ -545,54 +474,7 @@ For a non-Go runtime (C#, TypeScript) to claim GXL/GIS parity, it MUST pass:
 
 ---
 
-## Appendix A: Migration Examples
-
-### Before (current)
-```yaml
-- step:
-    id: check_pod
-    type: branch
-    branches:
-      - condition: 'pod_json contains "CrashLoopBackOff" || pod_json contains "ImagePullBackOff"'
-        label: Pod failing
-      - condition: '!str.contains(pod_json, "Running")'
-        label: Pod not running
-    title: "Check pod {{ .pod_name }} in {{ .namespace }}"
-```
-
-### After (GXL + GIS)
-```yaml
-- step:
-    id: check_pod
-    type: branch
-    branches:
-      - condition: 'str.contains(pod_json, "CrashLoopBackOff") or str.contains(pod_json, "ImagePullBackOff")'
-        label: Pod failing
-      - condition: 'not str.contains(pod_json, "Running")'
-        label: Pod not running
-    title: "Check pod ${pod_name} in ${namespace}"
-```
-
-### Before (fromJSON pattern)
-```yaml
-args: ['{{ $cfg := fromJSON .service_config }}{{ $cfg.region }}']
-```
-
-### After (structured capture + GIS)
-```yaml
-# At capture time, declare format:
-capture:
-  service_config:
-    path: json.config
-    format: json   # runtime stores as structured value
-
-# At usage time:
-args: ['${service_config.region}']
-```
-
----
-
-## Appendix B: Precedence Table
+## Appendix A: Precedence Table
 
 | Precedence (highest first) | Operator |
 |----------------------------|----------|

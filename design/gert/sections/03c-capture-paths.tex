@@ -48,8 +48,7 @@ a GDP suffix to navigate into the parsed output.
 GDP itself is defined in \S\ref{subsec:gxl:gdp} and is referenced here;
 it is not duplicated.
 
-GCP replaces the informal fixture-level capture conventions that preceded
-Phase~1 (see \S\ref{sec:gcp:migration}).
+GCP is the normative capture-path grammar for Phase~1 and later.
 \end{quote}
 
 % ─────────────────────────────────────────────────────────────────────────────
@@ -146,11 +145,8 @@ Implementations MUST use YAML~1.2 core schema strictly
 
 \noindent\textbf{Canonical spelling.}
 The GCP grammar standardizes on \texttt{exit\_code} (snake\_case).
-The camelCase form \texttt{exitCode}, found in some pre-Phase~1 fixtures,
-is not a legal GCP token and MUST be rejected as \texttt{GCP-PARSE-001}.
-The Stream~E migration tool MUST convert \texttt{exitCode}
-to \texttt{exit\_code} in all affected fixture files
-(\texttt{gcp.ebnf} \S3.4, OI-GCP-01).
+The camelCase form \texttt{exitCode} is not a legal GCP token and MUST be
+rejected as \texttt{GCP-PARSE-001} (\texttt{gcp.ebnf} \S3.4, OI-GCP-01).
 
 (\texttt{gcp.ebnf} \S3.4.)
 
@@ -664,67 +660,3 @@ Table~\ref{tab:gcp-errors} enumerates every GCP error code.
   Source: \texttt{gcp.ebnf} \S7.}
 \label{tab:gcp-errors}
 \end{table}
-
-% ─────────────────────────────────────────────────────────────────────────────
-\section{Migration Note}
-\label{sec:gcp:migration}
-% ─────────────────────────────────────────────────────────────────────────────
-
-\begin{quote}
-\noindent\textbf{Informative.}
-This section is not normative.
-\end{quote}
-
-GCP formalizes capture-path semantics that were previously inferred
-informally from fixture patterns and tooling conventions.
-Don's expression-evaluation audit
-(\texttt{design/gert/expression-evaluation-audit.md})
-inventoried the pre-Phase~1 surface: \texttt{stdout}, \texttt{stderr},
-\texttt{exitCode}, \texttt{json.*}, \texttt{yaml.*}, and the legacy
-\texttt{stdout.incident.id} form (now normalized to \texttt{json.incident.id}).
-
-Key changes in GCP relative to prior conventions:
-
-\begin{itemize}
-  \item \textbf{Canonical naming.}
-    \texttt{exitCode} (camelCase) is replaced by \texttt{exit\_code}
-    (snake\_case) throughout.
-    The Stream~E migration tool MUST convert all occurrences
-    (OI-GCP-01).
-
-  \item \textbf{Bare-root captures.}
-    \texttt{json} and \texttt{yaml} without a GDP suffix are now
-    explicitly permitted (OI-GCP-02, ratified), capturing the entire
-    parsed root as a PJVM value.
-    Pre-Phase~1 fixtures may have required a dummy \texttt{.\_} suffix
-    as a workaround; that workaround is now invalid and MUST be removed.
-
-  \item \textbf{Pipe expressions forbidden.}
-    Pre-Phase~1 capture conventions in some fixtures included jq-style
-    pipe expressions such as \texttt{json | length}.
-    GCP forbids all pipe expressions; \texttt{PLAN-006}
-    (\S\ref{sec:parse-gate:error-codes}) is raised if a pipe character
-    is detected in a capture path at parse time.
-    Authors who need to apply a function to a captured value MUST use
-    the capture-then-GXL pattern: capture the value first, then use
-    a GXL expression in a subsequent \texttt{when:} or \texttt{args:}
-    field.
-    Example:
-
-\begin{minted}{yaml}
-capture:
-  items: json.results          # subtree capture: array
-# use len() in a subsequent GXL expression:
-when: len(items) > 0
-\end{minted}
-
-  \item \textbf{Cross-step and HTTP/event sources.}
-    The \texttt{step.\{id\}.*}, \texttt{http.*}, and \texttt{event.*}
-    source prefixes were not formally specified in pre-Phase~1 fixtures.
-    They are now normative and MUST be used for their respective
-    capture contexts.
-\end{itemize}
-
-A full fixture migration guide will be added in a later Stream~B task.
-The Stream~D effort is responsible for migrating existing fixtures
-to GCP-compliant capture paths.

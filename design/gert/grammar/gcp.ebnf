@@ -217,7 +217,8 @@ EventHeader    = "headers" "." HEADER_NAME ;
    Don's audit found both 'exitCode' and 'exit_code' in the existing
    corpus. This grammar standardizes on 'exit_code' (snake_case,
    consistent with YAML authoring conventions and GERT field naming).
-   The migration tool (Stream E) must convert 'exitCode' → 'exit_code'.
+   'exitCode' is not a recognized capture name and MUST be rejected
+   with parse error GCP-PARSE-001.
    
    Examples:
      stdout                         → full stdout as string
@@ -541,10 +542,9 @@ IndexSegment   = "[" INTEGER "]" ;
    OI-GCP-01: exitCode vs exit_code normalization
      Don's audit found 'exitCode' (camelCase) in some spec locations
      and 'exit_code' (snake_case) in others. This grammar standardizes
-     on 'exit_code'. The migration tool (Stream E) must handle both
-     spellings. The Go and C# parsers should ONLY accept 'exit_code'.
-     Conformance corpus must include a vector: 'exitCode' → parse error
-     GCP-PARSE-001.
+     on 'exit_code'. Go and C# parsers MUST accept ONLY 'exit_code'
+     and reject 'exitCode' with parse error GCP-PARSE-001. Conformance
+     corpus must include a vector: 'exitCode' → parse error GCP-PARSE-001.
 
    OI-GCP-02: Root JSON capture without path
      ## RATIFIED 2026-06-05T00:14:04-04:00 (ormasoftchile via Copilot)

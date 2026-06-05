@@ -39,8 +39,7 @@ The most common use is a bare GDP path
 (e.g., \texttt{\$\{hostname\}}, \texttt{\$\{config.region\}}),
 but the full GXL grammar is available inside every interpolation block.
 
-GIS replaces the prior Go \texttt{text/template} interpolation surface;
-see \S\ref{sec:gis:migration} for the migration note.
+GIS is the only supported interpolation surface.
 This chapter is the authoritative normative statement of the
 GERT Portable JSON Value Model (PJVM) used by GIS, GXL, and GCP.
 \end{quote}
@@ -117,7 +116,6 @@ definitions where both shell-style \texttt{\$\{ENV\_VAR\}} and GIS
 Under the current grammar ALL \texttt{\$\{...\}} sequences are GIS
 interpolations; a literal \texttt{\$\{ENV\_VAR\}} intended for the OS
 process environment MUST be written as \texttt{\textbackslash\$\{ENV\_VAR\}}.
-Fixture migration is tracked under Stream~D.
 \end{quote}
 
 (\texttt{gis.ebnf} \S2.2.)
@@ -530,46 +528,3 @@ Table~\ref{tab:gis-errors} enumerates every GIS error code.
   Source: \texttt{gis.ebnf} \S5.}
 \label{tab:gis-errors}
 \end{table}
-
-% ─────────────────────────────────────────────────────────────────────────────
-\section{Migration Note}
-\label{sec:gis:migration}
-% ─────────────────────────────────────────────────────────────────────────────
-
-\begin{quote}
-\noindent\textbf{Informative.}
-This section is not normative.
-\end{quote}
-
-GIS replaces the prior Go \texttt{text/template} interpolation surface that
-was used for string-typed fields
-(\texttt{display.content}, \texttt{args}, \texttt{stdin},
-and related fields) in earlier versions of the GERT schema.
-The key authoring differences are:
-
-\begin{itemize}
-  \item The interpolation delimiter changes from \texttt{\{\{.Variable\}\}}
-    (Go template syntax) to \texttt{\$\{variable\}} (GIS syntax).
-
-  \item The canonical escape for a literal dollar-brace sequence is
-    \texttt{\textbackslash\$\{} (single backslash; OI-GIS-01, ratified).
-    Any historical occurrences of the deprecated \texttt{\$\$\{} doubling
-    convention (proposal \S2.6, now superseded) MUST be converted to
-    \texttt{\textbackslash\$\{} by the Stream~E migration tool.
-
-  \item GIS allows full GXL expressions inside \texttt{\$\{...\}},
-    not only bare variable paths.  Authors MAY use \texttt{str.*} and
-    \texttt{list.*} functions, arithmetic, and comparisons directly
-    within interpolation blocks.
-
-  \item Missing variables are hard errors under GIS\@.
-    The Go \texttt{text/template} behavior of silently substituting an
-    empty string for a missing key is \textbf{removed}.
-\end{itemize}
-
-A full deprecation appendix with migration rewrite rules will be added in
-a later Stream~B task.
-Existing spec sections that still reference Go \texttt{text/template}
-syntax are identified for rewrite in the Stream~B backlog
-(\texttt{02-architecture.tex} lines 467--477 and 586--587;
-\texttt{03-schema-vnext.tex} lines 2518--2560).

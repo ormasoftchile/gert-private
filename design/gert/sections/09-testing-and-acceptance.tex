@@ -85,12 +85,12 @@ assertions:
   captures:
     db_host:
       equals: "prod-db.example.com"
-    migration_status:
+    rollout_status:
       contains: "complete"
 
   trace:
     - type: step/completed
-      step_id: run-migration
+      step_id: run-rollout
     - type: governance/blocked
       step_id: drop-table
       data.rule: denylist

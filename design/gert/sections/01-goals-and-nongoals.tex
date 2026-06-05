@@ -34,7 +34,7 @@ as a verifiable criterion rather than an aspiration.
   \item \textbf{Establish stable, versioned extension contracts.}
     Tool definitions (\texttt{.tool.yaml}), input providers (\texttt{.provider.yaml}), and
     out-of-process extensions must bind to named, versioned contracts. A host version bump that breaks
-    an extension contract requires a major version increment and a migration path. The capability
+    an extension contract requires a major version increment and an explicit upgrade path. The capability
     taxonomy---what an extension may register, observe, and invoke---must be a published, enumerated
     list, not an implicit set of permissions inferred from code. This pattern is established by
     VS~Code's extension API~\cite{vscode-extension-api} and Kubernetes admission controller design~\cite{kubernetes-docs}.

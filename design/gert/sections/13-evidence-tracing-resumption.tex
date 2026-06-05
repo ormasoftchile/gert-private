@@ -454,7 +454,7 @@ Runbook authors should write resumable runbooks by following these guidelines:
   \item Use \texttt{kubectl apply} and \texttt{terraform apply} instead of imperative create commands.
   \item Use \texttt{--if-not-exists} or \texttt{--create-or-replace} flags where available.
   \item For tool steps, declare \texttt{idempotent: true} in the tool definition when the operation is safe to call multiple times.
-  \item For manual steps, write prompts as questions that remain valid on a second ask (``Has the database migration completed?'' rather than ``Confirm you have started the migration'').
+  \item For manual steps, write prompts as questions that remain valid on a second ask (``Has the database change completed?'' rather than ``Confirm you have started the change'').
   \item Avoid steps whose side effects depend on the current time or a random seed without an explicit override mechanism.
 \end{itemize}
 

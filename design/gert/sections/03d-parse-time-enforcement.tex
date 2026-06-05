@@ -326,10 +326,8 @@ here as normative.
 \end{center}
 
 \noindent\textit{Note:} \texttt{PLAN-004}, \texttt{PLAN-005}, and
-\texttt{PLAN-006} are migration-era codes designed to catch runbooks that have
-not yet been processed by the Stream~E migration tooling.  Once all fixtures
-are migrated, these codes remain active as defensive guards against accidental
-re-introduction of deprecated syntax.
+\texttt{PLAN-006} are defensive parse-gate codes that reject unsupported
+syntax before execution.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \subsection{Error Message Format}
@@ -562,7 +560,7 @@ runtime implementation begins.  Each is assigned an identifier for tracking.
     Stream~C (Tess) must add test vectors for \texttt{PLAN-001} through
     \texttt{PLAN-009} to the conformance corpus.  Stream~F does not define
     these vectors; they are a Phase~2 corpus deliverable.  The gate-level
-    codes that require migration-era negative vectors are \texttt{PLAN-004}
+    codes that require negative vectors are \texttt{PLAN-004}
     (Go-template detection), \texttt{PLAN-005} (forbidden infix), and
     \texttt{PLAN-006} (pipe capture).
 

@@ -1,68 +1,40 @@
-# Barbara — Project History
+# Barbara — Project History (Summarized)
 
-## Learnings
+## Overview
+Barbara is the spec editor and architecture specialist for the GERT web platform and GXL expression language. Work spans governance enforcement, Azure infrastructure, declaration/consent workflows, and language design.
 
-- **2026-06-05T18:36:00-04:00 (now() added to GXL stdlib — Stream D DEFERRED-001 resolved):** Ratified decision to add `now()` as zero-argument top-level GXL builtin returning current UTC timestamp as ISO-8601 string (`YYYY-MM-DDTHH:MM:SSZ`). Per-evaluation determinism (each call yields independent fresh timestamp). Arity error reuses GXL-TYPE-004 (no new code). Grammar patches: `gxl.ebnf` (+42 lines: KW_NOW keyword, NowCall production, stdlib entry), `03a-expression-language.tex` (+72 lines: keywords, function intro, stdlib subsection). Conformance corpus extended 205 → 208 vectors (TV-GXL-EVAL-088/089/090: return type, arity violation, bare keyword error). r04-soc2-evidence patched: `{{ now }}` → `${now()}` at line 285. **Stream D final status: ✅ FULLY COMPLETE** — All P1..P5 exit criteria zero; DEFERRED-001 closed. Germán's ratification binding.
+## Key Milestones (Phase 1)
 
-- **2026-06-05T00:27:12-04:00 (Phase 1 Day 2 complete — streams B+C+F arbitration):** Edith delivered 03b (GIS) and 03c (GCP) normative sections with 65+ KB output; established PJVM canonical home at `03b §sec:gis:portable-json`. Tess delivered 122 new conformance vectors (TV-GXL-EVAL 87 + TV-GXL-PATH 35) bringing corpus to 205 vectors, past ≥200 target. Merged three inbox memos to decisions.md. **TESS-CONFLICT-1 and TESS-CONFLICT-2 both resolved:** (1) Keyword-as-identifier code is GXL-PARSE-010 (sole authority); §2.3 body comment corrected from GXL-PARSE-007 (grammar patches applied); vectors 081–082 finalised. (2) `str.foo` (no parens) is GXL-PARSE-001 (unexpected token under PEG fallthrough); `str.xyz()` (with parens) remains GXL-PARSE-006 (closed-stdlib parse-time validation); vector 083 reclassified, note added. **Four new ambiguities surfaced** (TESS-AMBIG-3 through 6) requiring Barbara decision: (3) boolean ordering (false < true), (4) array equality semantics, (5) dot-access on scalar, (6) dot-access on null. All four vectors marked TBD pending resolution. Phase 1 deliverables: grammar complete, specs complete (03a/03b/03c/03d), corpus at target. Stream D now unblocked.
+### Expression Language & Parser Gate (Streams A/B/F — COMPLETE)
+- Delivered: GXL/GIS/GCP EBNF grammars (75 KB), normative LaTeX specs (§03a/03b/03c/03d), parser gate spec with 9 PLAN-* error codes
+- Critical decisions ratified: OI-GIS-01 (\${ canonical escape), OI-GCP-02 (bare-root GDP captures), Portable JSON Value Model (PJVM), now() zero-arg stdlib function
+- Grammar discrepancies resolved (scientific notation, len namespace, missing stdlib, GDP member access) — grammar is authoritative
+- Parser gate: single-checkpoint, no-bypass, type-enforced contract (Phase 2 open: in-flight grammar upgrade strategy — OPQ-GATE-01)
 
-- **2026-06-05T00:27:12-04:00 (TESS-CONFLICT arbitration):** Arbitrated two grammar conflicts from Tess's Stream C day-1 memo. **CONFLICT-1 (keyword-as-identifier code):** GXL-PARSE-010 is the sole authoritative code for keyword-used-as-identifier. The §2.3 IDENT production body comment incorrectly cited GXL-PARSE-007 — that was a documentation bug (GXL-PARSE-010 was added later and the comment was never updated). Fixed body text to cite GXL-PARSE-010; added scope note to GXL-PARSE-007 catalog entry clarifying it covers forbidden *syntax constructs* (&&, ||, ternary, etc.) exclusively. **CONFLICT-2 (str.foo classification):** Two sub-cases decided. (A) `str.xyz()` with parens: GXL-PARSE-006 at parse time — already correct in grammar; reaffirmed closed-stdlib design (§1.6). No new GXL-PARSE-011 code needed. (B) `str.foo` without parens: GXL-PARSE-001 (unexpected token) — under PEG ordered alternation, NamespaceCall fails at missing LPAREN, GDP fails because `str` is a keyword; all Primary alternatives exhaust. NOT GXL-PARSE-010 (no identifier position) and NOT GXL-PARSE-006 (method validation unreachable without parens). Grammar tightening: added note to NamespaceCall production, updated Method comment to make closed-stdlib + parse-time enforcement explicit. Vectors TV-GXL-PARSE-081/082 finalised as GXL-PARSE-010; TV-GXL-PARSE-083 changed from GXL-PARSE-010 → GXL-PARSE-001. **Third conflict surfaced (not resolved):** LaTeX uses `Method = IDENT` but ebnf uses `Method = RAW_IDENT` — minor documentation inconsistency, flagged in arbitration memo for awareness.
+### Stream D — Fixture Migration (Germán + Don-1)
+- All P1–P5 exit criteria passed: 21 runbooks migrated (0 and/or remain, 0 ! prefix, 0 infix contains, 0 jq paths)
+- Deferred-001 ({{ now }} in r04): Resolved by now() stdlib addition
+- Stream D final status: ✅ COMPLETE
 
+### Web Platform Architecture (A6 MVP → A8 Enterprise)
+- **A6 (MVP):** App Service P1v3, $113/mo, IUserInputGate (TCS + SignalR), IApprovalGate (polling via Service Bus), Cosmos DB user_inputs container
+- **A8 (Endgame):** Durable Functions with WaitForExternalEvent<T>() for approval/input gates
+- Key insight: approval steps (long wait) drive A8 migration pressure; choice steps (short wait) are cheap in A6
+- Campaign layer architecture: tenant → campaign → audience → invitation → contract artifact → run. White-label SWA portal, per-tenant domains, magic-link auth.
 
-- **2026-06-05T00:14:04-04:00 (Stream F complete):** Delivered Stream F — Parser/Planner Gate Specification. Key outputs: (1) Applied two ratified grammar patches: `gis.ebnf` OI-GIS-01 (escape clarification, `\${` canonical, `$${` deprecated), `gcp.ebnf` OI-GCP-02 (bare-root `json`/`yaml` capture now optional-GDP, table updated); (2) Wrote `design/gert/sections/03d-parse-time-enforcement.tex` — full normative spec of the parse gate including ValidatedPlan type contract, 9 new `PLAN-*` error codes, normative error message format, no-bypass guarantees, grammar version pinning, and Phase 2 open issues; (3) Created `.squad/decisions/inbox/barbara-stream-f-error-codes.md` proposing `PLAN-001` through `PLAN-009`; (4) Created `.squad/decisions/inbox/barbara-stream-f-complete.md` completion memo. **Critical governance gap surfaced (OPQ-GATE-01):** In-flight grammar version upgrade scenario — two options proposed (strict vs. sticky), needs Germán's decision before Phase 2. **Contradiction found:** Original proposal §2.4 restricts GIS to path-only; grammar is superset (full GXL inside `${...}`) — grammar is authoritative, Edith must update proposal in Stream B. The parse gate is now fully specified as a single-checkpoint, no-bypass, type-enforced structural contract.
+### Declaration/Consent Workflows
+- 22 concrete scenarios across healthcare, insurance, finance, real estate, employment, government, education
+- 5 archetype patterns: (A) Single-Party Informed Consent, (B) Two-Party Witnessed, (C) Proxy/Representative, (D) Eligibility-Then-Declaration, (E) Multi-Step Sectioned
+- 10 gaps identified: signature capture, identity proofing, witness flow, document versioning, locale provenance, on-behalf-of, validity expiry, revocation, contextual PII, QTSP integration
+- Proposed: DeclarationCollectedEvent, WitnessAttestedEvent, DeclarationRevokedEvent, IWitnessGate interface, UserInputKind.Signature
+- Non-goals confirmed: GERT ≠ TSP, doesn't store biometrics, doesn't render legal text, doesn't enforce jurisdiction rules
 
-- **2026-06-03:** The GERT runtime's governance enforcement happens INSIDE the Go binary, before subprocess fork. This means any hosting option that runs the unmodified binary preserves governance automatically — the web platform cannot bypass it unless it circumvents the JSON-RPC contract entirely.
-- **2026-06-03:** GERT has four adapter surfaces: JSON-RPC exec contract (`exec/v1`), WebSocket event stream, tool invocation contract, and extension handshake. The web platform is just another adapter — it must consume these contracts, not invent new execution paths.
-- **2026-06-03:** The event system is one-way (runtime → subscribers) and the trace file is the authoritative record (at-least-once to file, best-effort to subscribers). This means the web layer can tolerate event streaming failures as long as the trace file is persisted reliably.
-- **2026-06-03:** Key architectural decision: WHERE the Go binary runs determines isolation, blast radius, and governance preservation. Produced 5-option architecture menu. Recommended Thin Relay (Container Apps Jobs) for MVP with Sidecar Agent as enterprise endgame.
-- **2026-06-03:** Approval gates mid-execution are the hardest seam for the web platform. Jobs-based topologies need state serialization + resume; pool/sidecar topologies handle them naturally but at higher cost/complexity.
-- **2026-06-04:** Brainstorm output merged to decisions.md. Architectural recommendation (Thin Relay MVP → Sidecar endgame) recorded. Four related agent outputs (John, Don, David) synchronized cross-agent. Orchestration log created.
-- **2026-06-03:** Go-only constraint removed. User open to C# native runtime. Re-evaluated all 5 original topologies + 4 new C# options. Key insight: C# eliminates the binary lifecycle problem AND makes approval gates trivial (async/await vs checkpoint/resume). New MVP recommendation: B1 (App Service + BackgroundService) — zero cold start, trivial approval gates, single deployment, $55/mo. New enterprise endgame: B4 (App Service Per-Tenant) — same isolation as A4 Sidecar but without container orchestration complexity. Retired A2 (superseded by B2 Functions Isolated). Critical constraint: C# Runtime must be `internal sealed` to prevent governance bypass in shared-process topology. Don must validate governance parity. Decision output merged to decisions.md (2026-06-03T20:36:12). Orchestration log created.
-- **2026-06-03:** Produced comprehensive A6 architecture document (`design/web-platform/a6-architecture.md`). Key design decisions: (1) App Service P1v3 for always-on execution — no cold start, (2) IApprovalGate interface stubbed from day one as A6→A8 migration seam — polling in A6, Durable Functions external events in A8, (3) JSONL trace in Blob Storage is authoritative record (not Cosmos DB) — if Blob unavailable, steps BLOCK, (4) Service Bus sessions for at-most-once run dispatch, (5) `internal sealed` runtime classes to prevent governance bypass. Explicit scope: A6 handles single-approver gates <24h; multi-approver, escalation, and long-running approvals deferred to A8. Estimated MVP cost: ~$113/month. Created decision document at `.squad/decisions/inbox/barbara-a6-architecture.md`.
-- **2026-06-03:** Defined Interactive Waiting Patterns — distinguished Approval Steps (long wait, external approver, polling-based) from Choice Steps (short wait, portal session user, TaskCompletionSource + SignalR). Introduced `IChoiceGate` interface as the dual of `IApprovalGate`. Key design: choice gates use TCS + SignalR push for sub-second resume (NOT polling like approvals). Both interfaces are A6→A8 migration seams — swap to `WaitForExternalEvent<T>()` behind DI. Added `choices` Cosmos DB container, new API endpoints (`/choices/{id}/select`, `/choices/pending`), and SignalR `ChoiceRequired` event. Insight: choice steps are cheap in A6 (user responds quickly); approval steps are expensive (thread held hours). Migration pressure to A8 comes from approval-heavy workloads, not choice-heavy ones.
-- **2026-06-03:** CORRECTION — Generalized `IChoiceGate` → `IUserInputGate`. Germán's directive: every user input is blocking, not just choices. The gate now handles Choice, Text, Confirmation, FileUpload, and Form via `UserInputKind` enum. Interface takes `UserInputRequest` (describes what's needed) and returns `UserInputResponse` (carries the answer). Cosmos DB container renamed `choices` → `user_inputs`. Endpoint unified to `POST /runs/{id}/steps/{stepId}/input` accepting `UserInputResponse` payload. Migration seam unchanged in shape: `IUserInputGate` (A6: TCS + SignalR) → `IUserInputGate` (A8: `WaitForExternalEvent<UserInputResponse>`). Decision note: `.squad/decisions/inbox/barbara-user-input-gate-correction.md`.
-- **2026-06-03:** Declaration-before-process scenario taxonomy produced (`.squad/decisions/inbox/barbara-declaration-scenarios.md`). 22 concrete scenarios across healthcare, insurance, finance, real estate, employment, government, education. **Five archetype patterns** extracted: (A) Single-Party Informed Consent, (B) Two-Party Witnessed Declaration, (C) Proxy/Representative Declaration, (D) Conditional Eligibility-Then-Declaration, (E) Multi-Step Sectioned Disclosure. **Integration seam rule:** GERT owns form presentation, acknowledgment capture, signature token recording, witness approval gate, and JSONL trace emission. GERT does NOT own eligibility determination, KYC/AML screening, biometric validation, e-signature legal authority, payment, scheduling, or translation. **Six data model gaps flagged for Don:** `principal_id` (proxy flows), `display_language`+`disclosure_version_hash` (translation audit), `SignatureToken` type with `assurance_level`, `declaration_id` for cross-run revocation linking, `form_interaction_log` events (21 CFR Part 11), parent/child run relationship (A8). **Uncomfortable questions raised:** minors/capacity, language validity, e-sig jurisdiction (ESIGN/eIDAS/Chilean Law 19.799), revocation-after-execution compensation pattern, dual-blind multi-party flows.
-- **2026-06-04T12:28:39.293-04:00:** Contract-acceptance campaigns need a distinct campaign layer above A6 runtime: tenant config, campaign definitions, immutable contract artifact versions, audience members, invitations, runs, and notification subscriptions. The white-label portal should remain a shared Static Web Apps deployment fronted by Front Door, with per-tenant branding and domains loaded by hostname; per-tenant deployments are an exception for isolation/networking/regulatory requirements.
-- **2026-06-04T12:28:39.293-04:00:** A magic link is invitation-possession proof, not identity proof. Recommended baseline is two-stage invite redemption (to survive email scanner prefetch), followed by server-to-server customer identity validation before the contract runbook opens; webhook delivery must be paired with a pull reconciliation API because customer endpoints will fail at the worst possible time.
-- **2026-06-04T18:36:16-07:00:** Produced GXL/GIS/GCP architecture proposal (`design/gert/expression-language-proposal.md`). Key decisions: (1) `and`/`or`/`not` keyword operators — visual break from Go, YAML-safe; (2) `${...}` interpolation delimiter — distinct from Go templates, shell-familiar; (3) GERT Dotted Path for variable lookup — formalizes existing fixture patterns; (4) Hard error on missing keys — traceability over convenience; (5) Clean break, no compat shim — no shipped runtime means no installed base; (6) Capture path pipes (`| length`) eliminated in favor of `len()` in GXL; (7) `fromJSON`/`fromYAML` removed from authored surface, replaced by typed captures with `format: json`. Three parsers (GXL, GIS, GCP) gate entry to `ValidatedPlan` — nothing reaches `RunHandle.Next()` unvalidated. Coverage matrix maps all 15 audit sites. 22 fixtures inventoried for migration. Open questions raised for ormasoftchile: `iterate.over` syntax, default values, `str.*` naming convention, timeline vs A6.
-- **2026-06-04T23:36:26-04:00:** Produced Phase 1 Detailed Plan (`.squad/decisions/inbox/barbara-gxl-phase1-plan.md`). Work stream cut: 6 streams — (A) Reference Grammar [S, Barbara], (B) Spec Rewrite [L, Barbara + Spec Editor], (C) Conformance Corpus [XL, Don + Conformance Tester], (D) Fixture Migration [M, Don], (E) Migration Tooling [M, Don], (F) Parser Gate Spec [M, Barbara]. Critical path: A→C (14 days). Corpus is the bottleneck — 235 vectors across 13 categories. Three new agents needed: Spec Editor (Phase 1, day 2), Conformance Tester (Phase 1, day 3), Parser Engineer (Phase 2). Two open questions require immediate resolution before day 3: short-circuit semantics for `and`/`or`, and whether `capture.default:` applies to subtree captures. Risk R3 (short-circuit ambiguity) is highest-impact and must be ratified.
+### Team Directive
+- Leslie uses he/him pronouns (as of 2026-06-04T17:15:45-07:00)
 
----
+## Active Open Questions
+- OQ-GATE-01: In-flight grammar version upgrade strategy (strict vs. sticky) — blocks Phase 2 plan storage
+- Tess's ambiguities (TESS-AMBIG-3 through 6): boolean ordering, array equality, scalar field access, null field access — pending Barbara decision
 
-## Project Context
-
-GERT is a governed, executable, traceable runbook engine (Go binary, local-first). It has a VSCode extension, TUI runner, and mobile SDKs. The team focus is building a web execution platform on Azure — white-labeled customer portals where end-users run runbooks as part of business processes (applications, authorizations, compliance flows). Azure infra only (no k8s). Key concerns: queue-driven execution, webhook delivery, tenant isolation, audit traceability.
-
-**User:** ormasoftchile
-**Session start:** 2026-06-03
-
----
-
-## Session: 2026-06-04T02:50:37Z — Interactive Waiting Patterns & User Input Gate
-
-**Scribe consolidated 8 inbox items.**
-
-**Key outcomes for Barbara:**
-- **IUserInputGate adoption:** Generalized `IChoiceGate` to cover Choice, Text, Confirmation, FileUpload, Form
-- **A6 finalized:** P1v3 App Service confirmed; cost baseline $113/mo
-- **Interface design:** TCS + SignalR for sub-second UX; 15-min timeout for in-session interaction
-- **Cosmos container:** `user_inputs` (partition key `/runId`)
-- **API endpoints:** `POST /runs/{id}/steps/{stepId}/input` unified
-- **Status:** Decisions ratified and merged to decisions.md
-
-## Team Integration — White-Label Campaign Platform (2026-06-04)
-
-**Cross-agent coordination:**
-- **John:** Aspire local dev supports A6 architecture in multi-mode dev environment (fast loop + cloud integration loop)
-- **David:** Integration contracts align campaign layer with webhook delivery guarantees; server-to-server identity validation requirement cascades from Barbara's decision
-- **Leslie:** Portal UX decisions (shared SWA, per-tenant custom domains, magic-link auth) are the frontend implementation of campaign layer constraints
-- **All:** 8 campaign architecture ratification items + 5 integration contract items + 7 portal UX items merged to decisions.md for team review
-
-**Architectural implication:** Campaign layer (tenant, campaign, audience, invitation, contract artifact, run, notification) becomes first-class platform surface; white-label portal is the referent frontend; A6 runtime remains isolated execution engine.
-
----
-
-## Team Directive — 2026-06-04T17:15:45-07:00
-
-**Leslie uses he/him pronouns.** All team members and the coordinator must refer to Leslie with he/him going forward.
-
+## Session: 2026-06-04T02:50:37Z
+Consolidated 8 inbox items. Ratified IUserInputGate (Choice/Text/Confirmation/FileUpload/Form), A6 architecture, campaign layer, white-label portal UX.

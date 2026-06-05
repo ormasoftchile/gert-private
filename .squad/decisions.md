@@ -424,3 +424,46 @@ Historical decisions accessible via archive file:
 ---
 
 *Scribe note: Phase 1 Day 1 merged. Streams B, C, F kickoff deliverables integrated. 5 inbox memos processed. Conflicts surfaced for Barbara arbitration. Phase 2 gates identified (OPQ-GATE-01, 02, 05 blocking; 03, 04, 06, 07 lower priority). New team members (Edith, Tess) onboarded and integrated. Archive threshold crossed; old decisions archived. Cross-agent updates queued (see next task: charters + history).*
+
+
+---
+
+# Don — Stream E Day 2 Decision Summary
+
+Date: 2026-06-04T20:14:36.949-07:00
+Requested by: ormasoftchile
+
+## Summary
+
+Stream E Day 2 is implemented and validated. I dogfooded `gert migrate-expr` against the already-migrated runbook fixtures, fixed the idempotency bug it exposed, added contains ambiguity handling, extended E-006 for parenthesized negation, and added permanent regression coverage.
+
+## Outcomes
+
+- Dogfood target: `design/gert/testdata/runbooks/`
+- Result after fixes: 22 YAML files, 0 translations, post-migration verification clean.
+- Added integration coverage proving already-migrated runbook fixtures remain byte-for-byte unchanged.
+- Added E-007 handling:
+  - string-like LHS migrates to `str.contains(...)`
+  - list-like LHS migrates to `list.contains(...)`
+  - ambiguous LHS is not rewritten and emits a warning for manual resolution
+- Added E-006 scanner behavior:
+  - `!X` -> `not X`
+  - `!(X)` -> `not (X)`
+  - `!(X && Y)` -> `not (X and Y)`
+  - `!(X || (Y && Z))` -> `not (X or (Y and Z))`
+  - `!!X` -> `not not X`
+
+## Dogfood Finding
+
+The no-op pass exposed a real idempotency bug: migrated r07 strings such as `Amount: $${amount}` were being treated as legacy E-009 escapes on a second pass. That bypasses the intended Stream D meaning: literal dollar plus GIS interpolation. I fixed this by preserving `$${symbol}` when `symbol` is known from runbook context such as inputs/captures/collector fields.
+
+## Open Questions
+
+1. The current E-007 type detection is conservative heuristic context, not full schema/type inference. Stream E completion should decide whether heuristic warning is enough for MVP or whether Day 3 must add richer symbol typing from runbook schema.
+2. GXL now defines `list.contains(...)`; confirm that list-membership migration should permanently target that namespace call.
+
+## Validation
+
+- `gert migrate-expr --dry-run --diff=false .\design\gert\testdata\runbooks` -> 0 translations, clean verification.
+- `go test ./...` -> passing.
+

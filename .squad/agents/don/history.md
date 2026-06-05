@@ -177,3 +177,14 @@ Your Day 4 task (implement `now()` per Q2): Build with an injectable clock.
 - Verified corpus discovery count by file: 264 vectors total (`tv-gxl-parse.yaml` 83, `tv-gxl-eval.yaml` 90, `tv-gxl-path.yaml` 35, `tv-gis-path.yaml` 15, `tv-gcp-path.yaml` 41). Expected Day 2 harness result is 0 pass / 264 fail / 0 skip because all runners intentionally return not implemented.
 - Local deviation: Go remains unavailable on PATH in this environment, so `gofmt`, `go mod tidy`, `go build ./...`, and `go test ./...` could not be executed here. No module dependency changes were needed beyond existing `gopkg.in/yaml.v3`.
 - Day 3 remains the GXL lexer/parser stream. It should replace only `gxlParseRunner` first and drive `tv-gxl-parse.yaml` green without leaking GIS optional-chaining or GCP syntax into GXL.
+
+### Phase 2 Day 3 - GXL Lexer/Parser (2026-06-05T16:16:27.961-07:00)
+- Implemented `internal/eval/gxl` lexer with position-tagged tokens, string escape validation, number literal validation, comments/whitespace handling, reserved keyword tokenization, and explicit forbidden syntax diagnostics for legacy operators.
+- Implemented recursive-descent parser and AST (`Node`, literals, unary/binary expressions, GDP paths, calls) matching GXL precedence from `gxl.ebnf`, including multiply/modulo, top-level `len`/`now`, closed namespace/method validation, non-associative comparisons, and position-tagged `ParseError` codes `GXL-PARSE-001` through `GXL-PARSE-010`.
+- Wired `gxlParseRunner` in `internal/eval/conformance_test.go` to call `gxl.Parse` and compare structured parse error codes or the `parse_ok` sentinel. Other conformance runners remain intentional Day 4-8 `not implemented` stubs.
+- Added unit tests under `internal/eval/gxl` covering lexer token classes/positions/errors and parser positive productions, AST precedence shape, and negative error-code cases.
+- Surprise: the task brief said number literals should exclude scientific notation, but `gxl.ebnf` and `tv-gxl-parse.yaml` require `1.5e10`, `2.0E-3`, and `1e+5`; I followed the ratified grammar/vectors rather than the brief so Day 3 parse conformance can go green.
+- Vector expectation: `tv-gxl-parse.yaml` should flip to 83/83 green with this runner; `tv-gxl-eval.yaml`, `tv-gxl-path.yaml`, `tv-gis-path.yaml`, and `tv-gcp-path.yaml` should still fail as not implemented.
+- Local verification remains blocked because `go` and `gofmt` are not on PATH (`where.exe go` and `where.exe gofmt` failed). Coordinator should run `go build ./...`, `go test ./internal/eval/gxl/...`, and `go test ./internal/eval/... -run TestConformance` in a Go-enabled environment.
+- Extracted reusable parser implementation pattern to `.squad/skills/go-recursive-descent-parser/SKILL.md`.
+- Day 4 is unblocked at the AST boundary: evaluator can walk literals, `PathNode`, `UnaryNode`, `BinaryNode`, and `CallNode` without changing parse contracts.

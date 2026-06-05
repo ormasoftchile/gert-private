@@ -9,6 +9,7 @@ import (
 "testing"
 
 "github.com/ormasoftchile/gert/internal/eval/core"
+"github.com/ormasoftchile/gert/internal/eval/gxl"
 "gopkg.in/yaml.v3"
 )
 
@@ -152,8 +153,15 @@ return "", nil, fmt.Errorf("no conformance runner for %s", base)
 }
 }
 
-func gxlParseRunner(Vector) (core.Value, string, error) {
-return core.Value{}, "NOT-IMPLEMENTED", notImplementedError{runner: "GXL parse"}
+func gxlParseRunner(vector Vector) (core.Value, string, error) {
+_, err := gxl.Parse(vector.Input)
+if err != nil {
+if parseErr, ok := err.(*gxl.ParseError); ok {
+return core.Value{}, parseErr.Code, nil
+}
+return core.Value{}, "", err
+}
+return core.NewString("parse_ok"), "", nil
 }
 
 func gxlEvalRunner(Vector) (core.Value, string, error) {

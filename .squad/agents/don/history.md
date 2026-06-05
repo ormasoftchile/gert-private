@@ -106,6 +106,46 @@ The GIS optional-chaining extension (`?.` and `?.[N]`) has been ratified and all
 - Scaffolded `internal/eval` with per-grammar packages (`gxl`, `gis`, `gcp`) and shared `core` package.
 - Added initial PJVM type definitions in `internal/eval/core/value.go` using a struct-with-kind representation.
 - Added `internal/eval/conformance_test.go` to discover `design/gert/conformance/tv-*.yaml`, load vectors via `gopkg.in/yaml.v3`, print corpus summary, and create skipped subtests for every vector.
+
+## Cross-Agent Coordination — Phase 2 Day 1 (2026-06-05T09:25:14.584-07:00)
+
+### Incoming Ratifications (Q1-Q4)
+
+**From Coordinator (Phase 2 Day 1 Kickoff):**
+
+| Question | Decision | Impact on Your Work |
+|----------|----------|-------------------|
+| Q1: GCP vectors dispatch | **Tess NOW (parallel to Day 2)** | ✅ Tess delivered TV-GCP-PATH-001..041 (41 vectors). Day 8 GCP resolver can now proceed. |
+| Q2: now() conformance assertion | **Injected clock** — runtime accepts injectable clock; vectors set fixed value, assert equality | Day 4 Task: Implement `now()` with injectable clock per this binding. Parity across Go/C#/TS requires identical contract. |
+| Q3: Corpus loader (JSON Schema or YAML struct) | **YAML struct only for now** — defer JSON Schema to C# runtime kickoff | Conformance harness uses yaml.v3 struct tag validation. No schema library needed for MVP. |
+| Q4: Parse-gate OPQs | **Defer — Barbara writes proposal before Day 9** | Parse-gate decisions are governance-layer work. Your Day 9 entry becomes "spec drafted in separate proposal cycle before implementation." |
+
+### Corpus Status Update
+
+**New corpus count: 261 vectors** (was 223)
+
+| Category | Count | File | New? |
+|----------|-------|------|------|
+| GXL-PARSE | 83 | tv-gxl-parse.yaml | — |
+| GXL-EVAL | 87 | tv-gxl-eval.yaml | — |
+| GXL-PATH | 35 | tv-gxl-path.yaml | — |
+| GIS-PATH | 15 | tv-gis-path.yaml | — |
+| **GCP-PATH** | **41** | **tv-gcp-path.yaml** | ✅ NEW |
+
+### Binding: Injectable Clock for now()
+
+Your Day 4 task (implement `now()` per Q2): Build with an injectable clock.
+
+**Contract:**
+- Conformance vectors set a fixed timestamp and assert exact equality (not regex, not fuzzy match)
+- Runtime API accepts optional clock injector (for testing determinism)
+- Each call yields independent fresh timestamp per spec (no caching across calls)
+- Parity binding: Go/C#/TS implementations must support this injectable contract identically
+
+**References:**
+- Decision ratified in `.squad/decisions.md` § Phase 2 Day 1 — Don's open questions resolved, Q2
+- Vectors will be in Day 8 GCP corpus or separate `tv-gxl-now.yaml` expansion (TBD by Tess)
+
 - Added `gopkg.in/yaml.v3 v3.0.1` to `go.mod`/`go.sum`; this is for the runtime conformance harness, not the removed migrator.
 - Dropped decision summary at `.squad/decisions/inbox/don-phase2-day1-scaffold.md`.
 - Extracted reusable scaffold pattern to `.squad/skills/go-conformance-scaffold/SKILL.md`.

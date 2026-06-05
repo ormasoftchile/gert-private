@@ -65,6 +65,41 @@ Consolidated 8 inbox items. Ratified IUserInputGate (Choice/Text/Confirmation/Fi
 
 ## 2026-06-05T07:28:56.273-07:00 — GIS Optional-Chaining EBNF Applied
 
+## Cross-Agent Coordination — Phase 2 Day 1 (2026-06-05T09:25:14.584-07:00)
+
+### Incoming Notification: Parse-Gate Proposal Backlog Item
+
+**From Coordinator (Phase 2 Day 1 Kickoff):**
+
+**Q4 Decision:** Parse-gate OPQs (in-flight grammar upgrades, statically-reachable steps, warning trace, plan persistence, PLAN-* corpus) **Deferred** — you will write a separate parse-gate proposal **before Day 9** (Don's Day 9 runtime plan entry).
+
+**Rationale:** 
+- Parse-gate is governance-layer territory deserving a dedicated proposal cycle (similar to your GIS optional-chaining flow)
+- Should not be buried in Day-1 runtime plan
+- Day 9 is ~1 week out at current pace; timeline permits separate proposal cycle
+
+**Scope of Parse-Gate Proposal (when you start):**
+
+From Open Questions in Phase 2 Go Runtime Plan:
+
+| Gate | Item | Decision Needed |
+|------|------|-----------------|
+| **OPQ-GATE-01** (BLOCKING) | In-flight grammar version upgrade | Option A (strict, disruptive) vs. Option B (sticky, requires version registry) |
+| **OPQ-GATE-02** (blocking Day 9) | Statically reachable step set definition | Formal definition for cross-step capture validation (PLAN-009) |
+| **OPQ-GATE-05** (blocking plan store) | Plan storage and re-validation policy | ValidatedPlan persistence model (where stored, eviction, forced re-validation) |
+| **OPQ-GATE-03, 04, 06, 07** (lower priority) | Other parse-gate concerns | See `design/gert/sections/03d-parse-time-enforcement.tex` §8 |
+
+**Timeline:**
+- Backlog item: can start anytime before Day 9
+- Don's Day 9 entry becomes: "Spec drafted in separate proposal cycle before implementation"
+- Similar to your GIS optional-chaining proposal cycle flow
+
+**Reference:**
+- Phase 2 Go Runtime Plan: `design/gert/phase2-go-runtime-plan.md` § Open questions before/near Day 2, item 4
+- Parser gate spec: `design/gert/sections/03d-parse-time-enforcement.tex` § Open Issues Phase 2
+- Decision ratified in: `.squad/decisions.md` § Phase 2 Day 1 — Don's open questions resolved, Q4
+
+
 **Status:** IMPLEMENTED — ratified EBNF delta applied to `design/gert/grammar/gis.ebnf` under GIS-only scope.
 
 **Changes:**

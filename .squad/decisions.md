@@ -1,7 +1,7 @@
 ﻿# Squad Decisions
 
 **Last Updated:** 2026-06-05T09:25:14.584-07:00
-**Inbox Merged:** 8 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; user directive)
+**Inbox Merged:** 10 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; user directive; phase2-day1-open-questions-resolved; tess-gcp-vectors)
 
 ---
 
@@ -685,6 +685,85 @@ type Value struct {
 3. Confirm whether Day 2 should add JSON Schema validation for corpus files or keep YAML struct validation only until parser work starts.
 4. Parse-gate OPQs still need decisions: in-flight grammar upgrades, statically reachable step set, warning trace shape, plan persistence, and PLAN-* corpus coverage.
 
+
+---
+
+### 2026-06-05T09:25:14.584-07:00: Phase 2 Day 1 — Don's open questions resolved
+
+**By:** ormasoftchile (via Copilot)
+**Status:** Ratified — bindings for Day 2 onward
+
+| # | Question | Decision | Rationale |
+|---|----------|----------|-----------|
+| Q1 | GCP vectors missing from corpus | **Dispatch Tess NOW (parallel to Don's Day 2) to write `tv-gcp-*.yaml`** | Day 8 implements GCP resolver; vectors must exist before then. Tess can work from grammar + spec without waiting for Don. Also validates "anyone can extend the corpus and the harness picks it up." |
+| Q2 | How to assert `now()` conformance | **Injected clock** — runtime accepts an injectable clock; vectors set a fixed value and assert exact equality | Parity requires identical contract across Go/C#/TS. Regex matchers pass for the wrong reasons (e.g., impossible dates). Injection point becomes an explicit API surface decision now rather than improvised later. |
+| Q3 | Corpus loader: JSON Schema or YAML struct? | **YAML struct only for now; revisit when C# runtime starts** | Go's yaml.v3 + struct tags already enforces shape. JSON Schema becomes valuable when multiple runtimes load the same corpus. Adding now drags in a schema library for one debugging convenience. |
+| Q4 | Parse-gate OPQs (in-flight grammar upgrades, statically-reachable steps, warning trace, plan persistence, PLAN-* corpus) | **Defer — Barbara will write a separate parse-gate proposal before Day 9** | Day 9 is a week out at current pace. Parse-gate is governance-layer territory and deserves a dedicated proposal cycle (similar to GIS optional-chaining flow), not buried in a Day-1 plan. Don's Day 9 entry becomes "spec drafted in separate proposal cycle before implementation." |
+
+## Next actions
+- **Tess** → write `tv-gcp-*.yaml` corpus vectors from `design/gert/grammar/gcp.ebnf` + `design/gert/sections/03c-capture-paths.tex`. Number consistent with existing convention (e.g., `TV-GCP-PATH-NNN`).
+- **Don** → Day 2 proceeds: PJVM constructors + YAML→PJVM conversion + harness dispatch. When implementing `now()` per Day 4, build it with an injectable clock per Q2.
+- **Barbara** → draft parse-gate proposal at some point before Day 9 (no immediate session needed; this is a backlog item).
+
+## Not in scope (explicit non-decisions)
+- JSON Schema for corpus (deferred to C# runtime kickoff)
+- Parse-gate semantics (deferred to Barbara's proposal cycle)
+- C# runtime kickoff (still on hold until Go runtime hits Phase 2 done = all corpus vectors green)
+
+---
+
+### 2026-06-05T09:25:14.584-07:00: Tess — GCP Capture Path Vectors
+
+**Date:** 2026-06-05T09:25:14.584-07:00  
+**Author:** Tess — Conformance Tester  
+**Requested by:** ormasoftchile  
+**Status:** Delivered
+
+## Summary
+
+Created `design/gert/conformance/tv-gcp-path.yaml` to unblock Don's Phase 2 Day 8 GCP parser/resolver work.
+
+## Vector ID Range
+
+- `TV-GCP-PATH-001` .. `TV-GCP-PATH-041`
+
+## Coverage
+
+- Local sources: `stdout`, `stderr`, `exit_code`, `json`, `yaml`.
+- Snake-case enforcement: `exitCode` rejected as `GCP-PARSE-001`.
+- JSON paths: top-level, nested dot paths, array index, mixed dot/index, deep mixed path.
+- YAML paths: top-level, nested, and YAML 1.2 date-looking scalar as string.
+- Bare-root captures: `json` object root, `json` array root, and `yaml` object root.
+- Legacy stdout dot-path: `stdout.incident.id` and cross-step `step.run_scan.stdout.result`.
+- Subtree captures: object (`json.config`) and array (`json.services`).
+- Runtime misses: missing dot segment (`GCP-RESOLVE-002`), out-of-bounds index (`GCP-RESOLVE-003`), non-JSON stdout for JSON capture (`GCP-RESOLVE-004`).
+- Parse errors: invalid character, trailing dot, negative index, malformed bracket, invalid suffix, invalid header name, missing step id.
+- HTTP captures: `http.status`, `http.body.*`, `http.headers.*`, absent header soft-null.
+- Event captures: `event.id`, `event.body.*`, `event.headers.*`.
+- Cross-step captures: `step.{id}.json.*`, `step.{id}.stdout.*`, `step.{id}.exit_code`.
+- Default policy: `GCP-DEFAULT-SUBTREE` and `GCP-TYPE-001`.
+
+## Constructs Not Cleanly Encoded
+
+- OI-GCP-04 multiple captures from the same path cannot be represented cleanly in the current single-`input` vector schema. It needs either a multi-capture vector shape or a planner-level corpus later.
+- `GCP-RESOLVE-001` source-not-available is execution-order/state dependent. I did not force it into this black-box path corpus because the current vector shape has no skipped/not-yet-run source state beyond missing values.
+- Scalar `capture.default:` fallback success behavior could use a richer capture-default vector shape later. This batch pins the two hard policy errors only.
+
+## Schema Updates
+
+Updated `design/gert/conformance/schema.json` to admit:
+
+- error classes: `GCP-RESOLVE`, `GCP-DEFAULT`, `GCP-TYPE`
+- error code forms: `GCP-RESOLVE-###`, `GCP-TYPE-###`, and `GCP-DEFAULT-SUBTREE`
+
+## Edge Cases for Don Day 8
+
+- Literal EBNF text has a notation tension (`GDP = "." PathSegment` while `DotSegment = "." IDENT`), but all examples/spec prose use `json.foo`, not `json..foo`. Vectors follow the examples and normative prose intent.
+- `stdout.*` with a GDP suffix must parse stdout as JSON, including the legacy `stdout.incident.id` form.
+- Bare `json` / `yaml` must return the parsed PJVM root, including array roots; do not serialize subtrees to strings.
+- Missing HTTP/event headers return `null`, not `GCP-RESOLVE-002`.
+- YAML must use YAML 1.2 core schema: `2026-06-04` is a string in the vector, not a timestamp.
+- `GCP-PARSE-006` is plan-time semantic validation for known step IDs, even though it is cataloged under parse errors.
 
 ---
 

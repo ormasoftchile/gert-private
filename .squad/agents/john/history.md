@@ -119,3 +119,9 @@ GERT is a governed, executable, traceable runbook engine (Go binary, local-first
 
 **Key decisions:** Hybrid local dev with Aspire orchestration (API/worker + Service Bus emulator + Blob/Azurite); real Cosmos emulator optional (allow real dev account); real Entra ID/Event Grid; in-process SignalR for MVP; two dev modes (fast inner loop + cloud integration loop); skip 100% Aspire parity ambition.
 
+---
+
+## Team Directive — 2026-06-04T17:15:45-07:00
+
+**Leslie uses he/him pronouns.** All team members and the coordinator must refer to Leslie with he/him going forward.
+

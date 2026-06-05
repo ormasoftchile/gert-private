@@ -56,6 +56,24 @@
 - Resume is a first-class behavior: submitted progress survives server-side, same-device drafts can restore locally, and expired sessions resume via a fresh link rather than forced account creation
 - Two-device behavior should allow only one active writer session to prevent double-submit confusion
 
+### White-Label Frontend Foundations Close-Out (2026-06-04T17:14:51-07:00)
+
+**Key constraints found:**
+- Azure Static Web Apps Standard custom-domain capacity is a small per-app quota, not unlimited. Microsoft docs disagree between 5 and 6; design to 5 until John verifies the active subscription quota.
+- Custom domains require explicit public DNS validation and binding. Use TXT validation for zero-downtime/Enterprise Grade Edge flows, CNAME/ALIAS for traffic, and Azure-managed certs unless Front Door/App Service is introduced for certificate control.
+- Do not depend on wildcard SWA domains for MVP. Explicit hostname onboarding is cleaner for tenant mapping, offboarding, support, and audit.
+- SWA should remain a static React shell: 500 MB-ish per environment, 15,000 files, 30 MB request limit, static `staticwebapp.config.json`, limited managed Functions. Large assets, tenant config, identity validation, run state, and audit belong outside SWA.
+
+**Tiering recommendation:**
+- Standard tenants: shared SWA + shared A6 App Service/data plane with strict `tenantId` enforcement.
+- Higher-risk/public campaign tenants: shared SWA behind Azure Front Door for WAF, rate controls, TLS/domain scaling, and multiple-origin routing.
+- Regulated/high-volume/sovereign tenants: dedicated SWA/Front Door/App Service/data resources when isolation, private networking, release cadence, or residency requires it.
+
+**Open questions:**
+- John must confirm the live SWA custom-domain quota in the target subscription because docs conflict.
+- Product/team must decide whether enterprise tenants require BYO certificates or accept Azure-managed certs.
+- Barbara/John need to define which tier gets Front Door from day one and what threshold triggers a dedicated tenant stack.
+
 ---
 
 ## Project Context

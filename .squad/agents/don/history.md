@@ -108,3 +108,7 @@
 
 ---
 
+## Team Directive — 2026-06-04T17:15:45-07:00
+
+**Leslie uses he/him pronouns.** All team members and the coordinator must refer to Leslie with he/him going forward.
+

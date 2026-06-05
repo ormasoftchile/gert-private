@@ -2660,3 +2660,44 @@ steps:
 Prepared by: Leslie (Frontend Dev)
 Date: 2026-06-04
 Status: Ready for team review & design ratification
+
+---
+
+## Leslie — White-Label Frontend Foundations Decisions
+
+**Author:** Leslie (Frontend Dev)  
+**Date:** 2026-06-04T17:14:51-07:00  
+**Status:** Team inbox for ratification
+
+### Proposed Decisions
+
+1. **Correct SWA custom-domain assumption**  
+   Treat Azure Static Web Apps Standard as having a small per-app custom-domain quota, not unlimited domains. Current Microsoft docs disagree between 5 and 6, so design to 5 until John verifies the live subscription limit.
+
+2. **Keep explicit hostname onboarding**  
+   Each tenant hostname is explicitly validated, bound, mapped to a tenant record, and issued a managed certificate. Do not depend on wildcard SWA routing for MVP.
+
+3. **Use Front Door as the domain/WAF scale layer**  
+   Direct SWA custom domains are acceptable for low-count MVP tenants. Add Azure Front Door Standard/Premium when WAF, bot/rate controls, custom certificate policy, many hostnames, wildcard strategy, or multiple SWA origins are required.
+
+4. **Tier tenant isolation**  
+   Default to shared SWA + shared A6 data plane with strict `tenantId` enforcement. Move tenants to shared Front Door controls or dedicated stacks when regulation, private networking, release cadence, region, WAF, or volume demands it.
+
+5. **Keep SWA as static shell only**  
+   SWA should host the React shell and static assets. App Service remains authoritative for identity validation, run state, tenant data access, and audit progression. Move the frontend to App Service or Container Apps only for SSR, custom edge/server logic, BYO cert/TLS control, region constraints, or artifact/domain scale beyond SWA.
+
+### Open Questions for Team
+
+- John: what custom-domain quota is active in our target Azure subscription and region?
+- Barbara/John: which tenant tier gets Front Door from day one?
+- Product: do enterprise customers require BYO certificates or are Azure-managed certificates acceptable?
+- Barbara/Don: what traffic/security threshold triggers dedicated tenant stack migration?
+
+---
+
+## Team Directive: Pronoun Usage
+
+**Date:** 2026-06-04T17:15:45-07:00  
+**By:** ormasoftchile (via Copilot)  
+
+**Directive:** Leslie uses he/him pronouns. All agents and the coordinator must refer to Leslie with he/him going forward.

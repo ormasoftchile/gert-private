@@ -145,3 +145,9 @@ Industries have different retention requirements:
 
 **Key decisions:** Identity endpoint timeout 8s absolute; circuit breaker opens after 5 failures (5 min); campaign links stored as separate Cosmos docs; webhook registration at tenant/campaign scope; 5 retries over 24h; default events (campaign.closed, user.started, user.completed, user.failed).
 
+---
+
+## Team Directive — 2026-06-04T17:15:45-07:00
+
+**Leslie uses he/him pronouns.** All team members and the coordinator must refer to Leslie with he/him going forward.
+

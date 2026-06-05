@@ -49,3 +49,9 @@ GERT is a governed, executable, traceable runbook engine (Go binary, local-first
 
 **Architectural implication:** Campaign layer (tenant, campaign, audience, invitation, contract artifact, run, notification) becomes first-class platform surface; white-label portal is the referent frontend; A6 runtime remains isolated execution engine.
 
+---
+
+## Team Directive — 2026-06-04T17:15:45-07:00
+
+**Leslie uses he/him pronouns.** All team members and the coordinator must refer to Leslie with he/him going forward.
+

@@ -16,7 +16,9 @@ Use this pattern when a Go implementation must conform to a normative YAML vecto
 2. Put shared cross-grammar contracts in a small `core` package; keep grammar-specific parser/evaluator packages separate.
 3. Define the portable value model before writing evaluators.
 4. Add a `TestConformance` harness immediately that discovers all `tv-*.yaml` files, loads vectors, counts them, and creates one skipped subtest per vector ID.
-5. Make the scaffold compile with `go build ./...`, `go test ./... -run TestConformance`, and `go mod tidy` before implementing parser logic.
+5. Before parser implementation, normalize vector inputs and expected values through the shared value model, then dispatch by corpus file/category to explicit runner stubs that return recognizable `not implemented` failures.
+6. Keep normal test output concise with an aggregate total/per-category summary; print per-vector PASS/FAIL/SKIP only in verbose mode.
+7. Make the scaffold compile with `go build ./...`, `go test ./... -run TestConformance`, and `go mod tidy` before implementing parser logic.
 
 ## Anti-Patterns
 

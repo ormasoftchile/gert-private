@@ -165,3 +165,15 @@ Your Day 4 task (implement `now()` per Q2): Build with an injectable clock.
 - 2026-06-04T20:14:36.949-07:00 - Stream E was reversed cleanly after Day 2 shipped: no production runbooks means no migration target, and a migrator would imply a legacy mode GERT does not have.
 - 2026-06-04T20:14:36.949-07:00 - Dogfooding a tool against the source-of-truth corpus remains a valuable regression pattern; the specific migrator skill was removed, but future agents can re-derive the pattern when a real tool surface exists.
 - 2026-06-05T07:28:56.273-07:00 - Ratification meetings lock complex cross-language decisions efficiently when open questions are pre-identified. `?.` coverage across both runtimes can now proceed in parallel without alignment risk.
+
+### Phase 2 Day 2  Runtime Plumbing (2026-06-05T13:29:45.398-07:00)
+- Added PJVM constructors/accessors in `internal/eval/core`: `NewNull`, `NewBool`, `NewNumber`, `NewString`, `NewArray`, `NewObject`, `Kind`, typed `As*` accessors, deep `Equal`, and debug `String`.
+- Guarded the PJVM boundary: `NewNumber` rejects NaN and infinities with `ErrInvalidNumber`; `NewObject` rejects nil maps with `ErrInvalidObject`. Empty string object keys are allowed because the GERT specs are silent and PJVM follows JSON object semantics.
+- Added `core.FromYAML(*yaml.Node)` to convert YAML null/bool/int/float/string/sequence/mapping nodes into PJVM values. Unknown tags and non-string mapping keys are rejected.
+- Added `Clock`, `SystemClock`, and `FixedClock` in `internal/eval/core/clock.go` to lock the Q2 injected-clock API surface before `now()` implementation.
+- Reworked `internal/eval/conformance_test.go` from skip-only discovery into file-based dispatch: GXL parse, GXL eval, GXL path, GIS path, and GCP path runners now all execute and return recognizable `not implemented` failures.
+- Harness now loads `variables` and `expected.value` through the PJVM YAML converter and prints a concise total/per-category summary. Per-vector status is logged only under verbose test output.
+- Added PJVM core tests for constructors, accessors, equality, YAML primitive/nested conversion, NaN rejection, non-string YAML key rejection, and clock implementations.
+- Verified corpus discovery count by file: 264 vectors total (`tv-gxl-parse.yaml` 83, `tv-gxl-eval.yaml` 90, `tv-gxl-path.yaml` 35, `tv-gis-path.yaml` 15, `tv-gcp-path.yaml` 41). Expected Day 2 harness result is 0 pass / 264 fail / 0 skip because all runners intentionally return not implemented.
+- Local deviation: Go remains unavailable on PATH in this environment, so `gofmt`, `go mod tidy`, `go build ./...`, and `go test ./...` could not be executed here. No module dependency changes were needed beyond existing `gopkg.in/yaml.v3`.
+- Day 3 remains the GXL lexer/parser stream. It should replace only `gxlParseRunner` first and drive `tv-gxl-parse.yaml` green without leaking GIS optional-chaining or GCP syntax into GXL.

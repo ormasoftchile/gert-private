@@ -152,3 +152,26 @@ Confident we can ship Phase 1 (presentation + signature + 60-min timeout + recei
 
 **Key decisions:** Shared SWA MVP (dedicated SWA only for enterprise); explicit per-tenant custom domains; Static Web Apps built-in edge (Front Door later); Cosmos DB + Blob theme storage; magic-link-first auth (no password); resumable progress with single-writer concurrency; audit branding boundary decision pending.
 
+## Expression Language Alignment — GXL/GIS/GCP Approved (2026-06-05)
+
+**Action for Leslie (Portal Frontend):** Expression rendering in runbook steps must be updated to reflect new GIS syntax. User experience for dynamic titles, arguments, and content is changing from Go template style to portable GERT syntax.
+
+**What changes:**
+- Dynamic step titles, argument labels, display content: Now use `${variable_name}` instead of `{{.variable}}`
+- Nested object paths: Use dotted notation `${campaign.metadata.name}` instead of Go template range syntax
+- No more template-specific functions — use `${str.toLower(name)}` or `${list.length(items)}` instead
+- Plan-time validation happens earlier; portal should never receive unparseable expressions (parser rejects before runtime)
+
+**Portal UX implications:**
+- Update expression preview/tooltip rendering to show `${...}` syntax hints
+- Update step template editor to validate against GIS grammar (if client-side validation added)
+- Runbook fixtures will be migrated by backend; portal should handle both syntaxes gracefully during migration period (or await full fixture migration per Phase 1)
+- No user-facing expression authoring in this release; portal only renders expressions authored in runbooks (no expression DSL in portal UI)
+
+**References:** `.squad/decisions/decisions.md` (GXL/GIS/GCP open questions resolved + architecture proposal)
+
+---
+
+## Team Directive — 2026-06-04T17:15:45-07:00
+
+**Leslie uses he/him pronouns.** All team members and the coordinator must refer to Leslie with he/him going forward.

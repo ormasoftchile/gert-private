@@ -2701,3 +2701,125 @@ Status: Ready for team review & design ratification
 **By:** ormasoftchile (via Copilot)  
 
 **Directive:** Leslie uses he/him pronouns. All agents and the coordinator must refer to Leslie with he/him going forward.
+
+---
+
+
+## 2026-06-04 — Direction chosen — Option B (GERT-native expression + portable interpolation)
+
+**By:** ormasoftchile (via Copilot)
+
+**What:** Replace BOTH `expr-lang/expr` and Go `text/template` with:
+1. A tiny GERT-native expression language for all boolean fields (`when`, `condition`, `until`, etc.) — grammar owned by GERT, conformance-tested across runtimes.
+2. A portable interpolation syntax replacing `text/template` for all string fields (titles, args, argv, display content, assertion operands, artifact paths).
+
+**Rejected:**
+- Option A (CEL): only covers booleans, doesn't address `text/template`.
+- Option C (subset `expr`): keeps Go-library dependency in the contract.
+- Option D (structured predicates only): too verbose for the authoring surface we already have.
+
+**Next:** Barbara owns the design proposal (grammar, operators, helpers, interpolation syntax, migration plan). Don audits portability claims on the draft.
+
+---
+
+## 2026-06-04 — User directive — No Go-style expression evaluation in GERT
+
+**By:** ormasoftchile (via Copilot)
+
+**What:** GERT must not support Go-style expression evaluation at all. Scope confirmed: kill BOTH the `expr-lang/expr` boolean surface AND the Go `text/template` interpolation surface from authored runbooks/tools. Replace with portable equivalents that any non-Go runtime (C#, TS, browser) can implement identically.
+
+**Why:** Portability — Go-style evaluation makes GERT runtime-coupled. Every governed runtime must evaluate the same runbook the same way; depending on Go template / `expr` semantics guarantees drift across C#, browser, and future runtimes.
+
+**Scope notes:**
+- Applies to: `when`, `condition`, `until`, `iterate.until`, branch `condition`, `include.when`, collector `fields[].when`, AND all `text/template` interpolation sites (step titles, args, stdin, tool argv, display content, assertion subjects/expected, artifact paths, `fromJSON`/`fromYAML` helpers).
+- Migration must be enforced at parse/plan time before any step reaches the runtime.
+- Existing fixtures using non-normative `expr` syntax (e.g., `pod_json contains "..."`) must be migrated.
+- See audit: `design/gert/expression-evaluation-audit.md`.
+
+---
+
+## 2026-06-04 — Architecture Proposal — GXL + GIS Expression Language
+
+**By:** Barbara — Lead / Architect
+
+**Status:** Approved
+
+**Document:** `design/gert/expression-language-proposal.md`
+
+### Headline Picks
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Interpolation delimiter | `${...}` | Visually distinct from Go templates `{{ }}`; YAML-safe; familiar from shell/Terraform/Actions |
+| Path grammar | GERT Dotted Path (GDP) — `foo.bar[0].baz` | Formalizes what fixtures already use; simpler than JMESPath; more readable than JSON Pointer |
+| Missing-key behavior | Hard error | GERT's value is traceability; silent empty strings hide bugs; planner catches most at plan-time |
+| Logical operator spelling | `and` / `or` / `not` (keywords) | Breaks visually from Go/C; YAML-safe (no quoting needed for `!`); natural English for non-dev authors |
+| Backward compatibility | Clean break, no compat shim | No shipped production runtime; migration is mechanical; shim would double conformance burden |
+| Capture path pipes (`\| length`) | Removed — use `len()` in GXL after capture | Eliminates an entire evaluation surface; captures are data extraction, not computation |
+| `fromJSON`/`fromYAML` | Removed from authored surface | Replaced by typed capture declarations (`format: json`); runtime parses at capture time, not render time |
+
+### Scope
+
+- **GXL:** Boolean expressions for `when`, `condition`, `until`, `branches[].condition`, `include.when`, `fields[].when`
+- **GIS:** String interpolation for `title`, `args`, `stdin`, tool `argv`, `display.content`, assertion operands, artifact paths, `event.id`
+- **GCP:** Capture path grammar for `capture` values — formalized source prefixes + dotted path
+- **Unchanged:** `event.filter` (structured predicate), `input.from` (provider dispatch), assertion types (structured enum)
+
+---
+
+## 2026-06-04 — GXL/GIS/GCP — Open question resolutions
+
+**By:** ormasoftchile (via Copilot, with Barbara's proposal as input)
+
+**Status:** Approved — design contract for Phase 1 spec rewrite
+
+These resolve the 6 open questions in `design/gert/expression-language-proposal.md`. They are binding for the spec rewrite and all runtime implementations.
+
+| # | Question | Decision |
+|---|----------|----------|
+| Q1 | `iterate.over` syntax | **GIS expression** — `iterate.over: ${services}`. No bare-identifier shortcut. Keeps grammar count at three (GXL/GIS/GCP). |
+| Q2 | Default values for variables | **Both mechanisms, non-overlapping.** `vars:` defaults apply when value isn't supplied at submission. `capture.default:` applies when the capture path fails to resolve at runtime. Spec must state they do not compete. |
+| Q3 | `str.*` (and other namespace) naming | **camelCase** — `str.startsWith`, `str.toLower`, `list.indexOf`, etc. Matches existing spec; no churn beyond the eval-grammar rewrite itself. |
+| Q4 | Assertion `type: contains` | **Stays as-is.** Structured assertion operators (`contains`, `not_contains`, `matches`, `eq`, `ne`, `lt`, `gt`, `exit_code`, `json_path`) are a fixed enum, unrelated to the forbidden GXL `contains` infix. Spec must make the distinction explicit. |
+| Q5 | Structured captures for JSON/YAML | **Subtree captures.** Capture paths resolving to an object or array store the full subtree in the variable map. GIS dotted paths walk them. Spec must define a portable JSON value model (null, bool, number, string, array, object) for cross-runtime parity. |
+| Q6 | Timeline / sequencing | **Phase 1 (sequential):** spec rewrite + conformance corpus + fixture migration. **Phase 2 (parallel):** Go runtime impl, C# runtime impl, A6 infra continues independently. **Phase 3:** cross-runtime conformance gate before any non-Go runtime ships. Conformance corpus is part of Phase 1 (the test vectors *are* the spec). |
+
+### Cross-cutting notes
+
+- Q1 + Q5 are linked: `iterate.over: ${services}` only works because Q5 says subtree captures are allowed. Both must ship together.
+- Q2 (`capture.default:`) replaces the silent-empty fallback that Go `text/template` provided; without it, the hard-error policy would be a footgun for optional API fields.
+- Q6 conformance-corpus-as-spec-deliverable formalizes the gate already called for in `design/web-platform/c-sharp-governance-parity.md`.
+
+---
+
+## 2026-06-04 — Don Decision Inbox — Go-Style Expression Evaluation Audit
+
+**Date:** 2026-06-04  
+**Author:** Don — Backend Dev  
+**Status:** Audit complete; recommendations incorporated into final design direction.
+
+### Summary
+
+Audit report: `design/gert/expression-evaluation-audit.md`
+
+The repository snapshot does not include the Go runtime source tree, so implementation-level evaluator calls could not be inspected. The design/spec and fixture corpus still expose two author-facing evaluator families:
+
+1. `expr-lang/expr` for conditional fields (`when`, `condition`, `until`).
+2. Go `text/template` for interpolation in titles, args, tool argv, display content, assertion operands, and related non-conditional fields.
+
+### Decision Pressure
+
+The current surface is not portable enough for a non-Go runtime without either emulating Go template semantics or changing the runbook contract. There are also spec conflicts: the global expression section says conditional fields use `expr`, while some branch/collector tables still describe guards as Go templates.
+
+### Options Raised
+
+- Adopt CEL for boolean expressions.
+- Define a tiny GERT-native expression language.
+- Keep `expr` only as an implementation detail while allowlisting a portable subset.
+- Remove general expression evaluation and use structured literal predicates plus simple variable substitution.
+
+### Don's Guardrail
+
+No shortcut should bypass parser/plan-time validation. If Go-style syntax is deprecated, the parser must reject non-portable constructs before runtime execution, so governance, audit, replay, and web workers cannot diverge.
+
+---

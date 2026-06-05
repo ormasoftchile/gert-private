@@ -121,6 +121,27 @@ GERT is a governed, executable, traceable runbook engine (Go binary, local-first
 
 ---
 
+## Expression Language Alignment — GXL/GIS/GCP Approved (2026-06-05)
+
+**Action for John:** C# runtime implementation must conform to new portable expression grammar. Go-style evaluation (text/template, expr-lang/expr) is DEPRECATED. All runbooks must migrate to GXL (boolean) and GIS (string interpolation) before Phase 1 close.
+
+**What changes:**
+- Boolean `when`, `condition`, `until` fields: Migrate from Go `expr` syntax to GXL (GERT Expression Language)
+- String interpolation in titles, args, tool argv, display content: Migrate from Go `text/template` to GIS (GERT Interpolation Syntax, dollar-brace: `${...}`)
+- No Go template semantics in C# runtime — grammar is owned by GERT, not Go
+- Parser/plan-time validation enforces migration before any runbook reaches execution
+
+**C# runtime implications:**
+- Implement GXL lexer/parser/evaluator (owned by GERT spec, not dependent on Go `expr` library)
+- Implement GIS interpolation engine (portable dotted paths, camelCase function names: `str.startsWith`, `list.indexOf`)
+- Support `capture.default:` for optional API field handling (replaces text/template silent-empty fallback)
+- Conform to portable JSON value model for subtree captures (null, bool, number, string, array, object)
+- No C#-specific expression extensions; cross-runtime parity is the gate
+
+**References:** `.squad/decisions/decisions.md` (GXL/GIS/GCP open questions resolved + architecture proposal)
+
+---
+
 ## Team Directive — 2026-06-04T17:15:45-07:00
 
 **Leslie uses he/him pronouns.** All team members and the coordinator must refer to Leslie with he/him going forward.

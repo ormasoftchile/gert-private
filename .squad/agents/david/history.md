@@ -147,6 +147,26 @@ Industries have different retention requirements:
 
 ---
 
+## Expression Language Alignment — GXL/GIS/GCP Approved (2026-06-05)
+
+**Action for David (Integration/Webhooks):** Webhook payload shapes must support new portable interpolation syntax for variable substitution. No more Go template evaluation in webhook metadata.
+
+**What changes:**
+- Webhook metadata fields (event.id, custom headers): Migrate from Go `text/template` to GIS interpolation (`${...}` syntax)
+- Webhook payload variable substitution: Use GIS dotted paths (`${capture.customer_id}`) instead of template ranges
+- Assertion operands in webhook verification logic: Use GIS for dynamic values instead of template syntax
+- `capture.default:` provides fallback for optional capture paths (replaces text/template silent-empty behavior)
+
+**Integration implications:**
+- Webhook payloads remain JSON; payload *structure* doesn't change, only how variables are interpolated
+- Integration tests should verify new GIS syntax interpolation in webhook metadata
+- Backward compatibility: Any Go-template syntax in current fixtures will be rejected at parse time; migration is enforced before webhook dispatch
+- Multi-receiver scenarios (declaration events, at-least-once webhooks): Variables are interpolated consistently across all runtimes; no drift risk
+
+**References:** `.squad/decisions/decisions.md` (GXL/GIS/GCP open questions resolved + architecture proposal)
+
+---
+
 ## Team Directive — 2026-06-04T17:15:45-07:00
 
 **Leslie uses he/him pronouns.** All team members and the coordinator must refer to Leslie with he/him going forward.

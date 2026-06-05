@@ -458,9 +458,19 @@ The namespace prefix MUST be one of \texttt{str}, \texttt{list}, or
 \texttt{regex}.
 Referencing an unknown namespace is error \texttt{GXL-PARSE-005}.
 Referencing an unknown method within a valid namespace is error
-\texttt{GXL-PARSE-006}.
+\texttt{GXL-PARSE-006} (raised at parse time; the stdlib function set is
+closed per \S1.6 and method names are statically validated).
 Referencing the \texttt{math} namespace in v1 is error \texttt{GXL-PARSE-005}
 (\texttt{math} is reserved for v2; no methods are defined in this version).
+
+\paragraph{Note on \texttt{str.foo} without parentheses.}
+The expression \texttt{str.foo} (no call parentheses) does not match
+\texttt{NamespaceCall} (which requires \texttt{(ArgList)}) and cannot match a
+GDP variable path (\texttt{str} is a keyword, not \texttt{IDENT}).
+Under PEG ordered alternation all \texttt{Primary} alternatives fail;
+the correct error is \texttt{GXL-PARSE-001} (unexpected token), not
+\texttt{GXL-PARSE-006} or \texttt{GXL-PARSE-010}.
+See conformance vector \texttt{TV-GXL-PARSE-083}.
 
 (Source: \texttt{gxl.ebnf} \S3.)
 
@@ -872,10 +882,10 @@ Table~\ref{tab:gxl-errors} enumerates every GXL error code.
 \texttt{GXL-PARSE-004} & Lexer & Invalid escape sequence: unrecognized character after \texttt{\textbackslash}. \\
 \texttt{GXL-PARSE-005} & Parser & Unknown namespace: prefix not in the allowlist (\texttt{str}, \texttt{list}, \texttt{regex}), or \texttt{math} referenced in v1. \\
 \texttt{GXL-PARSE-006} & Parser & Unknown namespace method: e.g., \texttt{str.explode()} is not a known method of the \texttt{str} namespace. \\
-\texttt{GXL-PARSE-007} & Parser/Lexer & Forbidden syntax: \texttt{\&\&}, \texttt{||}, \texttt{!}, \texttt{|}, ternary, infix \texttt{contains}/\texttt{startsWith}/\texttt{matches}, assignment, string concatenation, array/object construction, negative array index, unary \texttt{+}, or bare function call. \\
+\texttt{GXL-PARSE-007} & Parser/Lexer & Forbidden syntax: \texttt{\&\&}, \texttt{||}, \texttt{!}, \texttt{|}, ternary, infix \texttt{contains}/\texttt{startsWith}/\texttt{matches}, assignment, string concatenation, array/object construction, negative array index, unary \texttt{+}, or bare function call. Does \emph{not} cover keyword-as-identifier (see \texttt{GXL-PARSE-010}). \\
 \texttt{GXL-PARSE-008} & Parser & Unmatched parenthesis. \\
 \texttt{GXL-PARSE-009} & Parser & Chained comparison: e.g., \texttt{a < b < c}. \\
-\texttt{GXL-PARSE-010} & Parser & Keyword used as identifier. \\
+\texttt{GXL-PARSE-010} & Parser & Keyword used as identifier (e.g., variable named \texttt{and}, \texttt{or}, \texttt{str}). Sole authoritative code for keyword misuse as identifier; \texttt{GXL-PARSE-007} does not apply to this case. \\
 \hline
 \multicolumn{3}{l}{\textit{Type errors (parse time where inferrable; otherwise evaluation time)}} \\
 \hline

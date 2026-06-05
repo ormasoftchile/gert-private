@@ -69,3 +69,63 @@
 - GCP spec section needed before the `capture.default:` cross-reference resolves
 - `main.tex` needs `\input{sections/03a-expression-language}` added
 - Migration appendix (deprecation of expr-lang/expr) is a separate Stream B task
+
+---
+
+### 2026-06-05 — Stream B Day 2: GIS and GCP sections (`03b`, `03c`)
+
+**Sections delivered:**
+- `design/gert/sections/03b-interpolation-syntax.tex` — Normative GIS spec.
+  Labels: `sec:gis`, `sec:gis:normref`, `sec:gis:lexical`,
+  `subsec:gis:template-string`, `subsec:gis:raw`, `subsec:gis:escapes`,
+  `subsec:gis:interpolation`, `sec:gis:expression`, `sec:gis:portable-json`,
+  `subsec:gis:pjvm-types`, `subsec:gis:pjvm-exclusions`,
+  `subsec:gis:unresolved`, `sec:gis:coercion`, `subsec:gis:coercion-number`,
+  `sec:gis:errors`, `sec:gis:migration`.
+- `design/gert/sections/03c-capture-paths.tex` — Normative GCP spec.
+  Labels: `sec:gcp`, `sec:gcp:normref`, `sec:gcp:sources`,
+  `subsec:gcp:sources:local`, `subsec:gcp:sources:step`,
+  `subsec:gcp:sources:http`, `subsec:gcp:sources:event`,
+  `subsec:gcp:sources:table`, `sec:gcp:traversal`, `sec:gcp:subtree`,
+  `subsec:gcp:subtree:inference`, `subsec:gcp:subtree:iteration`,
+  `sec:gcp:default`, `subsec:gcp:default:scalar`,
+  `subsec:gcp:default:subtree`, `sec:gcp:errors`, `sec:gcp:migration`.
+
+**New terminology committed (must remain consistent):**
+- **GIS evaluator** — runtime component rendering a GIS template string
+- **template string** — GIS field value (outer string, not the expression inside)
+- **interpolation block** — a `${...}` segment in a template string
+- **PJVM** — canonical home is now `§sec:gis:portable-json` (03b); 03a and 03c reference it
+- **boolean** — the PJVM type name (grammar term); `bool` is GXL shorthand only
+- **bare-root capture** — a `json`/`yaml` path with no GDP suffix (OI-GCP-02)
+- **scalar capture** — PJVM captured value of type null/boolean/number/string
+- **subtree capture** — PJVM captured value of type array or object
+- **source prefix** — the leading segment of a GCP expression
+- **capture-then-GXL pattern** — approved alternative to pipe expressions
+
+**Model-defining decisions committed:**
+- `§sec:gis:portable-json` is the single authoritative normative home of PJVM.
+  All other spec sections reference it; none duplicate it.
+- `boolean` is the PJVM type name; `bool` is acceptable GXL shorthand only in
+  error-message descriptions and the GXL type table (`03a`). Not interchangeable
+  in normative PJVM prose.
+- `http.body` without GDP suffix returns **string** (scalar), not subtree.
+  Bare-root subtree capability (OI-GCP-02) applies only to `json`/`yaml` sources.
+- Pipe expressions (e.g., `json | length`) are explicitly forbidden in GCP.
+  The approved pattern is capture-then-GXL.
+
+**Discrepancies flagged (grammar wins in all cases; logged in Day 2 memo):**
+1. DISC-B2-1: `boolean` (gis.ebnf) vs `bool` (03a prose). Grammar wins; `boolean` is PJVM canonical.
+2. DISC-B2-2: decisions.md OI-GCP-02 example uses `http.body` as bare-root subtree example, but grammar shows `http.body` (no GDP) is a scalar string return. Grammar wins; spec encodes grammar behavior.
+3. DISC-B2-3: OQ5/Q5 label from task brief not traceable in accessible decisions. Cited `gcp.ebnf §5` as source; parenthetical "(Q5, resolved)" per task brief.
+
+**Deferred items:**
+- Proposal §2.6 amendment (OI-GIS-01 action item) — not done in this task
+- `03a §sec:gxl:semantics:types` forward-reference to `§sec:gis:portable-json`
+- `main.tex` wiring for 03b and 03c (same as 03a, deferred to integration task)
+
+---
+
+## Integrated to Main (2026-06-05T00:27:12-04:00)
+
+✅ **Day 2 memo merged to `.squad/decisions.md`** under section "GXL Phase 1 Day 2 — GIS/GCP Specs, Eval+Path Vectors, Conflict Arbitration". All deliverables, ratifications, discrepancies, and follow-ups captured. PJVM canonical home established at `03b §sec:gis:portable-json` per Stream B Day 2 memo.

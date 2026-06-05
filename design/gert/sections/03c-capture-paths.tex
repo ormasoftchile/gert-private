@@ -1,0 +1,730 @@
+% ============================================================
+% §03c — GCP: GERT Capture Paths (Normative)
+% Author:  Edith — Spec Editor
+% Created: 2026-06-05
+% Source of truth: design/gert/grammar/gcp.ebnf (v1.0.0-draft)
+% ============================================================
+%
+% RFC 2119 normative language used throughout:
+%   MUST / MUST NOT  — absolute requirements for conforming implementations.
+%   SHOULD / SHOULD NOT — recommended but not mandatory.
+%   MAY              — optional; permitted but not required.
+%
+% Grammar production citations take the form: gcp.ebnf §<section>.<subsection>.
+% Decision ledger citations take the form: decisions.md "<heading>" <key>.
+
+% Local definition — remove if \TODO is promoted to the main preamble.
+\providecommand{\TODO}[1]{\textbf{\textcolor{red}{[TODO:~#1]}}}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{GCP\,---\,GERT Capture Paths}
+\label{sec:gcp}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{quote}
+\noindent\textbf{Informative introduction.}
+GCP (GERT Capture Path) is the GERT path language for extracting values
+from step outputs and binding them to named variables in the run variable
+context.
+A GCP expression appears as the value of an entry in a \texttt{capture:}
+map in every step type that produces output:
+\texttt{cli}, \texttt{tool}, \texttt{http\_call}, \texttt{include},
+and event-triggered runbooks.
+
+A GCP expression identifies \emph{what} to extract (the source prefix
+and optional traversal path) and implicitly determines \emph{how} to
+classify the result (scalar or subtree) for downstream GXL and GIS use.
+Captured variables are placed in the run variable context map
+(\S\ref{sec:gxl}) and are subsequently available as GDP paths in GXL
+boolean expressions (\S\ref{sec:gxl}) and as GIS interpolation targets
+(\S\ref{sec:gis}).
+
+The relationship between GCP and GDP (GERT Dotted Path) is as follows:
+GDP is the path-traversal sub-grammar shared by GXL expressions and GCP
+path suffixes.
+A GCP expression is a \emph{source-qualified} path: it names a source
+prefix (e.g., \texttt{json}, \texttt{http.body}) and optionally appends
+a GDP suffix to navigate into the parsed output.
+GDP itself is defined in \S\ref{subsec:gxl:gdp} and is referenced here;
+it is not duplicated.
+
+GCP replaces the informal fixture-level capture conventions that preceded
+Phase~1 (see \S\ref{sec:gcp:migration}).
+\end{quote}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Normative Reference to the Grammar}
+\label{sec:gcp:normref}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The file \texttt{design/gert/grammar/gcp.ebnf} (version~1.0.0-draft) is the
+authoritative grammar for GCP\@.  This chapter is normative prose \emph{about}
+that grammar; it does not supersede it.  Where this prose and the grammar
+conflict, \textbf{the grammar wins} and the prose is in error.  Conforming
+implementations MUST derive their capture-path parsers from
+\texttt{gcp.ebnf}, not from this chapter alone.
+
+GCP values are YAML scalar strings that appear as the right-hand side of
+entries in a \texttt{capture:} map.
+The GCP parser receives the raw string (after YAML parsing; leading and
+trailing whitespace is stripped by the YAML parser before delivery).
+The GCP grammar contains no operators, no literals, and no keywords;
+it is a pure path language.
+
+(\texttt{gcp.ebnf} \S1, \S2.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Source Prefixes}
+\label{sec:gcp:sources}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Every GCP expression begins with a \emph{source prefix} that identifies
+the origin of the value to be captured.
+The top-level GCP production is:
+
+\begin{minted}{text}
+CapturePath = StepCapture | HttpCapture | EventCapture | LocalCapture ;
+\end{minted}
+
+Conforming parsers MUST reject any \texttt{CapturePath} whose first
+segment does not match a recognised source prefix with error
+\texttt{GCP-PARSE-001}.
+
+(\texttt{gcp.ebnf} \S3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Local Step Capture}
+\label{subsec:gcp:sources:local}
+
+A \emph{local} capture references the current step's own output.
+This is the most common form and is used in the \texttt{capture:} blocks
+of \texttt{cli}, \texttt{tool}, and \texttt{http\_call} steps.
+
+\begin{minted}{text}
+LocalCapture    = LocalScalar | LocalText | LocalStructured ;
+LocalScalar     = "exit_code" ;
+LocalText       = ( "stdout" | "stderr" ) [ GDP ] ;
+LocalStructured = ( "json" | "yaml" ) [ GDP ] ;
+\end{minted}
+
+\noindent The local source prefixes are:
+
+\begin{itemize}
+  \item \texttt{exit\_code} --- Returns a \texttt{number} (integer in the
+    range 0--255 for POSIX exit codes).
+    No GDP suffix is permitted; \texttt{GCP-PARSE-002} is raised if a
+    \texttt{.} follows \texttt{exit\_code}.
+
+  \item \texttt{stdout} / \texttt{stderr} --- Without a GDP suffix: returns
+    the captured text as a \texttt{string} (scalar capture).
+    With a GDP suffix: the runtime parses the text as JSON and navigates
+    the path, returning a PJVM value (scalar or subtree depending on the
+    resolved value).
+    This form is equivalent to \texttt{json} with the same GDP suffix.
+
+  \item \texttt{json} / \texttt{yaml} --- Parses the step's
+    \texttt{stdout} as the named format and returns a PJVM value.
+    Without a GDP suffix (bare-root capture; OI-GCP-02, ratified):
+    the entire parsed root document is captured as a PJVM value
+    (\texttt{object}, \texttt{array}, or scalar depending on the
+    document root type).
+    With a GDP suffix: navigates to the specified sub-value.
+    If the output is not valid JSON (or YAML), \texttt{GCP-RESOLVE-004}
+    is raised.
+\end{itemize}
+
+\noindent\textbf{YAML source parity.}
+The \texttt{yaml} source applies YAML~1.2 core schema typing:
+YAML scalars map to PJVM \texttt{string}, \texttt{number}, \texttt{boolean},
+or \texttt{null} per the core schema;
+YAML sequences map to \texttt{array};
+YAML mappings map to \texttt{object};
+YAML anchors and aliases are fully resolved before path traversal.
+YAML~1.1-specific types (timestamps, binary) are mapped to \texttt{string}.
+Implementations MUST use YAML~1.2 core schema strictly
+(\texttt{gcp.ebnf} \S9, OI-GCP-06).
+
+\noindent\textbf{Canonical spelling.}
+The GCP grammar standardizes on \texttt{exit\_code} (snake\_case).
+The camelCase form \texttt{exitCode}, found in some pre-Phase~1 fixtures,
+is not a legal GCP token and MUST be rejected as \texttt{GCP-PARSE-001}.
+The Stream~E migration tool MUST convert \texttt{exitCode}
+to \texttt{exit\_code} in all affected fixture files
+(\texttt{gcp.ebnf} \S3.4, OI-GCP-01).
+
+(\texttt{gcp.ebnf} \S3.4.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Cross-Step Capture}
+\label{subsec:gcp:sources:step}
+
+A \emph{cross-step} capture references the output of a named peer step
+by its step identifier.
+
+\begin{minted}{text}
+StepCapture = "step" "." StepId "." StepOutput ;
+StepId      = IDENT ;
+StepOutput  = StepScalar | StepText | StepStructured ;
+StepScalar  = "exit_code" ;
+StepText    = ( "stdout" | "stderr" ) [ GDP ] ;
+StepStructured = ( "json" | "yaml" ) [ GDP ] ;
+\end{minted}
+
+The \texttt{StepId} MUST match a step \texttt{id:} value that is
+statically present in the runbook.
+A \texttt{step.\{id\}.*} path where \texttt{\{id\}} is not found in the
+runbook MUST be rejected at plan time with \texttt{GCP-PARSE-006}.
+The planner validates against the \emph{statically reachable} step set;
+the definition of ``statically reachable'' is specified in
+\S\ref{sec:parse-gate} (OPQ-GATE-02 pending).
+
+The source-field semantics for \texttt{StepScalar}, \texttt{StepText},
+and \texttt{StepStructured} are identical to those of their
+\texttt{LocalCapture} counterparts (\S\ref{subsec:gcp:sources:local}),
+with the additional constraint that the referenced step MUST have
+completed execution before the capturing step evaluates its
+\texttt{capture:} block; otherwise \texttt{GCP-RESOLVE-001} is raised.
+
+(\texttt{gcp.ebnf} \S3.1.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{HTTP Response Capture}
+\label{subsec:gcp:sources:http}
+
+An \emph{HTTP} capture references the response of an \texttt{http\_call}
+step.
+The \texttt{http.*} source prefix is available only within the
+\texttt{capture:} block of the \texttt{http\_call} step itself or within
+steps that immediately follow the \texttt{http\_call} step in the
+execution flow; cross-step HTTP references MUST use the
+\texttt{step.\{id\}.json.*} form instead.
+
+\begin{minted}{text}
+HttpCapture = "http" "." HttpField ;
+HttpField   = HttpStatus | HttpBody | HttpHeader ;
+HttpStatus  = "status" ;
+HttpBody    = "body" [ GDP ] ;
+HttpHeader  = "headers" "." HEADER_NAME ;
+\end{minted}
+
+\noindent The HTTP source fields are:
+
+\begin{itemize}
+  \item \texttt{http.status} --- Returns a \texttt{number}
+    (the HTTP status code, e.g., 200, 404).
+    No GDP suffix is permitted; \texttt{GCP-PARSE-002} is raised if
+    \texttt{.} follows \texttt{status}.
+
+  \item \texttt{http.body} --- Without a GDP suffix: returns the raw
+    response body as a \texttt{string} (scalar capture).
+    With a GDP suffix: the body MUST be valid JSON;
+    the runtime navigates the parsed body and returns the PJVM value
+    at the specified path.
+    If the body is not valid JSON when a GDP suffix is present,
+    \texttt{GCP-RESOLVE-004} is raised.
+
+  \item \texttt{http.headers.\{name\}} --- Returns the value of the named
+    response header as a \texttt{string}.
+    Header name lookup MUST be case-insensitive (RFC~7230 \S3.2);
+    the canonical form in the capture path uses lowercase with hyphens
+    preserved (e.g., \texttt{content-type}, \texttt{x-request-id}).
+    If the header is absent from the response, the capture returns
+    \texttt{null} (not \texttt{GCP-RESOLVE-002});
+    HTTP headers are optional by nature.
+    No GDP suffix is permitted on header values.
+\end{itemize}
+
+(\texttt{gcp.ebnf} \S3.2.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Event Capture}
+\label{subsec:gcp:sources:event}
+
+An \emph{event} capture references the payload of the triggering event
+for event-driven runbooks (those whose execution is initiated by an
+\texttt{event.filter} trigger).
+
+\begin{minted}{text}
+EventCapture = "event" "." EventField ;
+EventField   = EventId | EventBody | EventHeader ;
+EventId      = "id" ;
+EventBody    = "body" [ GDP ] ;
+EventHeader  = "headers" "." HEADER_NAME ;
+\end{minted}
+
+\noindent The event source fields are:
+
+\begin{itemize}
+  \item \texttt{event.id} --- Returns the event's unique identifier as a
+    \texttt{string}.
+    No GDP suffix is permitted; \texttt{GCP-PARSE-002} is raised if
+    \texttt{.} follows \texttt{id}.
+
+  \item \texttt{event.body} --- Without a GDP suffix: returns the raw
+    event body as a \texttt{string}.
+    With a GDP suffix: the body MUST be valid JSON;
+    navigates to the specified sub-value.
+
+  \item \texttt{event.headers.\{name\}} --- Returns the event header value
+    as a \texttt{string}.
+    Same case-insensitive lookup rule as \texttt{http.headers.*}.
+    Returns \texttt{null} if the header is absent.
+\end{itemize}
+
+(\texttt{gcp.ebnf} \S3.3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Source Prefix Reference Table}
+\label{subsec:gcp:sources:table}
+
+Table~\ref{tab:gcp-sources} is a quick-reference summary of all legal
+GCP source prefixes.
+All entries are derived from \texttt{gcp.ebnf} \S8 and confirmed against
+Don's expression-evaluation audit (\texttt{design/gert/expression-evaluation-audit.md}).
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{p{5.0cm}p{2.0cm}p{5.0cm}}
+\hline
+\textbf{Capture Path Pattern} & \textbf{Returns} & \textbf{Applies To} \\
+\hline
+\multicolumn{3}{l}{\textit{Local captures (current step output)}} \\
+\hline
+\texttt{exit\_code}            & \texttt{number}      & \texttt{cli}, \texttt{tool} steps \\
+\texttt{stdout}                & \texttt{string}      & \texttt{cli}, \texttt{tool} steps \\
+\texttt{stdout.\{gdp\}}        & PJVM value           & \texttt{cli}, \texttt{tool} steps \\
+\texttt{stderr}                & \texttt{string}      & \texttt{cli}, \texttt{tool} steps \\
+\texttt{stderr.\{gdp\}}        & PJVM value           & \texttt{cli}, \texttt{tool} steps \\
+\texttt{json}                  & PJVM root            & \texttt{cli}, \texttt{tool} steps \\
+\texttt{json.\{gdp\}}          & PJVM value           & \texttt{cli}, \texttt{tool} steps \\
+\texttt{yaml}                  & PJVM root            & \texttt{cli}, \texttt{tool} steps \\
+\texttt{yaml.\{gdp\}}          & PJVM value           & \texttt{cli}, \texttt{tool} steps \\
+\hline
+\multicolumn{3}{l}{\textit{Cross-step captures}} \\
+\hline
+\texttt{step.\{id\}.exit\_code}        & \texttt{number}  & any step type \\
+\texttt{step.\{id\}.stdout}            & \texttt{string}  & any step type \\
+\texttt{step.\{id\}.stdout.\{gdp\}}    & PJVM value       & any step type \\
+\texttt{step.\{id\}.stderr}            & \texttt{string}  & any step type \\
+\texttt{step.\{id\}.json}              & PJVM root        & any step type \\
+\texttt{step.\{id\}.json.\{gdp\}}      & PJVM value       & any step type \\
+\texttt{step.\{id\}.yaml}              & PJVM root        & any step type \\
+\texttt{step.\{id\}.yaml.\{gdp\}}      & PJVM value       & any step type \\
+\hline
+\multicolumn{3}{l}{\textit{HTTP response captures}} \\
+\hline
+\texttt{http.status}                   & \texttt{number}  & \texttt{http\_call} steps \\
+\texttt{http.body}                     & \texttt{string}  & \texttt{http\_call} steps \\
+\texttt{http.body.\{gdp\}}             & PJVM value       & \texttt{http\_call} steps \\
+\texttt{http.headers.\{name\}}         & \texttt{string}  & \texttt{http\_call} steps \\
+\hline
+\multicolumn{3}{l}{\textit{Event captures}} \\
+\hline
+\texttt{event.id}                      & \texttt{string}  & event-triggered \\
+\texttt{event.body}                    & \texttt{string}  & event-triggered \\
+\texttt{event.body.\{gdp\}}            & PJVM value       & event-triggered \\
+\texttt{event.headers.\{name\}}        & \texttt{string}  & event-triggered \\
+\hline
+\end{tabular}
+\caption{GCP source prefix reference.
+  Source: \texttt{gcp.ebnf} \S8.
+  Bare \texttt{json} and \texttt{yaml} patterns (no GDP suffix) are
+  bare-root captures; see \S\ref{sec:gcp:subtree}.}
+\label{tab:gcp-sources}
+\end{table}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Path Traversal}
+\label{sec:gcp:traversal}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The optional GDP suffix that follows a structured source prefix
+(\texttt{json}, \texttt{yaml}, \texttt{stdout} with path, \texttt{body}
+with path) is a GERT Dotted Path:
+
+\begin{minted}{text}
+GDP         = "." PathSegment { PathSegment } ;
+PathSegment = DotSegment | IndexSegment ;
+DotSegment  = "." IDENT ;
+IndexSegment = "[" INTEGER "]" ;
+\end{minted}
+
+\noindent\textbf{Note on notation.}
+In GCP context, a GDP suffix begins with an initial \texttt{.} following
+the source prefix (e.g., \texttt{json.status.phase}).
+In GXL context (\S\ref{subsec:gxl:gdp}), a GDP begins with an
+\texttt{IDENT} (the variable name), with no leading \texttt{.}.
+The path-traversal algorithm is identical in both contexts; only the
+starting point differs.
+
+Path resolution proceeds as follows (source: \texttt{gcp.ebnf} \S4):
+
+\begin{enumerate}
+  \item Start at the root of the parsed document (or PJVM value).
+  \item For each \texttt{DotSegment} (\texttt{.field}):
+    access the named key of the current \texttt{object}.
+    If the current value is not an \texttt{object}, raise
+    \texttt{GCP-RESOLVE-002}.
+    If the key is not present in the object, raise
+    \texttt{GCP-RESOLVE-002}.
+  \item For each \texttt{IndexSegment} (\texttt{[N]}):
+    access the $N$th element (zero-based) of the current \texttt{array}.
+    If the current value is not an \texttt{array}, raise
+    \texttt{GCP-RESOLVE-003}.
+    If $N \geq \text{array length}$, raise
+    \texttt{GCP-RESOLVE-003}.
+  \item The PJVM value at the final path segment is the captured value.
+\end{enumerate}
+
+For the semantics of path traversal within a GXL expression operating
+on a previously captured subtree variable, see \S\ref{sec:gxl:semantics:paths}.
+GIS dotted paths and GXL GDP paths walk captured subtrees identically.
+
+\noindent Path constraints:
+
+\begin{itemize}
+  \item Negative array indices (e.g., \texttt{[-1]}) MUST be rejected at
+    parse time with \texttt{GCP-PARSE-003}.
+
+  \item A double-dot or trailing-dot segment (e.g., \texttt{json..field}
+    or \texttt{json.field.}) MUST be rejected at parse time with
+    \texttt{GCP-PARSE-004}.
+\end{itemize}
+
+(\texttt{gcp.ebnf} \S4.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Subtree Capture Semantics}
+\label{sec:gcp:subtree}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Every captured value is classified at evaluation time into one of two
+categories:
+
+\begin{description}
+  \item[Scalar capture.]
+    The resolved PJVM value is of type \texttt{null}, \texttt{boolean},
+    \texttt{number}, or \texttt{string}.
+    The scalar value is stored directly in the run variable context map
+    under the declared variable name.
+    Subsequent GXL expressions access the variable by name;
+    GIS templates interpolate it using the coercion rules in
+    \S\ref{sec:gis:coercion}.
+
+  \item[Subtree capture.]
+    The resolved PJVM value is of type \texttt{array} or \texttt{object}.
+    The \textbf{entire} PJVM composite is stored in the run variable context
+    map, verbatim, using the PJVM definition in \S\ref{sec:gis:portable-json}.
+    The value is \emph{not} serialized to a string at capture time.
+    Subsequent GXL GDP paths navigate into the subtree by name or index
+    as if it were a top-level document (see \S\ref{sec:gxl:semantics:paths}).
+    GIS interpolation of a subtree variable produces the canonical JSON
+    serialization of the stored PJVM value (\S\ref{sec:gis:coercion}).
+\end{description}
+
+\noindent\textbf{Bare-root capture} (OI-GCP-02, ratified;
+decisions.md ``GXL Stream~A open issue ratifications'').
+A GCP expression that names a structured source with no GDP suffix
+(e.g., \texttt{json}, \texttt{yaml}, \texttt{step.scan.json}) is a
+\emph{bare-root capture}.
+It captures the entire parsed root document as a PJVM value.
+If the root document is an \texttt{object} or \texttt{array},
+the result is a subtree capture.
+If the root document is a scalar (a single string, number, boolean, or
+null value at the top level), the result is a scalar capture.
+The capture classification is determined by the actual root type at
+evaluation time, not at plan time.
+
+(\texttt{gcp.ebnf} \S5; Q5, resolved.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Type Inference at Plan Time}
+\label{subsec:gcp:subtree:inference}
+
+The parser/planner SHOULD infer the likely capture type from the path:
+
+\begin{itemize}
+  \item \texttt{exit\_code}, \texttt{http.status}, and \texttt{event.id}
+    always produce scalar captures.
+  \item Paths ending at a field that the conformance corpus declares as
+    a known scalar type MAY be inferred as scalar at plan time.
+  \item All other paths have unknown type at plan time; the type is
+    determined definitively at evaluation time.
+\end{itemize}
+
+Type inference is best-effort.
+The only normative constraint is that
+\texttt{capture.default:} on any path inferred or observed to resolve
+to an \texttt{object} or \texttt{array} MUST be rejected
+(\S\ref{sec:gcp:default}).
+
+(\texttt{gcp.ebnf} \S5.2.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Subtree Use in Iteration}
+\label{subsec:gcp:subtree:iteration}
+
+A subtree capture of type \texttt{array} MAY be used as the source of an
+\texttt{iterate.over:} field.
+The iteration variable receives each element of the array in order;
+each element is typed as a PJVM value (scalar or subtree depending on the
+element type).
+
+\begin{minted}{yaml}
+capture:
+  services: json.services          # subtree capture: array
+# in a subsequent step:
+iterate.over: services
+\end{minted}
+
+(\texttt{gcp.ebnf} \S5.1.3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{\texttt{capture.default:} Policy}
+\label{sec:gcp:default}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\noindent\textbf{Source:} \texttt{gcp.ebnf} \S6; OQ2, ratified.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Scalar Default Values}
+\label{subsec:gcp:default:scalar}
+
+A \texttt{capture.default:} declaration is PERMITTED for scalar captures.
+The schema form is:
+
+\begin{minted}{yaml}
+capture:
+  variable_name: <CapturePath>
+capture_defaults:
+  variable_name: <scalar_literal>
+\end{minted}
+
+Semantics:
+
+\begin{itemize}
+  \item If the capture path fails to resolve
+    (\texttt{GCP-RESOLVE-002}, \texttt{GCP-RESOLVE-003}),
+    or the resolved value is \texttt{null}:
+    the declared default value is used as the captured value.
+  \item If the capture path resolves to a non-null scalar:
+    the resolved value is used and the default is ignored.
+\end{itemize}
+
+The default value MUST be of a PJVM scalar type
+(\texttt{null}, \texttt{boolean}, \texttt{number}, or \texttt{string}).
+A type mismatch between the declared default and the inferred capture type
+MUST be rejected at plan time with \texttt{GCP-TYPE-001}.
+
+(\texttt{gcp.ebnf} \S6.2.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Subtree Default Prohibition}
+\label{subsec:gcp:default:subtree}
+
+A \texttt{capture.default:} declaration MUST NOT be used with a capture
+path that resolves to an \texttt{object} or \texttt{array}.
+The parser/planner MUST reject such a combination at plan time with error
+\texttt{GCP-DEFAULT-SUBTREE}, which is also surfaced as \texttt{PLAN-003}
+at the parse gate (\S\ref{sec:parse-gate:error-codes}).
+
+The prohibition exists for three reasons:
+
+\begin{enumerate}
+  \item Specifying a full object or array as a YAML default literal is
+    verbose and error-prone.
+  \item A missing subtree usually signals a structural change in the
+    step's output; the consuming step should be conditionally guarded
+    rather than silently fed a partial default.
+  \item Subtree default values cannot be type-checked at plan time because
+    the subtree's field schema is not declared in the runbook.
+\end{enumerate}
+
+\noindent\textbf{Correct pattern for optional subtrees.}
+Authors MUST guard subtree-consuming steps with a \texttt{when:} clause:
+
+\begin{minted}{yaml}
+# REJECTED at plan time — GCP-DEFAULT-SUBTREE / PLAN-003:
+capture:
+  config: json.optional_config
+capture_defaults:
+  config: {}
+
+# CORRECT — guard the consuming step instead:
+capture:
+  config: json.optional_config    # resolves to null if path missing
+# In the consuming step:
+when: config != null
+\end{minted}
+
+When \texttt{capture.default:} is absent and the path resolves to
+\texttt{null}, the variable holds \texttt{null} in the context map.
+The \texttt{when:} guard in the consuming step prevents evaluation of any
+expression that would fail on a \texttt{null} subtree.
+
+If the planner cannot determine the capture type at plan time, the
+\texttt{GCP-DEFAULT-SUBTREE} check is deferred to the first evaluation.
+If the path resolves to an \texttt{object} or \texttt{array} at runtime
+and a default is declared, \texttt{GCP-DEFAULT-SUBTREE} MUST be raised
+at that point.
+
+(\texttt{gcp.ebnf} \S6.3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Error Class Catalog}
+\label{sec:gcp:errors}
+% ─────────────────────────────────────────────────────────────────────────────
+
+GCP defines three timing categories for errors:
+\emph{parse errors} (raised at load/plan time);
+\emph{resolution errors} (raised at evaluation time);
+and \emph{default-policy and type errors} (raised at plan time or, if type
+cannot be inferred, at first evaluation).
+
+A runbook containing a parse error MUST NOT enter execution.
+Resolution and type errors cause the affected step to transition to the
+\texttt{failed} state.
+
+The master PLAN-* code catalog is owned by \S\ref{sec:parse-gate:error-codes}.
+GCP parse errors are surfaced at the parse gate via \texttt{PLAN-001};
+the \texttt{GCP-DEFAULT-SUBTREE} error is additionally aliased as
+\texttt{PLAN-003}.
+
+Table~\ref{tab:gcp-errors} enumerates every GCP error code.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{p{3.8cm}p{2.0cm}p{4.8cm}p{2.4cm}}
+\hline
+\textbf{Code} & \textbf{Raised By} & \textbf{Description} & \textbf{Remediation} \\
+\hline
+\multicolumn{4}{l}{\textit{Parse errors (raised at load/plan time)}} \\
+\hline
+\texttt{GCP-PARSE-001}
+  & GCP parser
+  & Unknown source prefix: the first path segment does not match any legal source token (\texttt{step}, \texttt{http}, \texttt{event}, \texttt{stdout}, \texttt{stderr}, \texttt{exit\_code}, \texttt{json}, \texttt{yaml}).  Example: \texttt{xml.root.item}.
+  & Use a legal source prefix from Table~\ref{tab:gcp-sources}. \\
+\texttt{GCP-PARSE-002}
+  & GCP parser
+  & Invalid path suffix: a GDP suffix appears after a source field that does not permit one (\texttt{exit\_code}, \texttt{http.status}, \texttt{event.id}, any \texttt{headers.*} field).
+  & Remove the trailing path segment. \\
+\texttt{GCP-PARSE-003}
+  & GCP parser
+  & Negative array index: \texttt{[-1]} or any negative integer in an \texttt{IndexSegment}.
+  & Use a non-negative integer index. \\
+\texttt{GCP-PARSE-004}
+  & GCP parser
+  & Empty path segment: \texttt{..} (double dot) or trailing dot in the capture path.
+  & Remove the duplicate or trailing dot. \\
+\texttt{GCP-PARSE-005}
+  & GCP parser
+  & Invalid header name: a character not permitted in \texttt{HEADER\_NAME} (e.g., space, colon, comma) in an \texttt{http.headers.*} or \texttt{event.headers.*} path.
+  & Use a valid lowercase HTTP header name (RFC~7230). \\
+\texttt{GCP-PARSE-006}
+  & Planner
+  & Step identifier not found: \texttt{step.\{id\}.*} where \texttt{\{id\}} does not match any step \texttt{id:} in the runbook.  Semantic plan-time error.
+  & Correct the step ID or add the missing step. \\
+\hline
+\multicolumn{4}{l}{\textit{Resolution errors (raised at evaluation time)}} \\
+\hline
+\texttt{GCP-RESOLVE-001}
+  & Evaluator
+  & Source not available: the step referenced by \texttt{step.\{id\}.*} has not yet executed, or its output is not available (e.g., the step was skipped by a \texttt{when:} guard).
+  & Re-order steps or use a \texttt{when:} guard. \\
+\texttt{GCP-RESOLVE-002}
+  & Evaluator
+  & Path segment not found: a \texttt{DotSegment} references a key absent from the current \texttt{object}, or the current value is not an \texttt{object}.
+  & Verify the field name and output schema, or add a default (\S\ref{subsec:gcp:default:scalar}). \\
+\texttt{GCP-RESOLVE-003}
+  & Evaluator
+  & Array index out of bounds: \texttt{IndexSegment} index $\geq$ array length, or the current value is not an \texttt{array}.
+  & Guard with a length check or use a scalar path. \\
+\texttt{GCP-RESOLVE-004}
+  & Evaluator
+  & Output not parseable: the step output could not be parsed as the declared format (\texttt{json} or \texttt{yaml}), including empty output when a structured path is given, invalid JSON syntax, or invalid YAML syntax.
+  & Ensure the step writes valid JSON or YAML to stdout before a structured capture is attempted. \\
+\texttt{GCP-RESOLVE-005}
+  & Evaluator
+  & Header absent: \texttt{http.headers.*} or \texttt{event.headers.*} references a header not present in the response or event.  Soft resolve: returns \texttt{null}, not a hard error.  An error is raised only if a downstream GXL expression fails on the \texttt{null} value without a guard.
+  & Use a \texttt{capture.default:} for the scalar header variable, or guard downstream use with \texttt{when: variable != null}. \\
+\hline
+\multicolumn{4}{l}{\textit{Default-policy and type errors (plan time, or deferred to first evaluation)}} \\
+\hline
+\texttt{GCP-DEFAULT-SUBTREE}
+  & Planner / Evaluator
+  & A \texttt{capture.default:} is declared for a capture path that resolves to an \texttt{object} or \texttt{array} (OQ2, ratified).  Also surfaced as \texttt{PLAN-003} at the parse gate (\S\ref{sec:parse-gate:error-codes}).  Error message MUST include: variable name, capture path, inferred or observed type (if determinable), and the correction hint.
+  & Remove the \texttt{capture.default:} and guard the consuming step with \texttt{when: variable != null}. \\
+\texttt{GCP-TYPE-001}
+  & Planner
+  & Default value type mismatch: the declared \texttt{capture.default:} value is not of a scalar type compatible with the capture path's expected type.  Example: \texttt{exit\_code} capture with a string default.
+  & Use a default value of the correct scalar type. \\
+\hline
+\end{tabular}
+\caption{GCP error class catalog.
+  Source: \texttt{gcp.ebnf} \S7.}
+\label{tab:gcp-errors}
+\end{table}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Migration Note}
+\label{sec:gcp:migration}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{quote}
+\noindent\textbf{Informative.}
+This section is not normative.
+\end{quote}
+
+GCP formalizes capture-path semantics that were previously inferred
+informally from fixture patterns and tooling conventions.
+Don's expression-evaluation audit
+(\texttt{design/gert/expression-evaluation-audit.md})
+inventoried the pre-Phase~1 surface: \texttt{stdout}, \texttt{stderr},
+\texttt{exitCode}, \texttt{json.*}, \texttt{yaml.*}, and the legacy
+\texttt{stdout.incident.id} form (now normalized to \texttt{json.incident.id}).
+
+Key changes in GCP relative to prior conventions:
+
+\begin{itemize}
+  \item \textbf{Canonical naming.}
+    \texttt{exitCode} (camelCase) is replaced by \texttt{exit\_code}
+    (snake\_case) throughout.
+    The Stream~E migration tool MUST convert all occurrences
+    (OI-GCP-01).
+
+  \item \textbf{Bare-root captures.}
+    \texttt{json} and \texttt{yaml} without a GDP suffix are now
+    explicitly permitted (OI-GCP-02, ratified), capturing the entire
+    parsed root as a PJVM value.
+    Pre-Phase~1 fixtures may have required a dummy \texttt{.\_} suffix
+    as a workaround; that workaround is now invalid and MUST be removed.
+
+  \item \textbf{Pipe expressions forbidden.}
+    Pre-Phase~1 capture conventions in some fixtures included jq-style
+    pipe expressions such as \texttt{json | length}.
+    GCP forbids all pipe expressions; \texttt{PLAN-006}
+    (\S\ref{sec:parse-gate:error-codes}) is raised if a pipe character
+    is detected in a capture path at parse time.
+    Authors who need to apply a function to a captured value MUST use
+    the capture-then-GXL pattern: capture the value first, then use
+    a GXL expression in a subsequent \texttt{when:} or \texttt{args:}
+    field.
+    Example:
+
+\begin{minted}{yaml}
+capture:
+  items: json.results          # subtree capture: array
+# use len() in a subsequent GXL expression:
+when: len(items) > 0
+\end{minted}
+
+  \item \textbf{Cross-step and HTTP/event sources.}
+    The \texttt{step.\{id\}.*}, \texttt{http.*}, and \texttt{event.*}
+    source prefixes were not formally specified in pre-Phase~1 fixtures.
+    They are now normative and MUST be used for their respective
+    capture contexts.
+\end{itemize}
+
+A full fixture migration guide will be added in a later Stream~B task.
+The Stream~D effort is responsible for migrating existing fixtures
+to GCP-compliant capture paths.

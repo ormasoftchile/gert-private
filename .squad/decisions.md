@@ -106,6 +106,76 @@ Sections: Informative intro, reference to grammar, lexical structure, syntactic 
 
 ---
 
+### 2026-06-05T00:27:12-04:00: GXL Phase 1 Day 2 — GIS/GCP Specs, Eval+Path Vectors, Conflict Arbitration
+
+**Streams B+C+arbitration — Status:** Delivered
+
+**Deliverables:**
+
+1. **Edith (Stream B Day 2) — GIS and GCP Spec Sections:**
+   - `design/gert/sections/03b-interpolation-syntax.tex` (29,321 bytes) — Normative GIS specification. Establishes PJVM canonical home at §sec:gis:portable-json. Terminology: GIS evaluator, template string, interpolation block, boolean (PJVM type name), PJVM.
+   - `design/gert/sections/03c-capture-paths.tex` (35,801 bytes) — Normative GCP specification. Implements OI-GCP-02 (bare-root capture allowed). Terminology: bare-root capture, scalar capture, subtree capture, source prefix, capture-then-GXL pattern.
+
+2. **Tess (Stream C Day 2) — Conformance Vectors:**
+   - `design/gert/conformance/tv-gxl-eval.yaml` (30,983 bytes, 87 vectors) — Evaluation semantics. Covers short-circuit AND/OR, logical operators, comparison (numbers/strings/booleans/cross-type/null), arithmetic, division/modulo by zero, modulo with negative operands (OI-GXL-03), stdlib (`str.*`, `list.*`, `len`), type errors, OI-GXL-05 (GDP in function arg), error codes exercised: GXL-EVAL-002, GXL-EVAL-004, GXL-TYPE-001..004, GXL-PARSE-006. **4 vectors TBD pending arbitration:** TV-GXL-EVAL-033 (boolean ordering), TV-GXL-EVAL-086 (array equality).
+   - `design/gert/conformance/tv-gxl-path.yaml` (16,169 bytes, 35 vectors) — Path traversal semantics. Covers simple access, object nesting, array indexing, mixed field+index, subtree captures (OQ5), missing keys, out-of-bounds, index-on-non-array, field-access edge cases, identifier constraints (keyword prefixes), realistic nested patterns. **2 vectors TBD pending arbitration:** TV-GXL-PATH-022 (field on scalar), TV-GXL-PATH-023 (field on null).
+
+3. **Barbara (Arbitration) — TESS-CONFLICT-1 and TESS-CONFLICT-2 Resolved:**
+   - **CONFLICT-1 (keyword-as-identifier):** GXL-PARSE-010 is the sole authoritative code. The §2.3 IDENT production body comment incorrectly cited GXL-PARSE-007 — documentation bug (GXL-PARSE-010 added later, comment never updated). Patch: `gxl.ebnf §2.3` body text corrected; `gxl.ebnf §6.1` scope note added to GXL-PARSE-007 clarifying it covers forbidden *syntax* (&&, ||, ternary) exclusively, not keywords-as-identifiers; `03a-expression-language.tex` error catalog updated; `03d-parse-time-enforcement.tex` error catalog updated; `tv-gxl-parse.yaml` vectors 081–082 finalised as GXL-PARSE-010, note updated.
+   - **CONFLICT-2 (str.foo classification):** Sub-case A (`str.xyz()` with parens, unknown method): GXL-PARSE-006 at parse time — no new code needed; closed-stdlib is authoritative. Sub-case B (`str.foo` without parens): GXL-PARSE-001 (unexpected token) — under PEG ordered alternation, NamespaceCall fails at missing LPAREN, GDP fails because `str` is keyword, all alternatives exhaust. NOT GXL-PARSE-010 (no identifier position) and NOT GXL-PARSE-006 (unreachable without parens). Patches: `gxl.ebnf §3 NamespaceCall` note block added; `gxl.ebnf §3 Method` comment clarified (closed stdlib, parse-time enforcement); `03a-expression-language.tex` PEG fallthrough paragraph added; `tv-gxl-parse.yaml` vector 083 changed from GXL-PARSE-010 → GXL-PARSE-001, note updated, `ambiguous` tag removed.
+
+**Conformance Corpus Status:**
+
+- **Total vectors delivered:** 122 (TV-GXL-EVAL 87 + TV-GXL-PATH 35)
+- **Cumulative corpus:** 205 vectors (TV-GXL-PARSE 83 + TV-GXL-EVAL 87 + TV-GXL-PATH 35)
+- **Phase 1 target:** ≥200 vectors — **TARGET HIT** ✅
+
+**Discrepancies Found (All Resolved — Grammar Authoritative):**
+
+1. **DISC-B2-1 (`boolean` vs `bool`):** gis.ebnf uses `boolean` (PJVM canonical); 03a prose uses `bool` (GXL shorthand in error messages only). Grammar wins. Editorial note added to terminology glossary.
+2. **DISC-B2-2 (decisions.md OI-GCP-02 example):** Ratification mentions `http.body` as bare-root subtree capture; but grammar shows `http.body` (no GDP) returns scalar string. Grammar wins — spec encodes grammar behavior. **Recommendation:** Scribe should amend OI-GCP-02 example from `http.body` to `json` in next merge to avoid misleading implementors.
+3. **DISC-B2-3 (OQ5/Q5 label):** Not found in accessible decisions; cited `gcp.ebnf §5` as source with "(Q5, resolved)" parenthetical per task brief. **Recommendation:** Scribe to confirm OQ5 label matches archive in next merge.
+
+**Open Items — Barbara Arbitration Required:**
+
+| Item | Trigger | Issue | Options |
+|------|---------|-------|---------|
+| **TESS-AMBIG-3** | TV-GXL-EVAL-033 `false < true` | No error code for ordered comparison on non-orderable type (bool). GXL-TYPE-001 requires *incompatible* types; booleans are same type. | A) Extend GXL-TYPE-001 to include "ordered comparison on type with no ordering" \| B) Define booleans as ordered (false < true valid) \| C) New code GXL-TYPE-005 |
+| **TESS-AMBIG-4** | TV-GXL-EVAL-086 `myArr == myArr` | Array/object equality semantics undefined. gxl.ebnf §5.2 covers scalars only. | A) Restrict == to scalars (GXL-TYPE-001 for lists/objects) \| B) Deep value equality (structural) \| C) Reference/identity equality |
+| **TESS-AMBIG-5** | TV-GXL-PATH-022 `foo.bar` (foo=7) | No error code for dot-access on scalar. GXL-PATH-001 says "segment not found" but reason is type, not absence. GXL-PATH-003 covers INDEX only. | A) Use GXL-PATH-001 ("segment missing") \| B) Extend GXL-PATH-003 to "dot-access on non-object" \| C) New code GXL-PATH-004 |
+| **TESS-AMBIG-6** | TV-GXL-PATH-023 `nullFoo.bar` (nullFoo=null) | Dot-access on null has no explicit code. GXL-PATH-003 covers bracket-index on null. | (Likely shares resolution with TESS-AMBIG-5) |
+
+**Phase 1 Ratifications:**
+
+- **OI-GIS-01 (canonical escape):** Confirmed `\${` in 03b prose. Proposal §2.6 amendment queued for Stream B integration task (FU-B2-1).
+- **OI-GCP-02 (bare-root capture):** Confirmed in 03c and grammar patches. Bare `json`/`yaml` with no GDP returns root subtree (not scalar string).
+- **OQ5 / Q5 (subtree capture semantics):** Cited `gcp.ebnf §5`; "(Q5, resolved)" parenthetical added per task brief.
+
+**PJVM Canonical Home:**
+
+`03b-interpolation-syntax.tex §sec:gis:portable-json` is established as the single normative definition of GERT Portable JSON Value Model. Both `03a` (GXL) and `03c` (GCP) reference it. **Future task (Stream B integration):** Add `\S\ref{sec:gis:portable-json}` cross-reference to `03a §sec:gxl:semantics:types`, replacing the informal type table with a forward reference.
+
+**Phase 1 Completion Status:**
+
+| Stream | Deliverable | Status |
+|--------|-------------|--------|
+| **A** | Reference Grammar | ✅ Complete (Barbara) |
+| **B** | Spec Rewrite (03a/03b/03c) | ✅ Complete (Edith) |
+| **C** | Conformance Corpus (205 vectors) | ✅ Complete (Tess) — target ≥200 HIT |
+| **D** | Fixture Migration | 🔄 Unblocked (awaits corpus) |
+| **E** | Migration Tooling | 🔄 Unblocked (awaits corpus) |
+| **F** | Parser Gate Spec (03d) | ✅ Complete (Barbara) |
+
+**Queued Follow-Ups (Stream B/C):**
+
+1. **FU-B2-1:** Proposal §2.6 amendment (OI-GIS-01 action item) — replace `$${` with `\${` (canonical).
+2. **FU-B2-2:** `03a §sec:gxl:semantics:types` forward-reference to `§sec:gis:portable-json`.
+3. **FU-B2-3:** `main.tex` wiring for 03a/03b/03c (deferred to Stream B integration).
+4. **FU-B2-4:** `decisions.md` OI-GCP-02 example amendment: change `http.body` to `json`.
+5. **Arbitration required:** TESS-AMBIG-3/4/5/6 vectors remain TBD until Barbara decision (4 vectors pending).
+
+---
+
 ### 2026-06-05T00:14:04-04:00: Stream F — Complete (Barbara, Lead / Architect)
 
 **Status:** Delivered — `design/gert/sections/03d-parse-time-enforcement.tex` + grammar patches

@@ -105,7 +105,11 @@ IDENT_CONT   = 'a'..'z' | 'A'..'Z' | '0'..'9' | '_' ;
 RAW_IDENT    = IDENT_START { IDENT_CONT } ;
 IDENT        = (* RAW_IDENT that is NOT a KEYWORD *) ;
                (* Parsers MUST reject any keyword used as identifier.
-                  Error: GXL-PARSE-007 (forbidden syntax). *)
+                  Error: GXL-PARSE-010 (keyword used as identifier).
+                  Note: GXL-PARSE-007 covers a distinct set of forbidden
+                  SYNTAX constructs (&&, ||, ternary, etc.); it does NOT
+                  apply to keyword-as-identifier — that is exclusively
+                  GXL-PARSE-010. *)
 
 
 (* --- 2.4 String Literals ---
@@ -273,11 +277,23 @@ LenCall      = KW_LEN LPAREN Expression RPAREN ;
                   See stdlib reference §4 for full signature. *)
 
 NamespaceCall = Namespace DOT Method LPAREN ArgList RPAREN ;
+               (* Note on 'str.foo' WITHOUT parentheses:
+                  The expression 'str.foo' (no call parens) does NOT match
+                  NamespaceCall (LPAREN required) and cannot match GDP
+                  ('str' is a KEYWORD, not IDENT).  Under PEG ordered
+                  alternation all Primary alternatives fail → GXL-PARSE-001
+                  (unexpected token).  'str.foo()' WITH parens DOES match
+                  NamespaceCall structure; the unknown method is then
+                  rejected as GXL-PARSE-006 at parse time. *)
 Namespace    = KW_STR | KW_LIST | KW_REGEX ;
                (* KW_MATH is reserved; no methods in v1. *)
 Method       = RAW_IDENT ;
-               (* Method name is an unconstrained identifier.
-                  Unknown methods raise GXL-PARSE-006 at parse time. *)
+               (* Method name is an unconstrained RAW_IDENT.
+                  The stdlib function set is CLOSED (§1.6).  All legal
+                  method names are statically enumerated in §4.  Any
+                  method name not in that enumeration MUST be rejected
+                  at parse time with GXL-PARSE-006 (unknown namespace
+                  method).  This is NOT an evaluation-time check. *)
 ArgList      = [ Expression { COMMA Expression } ] ;
 
 
@@ -530,10 +546,16 @@ NullLiteral  = KW_NULL ;
                   infix 'contains'/'startsWith'/'matches', assignment,
                   string concatenation, array/object construction,
                   negative array index, bare function call (other than len).
+                  SCOPE NOTE: GXL-PARSE-007 does NOT cover keyword used as
+                  identifier — that case is exclusively GXL-PARSE-010.
    GXL-PARSE-008  Unmatched parenthesis.
    GXL-PARSE-009  Chained comparison: e.g., a < b < c. Use
                   'a < b and b < c' instead.
-   GXL-PARSE-010  Keyword used as identifier: e.g., variable named 'and'.
+   GXL-PARSE-010  Keyword used as identifier: e.g., variable named 'and',
+                  'or', 'not', 'true', 'false', 'null', or any reserved
+                  namespace prefix (str, list, regex, math).  This is the
+                  ONLY code for keyword-misuse-as-identifier; do not use
+                  GXL-PARSE-007 for this case.
 
    6.2  Type Errors  (raised at plan time where inferrable;
                       otherwise at evaluation time)

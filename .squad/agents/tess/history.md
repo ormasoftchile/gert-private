@@ -57,3 +57,91 @@
 - TV-GIS-*: escape sequence `\${` (OI-GIS-01), template with zero interpolations, nested interpolations
 - TV-GCP-*: bare root capture `http.body` (OI-GCP-02)
 - GXL-TYPE-004 (wrong arg count) — surfaces at plan time; needs a dedicated vector in GXL-EVAL or GXL-ERROR category
+
+---
+
+## Day 2 Context
+
+### 2026-06-05T00:27:12-04:00 — Stream C Day 2 (TV-GXL-EVAL + TV-GXL-PATH)
+
+#### Vector counts delivered
+
+- TV-GXL-EVAL: 87 vectors (target ≥35) — 2.5× over
+- TV-GXL-PATH: 35 vectors (target ≥25) — 1.4× over
+- Total batch: 122 new vectors
+
+#### Short-circuit witness pattern (OQ1)
+
+- Canonical short-circuit proof: the RHS must be an expression that WOULD raise an error if evaluated (missing variable, `1/0`, `len(null)`).
+- Three witness categories confirmed for AND and OR respectively.
+- Chained AND with mid-chain false: `true and false and missing_var` — short-circuit fires at second operand, third not evaluated. Good asymmetric test.
+
+#### Error codes confirmed (all exist in gxl.ebnf §6)
+
+- GXL-EVAL-002: division/modulo by zero ✅
+- GXL-EVAL-004: null in ordered comparison ✅
+- GXL-TYPE-001: cross-type comparison ✅
+- GXL-TYPE-002: non-bool in boolean position (including `not null`, `not 42`) ✅
+- GXL-TYPE-003: arithmetic on non-number / wrong type to stdlib ✅
+- GXL-TYPE-004: wrong argument count ✅
+- GXL-PATH-001: variable or segment not found ✅
+- GXL-PATH-002: array index out of bounds ✅
+- GXL-PATH-003: index on non-array or null ✅
+
+#### Error codes with unclear triggers (flag for Barbara)
+
+- GXL-EVAL-001: "variable resolution failure not covered by PATH codes" — trigger condition opaque; PATH codes seem exhaustive. May be a dead code. Barbara to confirm.
+- GXL-EVAL-003: valid but deferred (regex.match bad pattern). Not covered in this batch.
+
+#### New ambiguities surfaced (requires Barbara arbitration)
+
+1. **TESS-AMBIG-3**: `false < true` — no error code for ordered comparison on non-orderable type (bool). GXL-TYPE-001 requires *incompatible* types; booleans are same type.
+2. **TESS-AMBIG-4**: `myArr == myArr` (array == array) — gxl.ebnf §5.2 defines equality only for scalars and null. List/object equality semantics unspecified.
+3. **TESS-AMBIG-5**: `foo.bar` when `foo` is a scalar — GXL-PATH-003 explicitly covers INDEX on non-array; no code for DOT access on non-object scalar.
+4. **TESS-AMBIG-6**: `nullFoo.bar` (dot-access on null) — GXL-PATH-003 covers bracket-index on null; dot-access on null has no explicit code.
+
+Ambiguities 5 and 6 likely share the same resolution: either extend GXL-PATH-003 or add GXL-PATH-004.
+
+#### Array literals: important constraint
+
+Array/object literal syntax `[a, b]` / `{key: value}` is GXL-PARSE-007 (forbidden). All list-function tests MUST put arrays in `variables`. This significantly changes how list.* stdlib tests are structured — no inline array arguments possible.
+
+#### GDP in function argument (OI-GXL-05)
+
+Confirmed pattern: `str.contains(config_key, "prod")` where `config_key` is a GDP path resolving a variable. Resolution order: GDP evaluates first, then function receives the resolved scalar. TV-GXL-EVAL-087 pins this.
+
+#### Null semantics summary (now pinned)
+
+- `null == null` → true ✅
+- `null != null` → false ✅
+- `x == null` where x is null → true ✅
+- `null == 0` → false (null-safe equality, no error) ✅
+- `null < x` → GXL-EVAL-004 ✅
+- `not null` → GXL-TYPE-002 ✅
+- `nullVar` (top-level, existing variable with null value) → null (not an error) ✅
+
+#### OI-GXL-03 modulo — not truly "pending"
+
+Grammar §7 OI-GXL-03 SPECIFIES the behavior (IEEE 754 fmod, sign of dividend). The open issue is cross-runtime validation (Go vs C#), not the value itself. Vectors 050–052 are pinned with expected values `-1`, `1`, `-1`. Not TBD.
+
+#### Path identifier edge cases
+
+The keyword-prefix identifier pattern (`andthing`, `ornot`, `trueish`, `nullPtr`) is critical for cross-runtime parity. Any runtime using a greedy keyword-first tokenization strategy may incorrectly lex `andthing` as KW_AND + `thing`. All four tests must pass before Phase 2 sign-off.
+
+#### Coverage gaps to test next
+
+- TV-GXL-EVAL Day 3:
+  - `regex.match` happy path + invalid pattern (GXL-EVAL-003)
+  - `str.trimPrefix`, `str.trimSuffix` (defined in §4.2 but not yet covered)
+  - `list.contains` with cross-type item (GXL-TYPE-003)
+  - GXL-EVAL-001 trigger (if Barbara clarifies the code)
+  - Resolved ambiguities (TESS-AMBIG-3, 4, 5, 6) → replace TBD vectors
+- TV-GIS-*: escape sequences, nested interpolation
+- TV-GCP-*: bare-root capture (OI-GCP-02), default on subtree (GCP-DEFAULT-SUBTREE)
+- TV-PLAN-*: PLAN-004, PLAN-005 (migration-era codes per Barbara §4)
+
+---
+
+## Integrated to Main (2026-06-05T00:27:12-04:00)
+
+✅ **Day 2 memo merged to `.squad/decisions.md`** under section "GXL Phase 1 Day 2 — GIS/GCP Specs, Eval+Path Vectors, Conflict Arbitration". Corpus now 205 vectors (past ≥200 target). Four TESS-AMBIG items (3, 4, 5, 6) flagged as open arbitrations; 4 vectors remain TBD pending Barbara decision. Phase 1 status: 03a/03b/03c/03d all complete; Stream D unblocked.

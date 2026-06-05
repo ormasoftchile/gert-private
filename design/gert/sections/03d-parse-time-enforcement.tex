@@ -228,10 +228,10 @@ Raised by: GXL Parser (plan time unless noted).
 \texttt{GXL-PARSE-004} & Parser & Invalid escape sequence & Use supported escapes (\textbackslash\textbackslash, \textbackslash n, \textbackslash t, \textbackslash r, \textbackslash u, \textbackslash U) \\
 \texttt{GXL-PARSE-005} & Parser & Unknown namespace (\texttt{math.*} in v1) & Remove \texttt{math.*} calls \\
 \texttt{GXL-PARSE-006} & Parser & Unknown namespace method & Check stdlib reference \\
-\texttt{GXL-PARSE-007} & Parser & Forbidden syntax: \texttt{\&\&}, \texttt{||}, \texttt{!}, \texttt{|}, ternary, infix \texttt{contains}/\texttt{startsWith}/\texttt{matches}, assignment, string concat, array/object construction, negative index & Use GXL equivalents \\
+\texttt{GXL-PARSE-007} & Parser & Forbidden syntax: \texttt{\&\&}, \texttt{||}, \texttt{!}, \texttt{|}, ternary, infix \texttt{contains}/\texttt{startsWith}/\texttt{matches}, assignment, string concat, array/object construction, negative index, unary \texttt{+}, or bare function call. Does \emph{not} cover keyword-as-identifier (see \texttt{GXL-PARSE-010}). & Use GXL equivalents \\
 \texttt{GXL-PARSE-008} & Parser & Unmatched parenthesis & Balance parentheses \\
 \texttt{GXL-PARSE-009} & Parser & Chained comparison (\texttt{a < b < c}) & Use \texttt{a < b and b < c} \\
-\texttt{GXL-PARSE-010} & Parser & Keyword used as identifier & Rename the variable \\
+\texttt{GXL-PARSE-010} & Parser & Keyword used as identifier (e.g., variable named \texttt{and}, \texttt{or}, \texttt{str}). Sole authoritative code for keyword misuse as identifier. & Rename the variable \\
 \texttt{GXL-TYPE-001}  & Parser/Planner & Type mismatch in comparison & Use same-type operands \\
 \texttt{GXL-TYPE-002}  & Parser/Planner & Non-bool in boolean position & Ensure expression resolves to bool \\
 \texttt{GXL-TYPE-003}  & Evaluator & Argument type mismatch / arithmetic on non-number & Check argument types \\

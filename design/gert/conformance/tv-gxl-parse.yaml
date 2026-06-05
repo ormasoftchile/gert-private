@@ -903,9 +903,11 @@ vectors:
   # ---------------------------------------------------------------
   # Negative Parse Vectors — GXL-PARSE-010: Keyword used as identifier
   # gxl.ebnf §2.3 (IDENT ≠ KEYWORD) and §6.1 GXL-PARSE-010
-  # NOTE: gxl.ebnf §2.3 body text says error is GXL-PARSE-007 but the
-  # error catalog §6.1 says GXL-PARSE-010. Conflict raised in inbox.
-  # Using GXL-PARSE-010 (error catalog) as normative.
+  # ARBITRATED 2026-06-05 (barbara-tess-conflicts-arbitration):
+  #   GXL-PARSE-010 is the sole authoritative code for
+  #   keyword-as-identifier.  gxl.ebnf §2.3 body text previously
+  #   cited GXL-PARSE-007 in error; that has been corrected in the
+  #   grammar.  GXL-PARSE-007 covers forbidden SYNTAX tokens only.
   # ---------------------------------------------------------------
 
   - id: TV-GXL-PARSE-081
@@ -916,8 +918,8 @@ vectors:
     expected:
       error_class: GXL-PARSE
       error_code: GXL-PARSE-010
-    note: "expected_status: undecided — error code conflict: gxl.ebnf §2.3 says GXL-PARSE-007; error catalog §6.1 says GXL-PARSE-010. Using catalog. See .squad/decisions/inbox/tess-stream-c-day1-schema-and-parse.md §Conflicts."
-    tags: [negative, keyword-as-identifier, ambiguous]
+    note: "ARBITRATED: GXL-PARSE-010 is correct per barbara-tess-conflicts-arbitration. gxl.ebnf §2.3 body-text bug (GXL-PARSE-007) has been patched."
+    tags: [negative, keyword-as-identifier]
 
   - id: TV-GXL-PARSE-082
     category: GXL-PARSE
@@ -927,16 +929,16 @@ vectors:
     expected:
       error_class: GXL-PARSE
       error_code: GXL-PARSE-010
-    note: "Same code conflict as TV-GXL-PARSE-081. Using error catalog GXL-PARSE-010."
-    tags: [negative, keyword-as-identifier, ambiguous]
+    note: "ARBITRATED: GXL-PARSE-010, same ruling as TV-GXL-PARSE-081."
+    tags: [negative, keyword-as-identifier]
 
   - id: TV-GXL-PARSE-083
     category: GXL-PARSE
-    description: Parser rejects 'str' used in a GDP path position (reserved namespace keyword as identifier).
+    description: Parser rejects 'str.foo' (no parens) — reserved namespace keyword cannot be used as GDP identifier, and incomplete NamespaceCall fails at missing LPAREN.
     input: "str.foo"
     variables: {}
     expected:
       error_class: GXL-PARSE
-      error_code: GXL-PARSE-010
-    note: "'str' is KW_STR (reserved namespace prefix). It cannot be used as the leading IDENT in a GDP path. The expression 'str.foo' is ambiguous: it could be NamespaceCall (but 'foo' is not a known method → GXL-PARSE-006) or a GDP path (but 'str' is a keyword → GXL-PARSE-010). PEG ordered alternation: NamespaceCall is tried first; failing method resolution should propagate GXL-PARSE-006. Raising as ambiguity in inbox."
-    tags: [negative, keyword-as-identifier, namespace, ambiguous]
+      error_code: GXL-PARSE-001
+    note: "ARBITRATED: Under PEG ordered alternation Primary tries NamespaceCall first: 'str' matches Namespace, '.' matches DOT, 'foo' matches Method, but LPAREN is absent — NamespaceCall fails. GDP also fails ('str' is KW_STR, not IDENT). All Primary alternatives fail → GXL-PARSE-001 (unexpected token). This is NOT GXL-PARSE-010 (no identifier position) and NOT GXL-PARSE-006 (no parens → method validation never reached). See barbara-tess-conflicts-arbitration for rationale."
+    tags: [negative, namespace, no-parens]

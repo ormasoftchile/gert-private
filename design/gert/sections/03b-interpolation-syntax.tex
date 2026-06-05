@@ -1,0 +1,575 @@
+% ============================================================
+% §03b — GIS: GERT Interpolation Syntax (Normative)
+% Author:  Edith — Spec Editor
+% Created: 2026-06-05
+% Source of truth: design/gert/grammar/gis.ebnf (v1.0.0-draft)
+% ============================================================
+%
+% RFC 2119 normative language used throughout:
+%   MUST / MUST NOT  — absolute requirements for conforming implementations.
+%   SHOULD / SHOULD NOT — recommended but not mandatory.
+%   MAY              — optional; permitted but not required.
+%
+% Grammar production citations take the form: gis.ebnf §<section>.<subsection>.
+% Decision ledger citations take the form: decisions.md "<heading>" <key>.
+
+% Local definition — remove if \TODO is promoted to the main preamble.
+\providecommand{\TODO}[1]{\textbf{\textcolor{red}{[TODO:~#1]}}}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\chapter{GIS\,---\,GERT Interpolation Syntax}
+\label{sec:gis}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{quote}
+\noindent\textbf{Informative introduction.}
+GIS (GERT Interpolation Syntax) is the GERT-native template language for
+embedding run-time values into string-typed runbook fields.
+Wherever a field carries dynamic content — step \texttt{title},
+command \texttt{args}, \texttt{stdin}, tool \texttt{argv} elements,
+\texttt{display.content}, assertion \texttt{subject} and \texttt{expected}
+operands, artifact paths, \texttt{event.id}, and \texttt{include.with}
+values — the field value is treated as a GIS template and evaluated
+immediately before the containing step executes.
+
+A GIS template is a Unicode string that may contain zero or more
+interpolation blocks of the form \texttt{\$\{}\textit{expr}\texttt{\}},
+where \textit{expr} is a GXL expression (\S\ref{sec:gxl}).
+The most common use is a bare GDP path
+(e.g., \texttt{\$\{hostname\}}, \texttt{\$\{config.region\}}),
+but the full GXL grammar is available inside every interpolation block.
+
+GIS replaces the prior Go \texttt{text/template} interpolation surface;
+see \S\ref{sec:gis:migration} for the migration note.
+This chapter is the authoritative normative statement of the
+GERT Portable JSON Value Model (PJVM) used by GIS, GXL, and GCP.
+\end{quote}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Normative Reference to the Grammar}
+\label{sec:gis:normref}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The file \texttt{design/gert/grammar/gis.ebnf} (version~1.0.0-draft) is the
+authoritative grammar for GIS\@.  This chapter is normative prose \emph{about}
+that grammar; it does not supersede it.  Where this prose and the grammar
+conflict, \textbf{the grammar wins} and the prose is in error.  Conforming
+implementations MUST derive their template parsers from \texttt{gis.ebnf},
+not from this chapter alone.
+
+GIS is a \emph{two-level} grammar: the outer level is defined in
+\texttt{gis.ebnf} and processes the template string; the inner level is the
+GXL grammar (\texttt{gxl.ebnf}) that processes each interpolation expression.
+Implementations MUST apply the two parsers in sequence and MUST NOT conflate
+their token streams.
+
+(\texttt{gis.ebnf} \S1, \S2.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Lexical Structure}
+\label{sec:gis:lexical}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The GIS lexer operates over the raw string value of the YAML field,
+after YAML parsing has resolved all YAML-level escaping and produced a
+plain Unicode string.
+The GIS lexer then partitions that string into a sequence of segments.
+All productions in this section correspond to \texttt{gis.ebnf} \S2.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Template String Structure}
+\label{subsec:gis:template-string}
+
+The top-level GIS production is:
+
+\begin{minted}{text}
+TemplateString = { RawSegment | EscapeSequence | Interpolation } ;
+\end{minted}
+
+A \texttt{TemplateString} containing zero \texttt{Interpolation} blocks MUST
+be returned as-is, without alteration.
+No error is raised for a template string that contains only raw characters.
+
+(\texttt{gis.ebnf} \S2.1.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Raw Segments}
+\label{subsec:gis:raw}
+
+\begin{minted}{text}
+RawSegment = RAW_CHAR { RAW_CHAR } ;
+RAW_CHAR   = (* any Unicode code point except '\' and '$' *)
+           | '$' (* ONLY when NOT immediately followed by '{' *)
+           ;
+\end{minted}
+
+A bare \texttt{\$} character that is \emph{not} immediately followed by
+\texttt{\{} is treated as a literal dollar sign and passed through verbatim.
+This permits shell-style environment-variable references
+(e.g., \texttt{\$PATH}) to coexist with GIS interpolations in
+\texttt{argv} values, provided the \texttt{\$} is not followed by \texttt{\{}.
+
+\begin{quote}
+\noindent\textit{Non-normative note.}
+Open issue OI-GIS-02 (\texttt{gis.ebnf} \S6) identifies a class of tool
+definitions where both shell-style \texttt{\$\{ENV\_VAR\}} and GIS
+\texttt{\$\{variable\}} appear in the same \texttt{argv} string.
+Under the current grammar ALL \texttt{\$\{...\}} sequences are GIS
+interpolations; a literal \texttt{\$\{ENV\_VAR\}} intended for the OS
+process environment MUST be written as \texttt{\textbackslash\$\{ENV\_VAR\}}.
+Fixture migration is tracked under Stream~D.
+\end{quote}
+
+(\texttt{gis.ebnf} \S2.2.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Escape Sequences}
+\label{subsec:gis:escapes}
+
+\begin{minted}{text}
+EscapeSequence = '\' ESCAPE_TARGET ;
+ESCAPE_TARGET  = '$' '{'   (* '\${' → literal '${' in output    *)
+               | '\'        (* '\\' → literal '\'                *)
+               | 'n'        (* '\n' → U+000A LINE FEED           *)
+               | 'r'        (* '\r' → U+000D CARRIAGE RETURN     *)
+               | 't'        (* '\t' → U+0009 CHARACTER TABULATION*)
+               ;
+\end{minted}
+
+The sequence \texttt{\textbackslash\$\{} is the \textbf{canonical escape}
+for a literal dollar-brace pair \texttt{\$\{} in template output.
+This is the single backslash followed by \texttt{\$\{} (OI-GIS-01, ratified;
+decisions.md ``GXL Stream~A open issue ratifications'').
+
+\noindent The recognized escape sequences and their output characters are:
+
+\begin{center}
+\begin{tabular}{lll}
+\hline
+\textbf{Sequence} & \textbf{Output} & \textbf{Description} \\
+\hline
+\texttt{\textbackslash\$\{} & \texttt{\$\{}        & Literal dollar-brace (canonical escape; OI-GIS-01) \\
+\texttt{\textbackslash\textbackslash} & \texttt{\textbackslash} & Literal backslash \\
+\texttt{\textbackslash n}            & U+000A              & Line feed \\
+\texttt{\textbackslash r}            & U+000D              & Carriage return \\
+\texttt{\textbackslash t}            & U+0009              & Horizontal tab \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent\textbf{Lenient unknown-escape policy.}
+A backslash followed by any character \texttt{X} not in the list above
+(i.e., not \texttt{\$\{}, \texttt{\textbackslash}, \texttt{n}, \texttt{r},
+or \texttt{t}) is passed through as the two-character literal
+\texttt{\textbackslash X} and MUST generate a \texttt{GIS-PARSE-002}
+diagnostic (a \emph{warning}, not a hard error; see \S\ref{sec:gis:errors}).
+This lenient behavior differs intentionally from GXL
+(\texttt{GXL-PARSE-004}, which is a hard error) because GIS template
+strings frequently arrive from YAML values that have already undergone
+YAML-level escape processing; strict rejection would break runbooks that
+contain literal backslashes in tool argument strings.
+
+(\texttt{gis.ebnf} \S2.3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Interpolation Blocks}
+\label{subsec:gis:interpolation}
+
+\begin{minted}{text}
+Interpolation = '$' '{' GISExpression '}' ;
+\end{minted}
+
+The two-character sequence \texttt{\$\{} is the start delimiter of an
+interpolation block.
+The block ends at the first \texttt{\}} that is not inside a nested
+grouping within the \texttt{GISExpression}
+(see \S\ref{sec:gis:expression} for nesting rules).
+
+An unclosed \texttt{\$\{} — i.e., a \texttt{\$\{} that has no matching
+\texttt{\}} before the end of the template string — MUST cause the
+entire template to be rejected with error \texttt{GIS-PARSE-001}.
+
+An unmatched \texttt{\}} outside an interpolation block is a literal
+\texttt{\}} and is passed through verbatim.
+An unmatched \texttt{\{} outside an interpolation block is likewise
+a literal \texttt{\{}.
+Only the two-character sequence \texttt{\$\{} begins an interpolation.
+
+(\texttt{gis.ebnf} \S2.4.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Embedded Expression}
+\label{sec:gis:expression}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The content of each interpolation block is a GXL expression:
+
+\begin{minted}{text}
+GISExpression = Expression ;
+\end{minted}
+
+\texttt{Expression} is the top-level non-terminal of the GXL syntactic
+grammar (\texttt{gxl.ebnf} \S3; \S\ref{sec:gxl}).
+Conforming implementations MUST support the full GXL grammar inside
+\texttt{\$\{...\}}, not a restricted subset.
+The GXL lexer handles string tokenization within the expression, which
+means the outer GIS parser MUST delegate to the GXL parser's
+``end of expression'' signal to locate the closing \texttt{\}};
+naive character-scanning of \texttt{\}} will mis-parse expressions
+containing string literals with embedded \texttt{\}}.
+(See \texttt{gis.ebnf} \S6, OI-GIS-04.)
+
+\noindent\textbf{In practice}, the overwhelming majority of interpolation
+sites use a bare GDP path (\S\ref{subsec:gxl:gdp}), which is a valid
+GXL sub-expression:
+
+\begin{minted}{text}
+${hostname}              -- top-level variable (bare IDENT)
+${config.region}         -- field access on captured object
+${items[0].name}         -- index into captured array, then field
+\end{minted}
+
+Full GXL expressions are equally valid:
+
+\begin{minted}{text}
+${str.toLower(env)}      -- stdlib call; result coerced to string
+${count + 1}             -- arithmetic; result coerced to string
+${status == "ok"}        -- comparison; "true" or "false" in output
+\end{minted}
+
+The result of the GXL expression is coerced to a string value before
+insertion into the template output, according to the rules in
+\S\ref{sec:gis:coercion}.
+
+\noindent\textbf{Empty interpolation.}
+The block \texttt{\$\{\}} (dollar-brace with no expression) MUST be
+rejected at parse time with error \texttt{GIS-PARSE-004}.
+There is no implicit expression for an empty block.
+
+(\texttt{gis.ebnf} \S2.4, \S3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{GERT Portable JSON Value Model}
+\label{sec:gis:portable-json}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{quote}
+\noindent\textbf{Authoritative definition.}
+This section is the single normative home of the GERT Portable JSON Value
+Model (PJVM).
+All other GERT specification chapters that reference PJVM types
+(\S\ref{sec:gxl}, \S\ref{sec:gcp}) MUST treat this section as the
+authoritative definition and MUST NOT duplicate or amend it.
+\end{quote}
+
+The GERT Portable JSON Value Model (PJVM) is the runtime type system
+shared by GXL (\S\ref{sec:gxl}), GIS, and GCP (\S\ref{sec:gcp}).
+It is derived from RFC~8259 (JSON) with the explicit constraints
+enumerated in this section.
+The design goal of PJVM is cross-runtime fidelity: a value serialized
+in the Go reference runtime and deserialized in the C\# runtime (or any
+future runtime) MUST have an identical PJVM representation with no
+runtime-specific surprises.
+
+(\texttt{gis.ebnf} \S4; OQ3, resolved.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{PJVM Types}
+\label{subsec:gis:pjvm-types}
+
+PJVM defines exactly six value types:
+
+\begin{center}
+\begin{tabular}{lp{9.5cm}}
+\hline
+\textbf{Type} & \textbf{Definition} \\
+\hline
+\texttt{null}    & The absence of a value, corresponding to JSON \texttt{null}.
+                   \texttt{null} is a distinct type; it is not the same as
+                   an empty string or the number zero. \\
+\texttt{boolean} & One of the two Boolean values: \texttt{true} or
+                   \texttt{false}, corresponding to JSON Boolean literals.
+                   GXL type-checking error messages use the abbreviation
+                   \texttt{bool} for this type. \\
+\texttt{number}  & A finite IEEE~754 double-precision float64 value.
+                   \texttt{NaN} and \texttt{Infinity} are \textbf{not}
+                   members of this type; see the exclusion table below. \\
+\texttt{string}  & An immutable, UTF-8-encoded sequence of Unicode code
+                   points, corresponding to a JSON string value.
+                   No length limit is mandated by this specification;
+                   implementations SHOULD document any practical limit. \\
+\texttt{array}   & An ordered, homogeneous-or-heterogeneous sequence of
+                   PJVM values, corresponding to a JSON array.
+                   Elements are zero-indexed. \\
+\texttt{object}  & An unordered collection of string-keyed PJVM values,
+                   corresponding to a JSON object.
+                   Key collisions in a source document are resolved by
+                   retaining the last occurrence (RFC~8259 \S4 behavior). \\
+\hline
+\end{tabular}
+\end{center}
+
+(\texttt{gis.ebnf} \S4.1.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{PJVM Exclusions}
+\label{subsec:gis:pjvm-exclusions}
+
+The following value types are explicitly excluded from PJVM and MUST NOT
+appear in the run variable context map:
+
+\begin{center}
+\begin{tabular}{lp{9.5cm}}
+\hline
+\textbf{Excluded Type} & \textbf{Rationale and Mapping} \\
+\hline
+\texttt{NaN}       & IEEE~754 not-a-number.
+                     A capture that would yield \texttt{NaN} MUST
+                     substitute \texttt{null} and raise
+                     \texttt{GIS-TYPE-001} if the value reaches
+                     a GIS interpolation site. \\
+\texttt{Infinity}  & IEEE~754 positive or negative infinity.
+                     Same policy as \texttt{NaN}. \\
+\texttt{undefined} & JavaScript \texttt{undefined}.
+                     MUST be mapped to \texttt{null} at ingestion. \\
+\texttt{date}      & No date type.  Dates are represented as strings
+                     in a documented format (ISO~8601 RECOMMENDED). \\
+\texttt{binary}    & No blob or buffer type.
+                     Binary data MUST be base64-encoded to a string. \\
+\texttt{int64}     & No distinct integer type.
+                     All numbers are \texttt{float64}; integers are
+                     representable exactly up to $2^{53}$. \\
+\texttt{decimal}   & No arbitrary-precision decimal.
+                     All numbers are \texttt{float64}. \\
+\hline
+\end{tabular}
+\end{center}
+
+(\texttt{gis.ebnf} \S4.1.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Unresolved Variables}
+\label{subsec:gis:unresolved}
+
+If the GXL expression inside \texttt{\$\{...\}} references a variable
+that is not present in the run variable context map (error
+\texttt{GXL-PATH-001}; \S\ref{sec:gxl:semantics:paths}), the GIS evaluator
+MUST propagate the failure as \texttt{GIS-PATH-MISSING} and MUST abort
+template rendering.
+
+Silent empty-string substitution for missing variables is \textbf{forbidden}.
+Every unresolved reference is a hard error.
+Authors MUST use \texttt{when:} guards (exploiting GXL short-circuit
+evaluation; \S\ref{sec:gxl:semantics:short-circuit}) or
+\texttt{capture.default:} values (\S\ref{sec:gcp:default}) to handle
+optional references.
+
+(\texttt{gis.ebnf} \S4.3.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Type Coercion to String}
+\label{sec:gis:coercion}
+% ─────────────────────────────────────────────────────────────────────────────
+
+When a GXL expression inside \texttt{\$\{...\}} resolves to a PJVM value,
+that value MUST be converted to a string before insertion into the template
+output.
+The coercion rules are normative and are exhaustive:
+no PJVM type is an error to interpolate, except as explicitly noted below.
+
+\begin{center}
+\begin{tabular}{lp{9.5cm}}
+\hline
+\textbf{PJVM Type} & \textbf{Coercion to String} \\
+\hline
+\texttt{null}    & The four-character string \texttt{null}.
+                   The empty string is not a valid coercion of \texttt{null}. \\
+\texttt{boolean} & \texttt{true} or \texttt{false} (the keyword spelling),
+                   matching the GXL literal syntax. \\
+\texttt{number}  & Shortest round-trip decimal representation satisfying
+                   \mbox{$\mathrm{parse}(\mathrm{repr}(x)) = x$}.
+                   Full rules in \S\ref{subsec:gis:coercion-number} below. \\
+\texttt{string}  & The string value, verbatim.
+                   No quoting, no escaping is added. \\
+\texttt{array}   & Canonical JSON serialization: \texttt{[} followed by
+                   comma-separated element representations followed by
+                   \texttt{]}.  No extra whitespace.
+                   Array elements are recursively coerced to their canonical
+                   JSON forms (not to strings first).
+                   Example: \texttt{[1,"a",true]} \\
+\texttt{object}  & Canonical JSON serialization with
+                   \textbf{lexicographically sorted keys}
+                   (Unicode code point order, ascending).
+                   Format: \texttt{\{} comma-separated \texttt{"key":value}
+                   pairs \texttt{\}}.  No extra whitespace.
+                   Example: \texttt{\{"a":2,"z":1\}} \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent\textbf{Rationale for sorted object keys.}
+Canonical serialization with sorted keys ensures that interpolating a
+captured object variable (e.g., \texttt{\$\{config\}}) produces the same
+string regardless of which runtime generated the object,
+making audit trail comparisons deterministic and reliable.
+
+(\texttt{gis.ebnf} \S4.2.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Number Coercion Rules}
+\label{subsec:gis:coercion-number}
+
+Number-to-string coercion MUST produce the shortest decimal representation
+that round-trips through standard \texttt{float64} parsing
+(\texttt{gis.ebnf} \S4.2).
+Implementations SHOULD use ECMAScript's \textsc{Number::toString} algorithm
+(ECMA-262 \S7.1.12.1) or Go's \texttt{strconv.FormatFloat(x, 'g', -1, 64)},
+both of which satisfy the round-trip requirement.
+The following rules are normative:
+
+\begin{itemize}
+  \item \textbf{Integer-valued floats}: no decimal point is emitted.
+    \texttt{42.0} coerces to \texttt{"42"}, not \texttt{"42.0"}.
+
+  \item \textbf{Non-integer floats}: the minimum number of decimal digits
+    required for round-trip fidelity is used.
+    \texttt{3.14} coerces to \texttt{"3.14"}.
+
+  \item \textbf{Large integers}: values below $10^{21}$ are represented
+    without exponential notation.
+    \texttt{1e20} coerces to \texttt{"100000000000000000000"}.
+    Values at or above $10^{21}$ use exponential notation with a
+    \texttt{+} in the exponent: \texttt{1e21} coerces to
+    \texttt{"1e+21"}.
+
+  \item \textbf{Negative zero}: \texttt{-0.0} coerces to \texttt{"0"},
+    not \texttt{"-0"}.
+
+  \item \textbf{NaN and Infinity}: these values are not members of PJVM
+    (see \S\ref{subsec:gis:pjvm-exclusions}).
+    A number value of \texttt{NaN} or \texttt{Infinity} encountered at
+    interpolation time MUST cause the template rendering to fail with
+    \texttt{GIS-TYPE-001}.
+    The runtime SHOULD have already substituted \texttt{null} at capture
+    time; reaching interpolation with a non-finite value indicates a
+    runtime defect.
+\end{itemize}
+
+(\texttt{gis.ebnf} \S4.2.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Error Class Catalog}
+\label{sec:gis:errors}
+% ─────────────────────────────────────────────────────────────────────────────
+
+GIS defines two timing categories for errors, consistent with GXL
+(\S\ref{sec:gxl:errors}):
+\emph{parse errors} are raised at runbook load/plan time, before any step
+executes;
+\emph{evaluation errors} are raised at runtime when a template is rendered
+for a specific step.
+A runbook containing a parse error MUST NOT enter execution.
+An evaluation error during template rendering causes the affected step
+to transition to the \texttt{failed} state.
+
+\texttt{GIS-PARSE-002} is a \emph{warning}: it does not prevent execution.
+All other GIS errors are \emph{hard errors}.
+
+The master PLAN-* code catalog is owned by \S\ref{sec:parse-gate:error-codes}.
+GIS parse errors are surfaced at the parse gate via \texttt{PLAN-001}
+(unparseable expression wrapper); the specific GIS error code is included
+in the \texttt{sub\_error} field of the \texttt{PLAN-001} diagnostic.
+
+Table~\ref{tab:gis-errors} enumerates every GIS error code.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{p{3.5cm}p{2.0cm}p{5.0cm}p{2.5cm}}
+\hline
+\textbf{Code} & \textbf{Raised By} & \textbf{Description} & \textbf{Remediation} \\
+\hline
+\multicolumn{4}{l}{\textit{Parse errors (raised at load/plan time)}} \\
+\hline
+\texttt{GIS-PARSE-001}
+  & GIS lexer
+  & Unclosed interpolation block: \texttt{\$\{} appears in the template with no matching \texttt{\}}.  The entire template is rejected.
+  & Close the \texttt{\$\{} with a matching \texttt{\}}. \\
+\texttt{GIS-PARSE-002}
+  & GIS lexer
+  & Unknown escape sequence: \texttt{\textbackslash X} where \texttt{X} is not a recognized escape target (\S\ref{subsec:gis:escapes}).  \emph{Warning only}; \texttt{\textbackslash X} is passed through literally.
+  & Use a recognized escape, or double the backslash: \texttt{\textbackslash\textbackslash X}. \\
+\texttt{GIS-PARSE-003}
+  & GIS parser
+  & Invalid GXL expression inside \texttt{\$\{...\}}: the GXL parser raised a \texttt{GXL-PARSE-*} error.  The specific GXL code is included in the \texttt{GIS-PARSE-003} diagnostic.
+  & Fix the flagged expression (see GXL error catalog, \S\ref{sec:gxl:errors}). \\
+\texttt{GIS-PARSE-004}
+  & GIS parser
+  & Empty interpolation block: \texttt{\$\{\}} with no expression.
+  & Provide a GXL expression inside the braces. \\
+\hline
+\multicolumn{4}{l}{\textit{Path errors (raised at evaluation time)}} \\
+\hline
+\texttt{GIS-PATH-MISSING}
+  & GIS evaluator
+  & The GXL expression inside \texttt{\$\{...\}} raised \texttt{GXL-PATH-001}: the referenced variable is not in the run variable context.  The template location and variable name are included in the diagnostic.
+  & Ensure the variable is captured before this step runs, or guard the step with \texttt{when:}. \\
+\hline
+\multicolumn{4}{l}{\textit{Type errors (raised at evaluation time)}} \\
+\hline
+\texttt{GIS-TYPE-001}
+  & GIS evaluator
+  & The resolved value cannot be coerced to string: specifically, a \texttt{number} value that is \texttt{NaN} or \texttt{Infinity} (\S\ref{subsec:gis:coercion-number}).
+  & Ensure the capture source cannot produce non-finite numbers; use a null-guard default. \\
+\texttt{GIS-TYPE-002}
+  & GIS evaluator
+  & A GXL type error was propagated from the embedded expression (e.g., \texttt{GXL-TYPE-001}, \texttt{GXL-TYPE-002}, \texttt{GXL-TYPE-003}).  The specific GXL error code is included in the diagnostic.
+  & Correct the expression type mismatch (see GXL error catalog, \S\ref{sec:gxl:errors}). \\
+\hline
+\end{tabular}
+\caption{GIS error class catalog.
+  Source: \texttt{gis.ebnf} \S5.}
+\label{tab:gis-errors}
+\end{table}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Migration Note}
+\label{sec:gis:migration}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{quote}
+\noindent\textbf{Informative.}
+This section is not normative.
+\end{quote}
+
+GIS replaces the prior Go \texttt{text/template} interpolation surface that
+was used for string-typed fields
+(\texttt{display.content}, \texttt{args}, \texttt{stdin},
+and related fields) in earlier versions of the GERT schema.
+The key authoring differences are:
+
+\begin{itemize}
+  \item The interpolation delimiter changes from \texttt{\{\{.Variable\}\}}
+    (Go template syntax) to \texttt{\$\{variable\}} (GIS syntax).
+
+  \item The canonical escape for a literal dollar-brace sequence is
+    \texttt{\textbackslash\$\{} (single backslash; OI-GIS-01, ratified).
+    Any historical occurrences of the deprecated \texttt{\$\$\{} doubling
+    convention (proposal \S2.6, now superseded) MUST be converted to
+    \texttt{\textbackslash\$\{} by the Stream~E migration tool.
+
+  \item GIS allows full GXL expressions inside \texttt{\$\{...\}},
+    not only bare variable paths.  Authors MAY use \texttt{str.*} and
+    \texttt{list.*} functions, arithmetic, and comparisons directly
+    within interpolation blocks.
+
+  \item Missing variables are hard errors under GIS\@.
+    The Go \texttt{text/template} behavior of silently substituting an
+    empty string for a missing key is \textbf{removed}.
+\end{itemize}
+
+A full deprecation appendix with migration rewrite rules will be added in
+a later Stream~B task.
+Existing spec sections that still reference Go \texttt{text/template}
+syntax are identified for rewrite in the Stream~B backlog
+(\texttt{02-architecture.tex} lines 467--477 and 586--587;
+\texttt{03-schema-vnext.tex} lines 2518--2560).

@@ -528,3 +528,254 @@ Table~\ref{tab:gis-errors} enumerates every GIS error code.
   Source: \texttt{gis.ebnf} \S5.}
 \label{tab:gis-errors}
 \end{table}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Optional Path Chaining}
+\label{sec:gis:optional-chaining}
+% ─────────────────────────────────────────────────────────────────────────────
+
+GIS optional path chaining is the explicit opt-in syntax for rendering an
+empty string when a path segment that the author has marked optional is
+missing.  The governing decision is the ratified GIS optional-chaining entry
+(
+\href{run:../../../.squad/decisions/inbox/copilot-gis-optional-chaining-ratified.md}{\texttt{copilot-gis-optional-chaining-ratified.md}},
+``Ratified Decisions''); it is consistent with the Phase~1 decision ledger's
+hard-error default for plain GIS paths (decisions.md ``GXL Phase~1 Day~2 ---
+GIS/GCP Specs'').  The semantic source prose is Barbara's proposal
+\texttt{design/gert/proposals/gis-optional-chaining.md} \S2.
+
+\begin{quote}
+\noindent\textbf{Normative scope.}
+This section specifies optional chaining only for GDP path resolution inside
+GIS interpolation blocks.  It does not amend GXL boolean expressions, GCP
+capture paths, or the PJVM coercion rules except where explicitly stated here.
+\end{quote}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Syntax}
+\label{subsec:gis:optional-chaining:syntax}
+
+The optional path segment forms are \texttt{?.}\textit{IDENT} and
+\texttt{?.[}\textit{N}\texttt{]}.  Conforming GIS implementations MUST accept
+both forms inside a GDP path in a GIS interpolation expression, according to
+the ratified EBNF delta:
+
+\begin{minted}{text}
+GDP = IDENT { PathSegment } ;
+PathSegment = '.' IDENT
+            | '?.' IDENT
+            | '[' INTEGER ']'
+            | '?.[' INTEGER ']'
+            ;
+\end{minted}
+
+\noindent The full grammar lives in
+\href{run:../grammar/gis.ebnf}{\texttt{design/gert/grammar/gis.ebnf}} and the
+embedded GDP production is the same path form referenced from
+\S\ref{subsec:gxl:gdp}; the subset shown here is only the ratified extension
+surface.  The token \texttt{?.} MUST be recognized as an atomic optional-dot
+segment separator, and \texttt{?.[} MUST be recognized as the start of an
+optional bracket segment.  (Source: proposal \S1.1--\S1.2 and Appendix~A;
+ratified decision rows ``\texttt{?.[N]} optional bracket indexing'' and
+``Scope''.)
+
+A GDP path MUST still begin with \texttt{IDENT}.  Therefore
+\texttt{\$\{?.root\}} is syntactically illegal and MUST be rejected at parse
+time: there is no grammar production for an optional root identifier.  The
+legal spelling is an ordinary root identifier followed by an optional segment,
+for example \texttt{\$\{root?.field\}}.  (Source: proposal \S1.1 and ratified
+decision row ``\texttt{\$\{?.root\}} (optional on root identifier)''.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Evaluation Semantics}
+\label{subsec:gis:optional-chaining:semantics}
+
+When a GIS interpolation expression evaluates a GDP path left-to-right, a miss
+encountered by a \texttt{?.}\textit{IDENT} or \texttt{?.[}\textit{N}\texttt{]}
+segment MUST stop evaluation of the entire remaining path tail and MUST resolve
+the GDP expression to the empty string \texttt{""}.  No later segment in that
+path is evaluated after the optional miss.  This is the ratified
+JS/TS-compatible full-tail short-circuit rule, with GIS substituting
+\texttt{""} for the JavaScript/TypeScript undefined result.  (Source: proposal
+\S2.1; ratified decision rows ``Default value for missing optional path'' and
+``Short-circuit semantics''.)
+
+For optional chaining, the following conditions are missing and MUST trigger
+that empty-string result when they are reached through an optional segment:
+
+\begin{itemize}
+  \item the root identifier is absent from the context map and the first path
+    hop from that identifier is optional, as in \texttt{\$\{user?.name\}};
+  \item the current value is \texttt{null};
+  \item the current object lacks the requested key;
+  \item the array index in \texttt{?.[}\textit{N}\texttt{]} is out of bounds.
+\end{itemize}
+
+\noindent Each condition above is normative.  (Source: proposal \S2.2;
+ratified decision rows ``Default value for missing optional path'',
+``Short-circuit semantics'', and ``\texttt{?.[N]} optional bracket indexing''.)
+
+The following PJVM values are present values, not misses, and MUST NOT trigger
+optional-chain defaulting: the empty string \texttt{""}, \texttt{false},
+\texttt{0}, the empty array \texttt{[]}, and the empty object \texttt{\{\}}.
+They continue through normal path evaluation and, when they become the final
+interpolation result, are coerced according to \S\ref{sec:gis:coercion}.
+(Source: proposal \S2.3; ratified decision row ``Default value for missing
+optional path''.)
+
+Plain GIS paths are unchanged.  A path written without optional segments, such
+as \texttt{\$\{a.b.c\}}, MUST still fail with \texttt{GIS-PATH-MISSING} on any
+missing identifier or key as specified in \S\ref{subsec:gis:unresolved}.  There
+is no implicit empty-string substitution for ordinary \texttt{\$\{...\}}
+interpolation.  (Source: \texttt{gis.ebnf} \S4.3; ratified decision row
+``Hard-error default unchanged''.)
+
+Mixed paths are legal, but non-optional segments remain mandatory.  If a
+mandatory \texttt{.}\textit{IDENT} or \texttt{[}\textit{N}\texttt{]} segment
+misses before any guarding optional segment applies, the GIS evaluator MUST
+raise the ordinary hard error; it MUST NOT reinterpret that miss as optional.
+(Source: proposal \S1.3 and \S2.4; ratified decision row ``Hard-error default
+unchanged''.)
+
+\begin{minted}{text}
+Expression: ${a.b?.c.d}
+Context:    { a: { b: { c: { d: "found" } } } }
+Result:     "found"
+
+Expression: ${a.b?.c.d}
+Context:    { a: { b: {} } }
+Result:     ""        -- ?.c misses; .d is not evaluated
+
+Expression: ${a.b?.c.d}
+Context:    { a: {} }
+Result:     GIS-PATH-MISSING
+            -- .b is mandatory; ?.c is never reached
+\end{minted}
+
+\noindent Optional bracket access follows the same full-tail rule:
+
+\begin{minted}{text}
+Expression: ${results?.[0]?.title}
+Context:    { results: [] }
+Result:     ""        -- ?.[0] misses; ?.title is not evaluated
+\end{minted}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Composition with GXL Expressions}
+\label{subsec:gis:optional-chaining:composition}
+
+Optional chaining is resolved at the GDP path-resolution step.  It MUST NOT
+propagate through enclosing GXL function calls.  For example, if
+\texttt{user} is absent, \texttt{\$\{str.toLower(user?.name)\}} MUST first
+resolve \texttt{user?.name} to \texttt{""} and then call
+\texttt{str.toLower("")}.  The function receives an ordinary string argument;
+it does not receive or observe an optional-chain marker.  (Source: proposal
+\S3.2 and \S8 OQ-OC-4; ratified decision row ``Stdlib call propagation''.)
+
+Optional chaining also composes with ordinary GXL expression evaluation after
+the GDP has resolved.  If \texttt{user?.name} resolves to \texttt{""}, an
+expression such as \texttt{\$\{user?.name + " suffix"\}} proceeds as string
+concatenation with an empty left operand.  (Source: proposal \S3.2; ratified
+decision row ``Stdlib call propagation''.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Relationship to \texttt{capture.default:}}
+\label{subsec:gis:optional-chaining:capture-default}
+
+Optional chaining and \texttt{capture.default:} address different layers.
+Optional chaining is a GIS rendering-time path rule for \texttt{\$\{...\}}
+interpolation; \texttt{capture.default:} is a GCP capture-time rule for scalar
+capture values (\S\ref{sec:gcp:default}).  Authors SHOULD use
+\texttt{capture.default:} when the run variable itself should be populated with
+a default at capture time, and SHOULD use \texttt{?.} only when the omission is
+local to a rendered string.  (Source: proposal \S2.5 and \S3.1; ratified
+decision rows ``Scope'' and ``\texttt{??} nullish-coalescing''.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Examples}
+\label{subsec:gis:optional-chaining:examples}
+
+\noindent\textbf{Idiomatic: optional API response field.}
+
+\begin{minted}{yaml}
+steps:
+  - tool: http.get
+    args: "${api_base}/users/${user_id}"
+    capture:
+      http.body.profile: user_profile
+  - display:
+      content: |
+        Name: ${user_profile.name}
+        Email: ${user_profile.email}
+        Company: ${user_profile?.company}
+\end{minted}
+
+\noindent If \texttt{company} is absent, the third line renders as
+\texttt{Company: } rather than failing the template.  (Source: proposal \S5.1;
+ratified decision row ``Default value for missing optional path''.)
+
+\noindent\textbf{Idiomatic: optional captured subtree.}
+
+\begin{minted}{yaml}
+steps:
+  - tool: api.call
+    capture:
+      http.body: response
+  - display:
+      content: "Request ID: ${response?.metadata?.request_id}"
+\end{minted}
+
+\noindent The \texttt{metadata} object and its \texttt{request\_id} member are
+both optional for this rendered string.  (Source: proposal \S5.3; ratified
+decision row ``Short-circuit semantics''.)
+
+\noindent\textbf{Idiomatic: optional configuration section.}
+
+\begin{minted}{yaml}
+steps:
+  - tool: deploy
+    args: "--name ${service_name} --monitoring-endpoint ${config?.monitoring?.endpoint}"
+\end{minted}
+
+\noindent If \texttt{config.monitoring} is absent, the optional chain renders
+the endpoint value as \texttt{""}; the receiving tool remains responsible for
+whether an empty argument is acceptable.  (Source: proposal \S5.2; ratified
+decision row ``Scope''.)
+
+\noindent\textbf{Anti-pattern: hiding required-field bugs.}
+
+\begin{minted}{yaml}
+steps:
+  - display:
+      content: "Order total: ${order?.total}"
+\end{minted}
+
+\noindent If \texttt{order} is required at this point in the runbook, the
+example above is an anti-pattern: it hides a missing capture, a misspelled
+variable, or a broken step dependency.  The parser cannot prove the author's
+intent here; use \texttt{?.} only after deciding that the field is truly
+optional.  Required fields SHOULD use plain \texttt{\$\{order.total\}} so that
+\texttt{GIS-PATH-MISSING} remains a safety net.  (Source: proposal \S5.5;
+ratified decision rows ``Existing fixture migration'' and ``Hard-error default
+unchanged''.)
+
+% ─────────────────────────────────────────────────────────────────────────────
+\subsection{Out of Scope}
+\label{subsec:gis:optional-chaining:out-of-scope}
+
+This section does not specify optional chaining for GXL boolean expressions;
+\texttt{?.} is GIS-only in this extension.  It does not specify optional
+chaining for GCP capture paths; use \texttt{capture.default:} at the capture
+layer where that mechanism applies (\S\ref{sec:gcp:default}).  It does not add
+nullish coalescing: \texttt{??} is deferred and MUST NOT be accepted as part of
+this extension.  It also does not specify the audit trace event format for an
+optional miss.  (Source: ratified decision rows ``Scope'', ``\texttt{??}
+nullish-coalescing'', and ``Audit trace on optional miss''.)
+
+\begin{quote}
+\noindent\textit{Non-normative note.}
+The proposed \texttt{GIS-PATH-OPTIONAL-MISS} info-level diagnostic is deferred
+to the runtime design phase.  This chapter locks the syntax and evaluation
+result; it does not define JSONL audit-trace event shape, payload fields, or
+emission policy.
+\end{quote}

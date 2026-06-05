@@ -105,7 +105,8 @@ Interpolation  = '$' '{' GISExpression '}' ;
 
 GISExpression  = Expression ;
                (* 'Expression' is the top-level non-terminal of the
-                  GXL syntactic grammar (gxl.ebnf §3).
+                  GXL syntactic grammar (gxl.ebnf §3), with the GIS-only
+                  GDP extension defined below.
                   
                   ## Relationship to GXL
                   The expression inside '${...}' is formally a full
@@ -114,7 +115,9 @@ GISExpression  = Expression ;
                     ${hostname}
                     ${config.region}
                     ${items[0].name}
-                  These are all valid GXL expressions (GDP as Primary).
+                    ${user?.email}
+                    ${items?.[0].name}
+                  These are all valid GIS expressions (GDP as Primary).
                   
                   Full GXL expressions are also valid:
                     ${str.toLower(env)}
@@ -127,13 +130,61 @@ GISExpression  = Expression ;
                   Implementations MUST support the full GXL grammar
                   inside '${...}', not just GDP paths.
 
-                  ## Prohibited forms (despite formal GXL validity)
-                  The following would be valid GXL but are semantically
-                  rejected in GIS context because their result is not
-                  coercible to a useful string:
-                    ${null}  — coerces to "null" (allowed, per §4.3)
-                  Everything else that is valid GXL is valid GIS.
+                  ## Explicitly rejected forms
+                    ${}        — empty interpolation block → GIS-PARSE-004.
+                    $${foo}    — dollar-doubling escape is not recognized;
+                                use '\${foo}' for a literal interpolation.
+                    ${?.root}  — root identifier may not be optional; the
+                                first GDP segment is always mandatory to
+                                prevent variable-name typo masking.
+                  Everything else that is valid GXL is valid GIS, subject
+                  to GIS-specific path optionality below.
                *)
+
+
+(* --- 2.5 GIS-only Optional-Chaining GDP Extension ---
+   Ratified by: .squad/decisions/inbox/copilot-gis-optional-chaining-ratified.md
+
+   Use '.' for the default hard-error contract: a missing variable or
+   segment raises GIS-PATH-MISSING. Use '?.' only when the author is
+   explicitly opting into tolerance for a legitimately optional segment.
+   Once any '?.' or '?.[N]' segment misses, evaluation short-circuits:
+   the entire remaining GDP tail is not evaluated and the GDP resolves
+   to the empty string "". '?.[N]' is the optional bracket equivalent
+   of '[N]' for array indexing.
+*)
+
+(* GIS imports the GXL Expression grammar but overrides GDP only within
+   GISExpression. GXL boolean expressions and GCP capture paths do NOT
+   receive this extension. Precedence is unchanged: '.', '?.', '[N]',
+   and '?.[N]' are path-segment connectors with identical precedence,
+   evaluated left-to-right as part of Primary GDP resolution. *)
+
+GDP                  = IDENT { GISPathSegment } ;
+
+GISPathSegment       = DotAccess
+                     | OptionalDotAccess
+                     | BracketAccess
+                     | OptionalBracketAccess
+                     ;
+
+DotAccess            = DOT IDENT ;
+OptionalDotAccess    = OPTIONAL_DOT IDENT ;
+BracketAccess        = LBRACKET INTEGER RBRACKET ;
+OptionalBracketAccess = OPTIONAL_BRACKET_OPEN INTEGER RBRACKET ;
+
+OPTIONAL_DOT         = '?.' ;
+OPTIONAL_BRACKET_OPEN = '?.[' ;
+                       (* Longest-match tokenization is required. When
+                          the GIS lexer sees '?', it MUST look ahead: if
+                          the next character is '.' and the following
+                          character is '[', emit OPTIONAL_BRACKET_OPEN
+                          and consume all three characters; if the next
+                          character is '.' but the following character is
+                          not '[', emit OPTIONAL_DOT and consume exactly
+                          '?' and '.'. The sequence '?.' is therefore a
+                          single token, never '?' followed by DOT;
+                          standalone '?' remains invalid in GDP paths. *)
 
 
 (* ============================================================
@@ -231,15 +282,18 @@ GISExpression  = Expression ;
    runtime generated the object, making audit trail comparisons
    reliable.
 
-   4.3  Unresolved Variables
-   ──────────────────────────
+   4.3  Unresolved Variables and Optional Path Misses
+   ───────────────────────────────────────────────────
    If the GXL expression inside '${...}' references a variable that
    is not in the context map (GXL-PATH-001), the GIS evaluator
-   propagates the error as GIS-PATH-MISSING.
+   propagates the error as GIS-PATH-MISSING unless the miss occurs at
+   a GIS optional path segment ('?.' or '?.[N]').
    
-   Silent empty-string substitution is FORBIDDEN. Missing variables
-   are always hard errors. Authors must use 'when:' guards or
-   capture defaults to handle optional references.
+   Silent empty-string substitution is FORBIDDEN by default. Missing
+   variables and path segments are hard errors unless the author has
+   explicitly marked the segment optional. For an optional-chain miss,
+   the GDP resolves to the empty string "" per §2.5; authors who need
+   non-empty defaults must use 'vars:' or capture defaults.
 *)
 
 

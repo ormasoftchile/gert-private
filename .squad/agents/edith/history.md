@@ -139,3 +139,13 @@
 - All GXL/GIS/GCP spec sections remain authoritative
 
 **Decision:** Merged to `.squad/decisions.md` (timestamp 2026-06-04T20:14:36-07:00)
+
+## 2026-06-05T07:28:56.273-07:00 — GIS Optional Path Chaining
+
+**Task:** Appended normative optional-chaining prose to `design/gert/sections/03b-interpolation-syntax.tex` without touching `design/gert/grammar/gis.ebnf` or conformance vectors.
+
+**Section added:** `Optional Path Chaining` after the GIS error catalog. Labels: `sec:gis:optional-chaining`, `subsec:gis:optional-chaining:syntax`, `subsec:gis:optional-chaining:semantics`, `subsec:gis:optional-chaining:composition`, `subsec:gis:optional-chaining:capture-default`, `subsec:gis:optional-chaining:examples`, `subsec:gis:optional-chaining:out-of-scope`.
+
+**Normative points encoded:** `?.` and `?.[N]`; empty-string default on optional miss; JS/TS-compatible full-tail short-circuiting; missing vs present-value lists; mixed-path hard errors; `${?.root}` parse illegality; stdlib call non-propagation; unchanged hard-error default for plain `${...}`.
+
+**Coordination note:** Dropped `.squad/decisions/inbox/edith-gis-optional-chaining-spec.md` for Scribe/Tess with labels and cross-reference notes.

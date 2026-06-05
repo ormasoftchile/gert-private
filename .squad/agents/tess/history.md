@@ -153,3 +153,15 @@ The keyword-prefix identifier pattern (`andthing`, `ornot`, `trueish`, `nullPtr`
 **Coverage:** Your corpus covers the runtime contracts for Streams A/B/C/D/F. Phase 2 runtimes (Go, C#, and future) will be validated against this body of work, not a migration tool.
 
 **Decision:** Merged to `.squad/decisions.md` (timestamp 2026-06-04T20:14:36-07:00)
+
+## 2026-06-05T07:28:56.273-07:00 — GIS Optional-Chaining Path Vectors
+
+**Status:** Delivered `design/gert/conformance/tv-gis-path.yaml` for ratified GIS optional-chaining (`?.` / `?.[N]`).
+
+**Vector range:** `TV-GIS-PATH-001` .. `TV-GIS-PATH-015`.
+
+**Coverage:** Simple miss, deep miss, full-tail short-circuit, mixed mandatory/optional hard-error boundaries, null vs empty/present PJVM values, optional bracket indexing, missing collection, stdlib composition with explicit evaluation order, and `${?.root}` parse rejection.
+
+**Schema note:** Updated `design/gert/conformance/schema.json` to admit the GIS path error family and catalog code `GIS-PATH-MISSING`, which `gis.ebnf` defines as a named error rather than a numeric `GIS-PATH-###` code.
+
+**Decision memo:** Dropped `.squad/decisions/inbox/tess-gis-path-vectors.md` for Scribe integration.

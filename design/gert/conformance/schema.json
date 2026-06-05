@@ -115,13 +115,15 @@
       "properties": {
         "error_class": {
           "type": "string",
-          "description": "Error family prefix. Must be one of: GXL-PARSE, GXL-TYPE, GXL-PATH, GXL-EVAL, GIS-PARSE, GIS-EVAL, GCP-PARSE, GCP-EVAL.",
+          "description": "Error family prefix. Must be one of: GXL-PARSE, GXL-TYPE, GXL-PATH, GXL-EVAL, GIS-PARSE, GIS-PATH, GIS-TYPE, GIS-EVAL, GCP-PARSE, GCP-EVAL.",
           "enum": [
             "GXL-PARSE",
             "GXL-TYPE",
             "GXL-PATH",
             "GXL-EVAL",
             "GIS-PARSE",
+            "GIS-PATH",
+            "GIS-TYPE",
             "GIS-EVAL",
             "GCP-PARSE",
             "GCP-EVAL"
@@ -129,8 +131,8 @@
         },
         "error_code": {
           "type": "string",
-          "description": "The precise error code from the grammar's error catalog (§6). Pattern: <CLASS>-<NNN> or 'TBD' for undecided vectors requiring Barbara arbitration. Examples: 'GXL-PARSE-007', 'GXL-TYPE-001', 'GXL-PATH-002'.",
-          "pattern": "^(GXL|GIS|GCP)-(PARSE|TYPE|PATH|EVAL)-\\d{3}$|^TBD$"
+          "description": "The precise error code from the grammar's error catalog (§6). Pattern: <CLASS>-<NNN>, special catalog symbols such as GIS-PATH-MISSING, or 'TBD' for undecided vectors requiring Barbara arbitration. Examples: 'GXL-PARSE-007', 'GXL-TYPE-001', 'GIS-PATH-MISSING'.",
+          "pattern": "^(GXL|GIS|GCP)-(PARSE|TYPE|PATH|EVAL)-\\d{3}$|^GIS-PATH-MISSING$|^TBD$"
         }
       }
     },

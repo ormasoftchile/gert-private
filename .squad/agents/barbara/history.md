@@ -39,6 +39,45 @@ Barbara is the spec editor and architecture specialist for the GERT web platform
 ## Session: 2026-06-04T02:50:37Z
 Consolidated 8 inbox items. Ratified IUserInputGate (Choice/Text/Confirmation/FileUpload/Form), A6 architecture, campaign layer, white-label portal UX.
 
+## 2026-06-05T07:28:56-07:00 — GIS Optional-Chaining Proposal
+
+**Status:** PROPOSED — awaiting ormasoftchile review.
+
+**Deliverables:**
+- `design/gert/proposals/gis-optional-chaining.md` — full design covering grammar extension, semantics, conformance vectors, scope clarification, parse-time implications
+- `.squad/decisions/inbox/barbara-gis-optional-chaining.md` — decision summary with headline picks
+
+**Key Design Choices:**
+- `?.` as opt-in optional path separator; `?.[N]` for optional bracket indexing (recommended IN)
+- Missing path → empty string `""` (locked by user; identity element in concatenation)
+- Full-tail short-circuit matching JS/TS semantics (no invented rules)
+- GIS-only scope — GXL boolean and GCP captures have separate mechanisms
+- `??` nullish-coalescing explicitly OUT (deferred)
+- No migration of existing fixtures — opt-in only
+
+**Open Questions Surfaced:**
+- OQ-OC-1: Confirm `?.[N]` in scope
+- OQ-OC-2: Confirm `${?.root}` illegal
+- OQ-OC-3: Info-level audit trace on optional-miss?
+- OQ-OC-4: Confirm `?.` doesn't propagate through stdlib calls
+
+**Grammar Impact:** Additive — extends GDP production with `PathSegment` alternatives. No breaking changes.
+
+## 2026-06-05T07:28:56.273-07:00 — GIS Optional-Chaining EBNF Applied
+
+**Status:** IMPLEMENTED — ratified EBNF delta applied to `design/gert/grammar/gis.ebnf` under GIS-only scope.
+
+**Changes:**
+- Added GIS-only GDP override with `GISPathSegment`, `OptionalDotAccess`, and `OptionalBracketAccess` productions.
+- Added `OPTIONAL_DOT = '?.'` and `OPTIONAL_BRACKET_OPEN = '?.['` with longest-match lookahead and equal-precedence left-to-right path evaluation.
+- Documented hard-error default vs. opt-in tolerance, full-tail short-circuit to empty string `""`, and optional bracket indexing.
+- Added `${?.root}` to explicit rejections; root `IDENT` remains mandatory to prevent typo masking.
+- Dropped implementation summary to `.squad/decisions/inbox/barbara-gis-grammar-ebnf-applied.md`.
+
+**Scope Guard:** Did not edit `gxl.ebnf`, `gcp.ebnf`, `design/gert/sections/03b-interpolation-syntax.tex`, or `design/gert/conformance/`.
+
+---
+
 ## 2026-06-04T20:14:36-07:00 — Stream E Removed (Scribe notification)
 
 **Status Update:** User directive executed. Stream E (migrator tooling) removed entirely per scope decision. Rationale: GERT has no production runbooks, so migration solves a non-problem.

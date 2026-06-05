@@ -152,6 +152,27 @@ func TestTranslateExprString_Negation(t *testing.T) {
 	assertRule(t, trans, "E-006")
 }
 
+func TestTranslateExprString_ParenthesizedNegation(t *testing.T) {
+	got, trans, _ := TranslateExprString("!(acknowledged)", 1)
+	assertEqual(t, "not (acknowledged)", got)
+	assertRule(t, trans, "E-006")
+}
+
+func TestTranslateExprString_ParenthesizedNegationWithAnd(t *testing.T) {
+	got, _, _ := TranslateExprString("!(ready && healthy)", 1)
+	assertEqual(t, "not (ready and healthy)", got)
+}
+
+func TestTranslateExprString_ParenthesizedNegationNested(t *testing.T) {
+	got, _, _ := TranslateExprString("!(ready || (healthy && drained))", 1)
+	assertEqual(t, "not (ready or (healthy and drained))", got)
+}
+
+func TestTranslateExprString_DoubleNegation(t *testing.T) {
+	got, _, _ := TranslateExprString("!!acknowledged", 1)
+	assertEqual(t, "not not acknowledged", got)
+}
+
 func TestTranslateExprString_NegationInCompound(t *testing.T) {
 	got, _, _ := TranslateExprString(`db_count == "0" && !analytics_still_exists`, 1)
 	assertEqual(t, `db_count == "0" and not analytics_still_exists`, got)
@@ -177,6 +198,32 @@ func TestTranslateExprString_ContainsWithOr(t *testing.T) {
 	assertEqual(t,
 		`str.contains(pod_json, "CrashLoopBackOff") or str.contains(pod_json, "ImagePullBackOff")`,
 		got)
+}
+
+func TestTranslateExprString_ContainsClearlyStringLHS(t *testing.T) {
+	got, trans, warns := TranslateExprString(`stdout contains "success"`, 1)
+	assertEqual(t, `str.contains(stdout, "success")`, got)
+	assertRule(t, trans, "E-007")
+	assertNoWarns(t, warns)
+}
+
+func TestTranslateExprString_ContainsClearlyListLHS(t *testing.T) {
+	got, trans, warns := TranslateExprString(`selected_ids contains user_id`, 1)
+	assertEqual(t, `list.contains(selected_ids, user_id)`, got)
+	assertRule(t, trans, "E-007")
+	assertNoWarns(t, warns)
+}
+
+func TestTranslateExprString_ContainsAmbiguousLHSWarns(t *testing.T) {
+	in := `result contains "success"`
+	got, trans, warns := TranslateExprString(in, 7)
+	assertEqual(t, in, got)
+	if len(trans) != 0 {
+		t.Fatalf("expected no translation for ambiguous contains, got %+v", trans)
+	}
+	if len(warns) != 1 || warns[0].RuleID != "E-007" || warns[0].Line != 7 {
+		t.Fatalf("expected one E-007 warning at line 7, got %+v", warns)
+	}
 }
 
 func TestTranslateExprString_AlreadyStrContainsUntouched(t *testing.T) {

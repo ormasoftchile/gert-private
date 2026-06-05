@@ -10,11 +10,11 @@ import (
 
 // Result is returned by TranslateFile.
 type Result struct {
-	Output      []byte
-	Translated  int
-	Deferred    int
-	Warnings    []Warning
-	ByRule      map[string]int
+	Output     []byte
+	Translated int
+	Deferred   int
+	Warnings   []Warning
+	ByRule     map[string]int
 }
 
 // TranslateFile parses a YAML document, walks every scalar node, applies
@@ -29,9 +29,21 @@ func TranslateFile(src []byte) (*Result, error) {
 		ByRule: make(map[string]int),
 	}
 
+	knownSymbols := map[string]bool{}
+	if len(doc.Content) > 0 {
+		knownSymbols = collectKnownSymbols(doc.Content[0])
+	}
+
 	// Walk the document node (wraps the root mapping/sequence).
 	if len(doc.Content) > 0 {
-		walkNode(doc.Content[0], "", false, res)
+		walkNode(doc.Content[0], "", false, res, knownSymbols)
+	}
+
+	// If the walker found no automated rewrites, preserve the input byte-for-byte.
+	// This keeps already-migrated fixtures idempotent and avoids yaml.v3 style churn.
+	if res.Translated == 0 {
+		res.Output = src
+		return res, nil
 	}
 
 	// Marshal back preserving node styles.
@@ -54,11 +66,11 @@ func TranslateFile(src []byte) (*Result, error) {
 // parentKey is the mapping key name whose value the current node is, used for
 // determining position type (expression vs GIS interpolation).
 // inIterate tracks whether we're inside an "iterate:" mapping, needed for E-008.
-func walkNode(node *yaml.Node, parentKey string, inIterate bool, res *Result) {
+func walkNode(node *yaml.Node, parentKey string, inIterate bool, res *Result, knownSymbols map[string]bool) {
 	switch node.Kind {
 	case yaml.DocumentNode:
 		for _, child := range node.Content {
-			walkNode(child, "", false, res)
+			walkNode(child, "", false, res, knownSymbols)
 		}
 
 	case yaml.MappingNode:
@@ -71,12 +83,12 @@ func walkNode(node *yaml.Node, parentKey string, inIterate bool, res *Result) {
 		for i := 0; i+1 < len(node.Content); i += 2 {
 			keyNode := node.Content[i]
 			valNode := node.Content[i+1]
-			walkNode(valNode, keyNode.Value, nextIterate, res)
+			walkNode(valNode, keyNode.Value, nextIterate, res, knownSymbols)
 		}
 
 	case yaml.SequenceNode:
 		for _, child := range node.Content {
-			walkNode(child, parentKey, inIterate, res)
+			walkNode(child, parentKey, inIterate, res, knownSymbols)
 		}
 
 	case yaml.ScalarNode:
@@ -88,8 +100,115 @@ func walkNode(node *yaml.Node, parentKey string, inIterate bool, res *Result) {
 				return
 			}
 		}
-		translateScalar(node, parentKey, inIterate, res)
+		translateScalar(node, parentKey, inIterate, res, knownSymbols)
 	}
+}
+
+func collectKnownSymbols(root *yaml.Node) map[string]bool {
+	symbols := map[string]bool{}
+	collectDirectKeysForName(root, "inputs", symbols)
+	collectDirectKeysForName(root, "captures", symbols)
+	collectFieldNamesForName(root, "fields", symbols)
+	return symbols
+}
+
+func collectDirectKeysForName(node *yaml.Node, name string, symbols map[string]bool) {
+	if node == nil {
+		return
+	}
+	switch node.Kind {
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			keyNode := node.Content[i]
+			valNode := node.Content[i+1]
+			if keyNode.Kind == yaml.ScalarNode && keyNode.Value == name {
+				addDirectMappingKeys(valNode, symbols)
+			}
+			collectDirectKeysForName(valNode, name, symbols)
+		}
+	case yaml.SequenceNode, yaml.DocumentNode:
+		for _, child := range node.Content {
+			collectDirectKeysForName(child, name, symbols)
+		}
+	}
+}
+
+func addDirectMappingKeys(node *yaml.Node, symbols map[string]bool) {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		keyNode := node.Content[i]
+		if keyNode.Kind == yaml.ScalarNode {
+			symbols[keyNode.Value] = true
+		}
+	}
+}
+
+func collectFieldNamesForName(node *yaml.Node, name string, symbols map[string]bool) {
+	if node == nil {
+		return
+	}
+	switch node.Kind {
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			keyNode := node.Content[i]
+			valNode := node.Content[i+1]
+			if keyNode.Kind == yaml.ScalarNode && keyNode.Value == name {
+				addNamedFieldSymbols(valNode, symbols)
+			}
+			collectFieldNamesForName(valNode, name, symbols)
+		}
+	case yaml.SequenceNode, yaml.DocumentNode:
+		for _, child := range node.Content {
+			collectFieldNamesForName(child, name, symbols)
+		}
+	}
+}
+
+func addNamedFieldSymbols(node *yaml.Node, symbols map[string]bool) {
+	if node == nil || node.Kind != yaml.SequenceNode {
+		return
+	}
+	for _, child := range node.Content {
+		if child.Kind != yaml.MappingNode {
+			continue
+		}
+		for i := 0; i+1 < len(child.Content); i += 2 {
+			keyNode := child.Content[i]
+			valNode := child.Content[i+1]
+			if keyNode.Kind == yaml.ScalarNode && keyNode.Value == "name" && valNode.Kind == yaml.ScalarNode {
+				symbols[valNode.Value] = true
+			}
+		}
+	}
+}
+
+func protectDollarInterpolations(s string, knownSymbols map[string]bool) (string, map[string]string) {
+	if len(knownSymbols) == 0 || !strings.Contains(s, "$${") {
+		return s, nil
+	}
+	restore := map[string]string{}
+	protected := s
+	i := 0
+	for symbol := range knownSymbols {
+		needle := "$${" + symbol + "}"
+		if !strings.Contains(protected, needle) {
+			continue
+		}
+		token := fmt.Sprintf("__GERT_MIGRATE_EXPR_DOLLAR_%d__", i)
+		i++
+		protected = strings.ReplaceAll(protected, needle, token)
+		restore[token] = needle
+	}
+	return protected, restore
+}
+
+func restoreDollarInterpolations(s string, restore map[string]string) string {
+	for token, original := range restore {
+		s = strings.ReplaceAll(s, token, original)
+	}
+	return s
 }
 
 // isLikelyString returns true for untagged scalars whose style implies string,
@@ -104,9 +223,10 @@ func isLikelyString(node *yaml.Node) bool {
 }
 
 // translateScalar applies the appropriate rules to a YAML scalar node.
-func translateScalar(node *yaml.Node, parentKey string, inIterate bool, res *Result) {
+func translateScalar(node *yaml.Node, parentKey string, inIterate bool, res *Result, knownSymbols map[string]bool) {
 	original := node.Value
 	lineHint := node.Line
+	protected, restore := protectDollarInterpolations(original, knownSymbols)
 
 	// E-008: iterate.over: "$.IDENT" → bare identifier.
 	if inIterate && parentKey == iterateOverKey {
@@ -130,9 +250,14 @@ func translateScalar(node *yaml.Node, parentKey string, inIterate bool, res *Res
 	)
 
 	if expressionPositionKeys[parentKey] {
-		translated, trans, warns = TranslateExprString(original, lineHint)
+		translated, trans, warns = TranslateExprString(protected, lineHint)
 	} else {
-		translated, trans, warns = TranslateGISString(original, lineHint)
+		translated, trans, warns = TranslateGISString(protected, lineHint)
+	}
+	translated = restoreDollarInterpolations(translated, restore)
+	for i := range trans {
+		trans[i].Before = restoreDollarInterpolations(trans[i].Before, restore)
+		trans[i].After = restoreDollarInterpolations(trans[i].After, restore)
 	}
 
 	if translated != original {
@@ -185,7 +310,7 @@ func VerifyClean(filename string, src []byte) []string {
 		// P3: ! prefix in when: field (but not !=).
 		if isWhenLine(line) {
 			exprVal := extractFieldValue(line)
-			if reNegation.MatchString(exprVal) {
+			if hasLegacyNegation(exprVal) {
 				violations = append(violations, fmt.Sprintf("%s:%d: forbidden ! prefix in when: %s", filename, ln, trimmed))
 			}
 		}

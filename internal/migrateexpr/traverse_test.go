@@ -2,6 +2,7 @@ package migrateexpr
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -197,6 +198,53 @@ flow:
 
 	if res.Deferred == 0 {
 		t.Error("E-010: expected deferred count > 0")
+	}
+}
+
+func TestTranslateFile_DogfoodMigratedRunbooksNoOp(t *testing.T) {
+	root := filepath.Join("..", "..", "design", "gert", "testdata", "runbooks")
+	var files []string
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		ext := strings.ToLower(filepath.Ext(path))
+		if ext == ".yaml" || ext == ".yml" {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walking migrated runbooks: %v", err)
+	}
+	if len(files) == 0 {
+		t.Fatal("expected migrated runbook YAML fixtures")
+	}
+
+	for _, file := range files {
+		file := file
+		t.Run(file, func(t *testing.T) {
+			src, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatalf("reading fixture: %v", err)
+			}
+			res, err := TranslateFile(src)
+			if err != nil {
+				t.Fatalf("TranslateFile: %v", err)
+			}
+			if res.Translated != 0 {
+				t.Fatalf("expected already-migrated fixture to need 0 translations, got %d", res.Translated)
+			}
+			if res.Deferred != 0 {
+				t.Fatalf("expected already-migrated fixture to need 0 deferrals, got %d: %+v", res.Deferred, res.Warnings)
+			}
+			if string(res.Output) != string(src) {
+				t.Fatal("expected migrated fixture to remain byte-for-byte unchanged")
+			}
+		})
 	}
 }
 

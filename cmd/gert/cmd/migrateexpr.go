@@ -33,8 +33,8 @@ Translation rules applied (per Stream D audit):
   E-001..003  {{ .var }}, {{ .a.b }}, {{ .a[0] }}  →  ${var}, ${a.b}, ${a[0]}
   E-004       && in expression position             →  and
   E-005       || in expression position             →  or
-  E-006       !IDENT in expression position         →  not IDENT
-  E-007       X contains "Y" in expression pos.     →  str.contains(X, "Y")
+  E-006       !X / !(...) in expression position    →  not X / not (...)
+  E-007       X contains Y in expression position    →  str/list.contains or WARN
   E-008       over: "$.IDENT"                       →  over: IDENT
   E-009/OI-GIS-01  legacy $${...} escape            →  \${...}
   E-010       {{ .x | default "v" }}               →  WARN (requires inputs block)

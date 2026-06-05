@@ -1,18 +1,19 @@
 // Package migrateexpr implements the translation engine for gert migrate-expr.
 //
 // Translation rules (Stream D audit / Stream E spec):
-//   E-001  {{ .IDENT }}            →  ${IDENT}              (GIS, all string positions)
-//   E-002  {{ .A.B }}              →  ${A.B}                (GDP path)
-//   E-003  {{ .A[N] }}             →  ${A[N]}               (array index)
-//   E-004  &&  (expr-position)     →  and
-//   E-005  ||  (expr-position)     →  or
-//   E-006  !IDENT (expr-position)  →  not IDENT
-//   E-007  X contains "Y"         →  str.contains(X, "Y")  (expr-position)
-//   E-008  over: "$.IDENT"        →  over: IDENT           (iterate.over)
-//   E-009  legacy $${...} escape  →  \${...}               (OI-GIS-01)
-//   E-010  {{ .x | default "v" }} →  WARN: requires inputs block
-//   E-011  {{ now }}              →  ${now()}
-//   E-011b {{ FUNCNAME }}         →  WARN: deferred
+//
+//	E-001  {{ .IDENT }}            →  ${IDENT}              (GIS, all string positions)
+//	E-002  {{ .A.B }}              →  ${A.B}                (GDP path)
+//	E-003  {{ .A[N] }}             →  ${A[N]}               (array index)
+//	E-004  &&  (expr-position)     →  and
+//	E-005  ||  (expr-position)     →  or
+//	E-006  !X / !(...)            →  not X / not (...)     (expr-position)
+//	E-007  X contains Y           →  str/list.contains or WARN if ambiguous
+//	E-008  over: "$.IDENT"        →  over: IDENT           (iterate.over)
+//	E-009  legacy $${...} escape  →  \${...}               (OI-GIS-01)
+//	E-010  {{ .x | default "v" }} →  WARN: requires inputs block
+//	E-011  {{ now }}              →  ${now()}
+//	E-011b {{ FUNCNAME }}         →  WARN: deferred
 package migrateexpr
 
 import (
@@ -78,7 +79,7 @@ var (
 	// E-007: X contains "Y" or X contains Y — infix contains.
 	// Only matches when contains is surrounded by whitespace (not str.contains / list.contains).
 	reContainsInfix = regexp.MustCompile(
-		`([A-Za-z_][A-Za-z0-9_.]*)\s+contains\s+("(?:[^"\\]|\\.)*"|[A-Za-z_][A-Za-z0-9_]*)`,
+		`((?:"(?:[^"\\]|\\.)*")|[A-Za-z_][A-Za-z0-9_.]*)\s+contains\s+("(?:[^"\\]|\\.)*"|[A-Za-z_][A-Za-z0-9_.]*)`,
 	)
 
 	// E-008: $.IDENT jq-style root prefix.
@@ -159,44 +160,20 @@ func TranslateExprString(s string, lineHint int) (string, []Translation, []Warni
 	// First, apply GIS rules (E-009, E-011, E-001..E-003).
 	s, trans, warns := TranslateGISString(s, lineHint)
 
-	// E-007: infix contains → str.contains(X, Y).
-	// Guard: skip if str.contains or list.contains already present on line
-	// (avoids double-processing an already-translated value).
-	for reContainsInfix.MatchString(s) {
-		// Verify none of the matches are already qualified (str./list.).
-		matches := reContainsInfix.FindAllStringSubmatchIndex(s, -1)
-		replaced := false
-		for _, idx := range matches {
-			// idx[2]..idx[3] = capture group 1 (subject); idx[4]..idx[5] = group 2 (object)
-			subject := s[idx[2]:idx[3]]
-			object := s[idx[4]:idx[5]]
-			// Check the char before the match — if preceded by '.' it's qualified.
-			if idx[0] > 0 && s[idx[0]-1] == '.' {
-				continue // already str.contains or list.contains
-			}
-			before := s
-			replacement := "str.contains(" + subject + ", " + object + ")"
-			s = s[:idx[0]] + replacement + s[idx[5]:]
-			trans = append(trans, Translation{"E-007", before, s})
-			replaced = true
-			break // restart loop after each replacement to avoid index corruption
-		}
-		if !replaced {
-			break
-		}
+	// E-007: infix contains → str.contains(X, Y) or list.contains(X, Y).
+	// Ambiguous subjects are left untouched and reported for manual migration.
+	if reContainsInfix.MatchString(s) {
+		var containsTrans []Translation
+		var containsWarns []Warning
+		s, containsTrans, containsWarns = translateContainsInfix(s, lineHint)
+		trans = append(trans, containsTrans...)
+		warns = append(warns, containsWarns...)
 	}
 
-	// E-006: !IDENT → not IDENT.
-	// Only matches ! immediately followed by an identifier character, so != is safe.
-	if reNegation.MatchString(s) {
+	// E-006: !X / !(...) → not X / not (...), preserving != and string literals.
+	if hasLegacyNegation(s) {
 		before := s
-		s = reNegation.ReplaceAllStringFunc(s, func(m string) string {
-			sub := reNegation.FindStringSubmatch(m)
-			if len(sub) < 2 {
-				return m
-			}
-			return "not " + sub[1]
-		})
+		s = translateNegation(s)
 		trans = append(trans, Translation{"E-006", before, s})
 	}
 
@@ -228,6 +205,153 @@ func TranslateOverValue(s string) (string, string, bool) {
 		return m[1], "E-008", true
 	}
 	return s, "", false
+}
+
+func translateContainsInfix(s string, lineHint int) (string, []Translation, []Warning) {
+	var translations []Translation
+	var warnings []Warning
+	offset := 0
+
+	for offset < len(s) {
+		idx := reContainsInfix.FindStringSubmatchIndex(s[offset:])
+		if idx == nil {
+			break
+		}
+		for i := range idx {
+			if idx[i] >= 0 {
+				idx[i] += offset
+			}
+		}
+
+		if idx[0] > 0 && s[idx[0]-1] == '.' {
+			offset = idx[1]
+			continue
+		}
+
+		subject := s[idx[2]:idx[3]]
+		object := s[idx[4]:idx[5]]
+		kind := classifyContainsSubject(subject)
+		if kind == "" {
+			warnings = append(warnings, Warning{
+				RuleID:  "E-007",
+				Line:    lineHint,
+				Before:  s[idx[0]:idx[1]],
+				Message: fmt.Sprintf("infix contains subject %q is ambiguous (string vs list); migrate manually to str.contains(...) or list.contains(...)", subject),
+			})
+			offset = idx[1]
+			continue
+		}
+
+		before := s
+		replacement := kind + ".contains(" + subject + ", " + object + ")"
+		s = s[:idx[0]] + replacement + s[idx[5]:]
+		translations = append(translations, Translation{"E-007", before, s})
+		offset = idx[0] + len(replacement)
+	}
+
+	return s, translations, warnings
+}
+
+func classifyContainsSubject(subject string) string {
+	trimmed := strings.TrimSpace(subject)
+	if strings.HasPrefix(trimmed, `"`) && strings.HasSuffix(trimmed, `"`) {
+		return "str"
+	}
+
+	last := trimmed
+	if dot := strings.LastIndex(last, "."); dot >= 0 {
+		last = last[dot+1:]
+	}
+	last = strings.ToLower(last)
+
+	stringSuffixes := []string{"_json", "_text", "_stdout", "_stderr", "_body", "_message", "_log", "_logs", "_output"}
+	for _, suffix := range stringSuffixes {
+		if strings.HasSuffix(last, suffix) {
+			return "str"
+		}
+	}
+	if last == "stdout" || last == "stderr" || last == "body" || last == "message" || last == "output" {
+		return "str"
+	}
+
+	listSuffixes := []string{"_list", "_ids", "_items", "_names", "_services", "_pods", "_nodes"}
+	for _, suffix := range listSuffixes {
+		if strings.HasSuffix(last, suffix) {
+			return "list"
+		}
+	}
+	if last == "items" || last == "services" || last == "pods" || last == "nodes" {
+		return "list"
+	}
+
+	return ""
+}
+
+func hasLegacyNegation(s string) bool {
+	return scanNegation(s, false) != s
+}
+
+func translateNegation(s string) string {
+	return scanNegation(s, true)
+}
+
+func scanNegation(s string, replace bool) string {
+	var b strings.Builder
+	inSingle := false
+	inDouble := false
+	escaped := false
+	changed := false
+
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if inDouble {
+			b.WriteByte(ch)
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+			} else if ch == '"' {
+				inDouble = false
+			}
+			continue
+		}
+		if inSingle {
+			b.WriteByte(ch)
+			if ch == '\'' {
+				inSingle = false
+			}
+			continue
+		}
+
+		switch ch {
+		case '"':
+			inDouble = true
+			b.WriteByte(ch)
+		case '\'':
+			inSingle = true
+			b.WriteByte(ch)
+		case '!':
+			if i+1 < len(s) && s[i+1] == '=' {
+				b.WriteByte(ch)
+				continue
+			}
+			changed = true
+			if replace {
+				b.WriteString("not ")
+			} else {
+				return ""
+			}
+		default:
+			b.WriteByte(ch)
+		}
+	}
+
+	if !changed {
+		return s
+	}
+	return b.String()
 }
 
 // normaliseSpaces collapses runs of more than one space into a single space,

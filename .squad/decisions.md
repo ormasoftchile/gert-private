@@ -1559,3 +1559,99 @@ main
 - Error codes stable; phase-1 arbitrations incorporated
 
 ✅ **No Action Items:** Don confirmed inline — no Barbara action, no Tess action, no changes to charter/skills/team.
+
+## 2026-06-06 — Phase D Speculative Kickoff (Don PR #12)
+
+**From:** Don (Backend Dev)  
+**Date:** 2026-06-06T00:14:11-04:00  
+**PR:** ormasoftchile/gert#12 (draft, `phase-d-path`, stacked on `phase-c-evaluator`)  
+**Status:** ✅ SHIPPED — 36/36 path vectors PASS on first pass; speculative merge approved.
+
+### GXL Path Engine Delivery
+
+**File Paths:**
+| Path | Purpose |
+|------|---------|
+| `internal/eval/gxl/path_gxl.go` | Thin path-resolution entrypoint — `ResolvePath(input, variables)` + `ResolvePathNode(*PathNode, …)` for pre-parsed AST |
+| `internal/eval/gxl/evaluator_gxl.go` | **FIXED** — corrected error code for field-on-non-object from GXL-PATH-001 → GXL-PATH-004 per ratified spec (TESS-AMBIG-5/6); added `CodePathFieldOnNonObject = "GXL-PATH-004"` |
+| `internal/eval/harness/path_runner_gxl_test.go` | Conformance harness path runner (dispatches to path engine) |
+| `internal/eval/harness/conformance_gxl_test.go` | *(minimal edit)* — wired `tv-gxl-path.yaml` runner (replaced `stubRunner`) |
+| `internal/eval/gxl/path_unit_gxl_test.go` | 18 edge-case unit tests — empty path, null root, all four error codes, bounds, deep nesting, mixed traversal |
+
+All files carry `//go:build gxl`.
+
+### Design Choice: Option (b) — Thin Entrypoint
+
+**Approach:** Minimal churn against Phase C internals. `path_gxl.go` wraps `Parse(input)` + `Eval(ast, variables, nil)`. No structural refactor of `evaluator_gxl.go` — single 2-line fix for the GXL-PATH-004 error code.
+
+**Rationale:** Phase C's `evalPath` already contained correct GDP traversal logic; only the error code was wrong. Extracting a standalone path package would touch ~80 lines across 2 files, incurring refactor risk without immediate benefit (GIS path logic defers to Phase E and has different semantics). Documented as optional follow-up if Phase E needs shared GDP resolution.
+
+### Vector Results
+
+**36 / 36 PASS** — zero failures, zero skips on GXL-PATH corpus.
+
+```
+Conformance totals: 211 PASS (83 parse + 92 eval + 36 path), 56 SKIP (15 GIS + 41 GCP), 0 FAIL
+  GXL-PARSE    83/83 ✅ (Phase B)
+  GXL-EVAL     92/92 ✅ (Phase C)
+  GXL-PATH     36/36 ✅ (Phase D — this PR)
+  GIS-PATH     15   SKIP ← Phase E (Ken)
+  GCP-PATH     41   SKIP ← Phase F (Ken)
+```
+
+All path vectors classified and passed: object/array/mixed traversal (TV-GXL-PATH-001..013), missing-path errors (014..016), out-of-bounds (017..018), index-on-non-array (019..021), field-on-scalar (022..023 — required the GXL-PATH-004 fix), parse errors (024..025), identifier edge cases (026..032), realistic nesting (033..034), null root (035), string dot-access (036).
+
+### Cross-Phase Fix: GXL-PATH-004 Correction
+
+**Issue:** Early sketch (commits 97ce48b..5c550c0) used a single `CodePathMissing` for both "field not found in object" and "field access on non-object". Phase 1 arbitration (TESS-AMBIG-5, TESS-AMBIG-6; Barbara, 2026-06-05) clarified: field-on-non-object must return **GXL-PATH-004**, not GXL-PATH-001.
+
+**Fix Applied:** `evaluator_gxl.go` line corrected to raise GXL-PATH-004 when `evalPath` encounters null, scalar, or array on field access. TV-GXL-PATH-022/023 now PASS.
+
+**Note:** This fix lives in PR #12 even though `evaluator_gxl.go` was created in PR #11 (Phase C territory). Merging #11 first will show Phase C complete but path vectors failing until #12 lands.
+
+### Handoffs
+
+**→ Barbara (Spec):** None required. All four GXL-PATH error codes (001–004) were pre-ratified Phase 1. No new ambiguities surfaced.
+
+**→ Tess (Corpus):** None required. All 36 vectors passed as authored. Zero corpus bugs. Harness verified all error-code branches.
+
+**→ Ken (Phase E/F):** GIS and GCP runners remain `stubRunner`. Phase E may review `ResolvePath`/`ResolvePathNode` in `path_gxl.go` as optional base for GIS resolver; however GIS adds optional chaining semantics which likely warrant separate resolver.
+
+### Stack Order & Merge Path
+
+```
+main
+ └─ phase-a-pjvm        (PR #9)
+     └─ phase-b-lexer-parser   (PR #10)
+         └─ phase-c-evaluator   (PR #11)
+             └─ phase-d-path     (PR #12, this PR)
+```
+
+**Merge order critical:** #9 → #10 → #11 → #12. Five-deep stack. Do NOT merge #12 before #11 or diffs will be misleading (GXL-PATH-004 fix appears as Phase C delta). Phase D exit-criteria satisfied once #12 merges.
+
+### Phase D Exit-Criteria Readiness
+
+✅ **Complete:**
+- GXL path engine shipped (thin `path_gxl.go` entrypoint + GDP traversal)
+- GXL-PATH-004 spec correction applied (TESS-AMBIG-5/6 compliance)
+- 36/36 path vectors PASS
+- 18 unit tests for edge cases
+- Error codes stable; all ratified Phase 1 decisions incorporated
+
+✅ **No Action Items:** Don confirmed inline — no Barbara action, no Tess action, no changes to charter/skills/team.
+
+### Phases Completed & Remaining
+
+**Critical Path (Don A→B→C→D complete):**
+- ✅ Phase A (PJVM/Clock/Harness) — PR #9 ✅
+- ✅ Phase B (GXL Lexer/Parser) — PR #10 ✅
+- ✅ Phase C (GXL Evaluator/Stdlib) — PR #11 ✅
+- ✅ Phase D (GXL Path Engine) — PR #12 ✅
+- ⏳ Phase G (Cutover) — pending Phase E/F completion
+- ⏳ Phase H (Cleanup) — pending Phase G
+
+**Parallel (Ken E/F, unblocks after #9 merge):**
+- ⏳ Phase E (GIS Path Resolver) — Ken, 15 vectors
+- ⏳ Phase F (GCP Capture Engine) — Ken, 41 vectors
+
+**Recommendation:** Phase D ready for speculative merge. Phase E/F unblock once PR #9 (PJVM) lands in `ormasoftchile/gert`. Recommend allocating hiring time for Phase E/F parallel execution to hit 10–15-day wallclock target.

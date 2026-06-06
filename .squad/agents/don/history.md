@@ -122,3 +122,17 @@ Next: Phase A in `ormasoftchile/gert` paired with Ken. PJVM + Clock + harness + 
 **Test Results:** tv-gxl-eval.yaml 92/92 PASS (no corpus bugs, no silent skips)
 
 **Handoff:** Don confirmed — no Barbara action items, no Tess action items, no Charter/skills/team changes needed. Speculative merge approved.
+
+## 2026-06-06 — Phase D: GXL Path Engine Shipped (PR #12)
+
+**Worktree:** `gert-phase-d-path`  
+**PR:** https://github.com/ormasoftchile/gert/pull/12 (draft, stacked on phase-c-evaluator)  
+**Status:** ✅ SHIPPED — 36/36 path vectors PASS on first pass.
+
+**Deliverable:** GXL path engine (`path_gxl.go`) — thin entrypoint wrapping Phase C evaluator's existing GDP traversal logic. Design choice Option (b): no structural refactor, minimal churn against PR #11 surface.
+
+**Key Fix:** Corrected `evaluator_gxl.go` error code for field-on-non-object from GXL-PATH-001 → GXL-PATH-004 (TESS-AMBIG-5/6 compliance). 2-line fix + constant; lives in PR #12.
+
+**Test Results:** 36/36 path vectors ✅. Total conformance: 211/267 PASS (83 + 92 + 36), 56 SKIP (Ken's E/F), 0 FAIL.
+
+**Next:** Phases G (cutover) + H (cleanup) remain. Critical path A→B→C→D now complete pending review. Phase E/F unblock once PR #9 (PJVM) merges.

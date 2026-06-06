@@ -123,13 +123,26 @@ identifier with error \texttt{GXL-PARSE-010}.
 \texttt{not}    & Logical NOT operator \\
 \texttt{len}    & Top-level length builtin \\
 \texttt{now}    & Top-level UTC timestamp builtin \\
-\texttt{str}    & Namespace prefix (string helpers) \\
-\texttt{list}   & Namespace prefix (list helpers) \\
-\texttt{regex}  & Namespace prefix (regex helpers) \\
+\texttt{str}    & Namespace prefix (string helpers); dual-role GDP root (see note) \\
+\texttt{list}   & Namespace prefix (list helpers); dual-role GDP root (see note) \\
+\texttt{regex}  & Namespace prefix (regex helpers); dual-role GDP root (see note) \\
 \texttt{math}   & Reserved namespace prefix (v2; no methods in v1) \\
 \hline
 \end{tabular}
 \end{center}
+
+\noindent\textbf{Dual-role namespace keywords.}
+The keywords \texttt{str}, \texttt{list}, and \texttt{regex} serve a dual role.
+When immediately followed by \texttt{.}, they are committed to the
+\texttt{NamespaceCall} production.
+When \emph{not} followed by \texttt{.} (e.g., used as a bare variable name or
+array-indexed path), they are treated as valid GDP root identifiers.
+All other keywords (\texttt{and}, \texttt{or}, \texttt{not}, \texttt{len},
+\texttt{now}, \texttt{math}, \texttt{true}, \texttt{false}, \texttt{null})
+remain unconditionally reserved and MUST be rejected with
+\texttt{GXL-PARSE-010} when used in identifier position.
+See \S\ref{subsec:gxl:gdp} and conformance vectors
+\texttt{TV-GXL-PARSE-028}, \texttt{TV-GXL-PARSE-048}, \texttt{TV-GXL-PARSE-083}.
 
 (Source: \texttt{gxl.ebnf} \S2.2.)
 
@@ -155,7 +168,10 @@ Unicode identifiers admit visual-spoofing attacks (Cyrillic look-alike
 characters), which in runbook governance contexts constitute a compliance risk.
 
 Conforming parsers MUST reject any keyword used in identifier position with
-error \texttt{GXL-PARSE-010}.
+error \texttt{GXL-PARSE-010}, with one exception: the namespace prefix
+keywords \texttt{str}, \texttt{list}, and \texttt{regex} are permitted as GDP
+root identifiers when not immediately followed by \texttt{.} (see
+\S\ref{subsec:gxl:keywords} dual-role note and \S\ref{subsec:gxl:gdp}).
 
 (Source: \texttt{gxl.ebnf} \S2.3.)
 
@@ -421,6 +437,29 @@ items[0].metadata     -- index 0 of array "items", then field "metadata"
 For the normative error behavior of missing segments, out-of-bounds indices,
 and non-array indexing, see \S\ref{sec:gxl:semantics:paths}.
 
+\paragraph{Dual-role namespace keywords as GDP roots.}
+The namespace prefix keywords \texttt{str}, \texttt{list}, and \texttt{regex}
+MAY serve as a GDP root identifier when the immediately following token is
+\emph{not} \texttt{.} (DOT).
+Under PEG ordered alternation, \texttt{Primary} tries \texttt{NamespaceCall}
+before \texttt{GDP}.
+When a namespace keyword is \emph{not} followed by \texttt{.},
+\texttt{NamespaceCall} fails immediately (it requires a DOT after the
+namespace prefix) and the parser falls through to \texttt{GDP}, treating the
+keyword token as a valid root identifier.
+Example: \texttt{list[10]} — \texttt{list} is not followed by \texttt{.}
+→ \texttt{parse\_ok} (\texttt{TV-GXL-PARSE-028}).
+
+When a namespace keyword IS followed by \texttt{.}, it is committed to the
+\texttt{NamespaceCall} production; the GDP dual-role carve-out does
+\emph{not} apply.
+Example: \texttt{str.foo} — \texttt{str} followed by \texttt{.}, but no
+\texttt{(} → \texttt{NamespaceCall} fails; GDP fallback inapplicable →
+\texttt{GXL-PARSE-001} (\texttt{TV-GXL-PARSE-083}).
+
+This dual-role carve-out does \emph{not} extend to \texttt{math},
+\texttt{len}, \texttt{now}, or any other keyword.
+
 (Source: \texttt{gxl.ebnf} \S3.)
 
 % ─────────────────────────────────────────────────────────────────────────────
@@ -536,9 +575,11 @@ Referencing the \texttt{math} namespace in v1 is error \texttt{GXL-PARSE-005}
 
 \paragraph{Note on \texttt{str.foo} without parentheses.}
 The expression \texttt{str.foo} (no call parentheses) does not match
-\texttt{NamespaceCall} (which requires \texttt{(ArgList)}) and cannot match a
-GDP variable path (\texttt{str} is a keyword, not \texttt{IDENT}).
-Under PEG ordered alternation all \texttt{Primary} alternatives fail;
+\texttt{NamespaceCall} (which requires \texttt{(ArgList)}).
+When a namespace keyword is followed by \texttt{.}, it is committed to the
+\texttt{NamespaceCall} production; the GDP dual-role carve-out (see
+\S\ref{subsec:gxl:gdp}) does \emph{not} apply.
+Under PEG ordered alternation all \texttt{Primary} alternatives therefore fail;
 the correct error is \texttt{GXL-PARSE-001} (unexpected token), not
 \texttt{GXL-PARSE-006} or \texttt{GXL-PARSE-010}.
 See conformance vector \texttt{TV-GXL-PARSE-083}.

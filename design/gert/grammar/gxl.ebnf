@@ -74,7 +74,9 @@ KW_NOT   = "not" ;
 KW_LEN   = "len" ;
 KW_NOW   = "now" ;
 
-(* Reserved namespace prefixes — also may not be identifiers *)
+(* Reserved namespace prefixes — dual role: Namespace token in NamespaceCall,
+   AND valid GDP root identifier when NOT immediately followed by DOT.
+   See §3 GDP note and IDENT exception below. *)
 KW_STR   = "str" ;
 KW_LIST  = "list" ;
 KW_REGEX = "regex" ;
@@ -110,7 +112,18 @@ IDENT        = (* RAW_IDENT that is NOT a KEYWORD *) ;
                   Note: GXL-PARSE-007 covers a distinct set of forbidden
                   SYNTAX constructs (&&, ||, ternary, etc.); it does NOT
                   apply to keyword-as-identifier — that is exclusively
-                  GXL-PARSE-010. *)
+                  GXL-PARSE-010.
+                  EXCEPTION — Namespace prefix keywords (KW_STR, KW_LIST,
+                  KW_REGEX) serve a dual role: they satisfy IDENT in the
+                  GDP root position ONLY when the immediately following token
+                  is NOT DOT (i.e., when NamespaceCall is not applicable).
+                  When followed by DOT, the namespace keyword is committed to
+                  the NamespaceCall production; if that production fails
+                  (e.g., no LPAREN), all Primary alternatives fail →
+                  GXL-PARSE-001.  This carve-out does NOT extend to KW_MATH,
+                  KW_LEN, KW_NOW, or any other keyword.
+                  See §3 GDP note and conformance vectors TV-GXL-PARSE-028,
+                  TV-GXL-PARSE-048, TV-GXL-PARSE-083. *)
 
 
 (* --- 2.4 String Literals ---
@@ -298,12 +311,14 @@ LenCall      = KW_LEN LPAREN Expression RPAREN ;
 NamespaceCall = Namespace DOT Method LPAREN ArgList RPAREN ;
                (* Note on 'str.foo' WITHOUT parentheses:
                   The expression 'str.foo' (no call parens) does NOT match
-                  NamespaceCall (LPAREN required) and cannot match GDP
-                  ('str' is a KEYWORD, not IDENT).  Under PEG ordered
-                  alternation all Primary alternatives fail → GXL-PARSE-001
-                  (unexpected token).  'str.foo()' WITH parens DOES match
-                  NamespaceCall structure; the unknown method is then
-                  rejected as GXL-PARSE-006 at parse time. *)
+                  NamespaceCall (LPAREN required).  When a namespace keyword
+                  IS followed by DOT, it is committed to the NamespaceCall
+                  production — the GDP dual-role carve-out (see IDENT §2 and
+                  GDP §3) does NOT apply.  All Primary alternatives therefore
+                  fail → GXL-PARSE-001 (unexpected token).
+                  'str.foo()' WITH parens DOES match NamespaceCall structure;
+                  the unknown method is then rejected as GXL-PARSE-006 at
+                  parse time. *)
 Namespace    = KW_STR | KW_LIST | KW_REGEX ;
                (* KW_MATH is reserved; no methods in v1. *)
 Method       = RAW_IDENT ;
@@ -331,6 +346,18 @@ GDP          = IDENT { DOT IDENT | LBRACKET INTEGER RBRACKET } ;
                   Index on non-array   → GXL-PATH-003.
                   A bare IDENT in boolean position MUST resolve to bool;
                   a string/number/null raises GXL-TYPE-002 at eval time.
+                  DUAL-ROLE NOTE: The namespace prefix keywords KW_STR,
+                  KW_LIST, and KW_REGEX satisfy the first IDENT in this
+                  production ONLY when the immediately following token is
+                  NOT DOT.  Under PEG ordered alternation, Primary tries
+                  NamespaceCall before GDP; when a namespace keyword is NOT
+                  followed by DOT, NamespaceCall fails and GDP proceeds
+                  treating the keyword token as a valid root identifier
+                  (e.g., 'list[10]' → parse_ok).  When the namespace keyword
+                  IS followed by DOT, NamespaceCall is the sole applicable
+                  production; GDP does NOT receive a fallback in that case.
+                  See §2 IDENT exception note and conformance vectors
+                  TV-GXL-PARSE-028, TV-GXL-PARSE-048, TV-GXL-PARSE-083.
                *)
 
 INTEGER      = '0' | ( '1'..'9' { '0'..'9' } ) ;

@@ -68,3 +68,60 @@ Don + I cleared to start Phase A in `ormasoftchile/gert`. PJVM + Clock + harness
 **Env Contract:** `GERT_PRIVATE_PATH` (default: `../gert-private`)
 
 **Learnings
+
+## 2026-06-06 — Phase E + F Shipped (PR #13 + #14) — 56/56 PASS
+
+**Status:** Two parallel shipments — GIS (Phase E, 15 vectors) + GCP (Phase F, 41 vectors) — both 100% conformance.
+
+**PRs:** ormasoftchile/gert#13 (phase-e-gis) + #14 (phase-f-gcp), both draft, stacked on phase-a-pjvm (PR #9).
+
+**My Track Record:**
+- **Phase A (PR #8):** DRIFT-DETECTION-001 (sync-vectors.sh + verify-vectors CI gate) ✅
+- **Phase E (PR #13):** GIS path resolver (internal/eval/gis/, 15/15 vectors) ✅
+- **Phase F (PR #14):** GCP capture engine (internal/eval/gcp/, 41/41 vectors) ✅
+
+Total: 3 shipments, 56 conformance vectors, zero defects.
+
+### Key Design Pattern: Three Separate Packages, Single Shared Foundation
+
+**Architecture:** gxl, gis, gcp are three independent evaluators, each in its own package:
+- `internal/eval/gxl/` — variable bindings + operator precedence + stdlib
+- `internal/eval/gis/` — optional chaining + null-as-miss semantics
+- `internal/eval/gcp/` — four source prefixes + GDP traversal + §6 default policy
+
+**Why separate?** Each has fundamentally different resolution semantics. Sharing would require abstraction layers that obfuscate the logic. Attempting to fork a "generic resolver" across all three creates coupling and refactor overhead without benefit. Keep each self-contained.
+
+**Only shared layer:** `internal/eval/core` (PJVM value model, `FromYAML`, `core.Value` interface). This is the right level of abstraction — the common representation, not the traversal logic.
+
+**Implication for future work:** Don't expect GIS/GCP to reuse GXL path logic. When Phase G integrates all three into the request/response flow, each stays independent, each gets its own harness runner entry point.
+
+### Implementation Notes
+
+**GIS (Phase E):**
+- Two-level parser: outer template string layer, inner GIS expression tokenizer
+- Lexer uses longest-match for `?.` and `?.[` to avoid ambiguity
+- Eval implements null coercion (null-as-miss) + short-circuit semantics per optional-chaining design
+- Falsy values (`""`, `false`, `0`, `[]`) correctly treated as **present** values, not misses
+- Stdlib integration: str functions (toLower, toUpper, trim, etc.) receive optional results and propagate `""` on miss
+
+**GCP (Phase F):**
+- Four source prefixes (local/http/event/step) parsed uniformly but resolved differently per source
+- HTTP/event headers resolve to soft-null (absent header → null, not error) per RFC 7230 case-insensitivity
+- YAML timestamp handling: yaml.v3 tags dates as `!!timestamp`, but spec (OI-GCP-06) requires YAML 1.2 strings. Implemented local YAML converter (`gcpFromYAML`) to map timestamp tags back to strings
+- §6 default policy: post-resolution check (`checkDefaultPolicy`) handles both GCP-DEFAULT-SUBTREE (object/array capture with default) and GCP-TYPE-001 (scalar type mismatch with default)
+- GDP traversal implemented locally in `traverseGDP` — different semantics than GXL (GCP uses single error code for both non-array and out-of-bounds)
+
+### Learnings for Phase G
+
+1. **Separate-package pattern scales.** When Don integrates all three engines into the request/response flow, he won't be juggling a monolithic resolver or a tangle of conditional branches. Three independent entry points, three independent error code sets, three independent unit test suites.
+
+2. **Build tag discipline holds.** All files `//go:build gxl`. The tag stays until Phase H cutover. Once old engine is deleted, tags come off and we run both systems side-by-side in CI to verify behavior parity.
+
+3. **Error code pre-ratification critical.** All 56 vectors passed without corpus bugs or spec gaps. This happened because Barbara's Phase 1 arbitrations (TESS-AMBIG-3..6) locked down all error codes upfront. Phase G can proceed without returning to Spec.
+
+4. **No handoff surprises.** Barbara: no action. Tess: no action. Each phase just ships. This is what pre-ratification looks like.
+
+### Next: Phase G + H (Don)
+
+Don takes integration (Phase G) and cutover (Phase H). My assignment (Phases E–F) closes once #9 merges and my PRs (#13/#14) pass final review. Wallclock on Phases A–F: ~6 days (2026-06-01 to 2026-06-06). Target was 10–15 days total with parallel streams; we're on track.
+

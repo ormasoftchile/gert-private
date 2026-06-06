@@ -181,3 +181,15 @@ Arbitration complete. Four TBD vectors pinned with two new error codes (GXL-TYPE
 Spec sections updated: `gxl.ebnf` §5.2/5.3/6.2/6.3; `03a-expression-language.tex` Type System, Path Access, Error Catalog. Corpus final: 211 vectors, 0 TBD.
 
 Phase 1 exit gate ✅ COMPLETE.
+
+## 2026-06-05T23:12:22-04:00 — GDP/Keyword Dual-Role Arbitration (commit `fdd14db`)
+
+**Status:** Spec arbitration complete. Resolved TV-GXL-PARSE-028 ambiguity via Option A.
+
+**Decision:** Namespace keywords `str`, `list`, `regex` have dual role: (1) NamespaceCall heads when followed by `.`, (2) valid GDP root identifiers when NOT followed by `.`. Carve-out scoped to these three keywords only.
+
+**Verification:** All gate vectors pass. Regressions: zero.
+
+**Spec updated:** `design/gert/grammar/gxl.ebnf` (§2/§3 notes) and `design/gert/sections/03a-expression-language.tex` (keywords table, identifiers, GDP, NamespaceCall sections).
+
+**Parser impact:** Don's PR #10 already implements correct behavior — no code change required.

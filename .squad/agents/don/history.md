@@ -94,3 +94,15 @@ Next: Phase A in `ormasoftchile/gert` paired with Ken. PJVM + Clock + harness + 
 **Test:** `go test -tags gxl ./internal/eval/core` (27/27 ✅) + `go test -tags gxl ./internal/eval/harness` (264 skip ✅)
 
 **Handoff:** Breadcrumb left at conformance_gxl_test.go:59 for Ken's sync replacement. Vector path will be updated once PR #8 lands.
+
+## 2026-06-05T23:12:22-04:00 — Phase B Lexer+Parser Shipped (PR #10)
+
+**Status:** Phase B complete. GXL lexer and recursive-descent parser implemented and tested.
+
+**Deliverable:** PR #10 (draft, stacked on PR #9 phase-a-pjvm). Branch: `phase-b-lexer-parser` in `ormasoftchile/gert`.
+
+**Test results:** tv-gxl-parse.yaml 83/83 PASS on first run. No parser bugs found.
+
+**Two corpus bugs identified and handed off to Tess:** TV-GXL-PARSE-062/063 YAML encoding (doubled backslashes), fixed upstream commit `424a334` before Ken's sync overwrite.
+
+**Next:** Phase C (GXL evaluator + stdlib, 92 vectors) starts once PR #10 merges.

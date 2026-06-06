@@ -1884,3 +1884,86 @@ For each option, I've focused on **what the end user actually sees**, not the en
 2. **Proof of concept:** Build one end-to-end example (e.g., quick consent flow: 1A + 2D + 3B + 4C)
 3. **Customer interviews:** Validate against real use cases
 4. **Architecture:** Define config schema for theming, runbook catalog, auth providers
+
+---
+
+## 2026-06-05 — Phase B speculative kickoff (Don PR #10) + spec hygiene
+
+**Authors:** Don (Backend Dev), Tess (Test Engineer), Barbara (Lead Architect)  
+**Status:** Phase B lexer+parser delivered via PR #10 (draft, stacked on PR #9). Spec ambiguities resolved.
+
+### Phase B Status: GXL Lexer + Parser (Don PR #10)
+
+**Deliverable:** GXL lexer and recursive-descent parser, all 83 GXL-PARSE conformance vectors PASS on first run.
+
+**Implementation path:** `internal/eval/gxl/` (Go package with `//go:build gxl` tag)
+- `lexer.go` — tokenization per gxl.ebnf §2
+- `parser.go` — recursive-descent per gxl.ebnf §3
+- `ast.go` — Position, Node interface, LiteralNode, UnaryNode, BinaryNode, PathNode, CallNode
+- `errors.go` — ParseError type + GXL-PARSE-* and GXL-TYPE-004 error codes
+- Unit tests: 13 lexer tests + 11 parser tests; all pass
+
+**Test results:**
+| Corpus | Total | PASS | FAIL | SKIP |
+|--------|-------|------|------|------|
+| GXL-PARSE | 83 | **83** | 0 | 0 |
+| GXL-EVAL | 92 | 0 | 0 | 92 (Phase C) |
+| GXL-PATH | 36 | 0 | 0 | 36 (Phase D) |
+| GIS-PATH | 15 | 0 | 0 | 15 (Phase E/Ken) |
+| GCP-PATH | 41 | 0 | 0 | 41 (Phase F/Ken) |
+| **TOTAL** | **267** | **83** | **0** | **184** |
+
+**PR Details:** `ormasoftchile/gert` PR #10 (draft, base: `phase-a-pjvm` = PR #9 base). Branch: `phase-b-lexer-parser`.
+
+### Tess Fix: YAML Escape Encoding (commit `424a334`)
+
+**Issue:** Conformance vectors TV-GXL-PARSE-062 and TV-GXL-PARSE-063 in `design/gert/conformance/tv-gxl-parse.yaml` used YAML single-quoted strings with doubled backslashes (`\\q`, `\\xFF`). In YAML single-quoted scalars, backslash has no escape semantics (only `''` is special), so `\\q` produced two literal backslashes + `q`, not the intended `\q` invalid-escape sequence.
+
+**Impact:** The GXL lexer saw valid escapes (`\\` → `\`) + regular char, yielding `parse_ok` instead of the intended `GXL-PARSE-004` error.
+
+**Fix applied:** `design/gert/conformance/tv-gxl-parse.yaml`
+| Vector | Before | After |
+|--------|--------|-------|
+| TV-GXL-PARSE-062 | `'"hello \\q world"'` | `'"hello \q world"'` |
+| TV-GXL-PARSE-063 | `'"hex \\xFF"'` | `'"hex \xFF"'` |
+
+**Verification:** YAML `repr` check confirms both vectors now present single-backslash sequences to GXL parser. Schema validation passed; 3 spot-check vectors unchanged.
+
+**Timing:** Landed on `gert-private/main` (commit `424a334`) before Ken's Phase A sync runs, protecting the 83/83 pass rate from regression to 81/83 upon PR merge.
+
+### Barbara Arbitration: GDP/Keyword Dual-Role (commit `fdd14db`)
+
+**Issue:** TV-GXL-PARSE-028 requires `list[10]` to parse_ok, but `list` is keyword KW_LIST. Grammar defines GDP = IDENT (excluding keywords), so strictly `list[10]` should error as GXL-PARSE-010 (keyword-as-identifier).
+
+**Resolution (Option A — Legitimize pragmatic parser behavior):** Namespace prefix keywords `str`, `list`, and `regex` serve a **dual role**:
+
+1. **When immediately followed by `.`:** Committed to NamespaceCall production only.
+   - If NamespaceCall fails (method but no `(`), all Primary alternatives fail → `GXL-PARSE-001`.
+   - Example: `str.foo` (no parens) → `GXL-PARSE-001` ✓
+
+2. **When NOT immediately followed by `.`:** Treated as valid GDP root identifier.
+   - NamespaceCall fails immediately (requires DOT), falls through to GDP → parse proceeds.
+   - Example: `list[10]` → `list` not followed by DOT → valid GDP root → parse_ok ✓
+
+**Scope:** Carve-out applies **only** to `str`, `list`, `regex`. Does NOT extend to `math`, `len`, `now`, `and`, `or`, `not`, `true`, `false`, `null`.
+
+**Verification:** Gate vectors all pass under Option A:
+- TV-GXL-PARSE-028: `list[10]` → parse_ok ✓ (NOT followed by DOT → GDP carve-out)
+- TV-GXL-PARSE-048: `str.contains(message, "error")` → parse_ok ✓ (NamespaceCall success)
+- TV-GXL-PARSE-083: `str.foo` → GXL-PARSE-001 ✓ (DOT-committed, NamespaceCall fails)
+
+Surrounding namespace vectors (TV-GXL-PARSE-049..053) and keyword vectors (TV-GXL-PARSE-081, 082) all unchanged — no regressions.
+
+**Spec updated:** `design/gert/grammar/gxl.ebnf` (§2 keyword comment, §2 IDENT exception, §3 NamespaceCall/GDP notes); `design/gert/sections/03a-expression-language.tex` (Keywords table dual-role annotation, Identifiers subsection GXL-PARSE-010 exception, GDP subsection dual-role paragraph, NamespaceCall `str.foo` note).
+
+**Parser impact:** Don's PR #10 parser already implements the correct behavior — **no code change required**. TV-GXL-PARSE-028 remains `parse_ok` as committed.
+
+### Phase B Exit-Criteria Readiness
+
+Phase B merge order (pending Germán PR landing):
+1. PR #8: Phase A sync infra (Ken)
+2. PR #9: Phase A PJVM/Clock/Harness (Don)
+3. PR #10: Phase B lexer+parser (Don)
+
+Once PR #10 merges, Don can start **Phase C (GXL evaluator + stdlib, 92 tv-gxl-eval vectors)**.
+

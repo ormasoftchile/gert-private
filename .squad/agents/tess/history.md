@@ -188,3 +188,15 @@ AMBIG-3..6 arbitrated by Barbara; my 4 TBD vectors are now pinned:
 - **Corpus:** 211 vectors, 0 TBD
 
 Phase 1 complete. All spec sections updated. Phase A starts in `ormasoftchile/gert`.
+
+## 2026-06-05T23:12:22-04:00 — YAML Escape Fix (TV-GXL-PARSE-062/063)
+
+**Status:** Conformance corpus hygiene. Fixed YAML encoding bug in tv-gxl-parse.yaml.
+
+**Vectors:** TV-GXL-PARSE-062 (hello \q), TV-GXL-PARSE-063 (hex \xFF)
+
+**Root cause:** Single-quoted YAML scalars have no backslash-escape semantics. Original encoding `\\q` / `\\xFF` produced two literal backslashes instead of single-backslash invalid-escape sequences.
+
+**Fix:** `design/gert/conformance/tv-gxl-parse.yaml` — corrected to single backslash. Commit: `424a334` on `gert-private/main`.
+
+**Timing:** Landed before Ken's Phase A sync, protecting Don's 83/83 pass rate from regression to 81/83 upon PR merge.

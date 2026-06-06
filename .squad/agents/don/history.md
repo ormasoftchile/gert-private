@@ -106,3 +106,19 @@ Next: Phase A in `ormasoftchile/gert` paired with Ken. PJVM + Clock + harness + 
 **Two corpus bugs identified and handed off to Tess:** TV-GXL-PARSE-062/063 YAML encoding (doubled backslashes), fixed upstream commit `424a334` before Ken's sync overwrite.
 
 **Next:** Phase C (GXL evaluator + stdlib, 92 vectors) starts once PR #10 merges.
+
+## 2026-06-05T23:54:03-04:00 — Phase C: GXL Evaluator Shipped (PR #11)
+
+**Worktree:** `gert-phase-c-evaluator`  
+**PR:** https://github.com/ormasoftchile/gert/pull/11 (draft, stacked on phase-b-lexer-parser)  
+**Status:** ✅ SHIPPED — 92/92 eval vectors PASS on first pass.
+
+**Key Deliverables:**
+- GXL evaluator (`evaluator_gxl.go`): AST walker with PJVM construction, short-circuit, error handling
+- Stdlib (`stdlib_gxl.go`): 13 functions across 4 namespaces (`str.*`, `list.*`, `regex.match`, globals `len`/`now`)
+- Harness regex-assert support: added for TV-GXL-EVAL-088 (`now()` → regex pattern validation)
+- Phase C exit-criteria satisfied; Phase D (path engine) unblocks on merge
+
+**Test Results:** tv-gxl-eval.yaml 92/92 PASS (no corpus bugs, no silent skips)
+
+**Handoff:** Don confirmed — no Barbara action items, no Tess action items, no Charter/skills/team changes needed. Speculative merge approved.

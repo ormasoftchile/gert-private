@@ -1457,3 +1457,105 @@ All streams delivered:
 - Merge both PRs to unblock Phase B (Don's stream B: GXL Lexer/Parser, Ken's stream E: GIS resolver)
 
 **Note:** Phase A implementation is complete in both PRs. The sync will be live once merged; the vector path constant in Don's harness can be updated then to read `testdata/vectors/VECTORS_SHA` and emit the source commit SHA in log output (for CI traceability).
+
+---
+
+## 2026-06-05 — Phase C Speculative Kickoff (Don PR #11)
+
+**From:** Don (Backend Dev)  
+**Date:** 2026-06-05T23:54:03-04:00  
+**PR:** ormasoftchile/gert#11 (draft, `phase-c-evaluator`, stacked on phase-b-lexer-parser)  
+**Status:** ✅ SHIPPED — 92/92 eval vectors PASS on first pass; speculative merge approved.
+
+### GXL Evaluator Delivery
+
+**File Paths:**
+| Path | Purpose |
+|------|---------|
+| `internal/eval/gxl/evaluator_gxl.go` | AST walker — literals, unary/binary ops, GDP path resolution, call dispatch, short-circuit control flow |
+| `internal/eval/gxl/stdlib_gxl.go` | Stdlib surface — `len`, `now`, `str.*`, `list.*`, `regex.match` |
+| `internal/eval/gxl/evaluator_unit_gxl_test.go` | Unit tests (evaluator + stdlib operators + type errors) |
+| `internal/eval/harness/eval_runner_gxl_test.go` | Conformance harness eval runner (dispatches to evaluator) |
+| `internal/eval/harness/conformance_gxl_test.go` | *(minimal edit)* — regex-assert support added for TV-GXL-EVAL-088 |
+
+All new files carry `//go:build gxl`.
+
+### Vector Results
+
+**92 / 92 PASS** — zero failures, zero skips on GXL-EVAL corpus.
+
+```
+Conformance totals: 175 PASS (83 parse + 92 eval), 92 SKIP (Phase D/E/F), 0 FAIL
+  GXL-PARSE    83/83 ✅ (Phase B)
+  GXL-EVAL     92/92 ✅ (Phase C)
+  GXL-PATH     36   SKIP ← Phase D (path engine)
+  GIS-PATH     15   SKIP ← Phase E (GIS resolver)
+  GCP-PATH     41   SKIP ← Phase F (GCP capture)
+```
+
+No silent skips. All 92 passed cleanly on first pass.
+
+### Stdlib Surface Implemented
+
+| Function | Signature | Notes |
+|----------|-----------|-------|
+| `len(v)` | string/array → count; null/object/bool/number → GXL-TYPE-003 | |
+| `now()` | → ISO-8601 UTC string via injected Clock | Deterministic testing support |
+| `str.startsWith(s, prefix)` | → bool | |
+| `str.endsWith(s, suffix)` | → bool | |
+| `str.contains(s, sub)` | → bool | |
+| `str.toLower(s)` | → string | |
+| `str.toUpper(s)` | → string | |
+| `str.trim(s)` | → TrimSpace | |
+| `str.length(s)` | → codepoint count as number | |
+| `str.trimPrefix(s, p)` | → string | |
+| `str.trimSuffix(s, p)` | → string | |
+| `list.contains(arr, needle)` | scalar equality only; null → false | |
+| `list.indexOf(arr, needle)` | scalar equality; not-found → -1 | |
+| `list.length(arr)` | → element count as number | |
+| `regex.match(s, pattern)` | → bool; invalid regex → GXL-EVAL-003 | |
+
+All null arguments to `str.*` return `GXL-TYPE-003` per spec §4.2.
+
+### Spec Fixes vs. Sketch
+
+Two corrections applied (sketch predated Phase 1 arbitrations):
+
+| Case | Sketch Behaviour | Corrected Behaviour | Ratification |
+|------|-----------------|---------------------|--------------|
+| Boolean ordered comparison (`false < true`) | Returned `CodeTBD` | Returns `GXL-TYPE-005` ✅ | TESS-AMBIG-3 (Barbara, Phase 1) |
+| List equality (`myArr == myArr`) | Returned `CodeTBD` | Returns `GXL-TYPE-001` ✅ | TESS-AMBIG-4 extension (Barbara, Phase 1) |
+
+Both aligned with existing arbitration ledger; no new spec action needed.
+
+### Harness Extensions
+
+**regex-assert Support:** TV-GXL-EVAL-088 (`now()` → regex pattern match) required harness support for `assert: regex` in conformance vector YAML. Added to `conformance_gxl_test.go`. No corpus changes needed; this harness capability now available for future vectors.
+
+### Handoffs
+
+**→ Barbara (Spec):** None required. All error codes in use were pre-ratified in Phase 1 decisions.
+
+**→ Tess (Corpus):** Observation only — harness now supports `assert: regex` for any future eval vectors. No corpus action needed; all 92 vectors pass as authored. No corpus bugs found.
+
+### Stack Order & Merge Path
+
+```
+main
+ └─ phase-a-pjvm       (PR #9)
+     └─ phase-b-lexer-parser  (PR #10)
+         └─ phase-c-evaluator  (PR #11, this PR)
+```
+
+**Merge order critical:** #9 → #10 → #11. Phase C exit-criteria satisfied once #11 merges. Phase D (path engine, 36 vectors) unblocks.
+
+### Phase C Exit-Criteria Readiness
+
+✅ **Complete:**
+- GXL evaluator shipped (AST walker + PJVM construction)
+- Stdlib surface implemented (13 functions across 4 namespaces)
+- Regex-assert harness support added
+- 92/92 eval vectors PASS
+- Error codes stable; phase-1 arbitrations incorporated
+
+✅ **No Action Items:** Don confirmed inline — no Barbara action, no Tess action, no changes to charter/skills/team.

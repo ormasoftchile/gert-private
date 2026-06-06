@@ -351,14 +351,14 @@ vectors:
 
   - id: TV-GXL-EVAL-033
     category: GXL-EVAL
-    description: "false < true raises an error — ordered comparison on boolean operands is not defined."
+    description: "false < true raises GXL-TYPE-005 — ordered comparison on boolean operands is forbidden."
     input: "false < true"
     variables: {}
     expected:
       error_class: GXL-TYPE
-      error_code: TBD
-    note: "TESS-AMBIG-3: GXL-TYPE-001 covers cross-type comparisons; bool < bool is same-type but ordering is unspecified for booleans. No existing error code clearly applies. Awaiting Barbara arbitration. Candidate: extend GXL-TYPE-001 to cover ordered comparison on non-orderable types, OR define false<true as valid (false maps to 0, true to 1). Pins the guess."
-    tags: [comparison, boolean, edge, undecided, TESS-AMBIG-3]
+      error_code: GXL-TYPE-005
+    note: "TESS-AMBIG-3 resolved 2026-06-05 (Barbara). Booleans define equality (==, !=) but no total ordering. Mapping false/true to 0/1 would be implicit coercion, which GXL forbids. New code GXL-TYPE-005 introduced to distinguish this from GXL-TYPE-001 (cross-type mismatch). See gxl.ebnf §5.2, 03a §Type System."
+    tags: [comparison, boolean, edge, TESS-AMBIG-3]
 
   # --- Cross-type comparisons ---
   # gxl.ebnf §5.2: NO implicit coercion. Cross-type == raises GXL-TYPE-001.
@@ -911,14 +911,14 @@ vectors:
 
   - id: TV-GXL-EVAL-086
     category: GXL-EVAL
-    description: "Array/list equality semantics — myArr == myArr where myArr = [1,2,3]."
+    description: "Array/list equality — myArr == myArr raises GXL-TYPE-001; == is restricted to scalars and null."
     input: "myArr == myArr"
     variables: {myArr: [1, 2, 3]}
     expected:
       error_class: GXL-TYPE
-      error_code: TBD
-    note: "TESS-AMBIG-4: GXL spec (§5.2) defines equality for scalars and null. Equality semantics for list/array operands are NOT defined. This vector pins the unresolved question: is arr==arr an error (GXL-TYPE-001, non-scalar type in ==), or deep-value equality (true), or reference equality (true only if same variable)? Awaiting Barbara arbitration. Category GXL-TYPE assumed; actual code TBD."
-    tags: [type-identity, list, equality, undecided, TESS-AMBIG-4]
+      error_code: GXL-TYPE-001
+    note: "TESS-AMBIG-4 resolved 2026-06-05 (Barbara). Equality operators (== and !=) are defined only for scalar types (number, string, bool) and null. Applying == to a list operand is a type mismatch → GXL-TYPE-001. Deep structural equality is not supported in GXL v1; OQ2 scalars-only default aligns with this decision. See gxl.ebnf §5.2, 03a §Type System."
+    tags: [type-identity, list, equality, TESS-AMBIG-4]
 
   # --- GDP path in function argument (OI-GXL-05) ---
   # gxl.ebnf §7 OI-GXL-05: GDP path in argument position resolves before passing to function.
@@ -971,3 +971,29 @@ vectors:
       error_code: GXL-PARSE-001
     note: "gxl.ebnf §4.1b and §2.2: 'now' is a reserved keyword (KW_NOW). A bare 'now' without parentheses cannot match NowCall (LPAREN required). 'now' as a KEYWORD cannot match IDENT, so GDP also fails. Under PEG ordered alternation all Primary alternatives fail → GXL-PARSE-001 (unexpected token). Analogous to 'str.foo' without parens → GXL-PARSE-001 (see gxl.ebnf §3 note on NamespaceCall). GXL-PARSE-010 does NOT apply here because 'now' is not being used as an identifier name; it simply appears in a position where no production matches."
     tags: [stdlib, now, bare-keyword, parse-error, GXL-PARSE-001]
+
+  # --- TESS-AMBIG-3 companion: additional boolean-ordering variants ---
+
+  - id: TV-GXL-EVAL-091
+    category: GXL-EVAL
+    description: "true >= false raises GXL-TYPE-005 — ordered comparison on boolean operands is forbidden."
+    input: "true >= false"
+    variables: {}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-005
+    note: "TESS-AMBIG-3 companion vector. Confirms that >= on booleans also raises GXL-TYPE-005, not just <. Symmetric with TV-GXL-EVAL-033."
+    tags: [comparison, boolean, edge, TESS-AMBIG-3]
+
+  # --- TESS-AMBIG-4 companion: object equality ---
+
+  - id: TV-GXL-EVAL-092
+    category: GXL-EVAL
+    description: "Object equality — myObj == myObj raises GXL-TYPE-001; == is restricted to scalars and null."
+    input: "myObj == myObj"
+    variables: {myObj: {a: 1}}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-001
+    note: "TESS-AMBIG-4 companion vector for object operands. Equality restricted to scalars + null; object operand → GXL-TYPE-001. Mirrors TV-GXL-EVAL-086 (list operand)."
+    tags: [type-identity, object, equality, TESS-AMBIG-4]

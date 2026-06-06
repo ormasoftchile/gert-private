@@ -166,3 +166,18 @@ Ratified all 5 OQ-M decisions encoded by ormasoftchile. Updated proposal status 
 ## 2026-06-05T22:31:50-04:00 — OQ-M5 Wording Correction: Single Squad Directive
 
 Corrected OQ-M5 language in `design/gert/proposals/runtime-migration-plan.md` (line 491) per single-squad directive (commit 541d194). Changed: "second backend agent's assignment happens in the `ormasoftchile/gert` runtime squad" → "second backend agent joins **this squad** (`gert-private`), both operate in gert repo during Phases A–H, then return to this squad for next assignment." Memo dropped to `.squad/decisions/inbox/barbara-m5-single-squad-correction.md` with exact before/after and explicit instruction for Scribe to update the dated decisions section.
+
+## 2026-06-05T22:31:50-04:00 — TESS-AMBIG-3..6 Arbitrated; Phase 1 Corpus Fully Pinned
+
+Arbitrated all four open ambiguities from Tess's Stream C Day 2 memo. Introduced two new error codes (`GXL-TYPE-005`, `GXL-PATH-004`). Closed all 4 TBD conformance vectors (TV-GXL-EVAL-033, TV-GXL-EVAL-086, TV-GXL-PATH-022, TV-GXL-PATH-023); added 3 companion vectors (TV-GXL-EVAL-091, TV-GXL-EVAL-092, TV-GXL-PATH-036). Patched `gxl.ebnf` (§5.2, §5.3, §6.2, §6.3) and `03a-expression-language.tex` (§Type System, §Path Access, §Error Catalog). Phase 1 GXL conformance corpus now has zero TBD entries. Memo dropped to `.squad/decisions/inbox/barbara-tess-ambig-3456-arbitration.md`. Flagged `GXL-PATH-004` and `GXL-TYPE-005` for Phase A awareness (Ken/Don evaluator dispatch split).
+
+## 2026-06-05 TESS-AMBIG-3..6 Arbitrated
+
+Arbitration complete. Four TBD vectors pinned with two new error codes (GXL-TYPE-005, GXL-PATH-004) and one extended code (GXL-TYPE-001):
+- **GXL-TYPE-005:** Boolean ordered comparison forbidden
+- **GXL-PATH-004:** Field access on non-object/null
+- **GXL-TYPE-001:** Extended to forbid list/object equality
+
+Spec sections updated: `gxl.ebnf` §5.2/5.3/6.2/6.3; `03a-expression-language.tex` Type System, Path Access, Error Catalog. Corpus final: 211 vectors, 0 TBD.
+
+Phase 1 exit gate ✅ COMPLETE.

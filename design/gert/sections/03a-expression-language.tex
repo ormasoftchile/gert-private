@@ -838,6 +838,28 @@ Authors MUST NOT rely on implicit truthiness:
 a bare string or number identifier used where a \texttt{bool} is required
 MUST raise \texttt{GXL-TYPE-002}.
 
+\noindent\textbf{Equality operators are restricted to scalars and null.}
+The equality operators \texttt{==} and \texttt{!=} are defined only for
+scalar operands (\texttt{number}, \texttt{string}, \texttt{bool}) and
+\texttt{null}.
+Applying \texttt{==} or \texttt{!=} to a \texttt{list} or \texttt{object}
+operand MUST raise \texttt{GXL-TYPE-001}.
+Deep structural comparison of collections is not supported in GXL v1;
+authors requiring it must decompose comparisons using \texttt{len} and
+scalar field access.
+(Source: \texttt{gxl.ebnf} \S5.2; ratification TESS-AMBIG-4, 2026-06-05.)
+
+\noindent\textbf{Boolean ordered comparison is forbidden.}
+The ordered comparison operators (\texttt{<}, \texttt{<=}, \texttt{>},
+\texttt{>=}) are defined for \texttt{number} and \texttt{string} operands
+only.
+Applying any ordered operator to \texttt{bool} operands MUST raise
+\texttt{GXL-TYPE-005} at evaluation time.
+Booleans define \emph{equality} (\texttt{==}, \texttt{!=}) but no total
+ordering; mapping \texttt{false}/\texttt{true} to 0/1 would constitute
+implicit coercion, which GXL forbids.
+(Source: \texttt{gxl.ebnf} \S5.2; ratification TESS-AMBIG-3, 2026-06-05.)
+
 \noindent The following null-comparison rules apply
 (\texttt{gxl.ebnf} \S5.2):
 
@@ -917,8 +939,14 @@ variable context map as follows:
     If not found, the evaluator MUST raise \texttt{GXL-PATH-001}.
   \item Each subsequent dotted segment (\texttt{.field}) is applied to the
     current value.
-    If the current value is not an object, or if the field name is not present
-    in the object, the evaluator MUST raise \texttt{GXL-PATH-001}.
+    \begin{itemize}
+      \item If the current value is \emph{not an object} (i.e., it is a
+        \texttt{number}, \texttt{string}, \texttt{bool}, or \texttt{null}),
+        the evaluator MUST raise \texttt{GXL-PATH-004}.
+      \item If the current value \emph{is} an object but the named field is
+        not present in it, the evaluator MUST raise \texttt{GXL-PATH-001}.
+    \end{itemize}
+    (Ratification TESS-AMBIG-5 and TESS-AMBIG-6, 2026-06-05.)
   \item Each subsequent indexed segment (\texttt{[N]}) is applied to the
     current value.
     If the current value is not a list, the evaluator MUST raise
@@ -1013,16 +1041,18 @@ Table~\ref{tab:gxl-errors} enumerates every GXL error code.
 \hline
 \multicolumn{3}{l}{\textit{Type errors (parse time where inferrable; otherwise evaluation time)}} \\
 \hline
-\texttt{GXL-TYPE-001} & Type checker & Type mismatch in comparison: comparing values of incompatible types (e.g., string~\texttt{==}~number). \\
+\texttt{GXL-TYPE-001} & Type checker & Type mismatch in comparison: comparing values of incompatible types (e.g., string~\texttt{==}~number), or applying \texttt{==}/\texttt{!=} to a \texttt{list} or \texttt{object} operand. \\
 \texttt{GXL-TYPE-002} & Type checker & Non-\texttt{bool} in boolean position: a non-bool value used as the final expression result where \texttt{bool} is required. \\
 \texttt{GXL-TYPE-003} & Evaluator & Argument type mismatch: wrong type passed to a stdlib function, or arithmetic applied to a non-\texttt{number}. \\
 \texttt{GXL-TYPE-004} & Evaluator & Wrong argument count: function called with incorrect number of arguments. \\
+\texttt{GXL-TYPE-005} & Evaluator & Ordered comparison on boolean operands: \texttt{<}, \texttt{<=}, \texttt{>}, or \texttt{>=} applied to \texttt{bool} values. Booleans define equality only. \\
 \hline
 \multicolumn{3}{l}{\textit{Path errors (raised at evaluation time)}} \\
 \hline
-\texttt{GXL-PATH-001} & Evaluator & Variable or path segment not found: first \texttt{IDENT} not in context map, or intermediate segment missing in object. \\
+\texttt{GXL-PATH-001} & Evaluator & Variable or path segment not found: first \texttt{IDENT} not in context map, or named field not present in an object. \\
 \texttt{GXL-PATH-002} & Evaluator & Array index out of bounds: index $\geq$ array length. \\
-\texttt{GXL-PATH-003} & Evaluator & Index applied to a non-array value: e.g., \texttt{"hello"[0]} or traversal through a null or scalar intermediate. \\
+\texttt{GXL-PATH-003} & Evaluator & Index applied to a non-array value: e.g., \texttt{"hello"[0]} or bracket traversal through a \texttt{null} or non-array intermediate. \\
+\texttt{GXL-PATH-004} & Evaluator & Field access on non-object value: dotted segment applied when the current node is not an \texttt{object} (e.g., \texttt{foo.bar} where \texttt{foo} is a number, string, boolean, or \texttt{null}). \\
 \hline
 \multicolumn{3}{l}{\textit{Evaluation errors (raised at evaluation time)}} \\
 \hline

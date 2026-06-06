@@ -1,7 +1,7 @@
 ﻿# Squad Decisions
 
-**Last Updated:** 2026-06-05T18:33:34-07:00
-**Inbox Merged:** 15 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; phase2-day1-open-questions-resolved; tess-gcp-vectors; don-phase2-day2; don-phase2-day3; don-phase2-day4; copilot-directive-design-only-repo; barbara-runtime-migration-plan)
+**Last Updated:** 2026-06-05T22:31:50-04:00
+**Inbox Merged:** 17 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; phase2-day1-open-questions-resolved; tess-gcp-vectors; don-phase2-day2; don-phase2-day3; don-phase2-day4; copilot-directive-design-only-repo; barbara-runtime-migration-plan; barbara-tess-ambig-3456-arbitration; don-stream-e-day2-dogfood)
 
 ---
 
@@ -1313,3 +1313,80 @@ Ken joined the squad as second Backend Dev per OQ-M5 (corrected wording: cast se
 - Plan: Don takes A→B→C→D→G→H critical path; Ken takes E (GIS) and F (GCP) in parallel during Phases A–H. Target: 10–15 days wallclock.
 
 **Status:** Ken onboarded; ready for Phase A kickoff in ormasoftchile/gert.
+
+---
+
+## 2026-06-05 — Phase 1 CLOSED (TESS-AMBIG arbitration + dogfood)
+
+**From:** Barbara (Lead Architect) + Don (Backend Dev)  
+**Date:** 2026-06-05T22:31:50-04:00  
+**Status:** COMPLETE
+
+### TESS-AMBIG Resolutions (Barbara)
+
+#### TESS-AMBIG-3 — Boolean Ordered Comparison
+
+**Verdict:** `false < true`, `true >= false`, etc. → **new error code `GXL-TYPE-005` (eval-time)**. Booleans define equality (`==`, `!=`) but no total ordering.
+
+**Rationale:** GXL's core no-coercion principle forbids mapping booleans to numeric values. A dedicated code signals that `bool < bool` is same-type ordering (not cross-type mismatch as `GXL-TYPE-001` would imply). Eval-time because grammar doesn't distinguish operand types at parse time.
+
+#### TESS-AMBIG-4 — Array/List and Object Equality Semantics
+
+**Verdict:** `==` and `!=` are **restricted to scalar types (`number`, `string`, `bool`) and `null`**. Applying either to `list` or `object` raises **`GXL-TYPE-001`** (extended description).
+
+**Rationale:** OQ2 (scalars-only default) directly supports this. Deep structural equality creates cross-runtime divergence (Go's `reflect.DeepEqual` vs C#'s `SequenceEqual` differ on edge cases). Reference equality is unusable since GXL can't create references. The right answer: reject the operation, let authors decompose to scalar comparisons. No new code needed — `GXL-TYPE-001` description expanded to explicitly exclude lists/objects.
+
+#### TESS-AMBIG-5 and TESS-AMBIG-6 — Dot-Access on Scalar or Null Value
+
+**Verdict:** `foo.bar` where `foo` is `number`, `string`, `boolean`, or `null` → **new error code `GXL-PATH-004` (eval-time)**. "Field access on non-object value."
+
+**Rationale:** Mirrors bracket-indexing precedent (`foo[0]` on null → `GXL-PATH-003`). Single code covers both scalar and null cases, avoiding false "field not found" framing. Separates diagnostic clearly: `PATH-001` = "doesn't exist", `PATH-004` = "wrong type for traversal."
+
+### New Error Codes
+
+| Code | Category | Description |
+|------|----------|-------------|
+| `GXL-TYPE-005` | Type error | Ordered comparison (`<`, `<=`, `>`, `>=`) on boolean operands forbidden. |
+| `GXL-PATH-004` | Path error | Field access on non-object value (number, string, boolean, null). |
+| `GXL-TYPE-001` | Type error | Extended: equality (`==`, `!=`) restricted to scalars + null; lists/objects forbidden. |
+
+### Corpus Final State
+
+**Before:** 208 vectors, 4 TBD  
+**Changes:**
+- TV-GXL-EVAL-033: `TBD` → `GXL-TYPE-005` (bool ordering)
+- TV-GXL-EVAL-086: `TBD` → `GXL-TYPE-001` (array equality)
+- TV-GXL-EVAL-091: **New** — `true >= false` → `GXL-TYPE-005` (bool companion)
+- TV-GXL-EVAL-092: **New** — `myObj == myObj` → `GXL-TYPE-001` (object companion)
+- TV-GXL-PATH-022: `TBD` → `GXL-PATH-004` (scalar dot-access)
+- TV-GXL-PATH-023: `TBD` → `GXL-PATH-004` (null dot-access)
+- TV-GXL-PATH-036: **New** — `foo.length` (foo=`"hello"`) → `GXL-PATH-004` (string companion)
+
+**After:** 211 vectors (83 parse + 92 eval + 36 path), **0 TBD**
+
+### Dogfood Results (Don)
+
+**Audit:** 22 migrated runbook fixtures (r01–r22)
+
+| Check | Result |
+|-------|--------|
+| P1: `{{ }}` template syntax | 0 occurrences |
+| P2: `&&`/`||` in expr fields | 0 occurrences (3 hits in bash strings, correct) |
+| P3: `!` prefix in `when:` / `condition:` | 0 occurrences |
+| P4: Infix `contains` | 0 occurrences |
+| P5: `$.` jq-style | 0 occurrences |
+
+**Result:** All 22 fixtures clean. No legacy syntax remains.
+
+### Phase 1 Exit Gate: ✅ COMPLETE
+
+All streams delivered:
+- **Stream A** (Reference Grammar): ✅ Barbara
+- **Stream B** (Spec Rewrite + GIS Optional Chaining): ✅ Edith
+- **Stream C** (Conformance Corpus): ✅ Tess (208 → 211 vectors after ambiguity closure)
+- **Stream D** (Fixture Migration): ✅ Don (22 runbooks, P1–P5 all zero)
+- **Stream E** (Migration Tooling): Removed per user directive (not blocking)
+- **Stream F** (Parser Gate Spec + PLAN codes): ✅ Barbara
+- **GIS Optional Chaining**: ✅ Complete
+
+**Next:** Phase A in `ormasoftchile/gert` (Don + Ken paired). Pending work transitions out of gert-private.

@@ -67,3 +67,9 @@ Ken hired as second Backend Dev to pair on runtime migration in ormasoftchile/ge
 - GXL path traversal (get, set, delete on GDP paths) with error codes GXL-PATH-001..010
 - Target: tv-gxl-path.yaml (35 vectors) green
 - Dependency: Day 4 evaluator and stdlib (locked)
+
+## 2026-06-05 Stream E Day 2 + Phase 1 Close
+
+Dogfood audit complete: 22 runbook fixtures all clean (P1–P5 all zero). Three tool bugs fixed during audit; tool subsequently removed per user directive (pre-1.0, no legacy users). Phase 1 formally closed: 0 blocking items. Streams A/B/C/D/E/F all complete.
+
+Next: Phase A in `ormasoftchile/gert` paired with Ken. PJVM + Clock + harness + DRIFT-DETECTION-001.

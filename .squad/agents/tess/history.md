@@ -177,3 +177,14 @@ The keyword-prefix identifier pattern (`andthing`, `ornot`, `trueish`, `nullPtr`
 **Schema note:** Updated `design/gert/conformance/schema.json` to admit GCP resolver/type/default error families: `GCP-RESOLVE-###`, `GCP-TYPE-###`, and `GCP-DEFAULT-SUBTREE`.
 
 **Encoding limits:** Current single-input vector shape cannot cleanly encode multiple captures from the same path (OI-GCP-04) or execution-order source-unavailable state (`GCP-RESOLVE-001`). Flagged both in `.squad/decisions/inbox/tess-gcp-vectors.md` for Don/Scribe.
+
+## 2026-06-05 AMBIG-3..6 Arbitrated
+
+AMBIG-3..6 arbitrated by Barbara; my 4 TBD vectors are now pinned:
+- **AMBIG-3** (`false < true`): GXL-TYPE-005 (boolean ordered comparison forbidden)
+- **AMBIG-4** (array equality): GXL-TYPE-001 extended (scalars+null only)
+- **AMBIG-5/6** (dot-access on scalar/null): GXL-PATH-004 (field access on non-object)
+- 3 companion vectors added (TV-GXL-EVAL-091, -092; TV-GXL-PATH-036)
+- **Corpus:** 211 vectors, 0 TBD
+
+Phase 1 complete. All spec sections updated. Phase A starts in `ormasoftchile/gert`.

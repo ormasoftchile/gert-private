@@ -28,3 +28,14 @@ Read `.squad/decisions.md` in full at first spawn. Highlights:
 ## Learnings
 
 (none yet — first session)
+
+## 2026-06-05 Phase 1 Complete
+
+Phase 1 closed before my first session. TESS-AMBIG-3..6 resolved:
+- **GXL-TYPE-005:** Boolean ordered comparison forbidden
+- **GXL-TYPE-001:** Extended to forbid list/object equality (scalars+null only)
+- **GXL-PATH-004:** Field access on non-object/null
+- **Corpus:** 211 GXL vectors, 0 TBD (83 parse + 92 eval + 36 path)
+- **Dogfood:** All 22 runbook fixtures clean (P1–P5 all zero)
+
+Don + I cleared to start Phase A in `ormasoftchile/gert`. PJVM + Clock + harness + DRIFT-DETECTION-001 are first deliverables.

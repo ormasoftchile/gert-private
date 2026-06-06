@@ -506,6 +506,14 @@ NullLiteral  = KW_NULL ;
      null == null  → true
      null == false → false
 
+   Equality operators (== and !=) are defined only for scalar types
+   (number, string, boolean) and null.  Applying == or != to a list or
+   object operand → GXL-TYPE-001.  [TESS-AMBIG-4 — ratified]
+
+   Boolean ordered comparison is forbidden.  Booleans define equality
+   (== and !=) but no total ordering.  Applying <, <=, >, >= to boolean
+   operands → GXL-TYPE-005 (eval time).  [TESS-AMBIG-3 — ratified]
+
    Comparisons permitted across types:
      == and !=  may be used with null on EITHER side:
        x == null  → true if x is null, false otherwise (no error)
@@ -530,8 +538,12 @@ NullLiteral  = KW_NULL ;
    short-circuited 'and'/'or' as described in §5.1.
    
    Missing intermediate segment (e.g., config.region when config
-   lacks a 'region' field): → GXL-PATH-001.
-   
+   lacks a 'region' field, but config IS an object): → GXL-PATH-001.
+
+   Dot-access on a non-object value (e.g., config.region when config
+   is a number, string, boolean, or null): → GXL-PATH-004.
+   [TESS-AMBIG-5 and TESS-AMBIG-6 — ratified]
+    
    Index on null or non-array value: → GXL-PATH-003.
    Index beyond array bounds: → GXL-PATH-002.
    
@@ -609,7 +621,8 @@ NullLiteral  = KW_NULL ;
                       otherwise at evaluation time)
    ──────────────────────────────────────────────────────
    GXL-TYPE-001  Type mismatch in comparison: comparing values of
-                 incompatible types (e.g., string == number).
+                 incompatible types (e.g., string == number), or applying
+                 == / != to a list or object operand.
    GXL-TYPE-002  Non-bool in boolean position: a non-bool value used as
                  the final result of an expression that must be bool
                  (e.g., a bare string variable in 'when:').
@@ -617,14 +630,20 @@ NullLiteral  = KW_NULL ;
                  function, or arithmetic applied to non-number.
    GXL-TYPE-004  Wrong argument count: function called with wrong number
                  of arguments.
+   GXL-TYPE-005  Ordered comparison on boolean operands: <, <=, >, >=
+                 applied to boolean values.  Booleans define equality only.
 
    6.3  Path Errors  (raised at evaluation time)
    ────────────────────────────────────────────────
    GXL-PATH-001  Variable or path segment not found: first IDENT not
-                 in context map, or intermediate segment missing in value.
+                 in context map, or named field not present in an object.
    GXL-PATH-002  Array index out of bounds: index >= array length.
    GXL-PATH-003  Index applied to non-array: e.g., "hello"[0] or
-                 path traversal through a null/scalar intermediate.
+                 bracket traversal through a null or non-array intermediate.
+   GXL-PATH-004  Field access on non-object: dotted segment applied to a
+                 value that is not an object (number, string, boolean, or
+                 null).  E.g., foo.bar where foo = 7, or foo.bar where
+                 foo = null.
 
    6.4  Evaluation Errors  (raised at evaluation time)
    ──────────────────────────────────────────────────────

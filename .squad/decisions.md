@@ -1,7 +1,7 @@
 ﻿# Squad Decisions
 
-**Last Updated:** 2026-06-05T18:13:09-07:00
-**Inbox Merged:** 14 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; phase2-day1-open-questions-resolved; tess-gcp-vectors; don-phase2-day2; don-phase2-day3; don-phase2-day4; copilot-directive-design-only-repo)
+**Last Updated:** 2026-06-05T18:33:34-07:00
+**Inbox Merged:** 15 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; phase2-day1-open-questions-resolved; tess-gcp-vectors; don-phase2-day2; don-phase2-day3; don-phase2-day4; copilot-directive-design-only-repo; barbara-runtime-migration-plan)
 
 ---
 
@@ -796,6 +796,143 @@ type Value struct {
 **Why:** `interface{}` would admit host-language values and scatter type assertions. A typed sum gives one shared representation for Go/C#/TS parity and leaves a clean place for Day 2 constructors to reject NaN/Infinity.
 
 ## Implementation stream order
+
+---
+
+## Decision: Runtime Migration Plan (GXL/GIS/GCP Expression Engine)
+
+**Author:** Barbara — Lead / Architect  
+**Date:** 2026-06-05T18:33:34-07:00  
+**Status:** PROPOSED — awaiting ormasoftchile review  
+**Proposal:** `design/gert/proposals/runtime-migration-plan.md`
+
+### Executive Summary
+
+**Target:** Migrate Go runtime (`ormasoftchile/gert`) from expr-lang/text/template to spec-compliant GXL/GIS/GCP engines.
+
+**Strategy:** Parallel-package (new `internal/eval/` alongside old `internal/expr/`), feature-flag cutover, 8-phase migration (A–H).
+
+**Conformance target:** 264 vectors across 5 corpora (83 tv-gxl-parse, 90 tv-gxl-eval, 35 tv-gis-path, 41 tv-gcp-path, 15 reserved) + 22 design fixtures.
+
+**Timeline (estimated):**
+- **Critical path (serial):** 12–18 days (A → B → C → D → G → H)
+- **With 2 engineers (E/F parallel):** 10–15 days (~3 weeks with buffer)
+- **With sketch reuse (commits 97ce48b..5c550c0):** ~10–12 days critical path
+
+**Gate criteria for Phase H (cutover):**
+1. 264/264 conformance vectors green in CI
+2. All 22 runbook fixtures execute successfully
+3. All integration/e2e tests green under new engine
+4. Performance benchmarks show no >2x regression
+5. No open P0/P1 bugs
+6. At least 1 week soak time with new engine as default
+
+### Gap Analysis Summary
+
+| # | Capability | Current | Required | Gap |
+|---|-----------|---------|----------|-----|
+| 1 | **GXL Parser** | expr-lang (CEL-like) | Recursive-descent per gxl.ebnf | Full replacement |
+| 2 | **GXL Evaluator** | expr-lang ad-hoc | Strict PJVM typing, `str.*`/`list.*`/`regex.*`/`math.*`/`len()`/`now()` | Full replacement |
+| 3 | **GIS Interpolation** | `{{ .path }}` text/template | `${expr}` with GDP, optional chaining `?.`, stdlib | Full replacement |
+| 4 | **GCP Capture** | Flat keyword enum (`"stdout"`, `"stderr"`, `"exit_code"`) | Path expressions into step output | New subsystem |
+| 5 | **PJVM** | `any`/`map[string]any` | Portable JSON Value Model (Null/Bool/Number/String/Array/Object) | New foundation |
+| 6 | **Clock injection** | None | `now()` via injected Clock interface | New interface |
+| 7 | **Conformance harness** | Hand-written unit tests | 264-vector test infrastructure | New test layer |
+| 8 | **Forbidden tokens** | Silently accepted | GXL-BANNED-* error codes (AND, OR, NOT, contains) | Behavioral inversion |
+| 9 | **Error codes** | Generic Go errors | Spec-mandated taxonomy (GXL-*, GIS-*, GCP-*) | New error model |
+
+### Migration Phases
+
+| Phase | Component | Size | Duration | Dependencies |
+|-------|-----------|------|----------|--------------|
+| **A** | Foundation: PJVM + Clock + harness | Medium | 2–3 days | None (blocks all) |
+| **B** | GXL Parser + parse conformance | Medium | 2–3 days | A |
+| **C** | GXL Evaluator + eval conformance | Large | 3–5 days | B (critical path bottleneck) |
+| **D** | GXL Path + ConditionEvaluator adapter | Medium | 2–3 days | C |
+| **E** | GIS Interpolation + Evaluator adapter | Large | 3–4 days | A, D (parallelizable with C/D) |
+| **F** | GCP Capture + executor integration | Medium | 2–3 days | A (parallelizable with B/C/D/E) |
+| **G** | Consumer migration + feature flag | Medium | 2–3 days | D, E, F |
+| **H** | Cutover + dependency drop | Small | 1 day | G (requires all gates) |
+
+**Phase DAG:**
+```
+A → B → C → D ─┐
+             ├─→ G → H
+A → E ──────┤
+A → F ──────┘
+```
+
+### Risk Register (HIGH severity flagged)
+
+| # | Risk | Likelihood | Impact | Mitigation |
+|---|------|-----------|--------|------------|
+| **R1** | **Semantic divergence** — existing runbooks rely on expr-lang behaviors GXL forbids (infix `contains`, coercion, nil propagation) | HIGH | HIGH | Audit all 34 condition tests; surface breaking changes in Phase D adapter testing. |
+| **R2** | **Executor coupling to `{{ }}`** — user-authored runbooks use template syntax not valid in GXL/GIS | Certain | Medium | Document syntax change as breaking in release notes. |
+| **R4** | **Conformance vectors reveal spec ambiguities** — TESS-AMBIG-3/4, TESS-CONFLICT-2, OI-GXL-03 unresolved | HIGH | Medium | Each ambiguity surfaces in implementation; file issue in gert-private; design fix + vector lands here; runtime resumes. |
+
+Other risks (R3, R5, R6, R7) are Medium/Low likelihood but documented in full proposal.
+
+### Sketch Code (commits 97ce48b..5c550c0)
+
+**Status:** Written in `ormasoftchile/gert-private` (wrong repo per user directive), never integrated into gert module context.
+
+**Coverage:** Phases A–C (PJVM, Clock, harness, lexer, parser, evaluator, stdlib). Passed tv-gxl-parse (83/83) and tv-gxl-eval in its environment.
+
+**Recommendation:** YES, cherry-pick as starting material, NOT drop-in. Covers ~40% of critical path compression. Requires:
+1. Adapt package paths (was `internal/eval/` in gert-private → gert module structure)
+2. Verify against current conformance corpus
+3. No code-review yet — treat as rough sketch, not production-ready
+
+**Risk:** Unfamiliar with gert-specific dependencies; may require build/import adjustment.
+
+### Cross-Repo Coordination
+
+**Spec ambiguity resolution flow:**
+```
+gert runtime dev finds ambiguity
+  → Issues "SPEC-AMBIG: [desc]" in gert-private (tag: spec-ambiguity, blocks-runtime)
+  → Barbara (or designee) resolves:
+      1. Updates grammar/spec section if needed
+      2. Adds conformance vector(s) pinning resolved behavior
+      3. Closes issue with commit reference
+  → gert runtime resumes implementation against updated vectors
+```
+
+**Conformance vector distribution:** Recommend Git submodule (`gert-private` → `specs/design/` in gert). Provides pinned, reproducible vector sets; `go test` references `specs/conformance/tv-*.yaml` directly.
+
+**Privacy note:** If gert goes public, submodule access or separate public artifact publishing required.
+
+### Open Questions for ormasoftchile
+
+| # | Question | Options | Barbara's Lean |
+|---|----------|---------|----------------|
+| **OQ-M1** | Conformance vector distribution | (a) Submodule (b) Published artifact (c) Vendored copy | (a) if both private; (b) if gert public |
+| **OQ-M2** | Sketch reuse (commits 97ce48b..5c550c0) | (a) Cherry-pick, adapt, verify (b) Start fresh | (a) — saves 3–5 days; just don't treat as reviewed |
+| **OQ-M3** | Feature flag mechanism | (a) Build tag `//go:build gxl` (b) Runtime flag | (a) for simplicity |
+| **OQ-M4** | Syntax change communication (`{{ }}` → `${}`): breaking change? | (a) Major version (b) Deprecation period (c) Just ship | (c) if pre-1.0; (b) if production users exist |
+| **OQ-M5** | Who implements | (a) Single engineer (b) Pair | (b) if timeline matters — E/F fully parallelizable |
+
+### Blast Radius Summary
+
+**Current runtime footprint affected:**
+- 12 executor types (CLI, Tool, Branch, Iterate, Collector, Assert, Choice, Decision, Display, Include, Noop, + helpers)
+- 2 wiring points (`pkg/run/run.go`, `internal/adapter/wire.go`)
+- 58 test cases relying on expr-lang / text/template semantics
+- 2 interfaces: `pkg/expr.Evaluator`, `pkg/expr.ConditionEvaluator` (adapters satisfy same surface)
+
+**Phase H deletions:**
+- `internal/expr/` (entire directory)
+- `pkg/testutil/fake_expr_evaluator.go`
+- `go.mod` dependencies: `github.com/expr-lang/expr`
+- No `{{ }}` syntax in any runtime code path
+
+### Coordinator Notes
+
+**Failure mode:** This plan exists BECAUSE gert-private was misidentified as the runtime repository. User directive (earlier in this file) states: gert-private is DESIGN ONLY. The Go runtime lives in a separate repository (`ormasoftchile/gert`). This migration plan documents the work to happen **there**, not here.
+
+**Why documented in gert-private decisions:** Design repo is the SSOT for spec, conformance vectors, grammar, and inter-team coordination. Runtime implementation PRs will reference this plan; decisions track coordination across repos.
+
+---
 
 1. PJVM + conformance harness — build the measuring stick first.
 2. GXL parser — GIS embeds GXL; parse vectors are the fastest feedback.

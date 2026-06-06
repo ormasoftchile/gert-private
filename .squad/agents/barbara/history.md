@@ -125,3 +125,36 @@ From Open Questions in Phase 2 Go Runtime Plan:
 **Cleanup Note:** Grammar files (gis.ebnf, gcp.ebnf) retained migration-tool comments as "do-not-touch" per directive. Team should decide whether to remove these in a grammar-owned follow-up.
 
 **Decisions:** Merged to `.squad/decisions.md` (timestamp 2026-06-04T20:14:36-07:00)
+
+## 2026-06-05T18:33:34-07:00 — Runtime Migration Plan
+
+**Status:** PROPOSED — awaiting ormasoftchile review.
+
+**Deliverables:**
+- `design/gert/proposals/runtime-migration-plan.md` — full 8-section plan covering current state survey, gap analysis, phased migration strategy, risk register, cross-repo coordination, effort estimates, non-goals, and open questions
+- `.squad/decisions/inbox/barbara-runtime-migration-plan.md` — decision summary with headline picks
+
+**Key Design Choices:**
+- Parallel-package strategy (`internal/eval/` alongside `internal/expr/`) with interface adapters
+- 8 phases (A-H) ordered by dependency; critical path ~12-18 days serial
+- Build-tag feature flag for zero-overhead compile-time switch
+- Cutover requires: 264/264 vectors green, 22 fixtures execute, perf ≤2x, 1-week soak
+- Recommend cherry-picking 4-day sketch (commits 97ce48b..5c550c0) as starting material
+- Git submodule for conformance vector distribution (pending visibility decision)
+
+**Blast Radius Documented:**
+- 12 executor types + 2 wiring points + engine config struct
+- ~58 test cases that depend on expr-lang or text/template semantics
+- Current capture mechanism is keyword-enum, not path-based (full replacement needed)
+
+**Open Questions Surfaced:**
+- OQ-M1: Conformance vector distribution mechanism
+- OQ-M2: Sketch cherry-pick confirmation
+- OQ-M3: Build tag vs. runtime flag
+- OQ-M4: Breaking syntax change communication
+- OQ-M5: Team size (1 vs. 2 engineers)
+
+**Risks Highlighted:**
+- Semantic divergence (expr-lang behaviors GXL forbids)
+- Unresolved spec ambiguities blocking implementation
+- Capture path upgrade requires structural output wrapping

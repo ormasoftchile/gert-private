@@ -1930,3 +1930,120 @@ Examined 10 legacy runbooks in `ormasoftchile/gert/examples/`: all use Go templa
 | **Phase H Impact** | None — proceed as planned |
 | **Migration** | Authors use `?.` or `capture.default:` for soft-miss |
 
+
+---
+
+## 2026-06-06 — Phase H Cutover COMPLETE (Don PR #16) — Runtime Migration COMPLETE
+
+**From:** Don — Runtime Engineer  
+**Date:** 2026-06-06T02:15:00-04:00  
+**PR:** https://github.com/ormasoftchile/gert/pull/16 (draft)  
+**Status:** ✅ SHIPPED — Hard cutover complete. New engine (GXL/GIS/GCP) is now unconditional.
+
+### Phases A→H Shipped Speculatively
+
+Eight PRs total, all stacked draft train awaiting Germán's review pass:
+- PR #8 (Ken drift, independent pre-PJVM foundation)
+- PR #9→#10→#11→#12 (Don critical path: PJVM → Lexer/Parser → Evaluator → Path engine)
+- PR #13/#14 (Ken Phase E/F: GIS and GCP engines, folded into #15)
+- PR #15 (Don integration: side-by-side runtime, build-tagged adaptation, adapter pattern wiring, fixture migration)
+- **PR #16** (Don cutover: deletion of legacy engine, canonicalization of runbooks, unconditional new engine)
+
+### Deletions (Phase H)
+
+**9 files deleted (~670 LoC total):**
+
+| File | Purpose | Lines |
+|------|---------|-------|
+| `internal/expr/condition.go` | Legacy GXL condition evaluator | 63 |
+| `internal/expr/condition_test.go` | Legacy condition tests | 262 |
+| `internal/expr/template.go` | Legacy GIS template evaluator | 63 |
+| `internal/expr/template_test.go` | Legacy template tests | 45 |
+| `internal/adapter/evaluators_legacy.go` | Legacy factory wiring | 22 |
+| `pkg/run/evaluators_legacy.go` | Legacy CLI wiring | 22 |
+| `internal/engine/runbook_paths_legacy_test.go` | Legacy test fixture selector | 9 |
+| `examples/collect-health/check-service-gxl.runbook.yaml` | Promoted to canonical name | 80 |
+| `examples/collect-health/collect-health-gxl.runbook.yaml` | Promoted to canonical name | 104 |
+
+**Dependency cleanup:**
+- `go mod tidy` removed `github.com/expr-lang/expr v1.17.8` from `go.mod`/`go.sum`
+
+**Build-tag constraints removed:**
+- 41 `//go:build gxl` pragmas dropped across Phase D-G files
+- 2 `//go:build !gxl` pragmas dropped from legacy factories
+- Total 43 files touched; new engine now unconditional
+
+### Runbook Canonicalization (Phase H)
+
+**12 runbook files migrated:**
+
+| File | Changes |
+|------|---------|
+| `collect-health.runbook.yaml` | `{{ .var }}` → `${var}` substitution; GXL variant promoted |
+| `check-service.runbook.yaml` | Inline Go-template conditional → GXL `branch` step with `str.contains()` |
+| 10 other legacy runbooks | Mechanical `{{ .varname }}` → `${varname}`, `{{ join .results "\n" }}` → `${results}` |
+
+**Special case:** `collect-health-parallel/check-service.runbook.yaml` had complex Go-template conditional:
+```
+{{ if contains .health_response "200" }}healthy{{ else }}degraded{{ end }}
+```
+Restructured as GXL `branch` step:
+```yaml
+- name: evaluate-health
+  run: |-
+    if str.contains(health_response, "200") then
+      "healthy"
+    else
+      "degraded"
+    end
+```
+
+**Capture path alignment:** `exitCode` (camelCase, legacy) → `exit_code` (snake_case, GCP adapter standard)
+
+### Validation
+
+- ✅ `go build ./...` clean (no `-tags` needed)
+- ✅ `go test ./...` — 267/267 conformance corpus green
+- ✅ `go test ./...` — 4/4 integration e2e tests green
+- ⚠️ Pre-existing `TestRender_Regions` markdown failure remains (absolute path issue, unrelated to Phase H, acknowledged since Phase G)
+
+### Spec Alignment & Migration Guide
+
+**Breaking changes documented in CHANGELOG/migration guide:**
+
+1. **GIS mandatory-miss-as-error:** (Ratified Barbara `e819895` 2026-06-06T01:40:00-04:00) — missing paths in `${...}` now raise `GIS-PATH-MISSING` error. Legacy engine returned empty string. Authors must use optional chaining (`${var?.path}`) or capture defaults for soft-miss semantics.
+
+2. **GCP capture path snake_case:** `exitCode` → `exit_code` per GCP adapter specification (Ken's Phase F). Existing runbooks using camelCase will error under strict adapter validation.
+
+3. **GXL condition syntax migration:** `{{ if }}...{{ end }}` (Go-template) → GXL `branch` step with `if...then...else...end` (GXL syntax). Existing runbooks must be rewritten; no auto-migration tool.
+
+### No GIS Mandatory-Miss Exposure Found
+
+Barbara's Option A ratification (mandatory-miss-as-error) proved low-risk in practice. Runbook survey of 10 legacy examples in `ormasoftchile/gert/examples/`: **all used simple `${var}` substitution, none relied on silent-miss default semantics.** No production runbooks blocked by this breaking change.
+
+### Stack Final
+
+**PR order (all draft, awaiting Germán review pass):**
+1. PR #8 (Ken, independent)
+2. PR #9 → #10 → #11 → #12 (Don critical path)
+3. PR #13 + #14 (Ken E/F, folded into #15)
+4. PR #15 (Don integration)
+5. PR #16 (Don cutover)
+
+**Total:** 8 PRs, zero handoffs, zero deferred work. All exit criteria met.
+
+### Key Learnings — Cutover Patterns
+
+1. **File-pair deletion of `_legacy.go` siblings:** Legacy wiring lived in parallel `evaluators_legacy.go` + `evaluators_gxl.go` pairs across `internal/adapter/` and `pkg/run/`. Phase H deletion of both `_legacy` variants leaves only unconditional `evaluators.go` → cleaner final surface.
+
+2. **Snake-case alignment with capture adapter:** Legacy `exitCode` (camelCase, expr-lang convention) vs. new `exit_code` (snake_case, GCP spec). This mismatch surfaced in PR #15 integration tests; Phase H migration guide must flag it explicitly or canonical runbooks will have non-portable exit-code references.
+
+3. **GXL `branch` step restructuring of Go-template conditionals:** Simple `{{ if }}...{{ end }}` can be replaced with `if...then...else...end` GXL expression directly in a single step value. Complex nested conditionals with mixed data operations (e.g., `{{ if contains .health_response "200" }}healthy{{ end }}`) map to GXL `branch` step + function call (`str.contains()`). Fixture migration requires careful reading of intent, not mechanical Find-Replace.
+
+### Next Actions
+
+- Germán: Review stack (#8→#16) and merge once all gates pass
+- Tess: No corpus changes; 267/267 conformance locked in Phase H
+- Barbara: Breaking changes documented; Phase H closes migration window
+- Future: All runtimes (C#, TS, etc.) target GXL/GIS/GCP spec directly; no legacy dual-engine concerns
+

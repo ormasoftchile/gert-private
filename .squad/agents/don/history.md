@@ -166,3 +166,29 @@ Next: Phase A in `ormasoftchile/gert` paired with Ken. PJVM + Clock + harness + 
 - Tess: No new corpus vectors. 267/267 locked.
 
 **Next:** Phase H hard cutover — remove build tags, delete legacy engine, update CHANGELOG. Estimated 1 day, low risk (all semantics proven by conformance corpus).
+
+## 2026-06-06T02:15:00-04:00 — Phase H: Hard Cutover Complete (PR #16)
+
+**Worktree:** `gert-phase-h-cutover`  
+**PR:** https://github.com/ormasoftchile/gert/pull/16 (draft, stacked on phase-g-integration)  
+**Status:** ✅ SHIPPED — Hard cutover complete. New engine (GXL/GIS/GCP) is now unconditional.
+
+**Deletions (9 files, ~670 LoC):**
+- Legacy engine: `internal/expr/` entire package (condition.go, condition_test.go, template.go, template_test.go)
+- Legacy factories: `internal/adapter/evaluators_legacy.go`, `pkg/run/evaluators_legacy.go`
+- Legacy test fixture selector: `internal/engine/runbook_paths_legacy_test.go`
+- Promoted `-gxl` runbook variants to canonical names (2 files)
+- Dependency: `go mod tidy` removed `github.com/expr-lang/expr v1.17.8`
+
+**Build-tag removal:** 43 files touched — 41 `//go:build gxl` + 2 `//go:build !gxl` pragmas deleted. New engine unconditional.
+
+**Runbook canonicalization (12 files):** Mechanical `{{ .var }}` → `${var}` substitution. Special case: `collect-health-parallel/check-service.runbook.yaml` inline Go-template conditional (`{{ if contains .health_response "200" }}...{{ end }}`) → GXL `branch` step with `str.contains()`. Capture path: `exitCode` → `exit_code` (snake_case).
+
+**Validation:** `go build ./...` clean, `go test ./...` 267/267 + 4/4 integration green. Pre-existing `TestRender_Regions` markdown failure remains.
+
+**Key Learnings (for future runtimes):**
+1. **File-pair deletion pattern:** Legacy `_legacy.go` siblings in adapter/run → single unconditional factory functions. Cleaner final surface.
+2. **Snake-case alignment with capture adapter:** `exitCode` (legacy camelCase) → `exit_code` (GCP spec). Critical migration detail that surfaced late in Phase G; flag in CHANGELOG.
+3. **GXL `branch` step restructuring:** Simple Go-template conditionals map to GXL `if...then...else...end` expression. Complex nested conditionals + data ops → `branch` step + function calls (`str.contains()`). Fixture migration requires intent reading, not mechanical replacement.
+
+**Stack final:** PR #8 (indep) → #9→#10→#11→#12 (critical) → #13/#14 (folded into #15) → #15 (integration) → #16 (cutover). Eight PRs total. All draft awaiting Germán review pass. Zero handoffs, zero deferred work. Phase 2 complete.

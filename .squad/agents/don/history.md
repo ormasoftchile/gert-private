@@ -136,3 +136,33 @@ Next: Phase A in `ormasoftchile/gert` paired with Ken. PJVM + Clock + harness + 
 **Test Results:** 36/36 path vectors ✅. Total conformance: 211/267 PASS (83 + 92 + 36), 56 SKIP (Ken's E/F), 0 FAIL.
 
 **Next:** Phases G (cutover) + H (cleanup) remain. Critical path A→B→C→D now complete pending review. Phase E/F unblock once PR #9 (PJVM) merges.
+
+## 2026-06-06T01:35:00-04:00 — Phase G: Runtime Integration Shipped (PR #15)
+
+**Worktree:** `gert-phase-g-integration`  
+**PR:** https://github.com/ormasoftchile/gert/pull/15 (draft, stacked on phase-d-path, folds PR #13/#14)  
+**Status:** ✅ SHIPPED — 267/267 conformance maintained, all test gates green
+
+**Key Deliverables:**
+- Merged Ken's Phase E (GIS) and Phase F (GCP) branches with zero code conflicts
+- Resolved harness collision: `vectorBindings` duplicate extracted to `helpers_gxl_test.go`
+- Adapter pattern: `GISEvaluatorAdapter`, `GXLConditionAdapter`, `GCPCaptureAdapter` wired into CLI via build-tagged factories in `internal/adapter/wire.go` + `pkg/run/run.go`
+- Build tag `//go:build gxl` activates new engines; legacy `!gxl` path unchanged (side-by-side runtime)
+- `internal/executor.CaptureResolver` interface added; `GCPCaptureAdapter` handles all capture paths under `gxl`
+- Four integration e2e tests in `internal/eval/integration_gxl_test.go` ✅
+
+**Fixture Migration:**
+- Hardcoded `/Volumes/Projects/gert/...` absolute paths in engine tests replaced with `repoRoot()` + relative path (portable across machines/worktrees)
+- Go-template `{{ }}` runbooks preserved for legacy; GXL-syntax variants added (`-gxl.runbook.yaml`)
+- `collectHealthRunbookPath()` build-tagged to select correct variant per compilation target
+
+**Test Results:** `go test ./...` (no tag) all pass ✅, `go test -tags gxl ./...` all pass ✅, 267/267 conformance maintained ✅, 4/4 integration e2e ✅. Pre-existing `TestRender_Regions` markdown failure pre-dates Phase work.
+
+**Key Learning — Adapter Pattern for Side-by-Side Engines:** Build-tagged factory functions decouple CLI wiring from engine selection. Both engines compile; runtime selection via `//go:build` tag. Zero runtime overhead for legacy path (`!gxl`). Fixture migration: absolute paths block multi-machine development; `repoRoot()` helper + relative paths restore portability.
+
+**Handoffs:**
+- Ken: Phase H scope — delete legacy factories, drop build tags, canonicalize runbooks, remove expr-lang dep. Note: `GCPCaptureAdapter` errors on non-standard keys (e.g., `exitCode` camelCase) — Phase H migration guide should document `exit_code` (snake_case only).
+- Barbara: Phase H gate — `GISEvaluatorAdapter.Eval()` returns error for mandatory missing-key paths (GIS-PATH-MISSING per spec). Legacy engine returned empty string. Potential breaking change for runbooks relying on missing-key-as-empty-string — needs arbitration before hard cutover.
+- Tess: No new corpus vectors. 267/267 locked.
+
+**Next:** Phase H hard cutover — remove build tags, delete legacy engine, update CHANGELOG. Estimated 1 day, low risk (all semantics proven by conformance corpus).

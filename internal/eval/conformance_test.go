@@ -4,9 +4,11 @@ import (
 "fmt"
 "os"
 "path/filepath"
+"regexp"
 "sort"
 "strings"
 "testing"
+"time"
 
 "github.com/ormasoftchile/gert/internal/eval/core"
 "github.com/ormasoftchile/gert/internal/eval/gxl"
@@ -22,8 +24,12 @@ Input              string
 Variables          core.Value
 ExpectedValue      core.Value
 ExpectedHasValue   bool
+ExpectedType       string
+ExpectedAssert     string
+ExpectedPattern    string
 ExpectedErrorClass string
 ExpectedErrorCode  string
+Clock              core.Clock
 SourceFile         string
 }
 
@@ -127,13 +133,33 @@ return "pass", gotErrCode
 }
 return "fail", fmt.Sprintf("got error code %q, want %q", gotErrCode, vector.ExpectedErrorCode)
 }
+if vector.ExpectedAssert == "regex" {
+if gotErrCode != "" {
+return "fail", fmt.Sprintf("got unexpected error code %q", gotErrCode)
+}
+if vector.ExpectedType != "" && got.Kind().String() != vector.ExpectedType {
+return "fail", fmt.Sprintf("got type %s, want %s", got.Kind(), vector.ExpectedType)
+}
+text, ok := got.AsString()
+if !ok {
+return "fail", fmt.Sprintf("got %s, want regex string", got)
+}
+matched, err := regexp.MatchString(vector.ExpectedPattern, text)
+if err != nil {
+return "fail", fmt.Sprintf("invalid expected regex %q: %v", vector.ExpectedPattern, err)
+}
+if matched {
+return "pass", got.String()
+}
+return "fail", fmt.Sprintf("got %q, want pattern %q", text, vector.ExpectedPattern)
+}
 if vector.ExpectedHasValue {
 if got.Equal(vector.ExpectedValue) {
 return "pass", got.String()
 }
 return "fail", fmt.Sprintf("got %s, want %s", got, vector.ExpectedValue)
 }
-return "skip", "vector has no expected value or error code"
+return "skip", "vector has no expected value, assertion, or error code"
 }
 
 func runnerForFile(base string) (string, vectorRunner, error) {
@@ -156,16 +182,59 @@ return "", nil, fmt.Errorf("no conformance runner for %s", base)
 func gxlParseRunner(vector Vector) (core.Value, string, error) {
 _, err := gxl.Parse(vector.Input)
 if err != nil {
-if parseErr, ok := err.(*gxl.ParseError); ok {
-return core.Value{}, parseErr.Code, nil
+if code := errorCode(err); code != "" {
+return core.Value{}, code, nil
 }
 return core.Value{}, "", err
 }
 return core.NewString("parse_ok"), "", nil
 }
 
-func gxlEvalRunner(Vector) (core.Value, string, error) {
-return core.Value{}, "NOT-IMPLEMENTED", notImplementedError{runner: "GXL eval"}
+func gxlEvalRunner(vector Vector) (core.Value, string, error) {
+ast, err := gxl.Parse(vector.Input)
+if err != nil {
+if code := errorCode(err); code != "" {
+return core.Value{}, code, nil
+}
+return core.Value{}, "", err
+}
+bindings, err := vectorBindings(vector)
+if err != nil {
+return core.Value{}, "", err
+}
+clock := vector.Clock
+if clock == nil {
+clock = core.SystemClock()
+}
+value, err := gxl.Eval(ast, bindings, clock)
+if err != nil {
+if code := errorCode(err); code != "" {
+return core.Value{}, code, nil
+}
+return core.Value{}, "", err
+}
+return value, "", nil
+}
+
+func errorCode(err error) string {
+type coded interface {
+ErrorCode() string
+}
+if codedErr, ok := err.(coded); ok {
+return codedErr.ErrorCode()
+}
+return ""
+}
+
+func vectorBindings(vector Vector) (map[string]core.Value, error) {
+if vector.Variables.Kind() == core.KindNull {
+return map[string]core.Value{}, nil
+}
+object, ok := vector.Variables.AsObject()
+if !ok {
+return nil, fmt.Errorf("%s variables must be an object", vector.ID)
+}
+return object, nil
 }
 
 func gxlPathRunner(Vector) (core.Value, string, error) {
@@ -251,8 +320,18 @@ return Vector{}, fmt.Errorf("%s expected.value: %w", vector.ID, err)
 vector.ExpectedValue = value
 vector.ExpectedHasValue = true
 }
+vector.ExpectedType = mappingString(expectedNode, "type")
+vector.ExpectedAssert = mappingString(expectedNode, "assert")
+vector.ExpectedPattern = mappingString(expectedNode, "pattern")
 vector.ExpectedErrorClass = mappingString(expectedNode, "error_class")
 vector.ExpectedErrorCode = mappingString(expectedNode, "error_code")
+if clockText := firstMappingString(node, "clock", "fixed_clock", "fixedClock", "now"); clockText != "" {
+parsed, err := time.Parse(time.RFC3339, clockText)
+if err != nil {
+return Vector{}, fmt.Errorf("%s clock: %w", vector.ID, err)
+}
+vector.Clock = core.FixedClock(parsed)
+}
 return vector, nil
 }
 
@@ -274,4 +353,13 @@ if value == nil {
 return ""
 }
 return value.Value
+}
+
+func firstMappingString(node *yaml.Node, keys ...string) string {
+for _, key := range keys {
+if value := mappingString(node, key); value != "" {
+return value
+}
+}
+return ""
 }

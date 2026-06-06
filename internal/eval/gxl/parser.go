@@ -200,10 +200,18 @@ func (p *parser) parseBuiltinCall(name string) (Node, error) {
 	}
 	var args []Node
 	if name == "now" {
-		if !p.match(TokenRParen) {
-			return nil, parseError(CodeUnexpectedToken, p.peek().At, "now() takes no parse-time arguments")
+		if p.check(TokenRParen) {
+			p.advance()
+			return &CallNode{Position: start.At, Method: name}, nil
 		}
-		return &CallNode{Position: start.At, Method: name}, nil
+		args, err := p.parseArgList()
+		if err != nil {
+			return nil, err
+		}
+		if !p.match(TokenRParen) {
+			return nil, parseError(CodeUnmatchedParen, start.At, "unmatched left parenthesis")
+		}
+		return nil, evalError(CodeTypeArity, start.At, "now expects 0 arguments, got %d", len(args))
 	}
 	if p.check(TokenRParen) {
 		return nil, parseError(CodeUnexpectedToken, p.peek().At, "expected argument to %s", name)

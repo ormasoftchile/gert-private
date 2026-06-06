@@ -2,7 +2,7 @@
 
 **Author:** Barbara — Lead / Architect  
 **Date:** 2026-06-05T18:33:34-07:00  
-**Status:** PROPOSED — awaiting ormasoftchile review  
+**Status:** RATIFIED — 2026-06-05  
 **Target Repo:** `ormasoftchile/gert` (Go runtime)  
 **Reference Design:** `ormasoftchile/gert-private` (this repo)
 
@@ -412,15 +412,83 @@ This plan explicitly does NOT cover:
 
 ---
 
-## 8. Open Questions for ormasoftchile
+## 8. Ratified Decisions
 
-| # | Question | Options | Barbara's Lean |
-|---|----------|---------|----------------|
-| OQ-M1 | **Conformance vector distribution**: submodule vs. published artifact? | (a) Git submodule into gert (requires gert-private access from gert CI) (b) Publish tv-*.yaml to a public gert-conformance repo (c) Vendor/copy into gert with sync script | (a) if both repos stay private; (b) if gert goes public |
-| OQ-M2 | **Sketch reuse**: Should the gert team cherry-pick commits 97ce48b..5c550c0 as starting material? | (a) Yes — cherry-pick, adapt, verify (b) Start fresh using spec + vectors only | (a) — the code is directionally correct and saves 3-5 days; just don't treat it as reviewed |
-| OQ-M3 | **Feature flag mechanism**: build tag vs. runtime config? | (a) Build tag `//go:build gxl` (compile-time, zero overhead) (b) Runtime flag `--eval-engine=gxl` (runtime switch, useful for A/B but slight overhead) | (a) for simplicity; the flag exists only during migration |
-| OQ-M4 | **Breaking syntax change communication**: How are existing gert users (if any) notified that `{{ }}` → `${}`? | (a) Major version bump (v2) (b) Deprecation period with both syntaxes supported (c) Just ship it (pre-1.0, no stability promise) | (c) if gert is pre-1.0; (b) if anyone is in production |
-| OQ-M5 | **Who implements?** Single engineer or pair? | (a) One engineer, serial (b) Two engineers, parallel streams | (b) if timeline matters — E and F are fully parallelizable with B/C/D |
+> **Ratified by ormasoftchile — 2026-06-05.** All five open questions are resolved. Phase A may start in `ormasoftchile/gert`.
+
+---
+
+### OQ-M1 — Conformance Vector Distribution
+
+**Decision: (c) Vendored copy**
+
+Conformance vectors (`tv-*.yaml`) are copied into `gert/testdata/vectors/` (or equivalent path in `ormasoftchile/gert`). No submodule dependency; no separate public repo required.
+
+**Rationale:** Eliminates cross-repo access complexity in CI. The canonical source of truth remains `gert-private`; the runtime carries its own snapshot.
+
+**⚠️ Follow-up (new Phase A scope item — DRIFT-DETECTION-001):**
+
+Drift between the vendored copy and the canonical `gert-private` vectors must be detected automatically. The following two artifacts are required before Phase A is considered complete:
+
+1. **`scripts/sync-vectors.sh`** (in `ormasoftchile/gert`): A script that, given the `gert-private` checkout path or a published SHA reference, copies the current `testdata/vectors/` payload into the runtime repo and records the source SHA in `testdata/vectors/VECTORS_SHA` (a single-line file containing the `gert-private` commit SHA the vectors were taken from).
+
+2. **`make verify-vectors` CI target** (in `ormasoftchile/gert`): A Makefile target that:
+   - Reads the SHA from `testdata/vectors/VECTORS_SHA`.
+   - Fetches the `tv-*.yaml` set at that SHA from `gert-private` (via `git archive` or equivalent).
+   - Diffs the fetched set against the vendored copy.
+   - **Fails the build** if any file differs or if new files exist in `gert-private` that are absent from the vendor copy.
+   - This target runs in CI on every PR touching `testdata/vectors/` or `scripts/sync-vectors.sh`, and on a weekly scheduled job.
+
+This mechanism is documented in `ormasoftchile/gert`'s `CONTRIBUTING.md` under "Conformance Vectors".
+
+---
+
+### OQ-M2 — Sketch Cherry-Pick
+
+**Decision: (a) Cherry-pick sketch (commits `97ce48b..5c550c0`)**
+
+The 4-day sketch is treated as **unreviewed starting material**. The standard review gate applies in `ormasoftchile/gert`; no code from the sketch is considered reviewed or production-quality until it passes that gate.
+
+**Rationale:** Saves an estimated 3–5 days of Phase A–C scaffolding. Phase A through C infrastructure (package layout, type stubs, harness skeleton) is reused and adapted. Phase D onward is written fresh against the spec and conformance vectors.
+
+**Constraint:** Cherry-picked commits must be squashed or annotated with a "UNREVIEWED SKETCH" note before landing; no sketch commit may bypass the standard PR review process.
+
+---
+
+### OQ-M3 — Feature Flag Mechanism
+
+**Decision: (a) Build tag `//go:build gxl`**
+
+The new engine is gated behind a compile-time build tag. The old `expr-lang`-based engine remains the default throughout the migration.
+
+**Rationale:** Zero runtime overhead; no accidental engine switch in production deployments. Simple to reason about.
+
+**CI requirement:** Both matrices must build and pass in CI for the duration of the migration (default build and `gxl`-tagged build). After Phase H cutover, the build tag is removed and the old engine (`internal/expr/`) is deleted entirely.
+
+---
+
+### OQ-M4 — Breaking Syntax Change Communication
+
+**Decision: (c) Just ship**
+
+GERT is pre-1.0 with no external users. Hard cutover occurs at Phase H. No deprecation period; no v2 version bump.
+
+**Required:** The `{{ }}` → `${}` syntax change (and any other breaking changes introduced by the new engine) must be documented in `CHANGELOG.md` with before/after examples at the time of Phase H merge. Entries should cover at minimum: interpolation delimiter change, condition expression syntax, capture path syntax, and any stdlib renames.
+
+---
+
+### OQ-M5 — Team Size
+
+**Decision: (b) Pair**
+
+Two backend agents implement in parallel:
+
+- **Don** owns the critical path: Phase A → B → C → D → G → H (sequential; blocks cutover).
+- **Second backend agent** owns parallel streams: Stream E (GIS interpolation) and Stream F (GCP captures), running concurrently with Don's B/C/D work.
+
+**Target wallclock:** 10–15 days.
+
+**Note:** The second backend agent's assignment happens in the `ormasoftchile/gert` runtime squad. This design repo (`gert-private`) has no role in casting; Germán handles that separately when kicking off Phase A.
 
 ---
 

@@ -27,6 +27,46 @@
 
 ---
 
+## 2026-06-05 — Runtime Migration Plan RATIFIED (OQ-M1..M5)
+
+**From:** Barbara (Lead Architect)  
+**Date:** 2026-06-05  
+**Subject:** Runtime Migration Plan RATIFIED; 5 OQ-M decisions encoded; Phase A can start in `ormasoftchile/gert`.
+
+---
+
+### Ratified Decisions
+
+| OQ | Decision | Notes |
+|---|---|---|
+| **OQ-M1** | (c) Vendored copy | Vectors copied into `gert/testdata/vectors/` (or equivalent). **Required follow-up:** ship a small sync script (e.g., `scripts/sync-vectors.sh`) and a CI check that fails if the runtime's copy drifts from `gert-private`. Document the drift-detection mechanism explicitly. |
+| **OQ-M2** | (a) Cherry-pick sketch (commits 97ce48b..5c550c0) | Treat as unreviewed starting material; standard review gate applies in `ormasoftchile/gert`. Phase A–C scaffolding gets reused; Phase D onward fresh. |
+| **OQ-M3** | (a) Build tag `//go:build gxl` | Compile-time switch. Old engine remains default during migration; CI builds both matrices. After cutover (Phase H), the build tag is removed and the old engine is deleted. |
+| **OQ-M4** | (c) Just ship | Pre-1.0, no external users. Hard cutover at Phase H. Document syntax changes in CHANGELOG with before/after examples. No deprecation period. |
+| **OQ-M5** | (b) Pair | Designate a second backend agent in the `ormasoftchile/gert` runtime squad (not this design squad). Don owns critical path A→B→C→D→G→H; second backend owns Stream E (GIS) and Stream F (GCP) in parallel. Target: 10–15 days wallclock. |
+
+### ⚠️ New Phase A Scope Addition: Drift-Detection (DRIFT-DETECTION-001)
+
+OQ-M1's ratification adds a concrete deliverable to Phase A in `ormasoftchile/gert`. Before Phase A is considered complete, the runtime repo must ship:
+
+1. **`scripts/sync-vectors.sh`** — copies canonical `tv-*.yaml` vectors from `gert-private` and records the source commit SHA in `testdata/vectors/VECTORS_SHA`.
+2. **`make verify-vectors` CI target** — reads `VECTORS_SHA`, fetches vectors at that SHA from `gert-private`, diffs against the vendored copy, and fails the build on any drift. Runs on every PR touching vectors and on a weekly schedule.
+3. **Documentation** in `CONTRIBUTING.md` under "Conformance Vectors".
+
+This is a new scope item that was not in the original plan. The Phase A exit criteria must be updated to include DRIFT-DETECTION-001.
+
+### Next-Action Handoff
+
+**Germán** needs to switch to the `ormasoftchile/gert` repository (separate squad) to kick off Phase A:
+
+- Assign Don to the critical path (A → B → C → D → G → H).
+- Cast the second backend agent within the `ormasoftchile/gert` runtime squad (not here — this design repo has no casting role).
+- Add DRIFT-DETECTION-001 to Phase A exit criteria before closing Phase A.
+
+**This design repo (`gert-private`) drops to "spec authority + ambiguity arbiter"** for the rest of the migration. It will be consulted when the runtime team hits spec gaps or interpretation questions, but has no active implementation role.
+
+---
+
 ## Phase 1 Active Decisions
 ### 2026-06-05T07:28:56-07:00: GIS Optional-Chaining (`?.`) — Ratified
 **By:** ormasoftchile (via Copilot)
@@ -803,7 +843,7 @@ type Value struct {
 
 **Author:** Barbara — Lead / Architect  
 **Date:** 2026-06-05T18:33:34-07:00  
-**Status:** PROPOSED — awaiting ormasoftchile review  
+**Status:** RATIFIED — 2026-06-05  
 **Proposal:** `design/gert/proposals/runtime-migration-plan.md`
 
 ### Executive Summary

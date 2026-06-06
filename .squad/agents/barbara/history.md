@@ -158,3 +158,7 @@ From Open Questions in Phase 2 Go Runtime Plan:
 - Semantic divergence (expr-lang behaviors GXL forbids)
 - Unresolved spec ambiguities blocking implementation
 - Capture path upgrade requires structural output wrapping
+
+## 2026-06-05T22:09:06-04:00 — Runtime Migration Plan RATIFIED
+
+Ratified all 5 OQ-M decisions encoded by ormasoftchile. Updated proposal status to `RATIFIED — 2026-06-05`; replaced "Open Questions" section with "Ratified Decisions" in `design/gert/proposals/runtime-migration-plan.md`. Identified DRIFT-DETECTION-001 as a new Phase A scope item (sync script + CI `make verify-vectors` target to prevent vendored vector drift). Memo dropped to `.squad/decisions/inbox/barbara-runtime-migration-ratified.md`. This design repo's role is now spec authority + ambiguity arbiter; active implementation hands off to `ormasoftchile/gert` runtime squad.

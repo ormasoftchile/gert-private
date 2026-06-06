@@ -1390,3 +1390,70 @@ All streams delivered:
 - **GIS Optional Chaining**: ✅ Complete
 
 **Next:** Phase A in `ormasoftchile/gert` (Don + Ken paired). Pending work transitions out of gert-private.
+
+---
+
+## 2026-06-05 — Phase A In-Flight (Don PR #9, Ken PR #8)
+
+**Status:** Both slices implemented, draft-PR'd in `ormasoftchile/gert`. Awaiting Germán review/merge; Phase A exit-criteria satisfied once merged.
+
+### Don's Slice: PJVM/Clock/Harness Scaffold (PR #9)
+
+**Branch:** `phase-a-pjvm` in `ormasoftchile/gert`  
+**Key Deliverables:**
+
+| Component | Files | Purpose |
+|-----------|-------|---------|
+| **PJVM** | `internal/eval/core/value_gxl.go` | 6-variant JSON value type (Null, Bool, Number, String, Array, Object) with typed accessors, deep-Equal, MarshalJSON/UnmarshalJSON |
+| **Clock** | `internal/eval/core/clock_gxl.go` | Clock interface, SystemClock(), FixedClock(t) for deterministic now() testing |
+| **YAML Loader** | `internal/eval/core/yaml_gxl.go` | FromYAML(*yaml.Node) for conformance harness |
+| **Unit Tests** | `internal/eval/core/core_gxl_test.go` | 27 tests: constructors, equality, JSON round-trip, YAML, Clock |
+| **Harness Skeleton** | `internal/eval/harness/conformance_gxl_test.go` | Loads tv-*.yaml from `testdata/vectors/`, dispatches to per-corpus runners (all stubbed → 264 vectors skip, 0 fail) |
+| **Vectors** | `testdata/vectors/tv-*.yaml` (5 files) + `VECTORS_SHA` | TEMPORARY copies + source commit breadcrumb (3ce53431); replaced when Ken's sync lands |
+| **Docs** | `phase-a/README.md` | Build-tag discipline, package layout, phase roadmap, cherry-pick provenance |
+
+**Source:** Cherry-picked from `97ce48b..5c550c0` in `gert-private` (OQ-M2); YAML fixed (escaping in descriptions); JSON marshaling added.
+
+**Test Results:** `go test -tags gxl ./internal/eval/...` → core: 27/27 ✅, harness: 264 skip, 0 fail ✅
+
+**Breadcrumb Left:** `conformance_gxl_test.go:59` marks hardcoded vector path for Ken's sync replacement.
+
+### Ken's Slice: DRIFT-DETECTION-001 Sync Infrastructure (PR #8)
+
+**Branch:** `phase-a-drift` in `ormasoftchile/gert`  
+**Key Deliverables:**
+
+| Component | Files | Purpose |
+|-----------|-------|---------|
+| **Sync Script** | `scripts/sync-vectors.sh` | Copies tv-*.yaml + schema.json from gert-private; writes `VECTORS_SHA` (source commit pinned to 3ce53431) |
+| **Makefile** | `Makefile` | Targets `sync-vectors` + `verify-vectors` (NEW; no prior Makefile in repo) |
+| **CI Gate** | `.github/workflows/verify-vectors.yml` | Runs on PR + main push + weekly; detects drift against gert-private canonical |
+| **Runbook** | `testdata/vectors/README.md` | Sync flow, drift semantics, upgrade path to Option B (deploy-key) if needed |
+
+**Env Contract:** `GERT_PRIVATE_PATH` (abs or rel path to gert-private; default: `../gert-private`)
+
+**Option Chosen:** **Option A (best-effort)** — attempt GITHUB_TOKEN checkout; fall back to SHA-format validation. Immediate within org; upgradeable to Option B (deploy-key) if token insufficient. Trade-off documented.
+
+**Test Loop:** sync → verify-clean ✅ → hand-edit + verify-drift ✅ → restore + verify-clean ✅
+
+### Coordination Note
+
+**Canonical vector path:** `testdata/vectors/` (same directory — both PRs converged!)  
+- Don's TEMPORARY copy will be replaced when Ken's sync script (PR #8) lands.
+- Ken's script pins SHA to 3ce53431 (gert-private HEAD at Phase A bootstrap).
+- Both PRs target the same location; no rename/migration needed post-merge.
+
+### Phase A Exit Criteria Status
+
+✅ **Completed:**
+- PJVM types with JSON marshaling (Don)
+- Clock interface for deterministic testing (Don)
+- Conformance harness skeleton dispatching all three corpus types (Don)
+- Sync script + CI gate + runbook (Ken)
+- DRIFT-DETECTION-001 test-loop verified (Ken)
+
+⏳ **Pending Merge:**
+- Germán review/approval of both PRs in `ormasoftchile/gert`
+- Merge both PRs to unblock Phase B (Don's stream B: GXL Lexer/Parser, Ken's stream E: GIS resolver)
+
+**Note:** Phase A implementation is complete in both PRs. The sync will be live once merged; the vector path constant in Don's harness can be updated then to read `testdata/vectors/VECTORS_SHA` and emit the source commit SHA in log output (for CI traceability).

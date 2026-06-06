@@ -73,3 +73,24 @@ Ken hired as second Backend Dev to pair on runtime migration in ormasoftchile/ge
 Dogfood audit complete: 22 runbook fixtures all clean (P1–P5 all zero). Three tool bugs fixed during audit; tool subsequently removed per user directive (pre-1.0, no legacy users). Phase 1 formally closed: 0 blocking items. Streams A/B/C/D/E/F all complete.
 
 Next: Phase A in `ormasoftchile/gert` paired with Ken. PJVM + Clock + harness + DRIFT-DETECTION-001.
+
+## 2026-06-05 — Phase A: PJVM/Clock/Harness Shipped (PR #9)
+
+**Worktree:** `gert-phase-a-pjvm`  
+**PR:** https://github.com/ormasoftchile/gert/pull/9 (draft, awaiting merge)
+
+**Shipped:**
+- PJVM (6-variant JSON types) + Clock interface + YAML loader → `internal/eval/core/`
+- Conformance harness skeleton → `internal/eval/harness/conformance_gxl_test.go`
+- 27 unit tests (core) + 264-vector harness (all skip, 0 fail)
+- Vector corpus TEMPORARY copies → `testdata/vectors/`; Ken's sync will replace
+
+**Key Paths:**
+- `internal/eval/core/value_gxl.go` — PJVM constructors + marshaling
+- `internal/eval/core/clock_gxl.go` — Clock interface
+- `internal/eval/harness/conformance_gxl_test.go` — harness dispatch (hardcoded vector path @ line 59; ready for Ken's sync)
+- `testdata/vectors/VECTORS_SHA` — source commit 3ce53431 + breadcrumb
+
+**Test:** `go test -tags gxl ./internal/eval/core` (27/27 ✅) + `go test -tags gxl ./internal/eval/harness` (264 skip ✅)
+
+**Handoff:** Breadcrumb left at conformance_gxl_test.go:59 for Ken's sync replacement. Vector path will be updated once PR #8 lands.

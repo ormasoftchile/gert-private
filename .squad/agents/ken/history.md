@@ -27,7 +27,16 @@ Read `.squad/decisions.md` in full at first spawn. Highlights:
 
 ## Learnings
 
-(none yet — first session)
+### 2026-06-05 — gert repo conventions (from Phase A / DRIFT-DETECTION-001)
+
+- **No Makefile existed** in `ormasoftchile/gert` — created from scratch. Pattern: `.PHONY` targets, `help` as default goal, `SHELL := /usr/bin/env bash`.
+- **No `scripts/` directory existed** — created. Convention: executable bash scripts go here.
+- **No `testdata/` directory existed** — created. `testdata/vectors/` is the first entry; this is the canonical path for vendored conformance vectors per OQ-M1.
+- **CI framework:** GitHub Actions. Existing workflow at `.github/workflows/e2e.yml` uses `actions/checkout@v4`, `ubuntu-latest`, `actions/setup-go@v5` with `go-version: '1.21'`.
+- **Temp dirs in Makefile:** `.gitignore` lists `tmp/` and `.temp/`. I used `.verify-vectors-tmp/` as verify scratch — always cleaned up by the target, no .gitignore entry needed.
+- **Both repos in same org:** `ormasoftchile/gert` + `ormasoftchile/gert-private`. `GITHUB_TOKEN` likely covers cross-repo reads within the org — relevant for the CI Option A/B decision.
+- **gert-private is read-only** from the runtime repo perspective — never commit to it from a gert worktree task.
+- **Worktree pattern:** Phase A uses dedicated worktrees (`gert-phase-a-drift`, `gert-phase-a-pjvm`) branched from main. Don't `cd` to main repo for edits; the worktree IS the working directory.
 
 ## 2026-06-05 Phase 1 Complete
 
@@ -39,3 +48,23 @@ Phase 1 closed before my first session. TESS-AMBIG-3..6 resolved:
 - **Dogfood:** All 22 runbook fixtures clean (P1–P5 all zero)
 
 Don + I cleared to start Phase A in `ormasoftchile/gert`. PJVM + Clock + harness + DRIFT-DETECTION-001 are first deliverables.
+
+## 2026-06-05 — Phase A: DRIFT-DETECTION-001 Shipped (PR #8, First Shipment)
+
+**Worktree:** `gert-phase-a-drift`  
+**PR:** https://github.com/ormasoftchile/gert/pull/8 (draft, awaiting merge)  
+**Status:** First ever shipment (pre-Phase-B)
+
+**Shipped:**
+- `scripts/sync-vectors.sh` — syncs tv-*.yaml + schema.json from gert-private; writes `VECTORS_SHA` (pinned to 3ce53431)
+- `Makefile` — `sync-vectors` + `verify-vectors` targets (no prior Makefile in repo)
+- `.github/workflows/verify-vectors.yml` — CI gate (PR + main + weekly cron)
+- `testdata/vectors/README.md` — runbook (sync flow, drift detection, upgrade path)
+
+**Option Chosen: A (best-effort).** GITHUB_TOKEN + sentinel-SHA fallback. Rationale: immediate within org; upgradeable to Option B (deploy-key) if token insufficient. Local `make verify-vectors` always fully enforced (dev gate during active dev).
+
+**Test Loop Verified:** sync ✅ → verify-clean ✅ → hand-edit + verify-drift ✅ → restore + verify-clean ✅
+
+**Env Contract:** `GERT_PRIVATE_PATH` (default: `../gert-private`)
+
+**Learnings

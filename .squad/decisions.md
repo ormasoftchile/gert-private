@@ -43,7 +43,7 @@
 | **OQ-M2** | (a) Cherry-pick sketch (commits 97ce48b..5c550c0) | Treat as unreviewed starting material; standard review gate applies in `ormasoftchile/gert`. Phase A–C scaffolding gets reused; Phase D onward fresh. |
 | **OQ-M3** | (a) Build tag `//go:build gxl` | Compile-time switch. Old engine remains default during migration; CI builds both matrices. After cutover (Phase H), the build tag is removed and the old engine is deleted. |
 | **OQ-M4** | (c) Just ship | Pre-1.0, no external users. Hard cutover at Phase H. Document syntax changes in CHANGELOG with before/after examples. No deprecation period. |
-| **OQ-M5** | (b) Pair | Designate a second backend agent in the `ormasoftchile/gert` runtime squad (not this design squad). Don owns critical path A→B→C→D→G→H; second backend owns Stream E (GIS) and Stream F (GCP) in parallel. Target: 10–15 days wallclock. |
+| **OQ-M5** | (b) Pair | Cast a **second backend in this squad** (gert-private; the squad is single). Both Don and the new hire (Ken) operate across `ormasoftchile/gert` during Phases A–H, then return to this squad for the next assignment. Target wallclock: 10–15 days (E and F parallel). |
 
 ### ⚠️ New Phase A Scope Addition: Drift-Detection (DRIFT-DETECTION-001)
 
@@ -1280,3 +1280,36 @@ ow()\ (Clock-injected)
 
 **Status:**  Merged to .squad/decisions.md 
 
+
+---
+
+## 2026-06-05 — Directive: Single Squad
+
+**Date:** 2026-06-05T22:31:50-04:00  
+**By:** ormasoftchile (via Copilot)  
+
+**What:** Squad has to be single. The same squad serves all repos. That's the purpose of `gert-private`: to hold the design AND host the squad. Agents in this squad operate across whatever repo the work is in (e.g., the runtime migration work happens in `ormasoftchile/gert`, but the squad members executing it live here).
+
+**Why:** User request — captured for team memory.
+
+**Implication for OQ-M5 (Runtime Migration Plan, ratified 2026-06-05):** The ratification said "cast a second backend in the `ormasoftchile/gert` runtime squad." That phrasing is now obsolete. Correct reading: cast a second backend in THIS squad (gert-private), and both backends (Don + the new hire) work in the `ormasoftchile/gert` repo for the runtime migration, then come back here for the next thing.
+
+**Action required:** Patch the runtime migration plan and decisions.md to reflect this. Then proceed with casting the second backend here.
+
+**Status:** Captured; M5 wording corrected in decisions.md and proposal; Ken hired per this directive.
+
+---
+
+## 2026-06-05 — Ken hired (second Backend Dev)
+
+**Date:** 2026-06-05T22:31:50-04:00
+
+Ken joined the squad as second Backend Dev per OQ-M5 (corrected wording: cast second backend in this squad, gert-private).
+
+**Coordinator Actions:**
+- Files created: `.squad/agents/ken/charter.md`, `.squad/agents/ken/history.md`
+- Files updated: `.squad/casting/registry.json` (Ken entry), `.squad/team.md` (Ken row), `.squad/routing.md` (Ken routing)
+- Ken's first assignment: Phase A of the runtime migration in `ormasoftchile/gert`, paired with Don (per OQ-M5 corrected wording)
+- Plan: Don takes A→B→C→D→G→H critical path; Ken takes E (GIS) and F (GCP) in parallel during Phases A–H. Target: 10–15 days wallclock.
+
+**Status:** Ken onboarded; ready for Phase A kickoff in ormasoftchile/gert.

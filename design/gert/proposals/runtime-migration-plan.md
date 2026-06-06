@@ -488,7 +488,7 @@ Two backend agents implement in parallel:
 
 **Target wallclock:** 10–15 days.
 
-**Note:** The second backend agent's assignment happens in the `ormasoftchile/gert` runtime squad. This design repo (`gert-private`) has no role in casting; Germán handles that separately when kicking off Phase A.
+**Note:** The second backend agent joins **this squad** (`gert-private`). Both agents (Don and the second backend) operate across the `ormasoftchile/gert` repo during Phases A–H, then return to this squad for the next assignment. Squad is single; Germán handles the hire when kicking off Phase A.
 
 ---
 

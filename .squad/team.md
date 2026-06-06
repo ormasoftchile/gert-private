@@ -15,6 +15,7 @@
 | Barbara | Lead / Architect | `.squad/agents/barbara/charter.md` | active |
 | John | Azure Platform Engineer | `.squad/agents/john/charter.md` | active |
 | Don | Backend Dev | `.squad/agents/don/charter.md` | active |
+| Ken | Backend Dev | `.squad/agents/ken/charter.md` | active |
 | Leslie | Frontend Dev | `.squad/agents/leslie/charter.md` | active |
 | David | Integration Engineer | `.squad/agents/david/charter.md` | active |
 | Edith | Spec Editor | `.squad/agents/edith/charter.md` | active |

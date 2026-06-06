@@ -9,6 +9,7 @@ How to decide who handles what.
 | Platform architecture, Azure system design, component boundaries | Barbara | "How should we structure the Azure services?", "Design the execution layer" |
 | Azure infra, Service Bus, Functions, Container Apps, Entra ID, Bicep | John | "Set up the queue topology", "Configure tenant auth", "Write infra-as-code" |
 | Runbook execution service, GERT runtime integration, backend APIs, worker | Don | "Build the execution worker", "Design the API for submitting runs", "SDK contracts" |
+| Runtime migration parallel streams (GIS engine, GCP engine), Go backend work paired with Don | Ken | "Implement the GIS interpolation engine", "Build the GCP capture engine", "Pair with Don on multi-stream phases" |
 | Web UI, white-label portal, auth UX, customer-facing frontend | Leslie | "Build the customer portal", "Design runbook step UI", "White-label theming" |
 | Webhooks, queue consumers, integration events, idempotency, DLQ | David | "Design webhook delivery", "Build the event consumer", "Handle poison messages" |
 | Code review | Barbara | Review PRs, enforce API contracts, check quality |

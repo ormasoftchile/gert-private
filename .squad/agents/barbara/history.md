@@ -162,3 +162,7 @@ From Open Questions in Phase 2 Go Runtime Plan:
 ## 2026-06-05T22:09:06-04:00 — Runtime Migration Plan RATIFIED
 
 Ratified all 5 OQ-M decisions encoded by ormasoftchile. Updated proposal status to `RATIFIED — 2026-06-05`; replaced "Open Questions" section with "Ratified Decisions" in `design/gert/proposals/runtime-migration-plan.md`. Identified DRIFT-DETECTION-001 as a new Phase A scope item (sync script + CI `make verify-vectors` target to prevent vendored vector drift). Memo dropped to `.squad/decisions/inbox/barbara-runtime-migration-ratified.md`. This design repo's role is now spec authority + ambiguity arbiter; active implementation hands off to `ormasoftchile/gert` runtime squad.
+
+## 2026-06-05T22:31:50-04:00 — OQ-M5 Wording Correction: Single Squad Directive
+
+Corrected OQ-M5 language in `design/gert/proposals/runtime-migration-plan.md` (line 491) per single-squad directive (commit 541d194). Changed: "second backend agent's assignment happens in the `ormasoftchile/gert` runtime squad" → "second backend agent joins **this squad** (`gert-private`), both operate in gert repo during Phases A–H, then return to this squad for next assignment." Memo dropped to `.squad/decisions/inbox/barbara-m5-single-squad-correction.md` with exact before/after and explicit instruction for Scribe to update the dated decisions section.

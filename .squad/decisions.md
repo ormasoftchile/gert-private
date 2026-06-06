@@ -1875,3 +1875,58 @@ Estimated size: Small (1 day), mostly mechanical deletion. Risk: low — all sem
 - Zero errors, all test gates green
 - Ready for Phase H hard cutover (deletion + canonicalization)
 
+---
+
+## 2026-06-06 — GIS Miss Semantics — Option A Ratified (Barbara, commit e819895)
+
+**From:** Barbara — Spec Arbiter  
+**Date:** 2026-06-06T01:40:00-04:00  
+**Arbitration:** SPEC-AMBIG resolution for Phase G integration (Don PR #15)  
+**Status:** ✅ RATIFIED — Option A (mandatory-miss-as-error)
+
+### Ruling
+
+**The spec already mandates hard errors for mandatory path misses.** Ken's GIS engine (shipped) is correct. Legacy `missingkey=zero` was an under-specified implementation leak, not a contract.
+
+Evidence:
+- `gis.ebnf` §4.3: "Silent empty-string substitution is FORBIDDEN by default."
+- `03b-interpolation-syntax.tex` §Unresolved Variables: "Hard error for unresolved reference."
+- All 15 GIS-PATH conformance vectors pass; TV-GIS-PATH-004 tests mandatory-miss-as-error.
+
+### Spec Files Updated
+
+| File | Section | Change |
+|------|---------|--------|
+| `design/gert/grammar/gis.ebnf` | Header | Arbitration note + date updated |
+| `design/gert/sections/03b-interpolation-syntax.tex` | §Unresolved Variables | Migration Note: Legacy Zero-Value Semantics |
+
+**No conformance vector changes.** All 15/15 pass as authored.
+
+### Phase H Impact
+
+- ✅ No code changes to GIS engine
+- ✅ No CLI flag needed
+- ✅ No parser changes needed
+- ✅ Proceed with Phase H: delete legacy engine, hard cutover
+
+### Migration Path
+
+Authors relying on silent empty-string substitution MUST use one of:
+1. **Optional chaining** (preferred): `${user?.email}` — returns `""` on miss
+2. **Capture default**: Declare default value in capture configuration
+3. **Guard with `when:`**: Conditional step execution
+
+### Runbook Survey
+
+Examined 10 legacy runbooks in `ormasoftchile/gert/examples/`: all use Go template `{{ }}` syntax (not GIS `${}`). No production runbooks at risk.
+
+### Decision Summary
+
+| Aspect | Value |
+|--------|-------|
+| **Ruling** | Option A — mandatory-miss-as-error (Ken's design ratified) |
+| **Grammar Changes** | None |
+| **Conformance Vectors** | None (15/15 pass) |
+| **Phase H Impact** | None — proceed as planned |
+| **Migration** | Authors use `?.` or `capture.default:` for soft-miss |
+

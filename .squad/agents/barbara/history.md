@@ -193,3 +193,15 @@ Phase 1 exit gate ✅ COMPLETE.
 **Spec updated:** `design/gert/grammar/gxl.ebnf` (§2/§3 notes) and `design/gert/sections/03a-expression-language.tex` (keywords table, identifiers, GDP, NamespaceCall sections).
 
 **Parser impact:** Don's PR #10 already implements correct behavior — no code change required.
+
+## 2026-06-06T01:40:00-04:00 — Phase G Arbitration: GIS Miss Semantics (commit e819895)
+
+**Status:** RATIFIED — Option A (mandatory-miss-as-error).
+
+**Decision:** Ken's GIS engine is correct as shipped. Legacy `missingkey=zero` was an under-spec'd implementation leak, not a contract. The spec already mandates hard errors for mandatory path misses.
+
+**Spec Authority:** `gis.ebnf` §4.3 + `03b-interpolation-syntax.tex` §Unresolved Variables both forbid silent empty-string substitution by default. All 15/15 GIS-PATH conformance vectors already pass and expect hard error on mandatory-miss.
+
+**Phase H Impact:** Zero. Proceed with planned hard cutover (delete legacy engine, no compat shim, no CLI flag, no parser change).
+
+**Migration:** Authors who relied on missing-key-as-empty-string use optional chaining (`?.`) or capture defaults for soft-miss tolerance.

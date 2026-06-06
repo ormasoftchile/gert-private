@@ -1,7 +1,7 @@
 ﻿# Squad Decisions
 
-**Last Updated:** 2026-06-05T16:16:27.961-07:00
-**Inbox Merged:** 12 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; user directive; phase2-day1-open-questions-resolved; tess-gcp-vectors; don-phase2-day2; don-phase2-day3)
+**Last Updated:** 2026-06-05T17:57:33.200-07:00
+**Inbox Merged:** 13 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; user directive; phase2-day1-open-questions-resolved; tess-gcp-vectors; don-phase2-day2; don-phase2-day3; don-phase2-day4)
 
 ---
 
@@ -1026,3 +1026,58 @@ ow() remain Day 4 scope
 ---
 
 **Status:**  Merged to .squad/decisions.md 
+
+# Phase 2 Day 4: GXL Evaluator
+
+**Author:** Don  Backend Developer  
+**Date:** 2026-06-05T18:06:05-07:00  
+**Status:** Completed  tv-gxl-eval.yaml all vectors green  
+**Work Item:** GXL AST evaluator with strict PJVM typing, short-circuit operators, arithmetic, comparison; stdlib (str/list/regex/math/len/now)
+
+## Architecture
+
+| Decision | Value |
+|----------|-------|
+| Entry point | \Eval(ast, bindings, clock)  (PJVM value, error)\ |
+| Type system | Strict PJVM (no implicit coercion; all type violations raise structured errors) |
+| Short-circuit | AST-level control flow (right side never evaluated if left side short-circuits) |
+| Stdlib isolation | Separate file per namespace; shared arity/type validators |
+| Clock injection | Injected dependency for time operations; no wall-clock reads in tests |
+| Error codes | Stable diagnostic codes matching conformance vectors exactly |
+
+## Stdlib Namespaces
+
+**\str.*\**: case, starts, ends, trim, split, join, replace, index, slice  
+**\list.*\**: append, at, concat, contains, empty, every, filter, find, index, join, length, map, reverse, slice, some  
+**\egex.*\**: match, test (Perl-compatible)  
+**\math.*\**: abs, ceil, floor, max, min, pow, round, sqrt  
+**Global**: \len(s|l)\, \
+ow()\ (Clock-injected)
+
+## Type Error Codes
+
+\EVAL-TYPE-{NUMBER|STRING|BOOLEAN|LIST|OBJECT}\, \EVAL-ARITY-MISMATCH\, \EVAL-UNDEFINED-VAR\, \EVAL-DIVIDE-BY-ZERO\, \EVAL-REGEX-INVALID\, \EVAL-INDEX-OUT-OF-BOUNDS\, \EVAL-KEY-NOT-FOUND\
+
+## Code Changes
+
+| File | Lines | Role |
+|------|-------|------|
+| \internal/eval/gxl/evaluator.go\ | 315 | AST walker with bindings + Clock injection |
+| \internal/eval/gxl/stdlib.go\ | 219 | All stdlib namespaces |
+| \internal/eval/gxl/evaluator_test.go\ | 197 | Unit tests |
+| \internal/eval/conformance_test.go\ | 98 | Harness integration |
+| \.squad/skills/go-ast-evaluator/SKILL.md\ | 27 | Skill documentation |
+
+**Total:** 872 additions, 7 deletions
+
+## Conformance Status
+
+- **tv-gxl-eval.yaml**:  All vectors green
+- **tv-gxl-parse.yaml**: ✅ 83/83 green
+- **tv-gxl-runtime.yaml**: Deferred (GXL type system pending)
+- **Other corpora** (GIS, GCP, flow control): NotImplemented
+
+---
+
+**Status:**  Merged to .squad/decisions.md 
+

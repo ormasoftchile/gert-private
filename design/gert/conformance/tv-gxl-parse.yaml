@@ -673,7 +673,7 @@ vectors:
   - id: TV-GXL-PARSE-062
     category: GXL-PARSE
     description: Parser rejects a string containing an unrecognized escape sequence (\q).
-    input: '"hello \\q world"'
+    input: '"hello \q world"'
     variables: {}
     expected:
       error_class: GXL-PARSE
@@ -684,7 +684,7 @@ vectors:
   - id: TV-GXL-PARSE-063
     category: GXL-PARSE
     description: Parser rejects a string with a \x hex escape (recognized in many languages but not in GXL).
-    input: '"hex \\xFF"'
+    input: '"hex \xFF"'
     variables: {}
     expected:
       error_class: GXL-PARSE

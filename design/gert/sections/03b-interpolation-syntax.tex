@@ -365,6 +365,42 @@ optional references.
 (\texttt{gis.ebnf} \S4.3.)
 
 % ─────────────────────────────────────────────────────────────────────────────
+\subsection{Migration Note: Legacy Zero-Value Semantics}
+\label{subsec:gis:migration-legacy}
+
+\begin{quote}
+\noindent\textbf{SPEC-AMBIG Arbitration (2026-06-06).}
+During Phase~G runtime integration (PR~\#15), a semantic divergence was
+identified between the new GIS engine and the legacy Go \texttt{text/template}
+engine.  The legacy engine's \texttt{missingkey=zero} option returned empty
+string for missing template variables; the new GIS engine correctly raises
+\texttt{GIS-PATH-MISSING} per this specification.
+
+\noindent\textbf{Ruling (Option~A):}
+Ken's GIS design is correct; the spec already mandates hard errors for
+mandatory path misses.  Legacy zero-value-on-miss was an \emph{under-specified
+implementation leak}, not a contract.  There is no compat mode; Phase~H
+proceeds with Ken's strict semantics.
+
+\noindent\textbf{Migration path for runbook authors:}
+Runbooks that relied on silent empty-string substitution MUST be updated
+before Phase~H cutover.  Authors have two options:
+\begin{enumerate}
+  \item Use optional chaining (\texttt{?.}) to explicitly opt into soft-miss
+        semantics where the empty string is acceptable:
+        \texttt{\$\{user?.email\}} instead of \texttt{\$\{user.email\}}.
+  \item Use \texttt{capture.default:} at capture time to populate a default
+        value when the source is absent, ensuring the variable always exists.
+\end{enumerate}
+The former is preferred for interpolation-local tolerance; the latter is
+preferred when the variable should have a meaningful default throughout the run.
+
+\noindent\textbf{Impact:}  No spec grammar changes required.  No conformance
+vector changes required (TV-GIS-PATH-004 already tests mandatory-miss-as-error).
+Phase~H proceeds without semantic compat shim.
+\end{quote}
+
+% ─────────────────────────────────────────────────────────────────────────────
 \section{Type Coercion to String}
 \label{sec:gis:coercion}
 % ─────────────────────────────────────────────────────────────────────────────

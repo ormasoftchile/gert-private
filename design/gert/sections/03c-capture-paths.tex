@@ -390,6 +390,49 @@ GIS dotted paths and GXL GDP paths walk captured subtrees identically.
 (\texttt{gcp.ebnf} \S4.)
 
 % ─────────────────────────────────────────────────────────────────────────────
+\subsection{Optional Chaining Is Not Supported in GCP}
+\label{subsec:gcp:traversal:no-optional-chaining}
+% ─────────────────────────────────────────────────────────────────────────────
+
+GCP does \textbf{not} support the optional-chaining operator (\texttt{?.})
+that is available in GIS interpolation paths (\S\ref{sec:gis}).
+A \texttt{?.} token in a GCP path MUST be rejected at parse time with
+\texttt{GCP-PARSE-005}.
+
+\noindent\textbf{Rationale.}
+GIS interpolates captured values into strings, where an empty-string
+default on path miss is a natural and safe behaviour.
+GCP captures structured data into the PJVM variable context, where a
+silent empty-string substitution would mask structural errors in step
+outputs.
+In GCP, absent-value handling is expressed via the
+\texttt{capture\_defaults:} mechanism (\S\ref{sec:gcp:default}), which
+provides explicit, type-checked scalar defaults declared in the runbook
+rather than implicit coercion at the path level.
+
+\noindent\textbf{Correct pattern for optional capture values.}
+Authors who want a fallback when a path segment is absent MUST use
+\texttt{capture\_defaults:} for scalar values or a \texttt{when:} guard
+for subtree values:
+
+\begin{minted}{yaml}
+# GIS (interpolation) — optional chaining IS supported:
+message: "User: ${user?.name}"    # yields "User: " if user is null
+
+# GCP (capture) — use capture_defaults instead:
+capture:
+  user_name: json.user.name
+capture_defaults:
+  user_name: "anonymous"          # explicit, type-checked default
+\end{minted}
+
+This intentional asymmetry reflects the different concerns of string
+interpolation (where empty-on-miss is cosmetic) versus structured capture
+(where miss-as-distinct-value preserves data fidelity).
+Cross-runtime implementations (C\#, TypeScript) MUST enforce this
+constraint identically.
+
+% ─────────────────────────────────────────────────────────────────────────────
 \section{Subtree Capture Semantics}
 \label{sec:gcp:subtree}
 % ─────────────────────────────────────────────────────────────────────────────

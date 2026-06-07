@@ -251,7 +251,7 @@ vectors:
       error_class: GXL-PATH
       error_code: GXL-PATH-003
     note: "gxl.ebnf §5.3: 'Index on null or non-array value → GXL-PATH-003'."
-    tags: [gdp, index, null, path-error]
+    tags: [gdp, index, "null", path-error]
 
   - id: TV-GXL-PATH-022
     category: GXL-PATH
@@ -273,7 +273,7 @@ vectors:
       error_class: GXL-PATH
       error_code: GXL-PATH-004
     note: "TESS-AMBIG-6 resolved 2026-06-05 (Barbara). Null is not an object; GXL-PATH-004 ('field access on non-object value') covers null as well as scalars. This mirrors GXL-PATH-003's handling of null for bracket indexing. GXL-PATH-001 would imply 'segment not found in an object' which is wrong — nullFoo is not an object at all. See gxl.ebnf §5.3, 03a §Path Access."
-    tags: [gdp, field, null, path-error, TESS-AMBIG-6]
+    tags: [gdp, field, "null", path-error, TESS-AMBIG-6]
 
   # --- Bracket vs dot: syntax classification ---
   # The grammar allows only IDENT after DOT and only INTEGER inside brackets.
@@ -401,7 +401,7 @@ vectors:
     expected:
       value: null
     note: "The variable EXISTS in the context map (no GXL-PATH-001). Its value happens to be null. Null is a valid PJVM value; returning null is correct."
-    tags: [gdp, null, top-level]
+    tags: [gdp, "null", top-level]
 
   # --- TESS-AMBIG-5 companion: string scalar dot-access ---
 

@@ -31,7 +31,7 @@ vectors:
 
   - id: TV-GXL-EVAL-001
     category: GXL-EVAL
-    description: 'false and missing_var' returns false; missing_var (PATH-001 if evaluated) is NOT evaluated.
+    description: "'false and missing_var' returns false; missing_var (PATH-001 if evaluated) is NOT evaluated."
     input: "false and missing_var"
     variables: {}
     expected:
@@ -41,7 +41,7 @@ vectors:
 
   - id: TV-GXL-EVAL-002
     category: GXL-EVAL
-    description: 'false and 1 / 0' returns false; division-by-zero subexpr is NOT evaluated.
+    description: "'false and 1 / 0' returns false; division-by-zero subexpr is NOT evaluated."
     input: "false and 1 / 0"
     variables: {}
     expected:
@@ -51,7 +51,7 @@ vectors:
 
   - id: TV-GXL-EVAL-003
     category: GXL-EVAL
-    description: 'false and len(nullVar)' returns false; len(null) is NOT evaluated.
+    description: "'false and len(nullVar)' returns false; len(null) is NOT evaluated."
     input: "false and len(nullVar)"
     variables: {nullVar: null}
     expected:
@@ -64,7 +64,7 @@ vectors:
 
   - id: TV-GXL-EVAL-004
     category: GXL-EVAL
-    description: 'true or missing_var' returns true; missing_var (PATH-001 if evaluated) is NOT evaluated.
+    description: "'true or missing_var' returns true; missing_var (PATH-001 if evaluated) is NOT evaluated."
     input: "true or missing_var"
     variables: {}
     expected:
@@ -74,7 +74,7 @@ vectors:
 
   - id: TV-GXL-EVAL-005
     category: GXL-EVAL
-    description: 'true or 1 / 0' returns true; division-by-zero subexpr is NOT evaluated.
+    description: "'true or 1 / 0' returns true; division-by-zero subexpr is NOT evaluated."
     input: "true or 1 / 0"
     variables: {}
     expected:
@@ -84,7 +84,7 @@ vectors:
 
   - id: TV-GXL-EVAL-006
     category: GXL-EVAL
-    description: 'true or len(nullVar)' returns true; len(null) is NOT evaluated.
+    description: "'true or len(nullVar)' returns true; len(null) is NOT evaluated."
     input: "true or len(nullVar)"
     variables: {nullVar: null}
     expected:
@@ -122,7 +122,7 @@ vectors:
       error_class: GXL-TYPE
       error_code: GXL-TYPE-002
     note: "gxl.ebnf §5.5: 'null in boolean pos → GXL-TYPE-002'. 'not' requires a bool operand."
-    tags: [not-operator, null, type-error]
+    tags: [not-operator, "null", type-error]
 
   - id: TV-GXL-EVAL-010
     category: GXL-EVAL
@@ -365,7 +365,7 @@ vectors:
 
   - id: TV-GXL-EVAL-034
     category: GXL-EVAL
-    description: "1 == \"1\" raises GXL-TYPE-001 — no implicit coercion between number and string."
+    description: '1 == "1" raises GXL-TYPE-001 — no implicit coercion between number and string.'
     input: '1 == "1"'
     variables: {}
     expected:
@@ -396,7 +396,7 @@ vectors:
     expected:
       value: true
     note: "gxl.ebnf §5.2: 'null == null → true'."
-    tags: [comparison, null, equality]
+    tags: [comparison, "null", equality]
 
   - id: TV-GXL-EVAL-037
     category: GXL-EVAL
@@ -405,7 +405,7 @@ vectors:
     variables: {}
     expected:
       value: false
-    tags: [comparison, null, not-equal]
+    tags: [comparison, "null", not-equal]
 
   - id: TV-GXL-EVAL-038
     category: GXL-EVAL
@@ -415,7 +415,7 @@ vectors:
     expected:
       value: true
     note: "gxl.ebnf §5.2: 'x == null → true if x is null, false otherwise (no error)'."
-    tags: [comparison, null, equality]
+    tags: [comparison, "null", equality]
 
   - id: TV-GXL-EVAL-039
     category: GXL-EVAL
@@ -425,7 +425,7 @@ vectors:
     expected:
       value: false
     note: "gxl.ebnf §5.2: == with null on either side is null-safe (no error). null ≠ 0."
-    tags: [comparison, null, equality]
+    tags: [comparison, "null", equality]
 
   - id: TV-GXL-EVAL-040
     category: GXL-EVAL
@@ -436,7 +436,7 @@ vectors:
       error_class: GXL-EVAL
       error_code: GXL-EVAL-004
     note: "gxl.ebnf §5.5: 'null < x → GXL-EVAL-004 (null in ordered comparison)'."
-    tags: [comparison, null, ordered, eval-error]
+    tags: [comparison, "null", ordered, eval-error]
 
   # --- Arithmetic: basic integer operations ---
   # gxl.ebnf §5.4: GXL uses float64 always. 5/2 = 2.5 (not 2).
@@ -584,7 +584,7 @@ vectors:
 
   - id: TV-GXL-EVAL-054
     category: GXL-EVAL
-    description: "len(\"hello\") returns 5 — UTF-8 code-point count."
+    description: 'len("hello") returns 5 — UTF-8 code-point count.'
     input: 'len("hello")'
     variables: {}
     expected:
@@ -638,14 +638,14 @@ vectors:
       error_class: GXL-TYPE
       error_code: GXL-TYPE-003
     note: "gxl.ebnf §4.1: 'Null argument → GXL-TYPE-003'."
-    tags: [stdlib, len, null, type-error]
+    tags: [stdlib, len, "null", type-error]
 
   # --- Function: str namespace ---
   # gxl.ebnf §4.2
 
   - id: TV-GXL-EVAL-060
     category: GXL-EVAL
-    description: "str.startsWith(\"hello\", \"he\") returns true."
+    description: 'str.startsWith("hello", "he") returns true.'
     input: 'str.startsWith("hello", "he")'
     variables: {}
     expected:
@@ -654,7 +654,7 @@ vectors:
 
   - id: TV-GXL-EVAL-061
     category: GXL-EVAL
-    description: "str.startsWith(\"hello\", \"lo\") returns false."
+    description: 'str.startsWith("hello", "lo") returns false.'
     input: 'str.startsWith("hello", "lo")'
     variables: {}
     expected:
@@ -663,7 +663,7 @@ vectors:
 
   - id: TV-GXL-EVAL-062
     category: GXL-EVAL
-    description: "str.startsWith(\"\", \"\") returns true — empty prefix always matches."
+    description: 'str.startsWith("", "") returns true — empty prefix always matches.'
     input: 'str.startsWith("", "")'
     variables: {}
     expected:
@@ -673,7 +673,7 @@ vectors:
 
   - id: TV-GXL-EVAL-063
     category: GXL-EVAL
-    description: "str.endsWith(\"hello\", \"lo\") returns true."
+    description: 'str.endsWith("hello", "lo") returns true.'
     input: 'str.endsWith("hello", "lo")'
     variables: {}
     expected:
@@ -682,7 +682,7 @@ vectors:
 
   - id: TV-GXL-EVAL-064
     category: GXL-EVAL
-    description: "str.endsWith(\"hello\", \"he\") returns false."
+    description: 'str.endsWith("hello", "he") returns false.'
     input: 'str.endsWith("hello", "he")'
     variables: {}
     expected:
@@ -691,7 +691,7 @@ vectors:
 
   - id: TV-GXL-EVAL-065
     category: GXL-EVAL
-    description: "str.endsWith(\"world\", \"\") returns true — empty suffix always matches."
+    description: 'str.endsWith("world", "") returns true — empty suffix always matches.'
     input: 'str.endsWith("world", "")'
     variables: {}
     expected:
@@ -701,7 +701,7 @@ vectors:
 
   - id: TV-GXL-EVAL-066
     category: GXL-EVAL
-    description: "str.contains(\"hello world\", \"world\") returns true."
+    description: 'str.contains("hello world", "world") returns true.'
     input: 'str.contains("hello world", "world")'
     variables: {}
     expected:
@@ -710,7 +710,7 @@ vectors:
 
   - id: TV-GXL-EVAL-067
     category: GXL-EVAL
-    description: "str.contains(\"hello\", \"xyz\") returns false."
+    description: 'str.contains("hello", "xyz") returns false.'
     input: 'str.contains("hello", "xyz")'
     variables: {}
     expected:
@@ -719,7 +719,7 @@ vectors:
 
   - id: TV-GXL-EVAL-068
     category: GXL-EVAL
-    description: "str.contains(\"hello\", \"\") returns true — empty substr always matches."
+    description: 'str.contains("hello", "") returns true — empty substr always matches.'
     input: 'str.contains("hello", "")'
     variables: {}
     expected:
@@ -729,7 +729,7 @@ vectors:
 
   - id: TV-GXL-EVAL-069
     category: GXL-EVAL
-    description: "str.toLower(\"HELLO\") returns \"hello\"."
+    description: 'str.toLower("HELLO") returns "hello".'
     input: 'str.toLower("HELLO")'
     variables: {}
     expected:
@@ -738,7 +738,7 @@ vectors:
 
   - id: TV-GXL-EVAL-070
     category: GXL-EVAL
-    description: "str.toUpper(\"hello\") returns \"HELLO\"."
+    description: 'str.toUpper("hello") returns "HELLO".'
     input: 'str.toUpper("hello")'
     variables: {}
     expected:
@@ -747,7 +747,7 @@ vectors:
 
   - id: TV-GXL-EVAL-071
     category: GXL-EVAL
-    description: "str.trim(\"  hello  \") returns \"hello\" — leading and trailing spaces removed."
+    description: 'str.trim("  hello  ") returns "hello" — leading and trailing spaces removed.'
     input: 'str.trim("  hello  ")'
     variables: {}
     expected:
@@ -756,7 +756,7 @@ vectors:
 
   - id: TV-GXL-EVAL-072
     category: GXL-EVAL
-    description: "str.trim(\"hello\") returns \"hello\" — no-op when no surrounding whitespace."
+    description: 'str.trim("hello") returns "hello" — no-op when no surrounding whitespace.'
     input: 'str.trim("hello")'
     variables: {}
     expected:
@@ -765,7 +765,7 @@ vectors:
 
   - id: TV-GXL-EVAL-073
     category: GXL-EVAL
-    description: "str.length(\"hello\") returns 5 — alias for len(string)."
+    description: 'str.length("hello") returns 5 — alias for len(string).'
     input: 'str.length("hello")'
     variables: {}
     expected:
@@ -782,7 +782,7 @@ vectors:
       error_class: GXL-TYPE
       error_code: GXL-TYPE-003
     note: "gxl.ebnf §4.2: 'Null argument → GXL-TYPE-003' for all str functions."
-    tags: [stdlib, str, null, type-error]
+    tags: [stdlib, str, "null", type-error]
 
   # --- Function: list namespace ---
   # gxl.ebnf §4.3
@@ -813,7 +813,7 @@ vectors:
     expected:
       value: false
     note: "gxl.ebnf §4.3: 'Null item → false (null is never in a list)'."
-    tags: [stdlib, list, contains, null, edge]
+    tags: [stdlib, list, contains, "null", edge]
 
   - id: TV-GXL-EVAL-078
     category: GXL-EVAL
@@ -843,7 +843,7 @@ vectors:
     expected:
       value: -1
     note: "gxl.ebnf §4.3: 'Null item → always -1'."
-    tags: [stdlib, list, indexOf, null, edge]
+    tags: [stdlib, list, indexOf, "null", edge]
 
   - id: TV-GXL-EVAL-081
     category: GXL-EVAL
@@ -888,7 +888,7 @@ vectors:
 
   - id: TV-GXL-EVAL-084
     category: GXL-EVAL
-    description: "str.unknownMethod(\"test\") raises a parse error — unknown method in str namespace."
+    description: 'str.unknownMethod("test") raises a parse error — unknown method in str namespace.'
     input: 'str.unknownMethod("test")'
     variables: {}
     expected:
@@ -902,7 +902,7 @@ vectors:
 
   - id: TV-GXL-EVAL-085
     category: GXL-EVAL
-    description: "\"a\" == \"a\" returns true — string identity."
+    description: '"a" == "a" returns true — string identity.'
     input: '"a" == "a"'
     variables: {}
     expected:
@@ -925,7 +925,7 @@ vectors:
 
   - id: TV-GXL-EVAL-087
     category: GXL-EVAL
-    description: "str.contains(config_key, \"prod\") resolves GDP config_key before passing to str.contains."
+    description: 'str.contains(config_key, "prod") resolves GDP config_key before passing to str.contains.'
     input: "str.contains(config_key, \"prod\")"
     variables: {config_key: "prod-east-1"}
     expected:

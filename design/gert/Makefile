@@ -3,8 +3,9 @@ MAIN ?= main.tex
 BUILD_DIR ?= build
 ENGINE ?= auto
 PDF_NAME ?= gert
+GERT_DESIGN_DIR ?= $(if $(wildcard design/gert/Makefile),design/gert,.)
 
-.PHONY: help check-tools build clean distclean rebuild release watch
+.PHONY: help check-tools build clean distclean rebuild release watch verify-corpus
 
 help:
 	@echo "Gert v2 design docs"
@@ -13,6 +14,7 @@ help:
 	@echo "  make check-tools  - Verify required tools are available"
 	@echo "  make build        - Build PDF using selected engine"
 	@echo "  make watch        - Continuous preview (requires latexmk)"
+	@echo "  make verify-corpus - Validate conformance YAML and schema (requires PyYAML + jsonschema)"
 	@echo "  make clean        - Remove generated build artifacts"
 	@echo "  make distclean    - Alias for clean"
 	@echo "  make rebuild      - Clean then build"
@@ -29,6 +31,9 @@ check-tools:
 
 build:
 	$(PYTHON) scripts/latex.py build --main $(MAIN) --build-dir $(BUILD_DIR) --engine $(ENGINE) --pdf-name $(PDF_NAME)
+
+verify-corpus:
+	@$(PYTHON) $(GERT_DESIGN_DIR)/scripts/verify_corpus.py
 
 clean:
 	$(PYTHON) scripts/latex.py clean --build-dir $(BUILD_DIR)

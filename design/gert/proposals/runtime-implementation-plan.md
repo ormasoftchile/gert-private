@@ -340,6 +340,7 @@ Fido's PR #20 in `ormasoftchile/gert` attempted a full conformance harness but i
 | **Acceptance criterion (B)** | GCP parser unit tests pass for all source prefixes (local, step, http, event). GDP resolver unit tests pass. GCP parser can parse all 41 tv-gcp-path vector inputs without error (evaluation deferred to P7). |
 | **Work units** | A: 5–7 evaluator, B: 3–4 GCP parser + GDP resolver |
 | **Cutover decision** | None — no production consumers yet. |
+| **Spec blockers** | ✅ RESOLVED (2026-06-07): Truthy() semantics for empty collections — Option (c) Strict. Non-bool in boolean context → `GXL-TYPE-002`. No implicit truthy/falsy coercion. See [`.squad/decisions/inbox/barbara-truthy-arbitration.md`](../../../.squad/decisions/inbox/barbara-truthy-arbitration.md) and spec §03a §Truthy Coercion in Boolean Context. |
 
 ### P4: GIS Interpolator
 

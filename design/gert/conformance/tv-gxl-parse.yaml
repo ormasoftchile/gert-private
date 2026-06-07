@@ -31,7 +31,7 @@ vectors:
 
   - id: TV-GXL-PARSE-001
     category: GXL-PARSE
-    description: Parser accepts a simple decimal integer literal.
+    description: "Parser accepts a simple decimal integer literal."
     input: "42"
     variables: {}
     expected:
@@ -40,7 +40,7 @@ vectors:
 
   - id: TV-GXL-PARSE-002
     category: GXL-PARSE
-    description: Parser accepts zero as a standalone integer literal (single-digit form).
+    description: "Parser accepts zero as a standalone integer literal (single-digit form)."
     input: "0"
     variables: {}
     expected:
@@ -49,7 +49,7 @@ vectors:
 
   - id: TV-GXL-PARSE-003
     category: GXL-PARSE
-    description: Parser accepts a negative integer produced by UnaryMinus applied to NUMBER.
+    description: "Parser accepts a negative integer produced by UnaryMinus applied to NUMBER."
     input: "-7"
     variables: {}
     expected:
@@ -64,7 +64,7 @@ vectors:
 
   - id: TV-GXL-PARSE-004
     category: GXL-PARSE
-    description: Parser accepts a decimal float literal (integer part + fractional part).
+    description: "Parser accepts a decimal float literal (integer part + fractional part)."
     input: "3.14"
     variables: {}
     expected:
@@ -73,7 +73,7 @@ vectors:
 
   - id: TV-GXL-PARSE-005
     category: GXL-PARSE
-    description: Parser accepts scientific notation with lowercase 'e' and positive exponent.
+    description: "Parser accepts scientific notation with lowercase 'e' and positive exponent."
     input: "1.5e10"
     variables: {}
     expected:
@@ -82,7 +82,7 @@ vectors:
 
   - id: TV-GXL-PARSE-006
     category: GXL-PARSE
-    description: Parser accepts scientific notation with uppercase 'E' and negative exponent.
+    description: "Parser accepts scientific notation with uppercase 'E' and negative exponent."
     input: "2.0E-3"
     variables: {}
     expected:
@@ -91,7 +91,7 @@ vectors:
 
   - id: TV-GXL-PARSE-007
     category: GXL-PARSE
-    description: Parser accepts scientific notation with explicit '+' exponent sign.
+    description: "Parser accepts scientific notation with explicit '+' exponent sign."
     input: "1e+5"
     variables: {}
     expected:
@@ -105,7 +105,7 @@ vectors:
 
   - id: TV-GXL-PARSE-008
     category: GXL-PARSE
-    description: Parser accepts the boolean literal 'true'.
+    description: "Parser accepts the boolean literal 'true'."
     input: "true"
     variables: {}
     expected:
@@ -114,7 +114,7 @@ vectors:
 
   - id: TV-GXL-PARSE-009
     category: GXL-PARSE
-    description: Parser accepts the boolean literal 'false'.
+    description: "Parser accepts the boolean literal 'false'."
     input: "false"
     variables: {}
     expected:
@@ -123,12 +123,12 @@ vectors:
 
   - id: TV-GXL-PARSE-010
     category: GXL-PARSE
-    description: Parser accepts the null literal.
+    description: "Parser accepts the null literal."
     input: "null"
     variables: {}
     expected:
       value: "parse_ok"
-    tags: [literal, null]
+    tags: [literal, "null"]
 
   # ---------------------------------------------------------------
   # Literals — STRINGS
@@ -137,7 +137,7 @@ vectors:
 
   - id: TV-GXL-PARSE-011
     category: GXL-PARSE
-    description: Parser accepts a double-quoted string containing ordinary ASCII characters.
+    description: "Parser accepts a double-quoted string containing ordinary ASCII characters."
     input: '"hello world"'
     variables: {}
     expected:
@@ -146,7 +146,7 @@ vectors:
 
   - id: TV-GXL-PARSE-012
     category: GXL-PARSE
-    description: Parser accepts a single-quoted string containing ordinary ASCII characters.
+    description: "Parser accepts a single-quoted string containing ordinary ASCII characters."
     input: "'hello world'"
     variables: {}
     expected:
@@ -155,7 +155,7 @@ vectors:
 
   - id: TV-GXL-PARSE-013
     category: GXL-PARSE
-    description: Parser accepts an empty double-quoted string.
+    description: "Parser accepts an empty double-quoted string."
     input: '""'
     variables: {}
     expected:
@@ -164,7 +164,7 @@ vectors:
 
   - id: TV-GXL-PARSE-014
     category: GXL-PARSE
-    description: Parser accepts an empty single-quoted string.
+    description: "Parser accepts an empty single-quoted string."
     input: "''"
     variables: {}
     expected:
@@ -173,7 +173,7 @@ vectors:
 
   - id: TV-GXL-PARSE-015
     category: GXL-PARSE
-    description: Parser accepts a string containing Unicode characters (non-ASCII content).
+    description: "Parser accepts a string containing Unicode characters (non-ASCII content)."
     input: '"café résumé"'
     variables: {}
     expected:
@@ -183,7 +183,7 @@ vectors:
 
   - id: TV-GXL-PARSE-016
     category: GXL-PARSE
-    description: Parser accepts a string with recognized escape sequences — backslash, newline, tab.
+    description: "Parser accepts a string with recognized escape sequences — backslash, newline, tab."
     input: '"line1\\nline2\\ttabbed"'
     variables: {}
     expected:
@@ -192,7 +192,7 @@ vectors:
 
   - id: TV-GXL-PARSE-017
     category: GXL-PARSE
-    description: Parser accepts a string with a 4-digit Unicode escape sequence (\uXXXX).
+    description: "Parser accepts a string with a 4-digit Unicode escape sequence (\\uXXXX)."
     input: '"snowman \u2603"'
     variables: {}
     expected:
@@ -201,7 +201,7 @@ vectors:
 
   - id: TV-GXL-PARSE-018
     category: GXL-PARSE
-    description: Parser accepts a string with an 8-digit Unicode escape sequence (\UXXXXXXXX).
+    description: "Parser accepts a string with an 8-digit Unicode escape sequence (\\UXXXXXXXX)."
     input: '"emoji \U0001F600"'
     variables: {}
     expected:
@@ -210,7 +210,7 @@ vectors:
 
   - id: TV-GXL-PARSE-019
     category: GXL-PARSE
-    description: Parser accepts a double-quoted string with an embedded single quote (no escaping needed).
+    description: "Parser accepts a double-quoted string with an embedded single quote (no escaping needed)."
     input: '"it''s fine"'
     variables: {}
     expected:
@@ -220,7 +220,7 @@ vectors:
 
   - id: TV-GXL-PARSE-020
     category: GXL-PARSE
-    description: Parser accepts a single-quoted string with an embedded double quote (no escaping needed).
+    description: "Parser accepts a single-quoted string with an embedded double quote (no escaping needed)."
     input: "'she said \"hi\"'"
     variables: {}
     expected:
@@ -235,7 +235,7 @@ vectors:
 
   - id: TV-GXL-PARSE-021
     category: GXL-PARSE
-    description: Parser accepts a simple lowercase identifier as a GDP path (single segment).
+    description: "Parser accepts a simple lowercase identifier as a GDP path (single segment)."
     input: "hostname"
     variables: {}
     expected:
@@ -244,7 +244,7 @@ vectors:
 
   - id: TV-GXL-PARSE-022
     category: GXL-PARSE
-    description: Parser accepts an identifier containing an underscore.
+    description: "Parser accepts an identifier containing an underscore."
     input: "my_var"
     variables: {}
     expected:
@@ -253,7 +253,7 @@ vectors:
 
   - id: TV-GXL-PARSE-023
     category: GXL-PARSE
-    description: Parser accepts an identifier with trailing digits (digits not in leading position).
+    description: "Parser accepts an identifier with trailing digits (digits not in leading position)."
     input: "var1"
     variables: {}
     expected:
@@ -262,7 +262,7 @@ vectors:
 
   - id: TV-GXL-PARSE-024
     category: GXL-PARSE
-    description: Parser accepts a camelCase identifier.
+    description: "Parser accepts a camelCase identifier."
     input: "myVariable"
     variables: {}
     expected:
@@ -271,7 +271,7 @@ vectors:
 
   - id: TV-GXL-PARSE-025
     category: GXL-PARSE
-    description: Parser accepts a GDP path with one dot-separated field access (two segments).
+    description: "Parser accepts a GDP path with one dot-separated field access (two segments)."
     input: "config.region"
     variables: {}
     expected:
@@ -280,7 +280,7 @@ vectors:
 
   - id: TV-GXL-PARSE-026
     category: GXL-PARSE
-    description: Parser accepts a GDP path with an integer array index.
+    description: "Parser accepts a GDP path with an integer array index."
     input: "items[0]"
     variables: {}
     expected:
@@ -289,7 +289,7 @@ vectors:
 
   - id: TV-GXL-PARSE-027
     category: GXL-PARSE
-    description: Parser accepts a deeply-nested GDP path combining dot access and array indexing.
+    description: "Parser accepts a deeply-nested GDP path combining dot access and array indexing."
     input: "response.items[0].metadata.name"
     variables: {}
     expected:
@@ -298,7 +298,7 @@ vectors:
 
   - id: TV-GXL-PARSE-028
     category: GXL-PARSE
-    description: Parser accepts a GDP path using multi-digit array index.
+    description: "Parser accepts a GDP path using multi-digit array index."
     input: "list[10]"
     variables: {}
     expected:
@@ -313,7 +313,7 @@ vectors:
 
   - id: TV-GXL-PARSE-029
     category: GXL-PARSE
-    description: Parser accepts equality comparison operator (==).
+    description: "Parser accepts equality comparison operator (==)."
     input: "status == \"ok\""
     variables: {}
     expected:
@@ -322,7 +322,7 @@ vectors:
 
   - id: TV-GXL-PARSE-030
     category: GXL-PARSE
-    description: Parser accepts inequality comparison operator (!=).
+    description: "Parser accepts inequality comparison operator (!=)."
     input: "status != \"error\""
     variables: {}
     expected:
@@ -331,7 +331,7 @@ vectors:
 
   - id: TV-GXL-PARSE-031
     category: GXL-PARSE
-    description: Parser accepts strict less-than comparison operator (<).
+    description: "Parser accepts strict less-than comparison operator (<)."
     input: "count < 100"
     variables: {}
     expected:
@@ -340,7 +340,7 @@ vectors:
 
   - id: TV-GXL-PARSE-032
     category: GXL-PARSE
-    description: Parser accepts less-than-or-equal comparison operator (<=).
+    description: "Parser accepts less-than-or-equal comparison operator (<=)."
     input: "count <= 100"
     variables: {}
     expected:
@@ -349,7 +349,7 @@ vectors:
 
   - id: TV-GXL-PARSE-033
     category: GXL-PARSE
-    description: Parser accepts strict greater-than comparison operator (>).
+    description: "Parser accepts strict greater-than comparison operator (>)."
     input: "score > 0"
     variables: {}
     expected:
@@ -358,7 +358,7 @@ vectors:
 
   - id: TV-GXL-PARSE-034
     category: GXL-PARSE
-    description: Parser accepts greater-than-or-equal comparison operator (>=).
+    description: "Parser accepts greater-than-or-equal comparison operator (>=)."
     input: "score >= 0"
     variables: {}
     expected:
@@ -372,7 +372,7 @@ vectors:
 
   - id: TV-GXL-PARSE-035
     category: GXL-PARSE
-    description: Parser accepts binary addition operator (+) between two GDP paths.
+    description: "Parser accepts binary addition operator (+) between two GDP paths."
     input: "a + b"
     variables: {}
     expected:
@@ -381,7 +381,7 @@ vectors:
 
   - id: TV-GXL-PARSE-036
     category: GXL-PARSE
-    description: Parser accepts binary subtraction operator (-) between GDP path and integer literal.
+    description: "Parser accepts binary subtraction operator (-) between GDP path and integer literal."
     input: "count - 1"
     variables: {}
     expected:
@@ -390,7 +390,7 @@ vectors:
 
   - id: TV-GXL-PARSE-037
     category: GXL-PARSE
-    description: Parser accepts multiplication operator (*).
+    description: "Parser accepts multiplication operator (*)."
     input: "price * quantity"
     variables: {}
     expected:
@@ -399,7 +399,7 @@ vectors:
 
   - id: TV-GXL-PARSE-038
     category: GXL-PARSE
-    description: Parser accepts division operator (/).
+    description: "Parser accepts division operator (/)."
     input: "total / count"
     variables: {}
     expected:
@@ -408,7 +408,7 @@ vectors:
 
   - id: TV-GXL-PARSE-039
     category: GXL-PARSE
-    description: Parser accepts modulo operator (%).
+    description: "Parser accepts modulo operator (%)."
     input: "value % 3"
     variables: {}
     expected:
@@ -422,7 +422,7 @@ vectors:
 
   - id: TV-GXL-PARSE-040
     category: GXL-PARSE
-    description: Parser accepts logical 'and' operator between two boolean GDP paths.
+    description: "Parser accepts logical 'and' operator between two boolean GDP paths."
     input: "is_ready and is_enabled"
     variables: {}
     expected:
@@ -431,7 +431,7 @@ vectors:
 
   - id: TV-GXL-PARSE-041
     category: GXL-PARSE
-    description: Parser accepts logical 'or' operator between two boolean GDP paths.
+    description: "Parser accepts logical 'or' operator between two boolean GDP paths."
     input: "is_admin or is_owner"
     variables: {}
     expected:
@@ -440,7 +440,7 @@ vectors:
 
   - id: TV-GXL-PARSE-042
     category: GXL-PARSE
-    description: Parser accepts logical 'not' as a unary prefix operator.
+    description: "Parser accepts logical 'not' as a unary prefix operator."
     input: "not is_blocked"
     variables: {}
     expected:
@@ -485,7 +485,7 @@ vectors:
 
   - id: TV-GXL-PARSE-046
     category: GXL-PARSE
-    description: Parser accepts a parenthesized sub-expression that overrides default precedence.
+    description: "Parser accepts a parenthesized sub-expression that overrides default precedence."
     input: "(a + b) * c"
     variables: {}
     expected:
@@ -500,7 +500,7 @@ vectors:
 
   - id: TV-GXL-PARSE-047
     category: GXL-PARSE
-    description: Parser accepts len() builtin with a single GDP path argument.
+    description: "Parser accepts len() builtin with a single GDP path argument."
     input: "len(items)"
     variables: {}
     expected:
@@ -509,7 +509,7 @@ vectors:
 
   - id: TV-GXL-PARSE-048
     category: GXL-PARSE
-    description: Parser accepts a namespace function call with two arguments (str.contains).
+    description: "Parser accepts a namespace function call with two arguments (str.contains)."
     input: 'str.contains(message, "error")'
     variables: {}
     expected:
@@ -518,7 +518,7 @@ vectors:
 
   - id: TV-GXL-PARSE-049
     category: GXL-PARSE
-    description: Parser accepts a namespace function call with a single argument (str.trim).
+    description: "Parser accepts a namespace function call with a single argument (str.trim)."
     input: "str.trim(label)"
     variables: {}
     expected:
@@ -527,7 +527,7 @@ vectors:
 
   - id: TV-GXL-PARSE-050
     category: GXL-PARSE
-    description: Parser accepts a list namespace function call with two arguments (list.contains).
+    description: "Parser accepts a list namespace function call with two arguments (list.contains)."
     input: "list.contains(tags, \"prod\")"
     variables: {}
     expected:
@@ -536,7 +536,7 @@ vectors:
 
   - id: TV-GXL-PARSE-051
     category: GXL-PARSE
-    description: Parser accepts a regex namespace function call (regex.match).
+    description: "Parser accepts a regex namespace function call (regex.match)."
     input: 'regex.match(path, "^/api/")'
     variables: {}
     expected:
@@ -545,7 +545,7 @@ vectors:
 
   - id: TV-GXL-PARSE-052
     category: GXL-PARSE
-    description: Parser accepts a nested function call (len inside a namespace call argument).
+    description: "Parser accepts a nested function call (len inside a namespace call argument)."
     input: "str.contains(message, \"x\") and len(items) > 0"
     variables: {}
     expected:
@@ -554,7 +554,7 @@ vectors:
 
   - id: TV-GXL-PARSE-053
     category: GXL-PARSE
-    description: Parser accepts a GDP path as an argument to a namespace function call.
+    description: "Parser accepts a GDP path as an argument to a namespace function call."
     input: "str.startsWith(config.prefix, \"prod\")"
     variables: {}
     expected:
@@ -571,7 +571,7 @@ vectors:
 
   - id: TV-GXL-PARSE-054
     category: GXL-PARSE
-    description: Parser accepts 'false and missingVar'; short-circuit parse form must be syntactically valid.
+    description: "Parser accepts 'false and missingVar'; short-circuit parse form must be syntactically valid."
     input: "false and missingVar"
     variables: {}
     expected:
@@ -581,7 +581,7 @@ vectors:
 
   - id: TV-GXL-PARSE-055
     category: GXL-PARSE
-    description: Parser accepts 'true or missingVar'; short-circuit parse form must be syntactically valid.
+    description: "Parser accepts 'true or missingVar'; short-circuit parse form must be syntactically valid."
     input: "true or missingVar"
     variables: {}
     expected:
@@ -595,7 +595,7 @@ vectors:
 
   - id: TV-GXL-PARSE-056
     category: GXL-PARSE
-    description: Parser rejects a bare leading-dot path (.foo) — DOT is not a valid Primary start.
+    description: "Parser rejects a bare leading-dot path (.foo) — DOT is not a valid Primary start."
     input: ".foo"
     variables: {}
     expected:
@@ -606,7 +606,7 @@ vectors:
 
   - id: TV-GXL-PARSE-057
     category: GXL-PARSE
-    description: Parser rejects a trailing operator with no right-hand operand.
+    description: "Parser rejects a trailing operator with no right-hand operand."
     input: "a +"
     variables: {}
     expected:
@@ -621,7 +621,7 @@ vectors:
 
   - id: TV-GXL-PARSE-058
     category: GXL-PARSE
-    description: Parser rejects a double-quoted string that is never closed before EOF.
+    description: "Parser rejects a double-quoted string that is never closed before EOF."
     input: '"unterminated'
     variables: {}
     expected:
@@ -632,7 +632,7 @@ vectors:
 
   - id: TV-GXL-PARSE-059
     category: GXL-PARSE
-    description: Parser rejects a single-quoted string that is never closed before EOF.
+    description: "Parser rejects a single-quoted string that is never closed before EOF."
     input: "'unterminated"
     variables: {}
     expected:
@@ -646,7 +646,7 @@ vectors:
 
   - id: TV-GXL-PARSE-060
     category: GXL-PARSE
-    description: Parser rejects an integer literal with leading zeros (007).
+    description: "Parser rejects an integer literal with leading zeros (007)."
     input: "007"
     variables: {}
     expected:
@@ -657,7 +657,7 @@ vectors:
 
   - id: TV-GXL-PARSE-061
     category: GXL-PARSE
-    description: Parser rejects a number with two decimal points (1.2.3) — invalid numeric token.
+    description: "Parser rejects a number with two decimal points (1.2.3) — invalid numeric token."
     input: "1.2.3"
     variables: {}
     expected:
@@ -672,7 +672,7 @@ vectors:
 
   - id: TV-GXL-PARSE-062
     category: GXL-PARSE
-    description: Parser rejects a string containing an unrecognized escape sequence (\q).
+    description: "Parser rejects a string containing an unrecognized escape sequence (\\q)."
     input: '"hello \q world"'
     variables: {}
     expected:
@@ -683,7 +683,7 @@ vectors:
 
   - id: TV-GXL-PARSE-063
     category: GXL-PARSE
-    description: Parser rejects a string with a \x hex escape (recognized in many languages but not in GXL).
+    description: "Parser rejects a string with a \\x hex escape (recognized in many languages but not in GXL)."
     input: '"hex \xFF"'
     variables: {}
     expected:
@@ -698,7 +698,7 @@ vectors:
 
   - id: TV-GXL-PARSE-064
     category: GXL-PARSE
-    description: Parser rejects a call to the 'math' namespace (reserved for v2, no methods in v1).
+    description: "Parser rejects a call to the 'math' namespace (reserved for v2, no methods in v1)."
     input: "math.abs(x)"
     variables: {}
     expected:
@@ -709,7 +709,7 @@ vectors:
 
   - id: TV-GXL-PARSE-065
     category: GXL-PARSE
-    description: Parser rejects a call to a completely unknown namespace prefix.
+    description: "Parser rejects a call to a completely unknown namespace prefix."
     input: "http.get(url)"
     variables: {}
     expected:
@@ -724,7 +724,7 @@ vectors:
 
   - id: TV-GXL-PARSE-066
     category: GXL-PARSE
-    description: Parser rejects a call to an unknown method on the 'str' namespace (str.explode).
+    description: "Parser rejects a call to an unknown method on the 'str' namespace (str.explode)."
     input: "str.explode(s, \",\")"
     variables: {}
     expected:
@@ -735,7 +735,7 @@ vectors:
 
   - id: TV-GXL-PARSE-067
     category: GXL-PARSE
-    description: Parser rejects a call to an unknown method on the 'list' namespace (list.sort).
+    description: "Parser rejects a call to an unknown method on the 'list' namespace (list.sort)."
     input: "list.sort(items)"
     variables: {}
     expected:
@@ -751,7 +751,7 @@ vectors:
 
   - id: TV-GXL-PARSE-068
     category: GXL-PARSE
-    description: Parser rejects '&&' (C-style logical AND) — use 'and' keyword instead.
+    description: "Parser rejects '&&' (C-style logical AND) — use 'and' keyword instead."
     input: "a && b"
     variables: {}
     expected:
@@ -762,7 +762,7 @@ vectors:
 
   - id: TV-GXL-PARSE-069
     category: GXL-PARSE
-    description: Parser rejects '||' (C-style logical OR) — use 'or' keyword instead.
+    description: "Parser rejects '||' (C-style logical OR) — use 'or' keyword instead."
     input: "a || b"
     variables: {}
     expected:
@@ -773,7 +773,7 @@ vectors:
 
   - id: TV-GXL-PARSE-070
     category: GXL-PARSE
-    description: Parser rejects '!' (C-style logical NOT) — use 'not' keyword instead.
+    description: "Parser rejects '!' (C-style logical NOT) — use 'not' keyword instead."
     input: "!is_ready"
     variables: {}
     expected:
@@ -784,7 +784,7 @@ vectors:
 
   - id: TV-GXL-PARSE-071
     category: GXL-PARSE
-    description: Parser rejects 'contains' used as an infix operator (expr-lang/expr style).
+    description: "Parser rejects 'contains' used as an infix operator (expr-lang/expr style)."
     input: "items contains \"prod\""
     variables: {}
     expected:
@@ -795,7 +795,7 @@ vectors:
 
   - id: TV-GXL-PARSE-072
     category: GXL-PARSE
-    description: Parser rejects a ternary conditional expression (?:) — not part of GXL grammar.
+    description: "Parser rejects a ternary conditional expression (?:) — not part of GXL grammar."
     input: "a ? b : c"
     variables: {}
     expected:
@@ -806,7 +806,7 @@ vectors:
 
   - id: TV-GXL-PARSE-073
     category: GXL-PARSE
-    description: Parser rejects a negative array index (foo[-1]) — negative indices are forbidden.
+    description: "Parser rejects a negative array index (foo[-1]) — negative indices are forbidden."
     input: "foo[-1]"
     variables: {}
     expected:
@@ -817,7 +817,7 @@ vectors:
 
   - id: TV-GXL-PARSE-074
     category: GXL-PARSE
-    description: Parser rejects a bare function call that is not 'len' (foo() without namespace).
+    description: "Parser rejects a bare function call that is not 'len' (foo() without namespace)."
     input: "foo()"
     variables: {}
     expected:
@@ -828,7 +828,7 @@ vectors:
 
   - id: TV-GXL-PARSE-075
     category: GXL-PARSE
-    description: Parser rejects an assignment expression (x = 5) — GXL is read-only.
+    description: "Parser rejects an assignment expression (x = 5) — GXL is read-only."
     input: "x = 5"
     variables: {}
     expected:
@@ -839,7 +839,7 @@ vectors:
 
   - id: TV-GXL-PARSE-076
     category: GXL-PARSE
-    description: Parser rejects unary plus (+5) — unary '+' is not a supported operator.
+    description: "Parser rejects unary plus (+5) — unary '+' is not a supported operator."
     input: "+5"
     variables: {}
     expected:
@@ -854,7 +854,7 @@ vectors:
 
   - id: TV-GXL-PARSE-077
     category: GXL-PARSE
-    description: Parser rejects an expression with an unclosed left parenthesis.
+    description: "Parser rejects an expression with an unclosed left parenthesis."
     input: "(a + b"
     variables: {}
     expected:
@@ -865,7 +865,7 @@ vectors:
 
   - id: TV-GXL-PARSE-078
     category: GXL-PARSE
-    description: Parser rejects an expression with a spurious extra right parenthesis.
+    description: "Parser rejects an expression with a spurious extra right parenthesis."
     input: "a + b)"
     variables: {}
     expected:
@@ -880,7 +880,7 @@ vectors:
 
   - id: TV-GXL-PARSE-079
     category: GXL-PARSE
-    description: Parser rejects a chained comparison (a < b < c) — comparisons are non-associative.
+    description: "Parser rejects a chained comparison (a < b < c) — comparisons are non-associative."
     input: "a < b < c"
     variables: {}
     expected:
@@ -891,7 +891,7 @@ vectors:
 
   - id: TV-GXL-PARSE-080
     category: GXL-PARSE
-    description: Parser rejects a chained equality comparison (a == b == c).
+    description: "Parser rejects a chained equality comparison (a == b == c)."
     input: "a == b == c"
     variables: {}
     expected:
@@ -912,7 +912,7 @@ vectors:
 
   - id: TV-GXL-PARSE-081
     category: GXL-PARSE
-    description: Parser rejects 'and' used as a standalone primary expression (keyword as identifier).
+    description: "Parser rejects 'and' used as a standalone primary expression (keyword as identifier)."
     input: "and"
     variables: {}
     expected:
@@ -923,7 +923,7 @@ vectors:
 
   - id: TV-GXL-PARSE-082
     category: GXL-PARSE
-    description: Parser rejects 'or' used as a standalone primary expression (keyword as identifier).
+    description: "Parser rejects 'or' used as a standalone primary expression (keyword as identifier)."
     input: "or"
     variables: {}
     expected:
@@ -934,7 +934,7 @@ vectors:
 
   - id: TV-GXL-PARSE-083
     category: GXL-PARSE
-    description: Parser rejects 'str.foo' (no parens) — reserved namespace keyword cannot be used as GDP identifier, and incomplete NamespaceCall fails at missing LPAREN.
+    description: "Parser rejects 'str.foo' (no parens) — reserved namespace keyword cannot be used as GDP identifier, and incomplete NamespaceCall fails at missing LPAREN."
     input: "str.foo"
     variables: {}
     expected:

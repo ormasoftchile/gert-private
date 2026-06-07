@@ -339,6 +339,32 @@ type InProcessTransport struct {
 \end{minted}
 
 % ------------------------------------------------------------------ %
+\subsection{Conformance Corpus Interpretation Contract}
+% ------------------------------------------------------------------ %
+
+\label{subsec:conformance-contract}
+
+The conformance corpus is the executable contract between the GERT specification and runtime implementations. Runtimes that load the corpus MUST interpret it according to the following normative rules. Deviations from these rules violate the conformance contract.
+
+\begin{enumerate}[label=\arabic*.]
+
+  \item \textbf{String outputs MUST be quoted in YAML.} A vector whose \texttt{expected.value} is intended to be the literal four-character string \texttt{"null"}, \texttt{"Null"}, \texttt{"NULL"}, \texttt{"\textasciitilde"}, or an empty string MUST appear with explicit double-quote delimiters in the YAML file (e.g., \texttt{expected.value: "null"}). Unquoted \texttt{null}, \texttt{Null}, \texttt{NULL}, or \texttt{\textasciitilde} decodes to the YAML null type per YAML 1.2 \S10.3.2 and signals the absence of a value, not a string literal. Runtime conformance MUST NOT treat these as equivalent.
+
+  \item \textbf{Empty string outputs MUST be written as \texttt{""}.} An empty mapping value (e.g., \texttt{expected.value:}), an unquoted blank line, or a YAML null literal are not equivalent to an empty string and MUST not be substituted for one without changing the test's semantics. Runtimes MUST treat empty string and null as distinct values.
+
+  \item \textbf{Description fields are non-normative.} A vector's \texttt{description} field is human-facing documentation; runtimes MUST NOT consume the description field for behavioral decisions or test evaluation. Description fields MAY contain YAML-special characters and MUST be quoted if necessary to ensure valid YAML parsing. The corpus is not normative on description phrasing or content.
+
+  \item \textbf{Schema validation is mandatory.} Every vector file MUST validate against \texttt{design/gert/conformance/schema.json} before any runtime processes vectors from it. A runtime that loads a vector failing schema validation MUST emit a hard error and refuse to execute the vector; silent skip or best-effort parsing is a conformance violation. Schema validation is part of the conformance harness gate, not a runtime feature flag.
+
+  \item \textbf{Runtime grammar version recording.} When a runtime executes a vector, it MUST record and report the grammar version(s) it used during parsing, evaluation, or resolution (e.g., \texttt{gxl@v1.0}, \texttt{gis@v1.0}, \texttt{gcp@v1.0}). The grammar version(s) are part of the conformance evidence and enable cross-runtime parity audits. If a vector involves multiple grammar layers (e.g., GXL expression inside GIS interpolation), the runtime MUST record all relevant versions.
+
+  \item \textbf{No silent skips.} A vector that the runtime cannot execute—because the feature it tests is not yet implemented, or because the runtime lacks a dependency—MUST be reported with an explicit ``skip'' verdict and a human-readable reason. Counting a skipped vector toward ``X/267 passing'' or reporting a run as ``fully conformant'' while silently eliding vectors is a conformance violation. Skipped vectors MUST be visible in test reports with their skip reasons.
+
+\end{enumerate}
+
+Runtimes that operate outside the bounds of these six rules—for example, by accepting unquoted \texttt{"null"} as semantically equivalent to quoted \texttt{"null"}, or by silently ignoring invalid schema—are not conformant to the corpus contract, even if they pass a subset of vectors through alternate interpretation.
+
+% ------------------------------------------------------------------ %
 \section{Acceptance Criteria}
 % ------------------------------------------------------------------ %
 

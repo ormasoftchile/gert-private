@@ -22,6 +22,8 @@
 
 ## Learnings
 
+- Added 13 truthy-coercion vectors per barbara-truthy-corpus-vectors.md (Strict semantics, GXL-TYPE-002).
+
 ### 2026-06-05T00:14:04-04:00 — Stream C Day 1 (Schema + TV-GXL-PARSE)
 
 #### Schema design choices

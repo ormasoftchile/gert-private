@@ -997,3 +997,148 @@ vectors:
       error_code: GXL-TYPE-001
     note: "TESS-AMBIG-4 companion vector for object operands. Equality restricted to scalars + null; object operand → GXL-TYPE-001. Mirrors TV-GXL-EVAL-086 (list operand)."
     tags: [type-identity, object, equality, TESS-AMBIG-4]
+
+  # --- Truthy coercion arbitration (Strict, 2026-06-07) ---
+
+  - id: TV-GXL-EVAL-093
+    category: GXL-EVAL
+    description: "Truthy strict: null in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: null}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: boolean context accepts only bool; null is not coerced. Existing bool sanity vectors: TV-GXL-EVAL-007 and TV-GXL-EVAL-008."
+    tags: [truthy, not-operator, "null", type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-094
+    category: GXL-EVAL
+    description: "Truthy strict: number 0 in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: 0}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: numeric zero is not falsy in GXL. Non-bool operands in boolean context raise GXL-TYPE-002."
+    tags: [truthy, not-operator, number, zero, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-095
+    category: GXL-EVAL
+    description: "Truthy strict: number 1 in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: 1}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: nonzero numbers are not truthy in GXL. Non-bool operands in boolean context raise GXL-TYPE-002."
+    tags: [truthy, not-operator, number, nonzero, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-096
+    category: GXL-EVAL
+    description: "Truthy strict: number -1 in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: -1}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: negative numbers are not truthy in GXL. Non-bool operands in boolean context raise GXL-TYPE-002."
+    tags: [truthy, not-operator, number, negative, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-097
+    category: GXL-EVAL
+    description: "Truthy strict: number 0.0 in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: 0.0}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: floating-point zero is not falsy in GXL. Non-bool operands in boolean context raise GXL-TYPE-002."
+    tags: [truthy, not-operator, number, float, zero, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-098
+    category: GXL-EVAL
+    description: "Truthy strict: empty string in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: ""}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: the empty string is not falsy in GXL. Non-bool operands in boolean context raise GXL-TYPE-002."
+    tags: [truthy, not-operator, string, empty, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-099
+    category: GXL-EVAL
+    description: "Truthy strict: string \"false\" in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: "false"}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: the string \"false\" is not the boolean false. Non-bool operands in boolean context raise GXL-TYPE-002."
+    tags: [truthy, not-operator, string, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-100
+    category: GXL-EVAL
+    description: "Truthy strict: whitespace string in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: " "}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: whitespace strings are not truthy in GXL. Non-bool operands in boolean context raise GXL-TYPE-002."
+    tags: [truthy, not-operator, string, whitespace, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-101
+    category: GXL-EVAL
+    description: "Truthy strict: empty array in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: []}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: arrays come from variables because GXL has no array literal syntax; empty arrays are not falsy."
+    tags: [truthy, not-operator, array, empty, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-102
+    category: GXL-EVAL
+    description: "Truthy strict: array [0] in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: [0]}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: arrays come from variables because GXL has no array literal syntax; non-empty arrays are not truthy."
+    tags: [truthy, not-operator, array, nonempty, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-103
+    category: GXL-EVAL
+    description: "Truthy strict: array [null] in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: [null]}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: arrays come from variables because GXL has no array literal syntax; arrays containing null are not truthy."
+    tags: [truthy, not-operator, array, "null", type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-104
+    category: GXL-EVAL
+    description: "Truthy strict: empty object in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: {}}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: objects come from variables because GXL has no object literal syntax; empty objects are not falsy."
+    tags: [truthy, not-operator, object, empty, type-error, arbitration-2026-06-07]
+
+  - id: TV-GXL-EVAL-105
+    category: GXL-EVAL
+    description: "Truthy strict: object {a: 0} in boolean context raises GXL-TYPE-002."
+    input: "not x"
+    variables: {x: {a: 0}}
+    expected:
+      error_class: GXL-TYPE
+      error_code: GXL-TYPE-002
+    note: "Barbara truthy arbitration, 2026-06-07: objects come from variables because GXL has no object literal syntax; non-empty objects are not truthy."
+    tags: [truthy, not-operator, object, nonempty, type-error, arbitration-2026-06-07]

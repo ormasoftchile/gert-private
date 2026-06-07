@@ -921,6 +921,69 @@ implicit coercion, which GXL forbids.
 (Source: \texttt{gxl.ebnf} \S5.2, \S5.5.)
 
 % ─────────────────────────────────────────────────────────────────────────────
+\subsection{Truthy Coercion in Boolean Context}
+\label{sec:gxl:semantics:truthy}
+
+GXL defines \emph{boolean context} as any syntactic position where the
+language requires a truth value: the operand of \texttt{not}, both sides
+of \texttt{and}/\texttt{or}, the condition in a runbook \texttt{when}/
+\texttt{condition}/\texttt{until}/\texttt{iterate.until} field, and the
+test position of a ternary expression (\texttt{x ? a : b}).
+
+\noindent\textbf{Rule (normative):}
+A value appearing in boolean context MUST have PJVM type \texttt{bool}.
+If the runtime evaluator encounters a non-\texttt{bool} value in boolean
+context, it MUST raise \texttt{GXL-TYPE-002} (``type error: expected bool'').
+There is \textbf{no} implicit truthy/falsy coercion for any type.
+
+\noindent This means GXL has no ``\texttt{Truthy()}'' function in the
+JS or Python sense.  The evaluator's boolean-context check is a strict
+type gate: \texttt{bool} passes, everything else is an error.
+
+\medskip
+\noindent\textbf{Worked examples by PJVM type:}
+
+\begin{center}
+\begin{tabular}{lll}
+\hline
+\textbf{Value}            & \textbf{In boolean context} & \textbf{Result} \\
+\hline
+\texttt{null}             & \texttt{if null:}           & \texttt{GXL-TYPE-002} \\
+\texttt{false}            & \texttt{if false:}          & evaluates; condition is false \\
+\texttt{true}             & \texttt{if true:}           & evaluates; condition is true \\
+\texttt{0}                & \texttt{if 0:}              & \texttt{GXL-TYPE-002} \\
+\texttt{1}                & \texttt{if 1:}              & \texttt{GXL-TYPE-002} \\
+\texttt{-1}               & \texttt{if (-1):}           & \texttt{GXL-TYPE-002} \\
+\texttt{0.0}              & \texttt{if 0.0:}            & \texttt{GXL-TYPE-002} \\
+\texttt{""}               & \texttt{if "":}             & \texttt{GXL-TYPE-002} \\
+\texttt{"hello"}          & \texttt{if "hello":}        & \texttt{GXL-TYPE-002} \\
+\texttt{"false"}          & \texttt{if "false":}        & \texttt{GXL-TYPE-002} \\
+\texttt{[]}               & \texttt{if []:}             & \texttt{GXL-TYPE-002} \\
+\texttt{[0]}              & \texttt{if [0]:}            & \texttt{GXL-TYPE-002} \\
+\texttt{\{\}}             & \texttt{if \{\}:}           & \texttt{GXL-TYPE-002} \\
+\texttt{\{"a": 0\}}       & \texttt{if \{"a": 0\}:}    & \texttt{GXL-TYPE-002} \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent\textbf{Recommended idioms} for authors who need emptiness checks:
+
+\begin{itemize}
+  \item Collection emptiness: \texttt{len(myList) > 0} or \texttt{len(myList) == 0}
+  \item Null check: \texttt{x != null}
+  \item Numeric zero check: \texttt{n != 0}
+  \item Empty string check: \texttt{s != ""}
+\end{itemize}
+
+\noindent\textbf{Cross-runtime note:}
+All GXL runtime implementations (Go, C\#, TypeScript, \ldots) MUST
+enforce this rule identically.  A conforming \texttt{EvalBool} function
+accepts only \texttt{bool} results; any other PJVM type triggers
+\texttt{GXL-TYPE-002}.  No runtime may introduce its own truthy/falsy
+table.
+(Ratification: Truthy arbitration, 2026-06-07.)
+
+% ─────────────────────────────────────────────────────────────────────────────
 \subsection{Short-Circuit Evaluation}
 \label{sec:gxl:semantics:short-circuit}
 % ─────────────────────────────────────────────────────────────────────────────

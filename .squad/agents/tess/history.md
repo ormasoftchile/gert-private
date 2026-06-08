@@ -1,13 +1,58 @@
 # Tess — History
 
+## Current Status Summary (2026-06-07)
+
+**Phase 1 COMPLETE.** Conformance corpus: 211 vectors across 5 YAML files (GXL-PARSE 83, GXL-EVAL 87, GXL-PATH 35, GIS-PATH 15, GCP-PATH 41). Zero TBD vectors.
+
+**Schema naming coordination:**
+- Evaluated collision risk: `design/gert/conformance/schema.json` (test vectors) vs Barbara's `runbook.v1.schema.json` (runbooks)
+- **Recommendation:** Rename to `vector.schema.json` (13-16 files impacted; 1 code change in verify_corpus.py, rest docs/comments)
+- **Status:** Awaiting Barbara ratification before executing atomic migration PR
+
+**Current role:** Conformance corpus authority, schema naming clarity advocate
+
+**Next steps:** (1) Await Barbara ratification on schema rename, (2) Execute migration PR once approved, (3) Support Phase A runtime team (Ken/Don) with corpus guidance
+
+---
+
 ## Project Context
 
-- **Project:** GERT — Governed Executable Runbook Technology
-- **Owner / User:** ormasoftchile (Germán)
-- **Tech Stack:** Go (runtime), Azure (web platform), TypeScript (extensions/web), C# (parallel runtime, planned)
-- **Joined:** 2026-06-05 for the GXL/GIS/GCP Phase 1 conformance corpus (Stream C)
-- **Corpus location:** `design/gert/conformance/` (to be created)
-- **Grammar source-of-truth:** `design/gert/grammar/gxl.ebnf`, `gis.ebnf`, `gcp.ebnf`
+- **Joined:** 2026-06-05 for Stream C (Phase 1 conformance corpus)
+- **Corpus location:** `design/gert/conformance/` (6 YAML files, 267 vectors)
+- **Grammar authority:** `design/gert/grammar/gxl.ebnf`, `gis.ebnf`, `gcp.ebnf`
+- **Phase 1 goal:** ≥200 vectors across 13 categories; ALL ambiguities pinned
+
+---
+
+## Consolidated Phase 1 Record
+
+**2026-06-05 to 2026-06-07:** Delivered corpus with zero TBD vectors:
+
+**Stream C deliverables:**
+- TV-GXL-PARSE: 83 vectors (keywords, identifiers, operators, precedence, escape sequences)
+- TV-GXL-EVAL: 87 vectors (short-circuit AND/OR, arithmetic, type checking, stdlib, null semantics)
+- TV-GXL-PATH: 35 vectors (missing variables, out-of-bounds, type errors, keyword-prefix identifiers)
+- TV-GIS-PATH: 15 vectors (optional chaining `?.`, `?.[N]`, full-tail short-circuit, stdlib composition)
+- TV-GCP-PATH: 41 vectors (local/step/HTTP/event/cross-step sources, JSON/YAML paths, subtree captures, defaults)
+
+**Arbitrations resolved (TESS-AMBIG-3..6 by Barbara):**
+- **AMBIG-3:** `false < true` → GXL-TYPE-005 (boolean ordered comparison forbidden)
+- **AMBIG-4:** array equality → GXL-TYPE-001 extended (scalars+null only)
+- **AMBIG-5/6:** dot-access on scalar/null → GXL-PATH-004 (field access on non-object)
+- **Result:** 4 TBD vectors pinned; 3 companion vectors added; Phase 1 corpus final: 211 vectors, 0 TBD
+
+**Schema design:**
+- JSON Schema Draft 2020-12, `$id: https://gert.internal/conformance/vector-schema/v1`
+- Used `oneOf` for mutual exclusivity (success vs error)
+- Variables constrained to PJVM types (RFC 8259: null, bool, number, string, array, object)
+- Pattern: `TV-(GXL|GIS|GCP|CONFORM)-[A-Z]+(-[A-Z0-9]+)*-\d{3,4}` (zero-padded 3-4 digit suffix)
+
+**Learnings:**
+- Array/object literal syntax forbidden in GXL (`[a,b]` is GXL-PARSE-007) → all list tests must use variables
+- GDP evaluation order: resolve first, then pass to function (OI-GXL-05 pinned)
+- Null semantics complete: `null == null` → true, `null < x` → GXL-EVAL-004, `not null` → GXL-TYPE-002
+- Keyword-prefix identifiers (`andthing`, `ornot`) critical for cross-runtime parity
+- Phase 1 exit gate ✅ COMPLETE; Phase A runtime validation ready
 
 ## Day 1 Context
 
@@ -202,3 +247,48 @@ Phase 1 complete. All spec sections updated. Phase A starts in `ormasoftchile/ge
 **Fix:** `design/gert/conformance/tv-gxl-parse.yaml` — corrected to single backslash. Commit: `424a334` on `gert-private/main`.
 
 **Timing:** Landed before Ken's Phase A sync, protecting Don's 83/83 pass rate from regression to 81/83 upon PR merge.
+
+## 2026-06-07T19:14:39-07:00 — Schema Naming Collision Evaluation
+
+**Task:** Evaluate the naming-collision risk created by Barbara's new `design/gert/schemas/runbook.v1.schema.json` and propose a remediation for my existing `design/gert/conformance/schema.json`.
+
+**Scope Confirmed:**
+- My schema validates **conformance test vectors** (tv-*.yaml files), NOT runbooks
+- Schema $id: `https://gert.internal/conformance/vector-schema/v1`
+- Validates 267 vectors across 6 YAML files (TV-GXL-PARSE, TV-GXL-EVAL, TV-GXL-PATH, TV-GIS-PATH, TV-GCP-PATH)
+
+**Blast Radius Surveyed:**
+- 13 files in gert-private reference the path (5 vector YAML comments, 1 Python script, 1 LaTeX doc, 4 decision/history docs, 1 README)
+- 3 files in gert repo (1 Go code that receives dir path, 1 vendored copy, 1 planned sync script)
+- Total impact: ≤16 files, mostly grep-and-replace or documentation updates
+
+**Recommendation:** Rename to `vector.schema.json`
+- Most precise: directly names what it validates (test vectors)
+- Eliminates confusion with `runbook.v1.schema.json`
+- Mirrors naming style (document-type + schema)
+- Cost: 13 file edits + 1 rename, all safe
+
+**Detailed report:** `.squad/decisions/inbox/tess-conformance-schema-naming.md` (awaiting Barbara ratification before execution)
+
+## 2026-06-07T19:28:42-07:00 — Conformance Schema Naming Recommendation
+
+**Status:** Evaluation complete. Recommendation submitted for Barbara ratification.
+
+**Finding:** The collision between `design/gert/conformance/schema.json` (test vectors) and `design/gert/schemas/runbook.v1.schema.json` (runbooks) creates legitimate confusion risk for future contributors.
+
+**Recommendation:** Rename `design/gert/conformance/schema.json` → `design/gert/conformance/vector.schema.json`
+
+**Justification:**
+- Direct naming: `vector.schema.json` explicitly names what it validates (test VECTORS, not runbooks)
+- Unambiguous: New naming immediately distinguishes from Barbara's `runbook.v1.schema.json`
+- Mirrors Barbara's convention: document-type + schema (vector + schema)
+- Schema $id unchanged: `https://gert.internal/conformance/vector-schema/v1` remains intact
+
+**Blast Radius:**
+- 13 files in gert-private (5 vector YAML comments, 1 Python script, 1 LaTeX doc, 4 decision/history, 1 README)
+- 3 files in gert repo (1 indirect Go code, 1 vendored copy, 1 planned sync script)
+- Total: ≤16 files, all safe (1 code change, 12 documentation/comment updates)
+
+**Cost:** 1-2 hours to execute (grep-and-replace + verify + commit)
+
+**Status:** Awaiting Barbara ratification. Once approved, will execute migration as single atomic PR.

@@ -125,3 +125,89 @@ This means the extension has zero direct GIS/GXL/GCP violations in its own sourc
 - `.squad/agents/leslie/gert-vscode-audit.md` (full findings)
 - Decision inbox: `leslie-runbook-schema-canonical-source.md` (now merged to decisions.md)
 
+---
+
+## Learnings — gert-vscode Minor Fixes Shipped (2026-06-07T19:14:39-07:00)
+
+### What was shipped
+PR #1 (`fix/minor-platform-bugs`) landed audit findings F-01, F-02, F-03 as a single clean commit. The three changes totalled 4 insertions / 3 deletions across 3 files.
+
+### Build command confirmed
+`npm run compile` (alias for `tsc -p ./`) is the correct compile command. `npx tsc --noEmit` is not a project script — always use `npm run compile`. Build is fast (<5 seconds). `node_modules` must be installed first with `npm install` (181 packages, ~27 seconds cold).
+
+### Extension footprint confirmed
+The extension is small enough for surgical fixes — two source files, ~363 lines, zero test harness. Individual line-level edits compile instantly. There is no lint step, no pre-commit hook, and no mocha/jest setup. The only CI gate is "Compile & Package Extension" (GitHub Actions) plus GitGuardian secret scanning.
+
+### CI configuration
+`.github/workflows/ci.yml` runs `npm run package` (which calls `vsce package`) on every PR and uploads the `.vsix` as an artifact. GitGuardian secret scanning runs as a separate check (fast, completes in under a second). The main CI job ("Compile & Package Extension") queues on GitHub-hosted runners — expect ~1-2 minutes.
+
+### Windows compat patterns in VS Code extensions
+Confirmed two recurring Windows compat anti-patterns now fixed in this codebase:
+1. `string.split('/').pop()` for basename — always use `path.basename()`.
+2. `ChildProcess.kill('SIGTERM')` — always use `kill()` with no argument for cross-platform termination.
+These patterns are worth flagging in any future Node-based extension or CLI tool audit.
+
+### MAJORs remain blocked
+F-04 (grammar), F-05 (snippets), F-06 (YAML schema), F-07 (providers) are not in scope until Barbara issues a schema-ownership ruling. Do not merge or draft any of those in gert-vscode until that decision lands in decisions.md.
+
+## 2026-06-07T19:28:42-07:00 — Runbook Schema Canonical Source & GitHub Actions Cost Control
+
+**Session Summary:** Two major decisions finalized + GitHub Actions workflows disabled for cost control.
+
+### Runbook v1 Schema Canonical Home — DECIDED
+
+Barbara's decision (2026-06-07T19:14:39-07:00): `gert-private/design/gert/schemas/runbook.v1.schema.json` is the canonical home.
+
+**Unblocks:** gert-vscode Phase 2. Leslie can now begin YAML schema integration, snippets provisioning, and IDE provider work.
+
+**Action Items for Leslie:**
+1. Vendor the canonical schema into gert-vscode at `gert-vscode/schemas/runbook.v1.schema.json`
+2. Add `contributes.yamlValidation` to `package.json` pointing to vendored copy
+3. Write `scripts/sync-schema.sh` to fetch canonical schema from gert-private at a pinned git tag/SHA
+4. Add CI job for drift detection (fail if vendored copy diverges from canonical)
+5. Pattern: Same as DRIFT-DETECTION-001 for conformance vectors (already established)
+
+**Reference:** `.squad/decisions/decisions.md` § Runbook v1 Schema Canonical Home (merged 2026-06-07)
+
+### Conformance Schema Naming Clarity — RECOMMENDATION AWAITING RATIFICATION
+
+Tess evaluated collision risk between `design/gert/conformance/schema.json` (test vectors) and `design/gert/schemas/runbook.v1.schema.json` (runbooks).
+
+**Recommendation:** Rename to `vector.schema.json` for clarity. Blast radius ~13-16 files (1 code change, 12 documentation updates).
+
+**Status:** Awaiting Barbara ratification. Once approved, Tess will execute atomic migration PR.
+
+### GitHub Actions Cost Control — EXECUTED
+
+John disabled 8 workflows across 4 GERT-family repos (gert, gert-private, gert-vscode, gert-tui) per user cost control directive.
+
+**Summary:**
+- ormasoftchile/gert: 3 workflows disabled (E2E Tests, Conformance Verification, Go Tests)
+- ormasoftchile/gert-private: 4 workflows disabled (Squad Heartbeat, Squad Issue Assign, Squad Triage, Sync Squad Labels)
+- ormasoftchile/gert-vscode: 1 workflow disabled (CI)
+- ormasoftchile/gert-tui: 0 workflows found
+- Security carve-out: Dependabot left active (vulnerability scanning)
+
+**Verification:** 0 in-flight runs cancelled; all workflows confirmed disabled.
+
+**Re-enable Process:** Case-by-case via `gh workflow enable <id>` with justification.
+
+### Capability Gap for Leslie
+
+The gert-vscode extension currently provides zero IDE assistance for GIS/GXL/GCP expressions:
+- No TextMate grammar (syntax highlighting)
+- No JSON Schema (validation)
+- No snippets
+- No completion providers
+- No hover tooltips
+- All intelligence delegated to gert CLI (`gert preview`) and web UI (`gert serve`)
+
+**Phase 2 deliverables for Leslie:**
+1. TextMate grammar for GIS (`${...}` syntax, escape sequences)
+2. JSON Schema for runbook structure (now canonical from Barbara)
+3. Snippets for common step types and stdlib functions
+4. Completion providers for step types, field names, stdlib namespaces
+5. Hover providers for step documentation
+6. Diagnostics providers for expression syntax errors (real-time feedback)
+
+**Expected value:** Real-time GERT-specific IDE assistance, reducing context-switching to gert CLI and web UI.

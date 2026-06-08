@@ -149,3 +149,35 @@
 **Normative points encoded:** `?.` and `?.[N]`; empty-string default on optional miss; JS/TS-compatible full-tail short-circuiting; missing vs present-value lists; mixed-path hard errors; `${?.root}` parse illegality; stdlib call non-propagation; unchanged hard-error default for plain `${...}`.
 
 **Coordination note:** Dropped `.squad/decisions/inbox/edith-gis-optional-chaining-spec.md` for Scribe/Tess with labels and cross-reference notes.
+
+## 2026-06-07T19:14:39-07:00 — Runbook v1 JSON Schema Authoring
+
+**Task:** Author the canonical `design/gert/schemas/runbook.v1.schema.json` per Barbara's decision that design repo is the normative home.
+
+**Approach:**
+- Used Go runtime structs (`pkg/schema/runbook.go`, `step.go`, `steps.go`, `tool.go`) as a reference checklist
+- Canonical authority remains spec sections (`design/gert/sections/*.tex`) and grammar (`design/gert/grammar/*.ebnf`)
+- Schema: JSON Schema draft 2020-12, `$id: https://gert.dev/schemas/runbook/v1`
+- Step discrimination: `allOf[if/then]` with `unevaluatedProperties: false` for type-safe step payloads
+- All expression strings (GIS/GXL/GCP) typed as opaque strings with description notes (syntax validation is runtime-only)
+
+**Validation:**
+- ✅ All 23 example runbooks in `gert/examples/` pass validation
+- ✅ One schema fix during validation: added `list` and `object`/`array` to Input type enum (SQ-003 filed)
+
+**Open Questions Filed (5 spec questions for Barbara arbitration):**
+| # | Question | Blocks |
+|---|----------|--------|
+| SQ-001 | Is `name:` field on steps a legacy alias for `title:`, deprecated, or missing? | Nothing immediately; safe default chosen |
+| SQ-002 | What fields does `extension` step type carry? Payload fixed or open? | gert-vscode hover/completion for extension steps |
+| SQ-003 | Is `list` a normative type alias for `array` in input declarations? | Normative enum in spec §Input Declarations |
+| SQ-004 | Should runbook `id` pattern differ from step `id` pattern? | ID validation strictness for gert-vscode |
+| SQ-005 | Are `iterate` and `parallel` valid step `type` values? | Would affect schema if embedded inside step wrappers |
+
+**Files Delivered:**
+- `design/gert/schemas/runbook.v1.schema.json` — canonical schema (hand-authored, draft 2020-12)
+- `design/gert/schemas/README.md` — boundary statement, consumer rules, maintenance guide
+- PR #7 on GitHub: https://github.com/ormasoftchile/gert-private/pull/7
+- `.squad/decisions/inbox/edith-runbook-schema-questions.md` — all 5 spec questions documented
+
+**Next Steps:** Awaiting Barbara's arbitration on all 5 spec questions. Once decided, will update schema and spec sections for precision. gert-vscode Phase 2 (YAML schema, IDE integration) unblocked once arbitrations complete.

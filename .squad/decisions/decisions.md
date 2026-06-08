@@ -508,3 +508,637 @@ Phase 1 is complete and Phase 2 is unblocked when ALL of the following are true:
 | **Total (all streams, with parallelism)** | | | **~14 days** |
 
 The critical path is 14 calendar days assuming Stream C (conformance corpus) starts on Day 3 and takes 12 days. Streams B, D, E, F run in parallel and finish within that window.
+
+
+---
+
+### 2026-06-07: Q2 — GCP optional chaining (`?.`) arbitration
+
+**Decision:** Option (a) — No `?.` in GCP. GIS keeps `?.` (ratified earlier); GCP does not support it.
+
+**Arbitrated by:** Barbara (Lead/Architect)
+**Date:** 2026-06-07T15:06:00-07:00
+
+---
+
+#### Rationale
+
+1. **Zero vector impact.** None of the 41 tv-gcp-path conformance vectors use `?.`. The 6 P7-blocked vectors require the capture service and step output model — not optional chaining. Adding `?.` would create new surface area with no existing test demand.
+
+2. **Different concerns, different syntax.** GIS interpolates into strings where empty-on-miss is cosmetically safe (`"Hello, ${user?.name}"` → `"Hello, "`). GCP captures structured data into PJVM where silent empty-string substitution would mask structural errors in step outputs. The existing `capture_defaults:` mechanism provides explicit, type-checked, runbook-declared defaults — superior to implicit path-level coercion.
+
+3. **Blast radius: zero.** No grammar change. No runtime extension. No corpus changes. No conformance vector reclassification. GNC's implementation already rejects `?.` — this decision ratifies her safe default.
+
+4. **Cross-runtime parity.** Clean, unambiguous answer for C#/TS: "GCP paths are strict; missing segments raise GCP-RESOLVE-002/003. Use `capture_defaults:` for optional-value patterns." No ambiguity about whether `?.` means empty-string or Miss sentinel.
+
+5. **User mental model.** Yes, `vars.user?.id` works differently in `${...}` (GIS) vs `capture.path:` (GCP). This is acceptable because they serve different purposes: interpolation vs structured extraction. The runbook schema already separates these syntactically (`string templates` vs `capture: map entries`), so the contexts are unambiguous.
+
+#### Spec changes made
+
+Added normative subsection `§subsec:gcp:traversal:no-optional-chaining` to `03c-capture-paths.tex` documenting:
+- `?.` MUST be rejected in GCP paths (GCP-PARSE-005)
+- Rationale for the asymmetry with GIS
+- Correct pattern using `capture_defaults:`
+
+#### P7-blocked vectors (unchanged)
+
+The 6 P7-blocked vectors depend on capture service infrastructure (plan-time validation of step IDs, default-policy enforcement, type checking) — none require `?.` syntax. They remain P7-blocked regardless of this decision.
+
+#### Follow-up needed
+
+None. No grammar changes, no runtime extension, no corpus modifications.
+
+
+---
+
+### 2026-06-07: Q1 — Missing GDP resolution section (03d-gdp.tex)
+
+**Decision:** Option (B) — Do not create a separate `03d-gdp.tex`. GDP resolution semantics remain where they already live.
+
+**Arbitrated by:** Barbara (Lead/Architect)
+**Date:** 2026-06-07T15:06:00-07:00
+
+---
+
+#### Rationale
+
+The "missing 03d-gdp.tex" was a misidentification. The file `03d-parse-time-enforcement.tex` already exists and is correctly referenced by the runtime plan for parse-gate semantics — not for GDP resolution. GDP resolution semantics are already fully specified across two locations:
+
+1. **`03a-expression-language.tex` §subsec:gxl:gdp** — defines the GDP grammar (`GDP = IDENT { "." IDENT | "[" INTEGER "]" }`) and variable-access traversal rules.
+2. **`03c-capture-paths.tex` §sec:gcp:traversal** — defines GDP path traversal in the GCP context (source-qualified), including error codes for missing keys (GCP-RESOLVE-002) and out-of-bounds indices (GCP-RESOLVE-003).
+
+Section 03c explicitly states: "GDP itself is defined in §subsec:gxl:gdp and is referenced here; it is not duplicated." GNC built her resolver successfully from these two sections plus the grammar — confirming they are sufficient. Creating a third location would introduce maintenance burden and duplication risk without adding new normative content.
+
+#### Cross-runtime impact
+
+Zero. C#/TS implementers follow the same two sections. No references need updating — the runtime plan's `§03d` citations correctly point at parse-time enforcement.
+
+#### What changed
+
+No spec files created or removed. This decision confirms the status quo and closes the question.
+
+
+---
+
+# Decision: Runtime Implementation Plan (Greenfield) — v2
+
+**Author:** Barbara — Lead / Architect  
+**Date:** 2026-06-07 (v2)  
+**Status:** PROPOSED  
+**Ref:** `design/gert/proposals/runtime-implementation-plan.md`  
+**Input:** Rubber-duck plan critique (2026-06-07) — 5 blocking + 3 non-blocking findings. Brady approved bundling corpus/spec fixes into this revision as a formal P0 phase.
+
+---
+
+## Context
+
+Post-merge audit revealed the `ormasoftchile/gert` runtime does NOT implement GXL/GIS/GCP. The four engines are entirely missing. Phase 2 is greenfield, not maintenance. The prior migration plan (`runtime-migration-plan.md`, ratified 2026-06-05) is superseded.
+
+The v1 implementation plan (same date) was reviewed by rubber-duck, which identified 5 blocking and 3 non-blocking issues. This v2 addresses all 8 findings.
+
+---
+
+## Decisions
+
+### 1. Build Order: P0 → P1 → P2 → P3 ∥ (GCP parser + GDP resolver) → P4 → P5 → P6 → P7 → P8
+
+**Rationale:**
+
+- **P0 (corpus hygiene) must precede P1** because the conformance harness cannot accept vectors that fail YAML lint or schema validation. Without trustworthy inputs, no acceptance gate is meaningful. Brady approved this bundling.
+- **Parser (P2) before evaluator (P3)** because the evaluator walks an AST the parser produces.
+- **GXL evaluator (P3) before GIS interpolator (P4)** because `gis.ebnf` §2.4 requires full GXL expressions inside `${...}`. The interpolator delegates to the evaluator.
+- **GCP parser + GDP resolver can parallelize with P3** because they need only PJVM (P1) and the GDP path grammar, not the full evaluator. However, the full GCP capture service (P7) CANNOT parallelize with P3 — it requires the engine-selection seam (P6), step output model, and executor refactoring that touches production code.
+- **Parse-gate (P5) before runtime routing (P6)** because the runtime routing delivers `ValidatedPlan` to executors. Cannot route without the gate.
+- **Full GCP integration (P7) after staged routing (P6)** because capture logic touches 5+ executor types. Must use the new routing seam, not the old path.
+- **expr-lang deletion (P8) last** because it requires proven production exercise + soak.
+
+**v1 → v2 change:** v1 had GCP as a 2-unit phase parallel with P3 evaluator. This was under-scoped. GCP is now split: parser+GDP resolver (3–4 units, parallelizable) and capture service + executor refactor (6–10 units, sequential after P6). v1 also omitted P0 and P5 entirely.
+
+### 2. Strategy: Side-by-side with staged runtime routing (engine-selection seam)
+
+**Rationale:**
+
+v1 proposed build-tag-only side-by-side: new engines exercised ONLY by the conformance harness until a big-bang cutover in P6 flipped 12 executors + capture logic + tests + dependency deletion together. The rubber-duck critique (finding #2) identified this as a "test one thing, ship another" trap — the production path was never exercised under the new engines until the moment of cutover.
+
+**v2 strategy:** Keep the build tag for CI matrix coverage, but add an internal `EngineRouter` that enables per-subsystem cutover:
+- **P6a:** Route GXL condition evaluation through new engines. Old path remains for interpolation/capture.
+- **P6b:** Route GIS interpolation through new engines. Old path remains for capture.
+- **P6c:** Route GCP capture through new engines, one executor family at a time.
+
+Each P6 sub-PR exercises the new path through production routing. CI runs both build paths. expr-lang is not deleted until P8, after the soak proves the new path under real routing.
+
+**Rejected alternative (v1 approach):** Build-tag-only with big-bang cutover. This was the v1 decision. It is now **rejected** because:
+- Production code never exercises new engines until cutover day
+- Bisecting failures across 12 simultaneous executor flips is painful
+- The conformance harness passing does not prove production wiring works
+
+**Rejected: Replace-in-place.** Big-bang risk on 12 executors + 58 tests.
+
+**Rejected: Runtime feature flag.** Overhead, hot-path branching, indefinite dual-path CI.
+
+**Mitigation for staged routing complexity:** The `EngineRouter` is internal wiring (~100 lines), not a public API. It is deleted in P8 when new engines become the only path. The added complexity is temporary and bounded.
+
+### 3. Parse-Gate / ValidatedPlan: Mandatory phase
+
+**Rationale:**
+
+v1 marked parse-gate implementation (OPQ-GATE-01..07) as "out of scope — separate proposal cycle." The rubber-duck critique (finding #1) identified this as wrong: the spec (`design/gert/sections/03d-parse-time-enforcement.tex`) mandates that execution is blocked from unvalidated plans. 267/267 on engine APIs would not prove conformance if the planner still lazy-parses at execution time.
+
+**Decision:** Parse-gate is P5 — a mandatory phase. It is NOT deferred to a separate proposal. The implementation:
+- Extends `internal/planner/planner.go` with a validation pipeline per §03d
+- Produces an unexported `validatedPlan` type (no external construction possible)
+- Emits `plan.validated` event with grammar versions, expression counts, runbook hash
+- Blocks `RunHandle.Next()` from unvalidated plans
+- Adds integration tests proving invalid expressions fail BEFORE any step dispatches
+
+**Architectural impact:** This touches the existing planner package in `ormasoftchile/gert`. The current `Plan()` function returns `*engine.ExecutionPlan` directly. P5 wraps this with validation. The planner files involved: `planner.go` (existing), `validate.go` (new), `validated_plan.go` (new), `validate_test.go` (new).
+
+### 4. GCP Scope: Full capture system, not just GDP resolver
+
+**Rationale:**
+
+v1 budgeted 2 units for "GCP resolver (GDP paths on PJVM trees)." The rubber-duck critique (finding #4) identified this as materially under-scoped. Real GCP requires: source prefixes (`http.*`, `event.*`, `step.*`), local/cross-step output lookup, JSON/YAML parsing, header semantics, bare-root capture, scalar vs subtree classification, `capture_defaults`, default/subtree policy errors. Current gert capture logic is scattered across CLI/tool/include/noop executors with keyword switches.
+
+**Decision:** GCP is split:
+- **GCP parser + GDP resolver** (3–4 units): Pure parsing. Can parallelize with P3 evaluator.
+- **Capture service + executor refactor** (6–10 units): Production wiring. Sequential after P6 (requires engine-selection seam). This is P7.
+
+The shared GDP resolver (`internal/gdp/`) is extracted as a first-class shared package from the start — not "extract later if duplication exceeds 100 lines" (v1 risk #5). This is a design decision, not a contingency.
+
+### 5. Cutover Gate: Defined methodology
+
+**Rationale:**
+
+v1 specified "≤ 2× perf" and "48h soak" without defining benchmark command, dataset, thresholds, or soak workload. The rubber-duck critique (finding #7) flagged this as unactionable.
+
+**Decision:** Cutover gate (P8) requires:
+
+| Criterion | Methodology |
+|---|---|
+| **Benchmark** | `go test -bench=BenchmarkEngine -benchmem -count=5 ./internal/conformance/...` against 267 vectors + 22 fixture runbooks. Baseline: last commit before P6a. |
+| **GXL parse/eval** | ≤ 2× baseline ns/op |
+| **GIS interpolation** | ≤ 2× baseline ns/op |
+| **GCP resolution** | ≤ 3× baseline ns/op (new capability) |
+| **Full fixture run** | ≤ 2× baseline wall-clock |
+| **Allocation cap** | ≤ 1.5× allocs/op, ≤ 2× bytes/op vs baseline |
+| **Race-free** | `go test -race ./...` with zero data races, zero panics |
+| **Soak** | Scheduled CI job: full fixture + conformance suite every 2 hours for 48 consecutive hours on a dedicated soak branch. Zero failures across all runs. NOT passive dev-branch time. |
+
+### 6. Honest Effort Estimate: 32–49 critical-path work units
+
+v1 estimated 20 work units. This was optimistic (finding #8). The honest estimate:
+
+| Phase | v1 | v2 | Delta reason |
+|---|---|---|---|
+| P0 (corpus) | — | 2–4 | New phase (finding #3) |
+| P1 (PJVM) | 3 | 4–5 | Normative number model, conversion rules (finding #6) |
+| P2 (GXL parser) | 3 | 5–7 | Realistic for recursive descent + operator precedence |
+| P3 (GXL eval) | 5 | 5–7 | Stdlib breadth |
+| GCP parser+GDP | (2 in P4) | 3–4 | Split from old P4 |
+| P4 (GIS) | 3 | 4–6 | Corrected escape, GXL delegation, per-segment ?. (finding #5) |
+| P5 (parse-gate) | — | 3–5 | New phase (finding #1) |
+| P6 (routing) | 4 | 3–5 | Staged routing (finding #2) |
+| P7 (GCP full) | — | 6–10 | Split from old P4 (finding #4) |
+| P8 (perf/soak) | (in P6) | 3–5 | Defined methodology (finding #7) |
+| **Total** | **20** | **32–49** | |
+
+With 2 engineers and P3 parallelism: ~25–38 calendar work-days (5–8 weeks with buffer).
+
+---
+
+## Blast Radius
+
+- **P0:** Changes gert-private only (corpus, schema, spec). Zero runtime impact.
+- **P1–P4:** Pure additions to `ormasoftchile/gert`. No production impact. New packages only.
+- **P5:** Modifies `internal/planner/planner.go` — adds validation pipeline. The `Plan()` function now returns a validated result. Internal change; public API unchanged.
+- **P6:** Introduces engine-selection seam. Each sub-PR (P6a/P6b/P6c) touches specific executor wiring. Staged — not all at once.
+- **P7:** Refactors capture logic across 5+ executor types. This is the highest-risk phase after P6 in terms of blast radius.
+- **P8:** Deletes `internal/expr/`, drops `expr-lang/expr` from `go.mod`, removes build tag and `EngineRouter`. Irreversible once merged.
+
+## Open Items Carried Forward
+
+- OQ-GATE-01 (in-flight grammar upgrades) — deferred; separate proposal before Day 9
+- TESS-CONFLICT-2 (str.unknownMethod) — needs arbitration before P3
+- OI-GXL-03 (negative modulo) — needs arbitration before P3
+
+## 2026-06-07 — Three open questions resolved
+
+Brady answered three critical questions during v2 preparation. These resolutions are applied to the plan and memo below.
+
+### Q1 Resolution: P0 Split
+
+**Question:** Who owns which parts of P0? Corpus YAML + schema + Make target, vs spec prose?
+
+**Brady's Answer (2026-06-07):** Split. Tess executes the corpus data work (YAML linting, schema.json reconciliation, `make verify-corpus`). Barbara executes the spec contract piece (section 09 subsection). They run in parallel (this spawn IS that parallel execution; Tess runs `tess/p0-corpus-hygiene` while Barbara runs this task).
+
+**Rationale:** Domain ownership + throughput. Tess owns data quality; Barbara owns prose/spec. Parallel execution halves P0 calendar time.
+
+**Application:** Plan §C.0 and §E P0 updated to reflect the split. Both sub-tasks land in the same PR closing gert-private#1, but they execute independently. Acceptance remains: `make verify-corpus` passes + corpus interpretation contract lands in section 09 + all 267 vectors validate.
+
+---
+
+### Q2 Resolution: Soak Infrastructure Decision
+
+**Question:** Which infrastructure pattern for the soak workload — scheduled CI capacity, or dedicated runner? How many hours, what frequency?
+
+**Brady's Answer (2026-06-07):** DEFERRED to post-P7. P8 acceptance criteria stay (per-category performance thresholds, race-free, soak methodology). The *infrastructure choice* (capacity vs runner, 2h vs 4h frequency, 48h vs 72h duration) is parked pending runtime eng assessment AFTER all previous phases complete.
+
+**Rationale:** Runtime infrastructure decisions depend on production capacity, load patterns, and cost-effectiveness. Brady wants to decide based on empirical data from P6/P7, not speculation now.
+
+**Application:** Plan §E P8 updated. Soak acceptance methodology (per-category perf thresholds + race-free + zero failures across scheduled runs) is firm. Soak infrastructure choice is marked DEFERRED. P8 begins with a placeholder workload (22-fixture suite + 267-vector suite); runtime engineers can swap infra + workload when the decision lands without changing acceptance criteria.
+
+---
+
+### Q3 Resolution: P7 Executor Refactor Scope — Fix, not Preserve
+
+**Question:** When P7 implementers find capture-logic divergences from the GCP spec in the existing 5 executor types (cli, tool, http_call, include, noop), what's the policy — preserve backwards compat, or fix to spec?
+
+**Brady's Answer (2026-06-07):** FIX. Document-and-fix. When divergences are found between current capture logic and the GCP spec, bring behavior into spec conformance. The GCP spec is the contract. Backwards compatibility with existing accidental behavior is NOT a constraint. (User directive — preserves the conformance-as-contract principle.)
+
+**Rationale:** Spec is the source of truth. Executors have accumulated ad-hoc behavior over time. Alignment to spec during P7 is the right time to fix them. Backwards compat would lock in the drift permanently.
+
+**Application:** Plan §E P7 updated with explicit policy statement + discovery contract: P7 implementers MUST log every capture-logic divergence (what was, what spec says, what changed) in PR body with `P7-divergence:` tag. The fix is mandatory; the spec is the contract. This prevents silent behavior changes and keeps the audit trail.
+
+---
+
+## Action
+
+Awaiting Brady's resource commitment. If approved:
+- P0 can begin immediately in `ormasoftchile/gert-private` (closes #1)
+- P1 begins in `ormasoftchile/gert` only AFTER P0 PR merges
+
+
+---
+
+# Decision: Runtime Migration Plan — Headline Picks
+
+**Author:** Barbara — Lead / Architect  
+**Date:** 2026-06-05T18:33:34-07:00  
+**Status:** PROPOSED — awaiting ormasoftchile review  
+**Document:** `design/gert/proposals/runtime-migration-plan.md`
+
+---
+
+## Headline Picks
+
+| # | Decision | Value |
+|---|----------|-------|
+| 1 | Package strategy | **Parallel-package** (`internal/eval/`) alongside existing `internal/expr/`; adapter satisfies existing interfaces; old code deleted at cutover |
+| 2 | Phase ordering | **A→B→C→D→G→H** (critical path); E and F parallelizable |
+| 3 | Feature flag | **Build tag** (`//go:build gxl`) for zero-overhead compile-time switch during migration |
+| 4 | Cutover criteria | 264/264 vectors green + 22 fixtures execute + perf within 2x + 1 week soak |
+| 5 | Dependency drop timing | **Phase H only** — after soak period; revert = one commit |
+| 6 | Sketch reuse | **Yes** — cherry-pick 97ce48b..5c550c0 as starting material (not drop-in) |
+| 7 | Conformance distribution | **Git submodule** (pending OQ-M1 on repo visibility) |
+| 8 | Estimated total effort | 12-18 days serial; ~12-15 days with 2 engineers; ~10-12 with sketch reuse |
+
+## Key Risks
+
+1. **R1 (HIGH):** Semantic divergence — expr-lang `contains` infix and implicit coercion are FORBIDDEN in GXL. Existing runbooks/tests that use these break.
+2. **R4 (HIGH):** Unresolved spec ambiguities (TESS-AMBIG-3/4, OI-GXL-03) will block implementation until resolved in gert-private.
+3. **R5 (HIGH):** Capture path upgrade requires structural output wrapping — CLI executor's keyword-switch must become GDP path resolution.
+
+## Open Questions (Require ormasoftchile Input)
+
+- OQ-M1: Conformance vector distribution mechanism (submodule vs. published artifact)
+- OQ-M2: Confirm sketch cherry-pick approach
+- OQ-M3: Build tag vs. runtime flag for migration period
+- OQ-M4: Breaking syntax change communication strategy
+- OQ-M5: Team size (1 vs. 2 engineers)
+
+
+---
+
+## Truthy() Arbitration for Empty Collections — Decision Record
+
+**Date:** 2026-06-07
+**Author:** Barbara (Lead/Architect)
+**Requested by:** Coordinator (relaying Booster, P1 PJVM)
+**Status:** RATIFIED
+
+---
+
+### Question
+
+PJVM `Truthy()` is called by GXL boolean coercion in contexts like `if x:` or `${x ? a : b}`. Spec section 03a says "no implicit truthiness" but does not explicitly pin down the behavior for every PJVM type (especially empty collections `[]` and `{}`) when they end up in a boolean context. Booster's P1 PJVM picked JS-style truthiness to make tests pass; without a normative answer, P3's GXL evaluator would lock in a de-facto behavior that C#/TS runtimes would have to reverse-engineer.
+
+### Options Considered
+
+- **(a) JS-style:** empty array/object → truthy. Only canonical falsy set (`false`, `null`, `0`, `""`) is falsy.
+- **(b) Python-style:** empty array/object → falsy. Empty collections join the falsy set.
+- **(c) Strict:** non-bool value in boolean context → `GXL-TYPE-002` error. No implicit coercion at all.
+
+### Decision
+
+**Option (c) — Strict.** A value in boolean context MUST have PJVM type `bool`. Any non-bool value raises `GXL-TYPE-002`. There is no `Truthy()` coercion function.
+
+### Rationale
+
+The spec already mandates this. Section 03a states "Authors MUST NOT rely on implicit truthiness" and `gxl.ebnf` §5.2 states "A non-bool value in boolean position → GXL-TYPE-002." Choosing (a) or (b) would contradict existing normative text and require a spec *change*, not a clarification. Option (c) confirms what the spec already says.
+
+From a cross-runtime parity perspective, strict typing is trivially portable: every runtime checks `type == bool` and raises `GXL-TYPE-002` otherwise. Options (a) and (b) each require every runtime to implement an identical truthiness table — a needless divergence surface. The blast radius of (c) is zero: it changes no existing behavior, adds no new coercion paths, and leaves the type system closed. Users who want emptiness checks use explicit idioms (`len(x) > 0`, `x != null`, `n != 0`, `s != ""`), which are self-documenting and unambiguous.
+
+The "is this list empty?" idiom (`if myList:`) is common in Python/JS, but GXL is not those languages. GXL's value proposition is deterministic, auditable evaluation — implicit coercion undermines that. The explicit `len(myList) == 0` form is four characters longer and infinitely clearer in an audit trail.
+
+### Cross-Runtime Implication
+
+All GXL runtime implementations (Go, C#, TypeScript) MUST enforce the strict boolean-context gate identically: only `bool` values pass; all other PJVM types trigger `GXL-TYPE-002` — no runtime may introduce its own truthy/falsy table.
+
+### Spec Section Updated
+
+`design/gert/sections/03a-expression-language.tex` — new subsection "Truthy Coercion in Boolean Context" (§`sec:gxl:semantics:truthy`) with normative rule, worked examples for all PJVM types, recommended idioms, and cross-runtime note.
+
+### Grammar
+
+`design/gert/grammar/gxl.ebnf` — no change needed. Boolean context is a runtime evaluation concept, not a grammar-level production. The EBNF already documents the rule in §5.2 commentary ("A non-bool value in boolean position → GXL-TYPE-002"). The grammar defines where boolean expressions appear syntactically (after `not`, both sides of `and`/`or`); the type check is enforced at eval time, not parse time.
+
+### Corpus Vectors Added
+
+See [barbara-truthy-corpus-vectors.md](barbara-truthy-corpus-vectors.md) — ~14 new conformance vectors for Tess to add to `tv-gxl-eval.yaml`.
+
+### Impact on Booster's P1 PJVM
+
+If Booster's P1 PJVM implements a `Truthy()` function with JS-style semantics, it must be corrected: the function should accept only `bool` and return the bool value directly, or (preferably) the evaluator should perform the type check inline without a separate `Truthy()` method. Either way, the runtime MUST raise `GXL-TYPE-002` for non-bool inputs in boolean context.
+
+
+---
+
+## Truthy Conformance Vectors — Memo to Tess
+
+**Date:** 2026-06-07
+**From:** Barbara (Lead/Architect)
+**To:** Tess (Conformance)
+**Re:** New vectors for `tv-gxl-eval.yaml` per Truthy arbitration (Option c: Strict)
+
+---
+
+### Context
+
+The Truthy arbitration (see `barbara-truthy-arbitration.md`) chose **Option (c) Strict**: non-bool in boolean context → `GXL-TYPE-002`. The following vectors pin this behavior normatively so every runtime (Go, C#, TS) can test against the same expectations.
+
+### Vectors to Add
+
+All vectors below test a value in boolean context. The expression form is `<value>` used as a boolean condition (e.g., as the operand of `not`, or as a `when:` condition). Expected error code is `GXL-TYPE-002` for all non-bool types.
+
+#### Existing assumed behavior to pin down (sanity vectors)
+
+| # | Input Expression | Expected Result | Notes |
+|---|---|---|---|
+| 1 | `false` | `false` (no error) | Bool literal — sanity baseline |
+| 2 | `true` | `true` (no error) | Bool literal — sanity baseline |
+
+These may already be covered by existing vectors. If so, mark as "already covered" and skip.
+
+#### New vectors (the Truthy arbitration additions)
+
+| # | Input Expression | Expected Result | Notes |
+|---|---|---|---|
+| 3 | `null` in boolean context | `GXL-TYPE-002` | null is not bool |
+| 4 | `0` in boolean context | `GXL-TYPE-002` | Number — not bool, even if zero |
+| 5 | `1` in boolean context | `GXL-TYPE-002` | Number — not bool, even if nonzero |
+| 6 | `-1` in boolean context | `GXL-TYPE-002` | Negative number — not bool |
+| 7 | `0.0` in boolean context | `GXL-TYPE-002` | Float zero — not bool |
+| 8 | `""` (empty string) in boolean context | `GXL-TYPE-002` | Empty string — not bool |
+| 9 | `"false"` (string) in boolean context | `GXL-TYPE-002` | String containing "false" — not bool |
+| 10 | `" "` (whitespace string) in boolean context | `GXL-TYPE-002` | Non-empty string — still not bool |
+| 11 | `[]` (empty array) in boolean context | `GXL-TYPE-002` | **KEY VECTOR** — the original question. Empty array is not bool. |
+| 12 | `[0]` (non-empty array) in boolean context | `GXL-TYPE-002` | Non-empty array — still not bool |
+| 13 | `[null]` (array with null) in boolean context | `GXL-TYPE-002` | Array containing null — still not bool |
+| 14 | `{}` (empty object) in boolean context | `GXL-TYPE-002` | **KEY VECTOR** — the original question. Empty object is not bool. |
+| 15 | `{"a": 0}` (non-empty object) in boolean context | `GXL-TYPE-002` | Non-empty object — still not bool |
+
+#### Recommended expression forms for the vectors
+
+Use variable binding to place each value in boolean context. Example YAML structure:
+
+```yaml
+- id: TV-GXL-EVAL-XXX
+  description: "Truthy: null in boolean context → GXL-TYPE-002"
+  input:
+    expression: "x"
+    variables:
+      x: null
+  expected:
+    error: "GXL-TYPE-002"
+  tags: [truthy, type-error, arbitration-2026-06-07]
+```
+
+For literal forms (numbers, strings), the expression can be the literal itself in a boolean position:
+
+```yaml
+- id: TV-GXL-EVAL-XXX
+  description: "Truthy: 0 in boolean context → GXL-TYPE-002"
+  input:
+    expression: "not 0"
+  expected:
+    error: "GXL-TYPE-002"
+  tags: [truthy, type-error, arbitration-2026-06-07]
+```
+
+### Summary
+
+- **2 sanity vectors** (existing behavior, may already be covered)
+- **13 new vectors** (3 through 15 above)
+- **Total: up to 15**, net new ~13
+- **All non-bool vectors expect `GXL-TYPE-002`** — this is the whole point
+- **Key vectors: #11 (`[]`) and #14 (`{}`)** — these are the ones that triggered the arbitration
+
+### Source
+
+Decision: `.squad/decisions/inbox/barbara-truthy-arbitration.md`
+Spec: `design/gert/sections/03a-expression-language.tex` §Truthy Coercion in Boolean Context
+
+
+---
+
+RESOLVED 2026-06-07 — see barbara-gdp-section-03d.md and barbara-gcp-optional-chaining.md
+
+### 2026-06-07T19-40-00Z: Two GCP spec questions surfaced by GNC (P3 parallel work)
+
+**By:** Coordinator (relaying GNC from gert#26)
+
+**Context:** GNC built the GCP parser + GDP resolver and ran the 41 tv-gcp-path vectors. Result: 35 runnable, 6 explicitly P7-skipped. During implementation, two spec ambiguities surfaced.
+
+---
+
+#### Question 1 — Missing spec section: `design/gert/sections/03d-gdp.tex`
+
+The runtime implementation plan and Barbara's section 09 contract both reference section 03d (GDP — GERT Dotted Path resolution semantics) as the source of truth for path resolution rules. GNC searched and **the file does not exist** in the repo. She inferred GDP semantics from `gcp.ebnf`, `03c-paths.tex`, and the conformance vectors themselves.
+
+**Action needed:** Barbara (or Edith if spec prose) to either:
+- Write `03d-gdp.tex` formalizing the GDP resolution rules GNC inferred (and that the 36/36 tv-gxl-path passes prove correct), OR
+- Confirm that GDP semantics live entirely in `03c-paths.tex` and update the plan + section 09 contract to stop referencing `03d`.
+
+Either way, the gap should be closed — a runtime implementer reading the plan today would hit the same wall.
+
+---
+
+#### Question 2 — GCP optional chaining (`?.`) conflicts with spec/vectors
+
+GNC found that GCP optional chaining is undefined in the current spec/grammar, and several vectors that LOOK like they want `?.` GCP behavior actually trigger inconsistent results. She **rejected `?.` in the GCP parser** as the safe default — vectors using GCP `?.` now fail (or fall into the 6 P7-skipped bucket if they require capture service).
+
+**Three options for Barbara to arbitrate:**
+
+- (a) **No `?.` in GCP.** GIS keeps `?.` (Brady's earlier ratification), GCP doesn't. Capture defaults handled via `capture.default:` in the runbook, not via path syntax. Document that GIS `?.` and GCP path semantics are intentionally different.
+- (b) **Add `?.` to GCP**, mirror GIS semantics (miss → empty-string, JS-style short-circuit). Update grammar, update spec section 03c (or 03d), update affected vectors. GNC would need a follow-up PR to extend her parser + resolver.
+- (c) **Add `?.` to GCP but with GCP-specific semantics** (miss → typed Miss sentinel that capture machinery interprets in P7). More work but possibly cleaner for capture defaults.
+
+**Recommendation from GNC (paraphrased):** Option (a) is the safest current default and aligns with how the existing vectors actually behave. If we want `?.` in GCP, it needs an explicit normative decision and grammar update.
+
+**Impact if option (b) or (c):** A few vectors currently in the "35 passing" or "6 P7-skipped" buckets may move; runtime needs a follow-up extension.
+
+---
+
+**Neither question blocks P3 GXL evaluator** (FAO is being dispatched now). They block the next round of GCP corpus completion and the `03d-gdp.tex` cleanup.
+
+**Action items:** Barbara to arbitrate Q2 and decide on Q1's path (write the missing section or amend the plan references) when next active.
+
+
+---
+
+**RESOLVED — see [barbara-truthy-arbitration.md](barbara-truthy-arbitration.md) (2026-06-07, Option c: Strict).**
+
+### 2026-06-07T19-00-00Z — Truthy() semantics for empty arrays/objects (needs arbitration)
+
+**By:** Coordinator (relaying Booster from gert#24 P1 work)
+
+**What:** PJVM `Truthy()` is called by GXL boolean coercion (e.g., `if x:`). Section 03a says no implicit truthiness, but empty array `[]` and empty object `{}` need a deterministic answer because the GXL evaluator (lands in P3) will call `Truthy()` on whatever the user passes to a boolean context. Booster's P1 implementation picked one in code to keep PJVM testable, but the choice is not pinned down in the spec.
+
+**Options:**
+- (a) **JS-style:** empty array/object → truthy. Only the canonical falsy set (`false`, `null`, `0`, `""`) is falsy.
+- (b) **Python-style:** empty array/object → falsy. Falsy set expands to include empty collections.
+- (c) **Strict:** any non-bool value passed to a boolean context → parse-gate error OR runtime error. No implicit coercion at all.
+
+**Why it matters now:** P3 GXL evaluator cannot land without this answer. Cross-runtime parity for C# / TS later depends on a single answer that ships in the corpus.
+
+**Recommendation from Booster:** Option (a) — JS-style. Predictable, matches what most users will expect from `${someList ? "yes" : "no"}` style expressions, and is the dominant convention in adjacent expression languages.
+
+**Action items:**
+1. Barbara (or Brady) arbitrate Option (a) / (b) / (c)
+2. Tess add conformance vectors covering empty `[]` and `{}` in boolean context once decided
+3. Update section 03a (or equivalent) to make the rule normative
+4. Block P3 (GXL evaluator) until resolved — without this, the evaluator has no defensible answer for `Truthy([])`
+
+
+---
+
+---
+author: david
+date: 2026-06-07T19-07-00-07-00
+slug: ntfs-safe-filenames-policy
+status: proposed
+---
+
+# Decision: All GERT-family repos must enforce colon-free filenames
+
+## Context
+
+On 2026-06-07, a fresh clone of `gert-tui` on Windows failed completely because 19 historical Scribe log files contained raw ISO-8601 colons in their filenames (e.g., `2026-04-29T01:00:25Z-scaffold-session.md`). Windows NTFS forbids `:` in path components. `git checkout` silently wiped the entire working tree, leaving the repo unusable until a GitHub API tree-rewrite was performed.
+
+This is the **third** recorded occurrence of this class of bug across GERT-family repos (previous instances documented in `gert-private/.squad/identity/wisdom.md`). The pattern is always the same: Scribe or an agent generates a log file with an unescaped timestamp and commits it without validation.
+
+## Decision
+
+1. **Filename convention (non-negotiable):** All files committed to any GERT-family repository must use NTFS-safe characters only. For timestamp segments in filenames, use `T\d\d-\d\d-\d\dZ` (hyphens), never `T\d\d:\d\d:\d\dZ` (colons). Also forbidden: `<`, `>`, `"`, `|`, `?`, `*`, trailing `.` or space.
+
+2. **Pre-commit hook (all repos):** Add a pre-commit hook that rejects any staged path containing `:`, `<`, `>`, `"`, `|`, `?`, or `*`. Sample check:
+   ```sh
+   git diff --cached --name-only | grep -P '[:<>"|?*]' && echo "ERROR: Windows-forbidden char in filename" && exit 1
+   ```
+
+3. **`.gitattributes` guard:** Each repo should have:
+   ```
+   * text=auto eol=lf
+   ```
+   to prevent CRLF drift, but this does not block bad filenames — the pre-commit hook is the primary gate.
+
+4. **Agent generation rule:** Any agent (Scribe, Coordinator, or domain agent) that generates filenames with timestamps must apply the substitution `s/:/-/g` at generation time, not as a post-hoc fix. This is already documented in `wisdom.md`; this decision makes it a ratifiable team contract.
+
+## Impact
+
+- Affects: gert-private, gert-tui, gert (runtime), and any future GERT-family repo
+- Owner: Coordinator to propagate hook to all active repos; each agent charter to reference this rule
+- Urgency: High — every Windows clone is at risk until hooks are in place
+
+
+---
+
+# Don Phase 2 Day 4 — GXL Evaluator
+
+Date: 2026-06-05T17:57:33.200-07:00
+
+## Evaluator Entry + Walk Strategy
+
+Implemented `gxl.Eval(node Node, bindings map[string]core.Value, clock core.Clock) (core.Value, error)`. The evaluator walks the Day-3 AST directly with strict PJVM typing: literals construct PJVM values, paths resolve from bindings, unary/binary nodes enforce operator semantics, calls dispatch to closed stdlib namespaces, and `and`/`or` perform AST-level short-circuit evaluation.
+
+## Stdlib Implemented
+
+- `len`: strings by rune count; lists by element count.
+- `now`: zero-argument top-level builtin using injected `core.Clock`, UTC `YYYY-MM-DDTHH:MM:SSZ`.
+- `str`: `contains`, `startsWith`, `endsWith`, `toLower`, `toUpper`, `trim`, `length`, `trimPrefix`, `trimSuffix`.
+- `list`: `contains`, `indexOf`, `length`.
+- `regex`: `match` with Go RE2-compatible `regexp` compilation per call; invalid patterns return `GXL-EVAL-003`.
+- `math`: no functions implemented because `gxl.ebnf` reserves `math` for v2 and current vectors exercise none.
+
+## Vector Pass Count
+
+Expected `tv-gxl-eval.yaml`: 90 of 90 green after coordinator runs Go. Local verification is blocked because `go` is not on PATH in this environment.
+
+## Flagged for Edith/Barbara
+
+- `TV-GXL-EVAL-033` / `TESS-AMBIG-3`: bool ordered comparison still carries `error_code: TBD`; evaluator returns `TBD` to keep the ambiguity visible.
+- `TV-GXL-EVAL-086` / `TESS-AMBIG-4`: array/list equality still carries `error_code: TBD`; evaluator returns `TBD` rather than inventing deep equality.
+- `TV-GXL-EVAL-088`: corpus still specifies regex assertion for `now()` while Phase 2 Q2 ratified injected-clock exact assertions. Harness supports regex now and fixed-clock fields if the corpus is updated.
+
+## Day 5 Readiness
+
+Day 5 GIS/GXL integration is unblocked: GIS can parse embedded expressions with `gxl.Parse` and call `gxl.Eval(ast, bindings, clock)` directly. GDP traversal currently exists inside the evaluator for Day 4 argument/root resolution; Day 5 can harden path-specific runner coverage without changing the Eval entry signature.
+
+
+---
+
+# Decision Needed: Extensions Must Consume a Published `runbook/v1` JSON Schema
+
+**Raised by:** Leslie (Frontend Dev)  
+**Date:** 2026-06-07T19:07:00-07:00  
+**Context:** gert-vscode extension audit (see `.squad/agents/leslie/gert-vscode-audit.md`, Open Question #1)
+
+---
+
+## Background
+
+During the gert-vscode audit I found that the extension provides **no YAML validation** for `.runbook.yaml` files, and there is no centrally published machine-readable schema for `runbook/v1`. If we add validation to the extension ad-hoc (hand-authoring a JSON Schema locally in the extension repo), we will have at least three consumers that each maintain their own version:
+
+1. The VS Code extension (`contributes.yamlValidation`)
+2. Any CI lint step on runbook repos
+3. The web portal's runbook editor/step renderer (if it ever gets an authoring mode)
+
+These will diverge. They've already diverged once (the P0–P8 migration collapsed v2 framing back into v1, and any stale copy of the schema would still reference a v2 structure).
+
+## Proposal
+
+**The `gert` repo should publish a canonical `runbook.v1.schema.json`** as a versioned artifact — either committed to the repo and referenced by a stable URL, or generated at build time from the Go struct definitions and exported as a release asset.
+
+All tooling (extension, CI, portal) should reference this single artifact, **not** maintain local copies.
+
+## Decisions Needed
+
+1. **Who owns the schema?** Proposed: Barbara (runtime architect). She owns the YAML structure definition; she should also own its machine-readable expression.
+
+2. **What format?** JSON Schema Draft-07 (compatible with VS Code's YAML language server and `ajv`).
+
+3. **How is it versioned and distributed?** Options:
+   - Committed at `gert/schemas/runbook.v1.schema.json` (stable path, easy to reference via raw GitHub URL)
+   - Published as a GitHub release asset
+   - Hosted on a stable URL (e.g., `https://schema.gert.run/runbook/v1`)
+
+4. **Should `capture_defaults:` values accept GIS expressions or only literals?** This is a schema precision question that should be resolved before the schema is authored.
+
+## Impact if Not Decided
+
+The gert-vscode Phase 2 work (YAML schema + snippets) cannot start until this is resolved — or it will start with a local hand-authored schema that becomes a liability the moment the canonical schema diverges.
+
+## Suggested Resolution Timeline
+
+Before gert-vscode Phase 2 begins (i.e., before the grammar work from Phase 1 is merged).
+

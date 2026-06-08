@@ -2047,3 +2047,5 @@ Barbara's Option A ratification (mandatory-miss-as-error) proved low-risk in pra
 - Barbara: Breaking changes documented; Phase H closes migration window
 - Future: All runtimes (C#, TS, etc.) target GXL/GIS/GCP spec directly; no legacy dual-engine concerns
 
+
+Note: path renamed to vector.schema.json on 2026-06-07 per Barbara ratification (entry barbara-schema-rulings-2026-06-07).

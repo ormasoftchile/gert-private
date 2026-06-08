@@ -12,7 +12,7 @@
 ## What I Own
 
 - The conformance corpus under `design/gert/conformance/` — YAML test vector files (`TV-GXL-*.yaml`, `TV-GIS-*.yaml`, `TV-GCP-*.yaml`)
-- The vector schema (`design/gert/conformance/schema.json`) that validates every vector file
+- The vector schema (`design/gert/conformance/vector.schema.json`) that validates every vector file
 - Coverage tracking: which grammar productions, which error classes, which evaluation paths are exercised
 - Cross-runtime parity vectors — scenarios that catch behavioral drift between Go, C#, and any future runtime
 - Error-class taxonomy — every error code from the grammar files must have at least one negative test vector

@@ -1,7 +1,7 @@
 # tv-gis-path.yaml
 # Category:    GIS-PATH
 # Grammar ref: design/gert/grammar/gis.ebnf §2.5 (GISPathSegment, OptionalDotAccess, OptionalBracketAccess)
-# Schema ref:  design/gert/conformance/schema.json
+# Schema ref:  design/gert/conformance/vector.schema.json
 # Author:      Tess (Conformance Tester)
 # Date:        2026-06-05T07:28:56.273-07:00
 #

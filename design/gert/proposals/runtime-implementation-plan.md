@@ -484,7 +484,7 @@ Every finding from the rubber-duck critique (2026-06-07) is addressed:
 - Grammars: `design/gert/grammar/{gxl,gis,gcp}.ebnf`
 - Spec sections: `design/gert/sections/03a-expression-language.tex`, `03b-interpolation-syntax.tex`, `03c-capture-paths.tex`, `03d-parse-time-enforcement.tex`, `09-testing-and-acceptance.tex`
 - Conformance vectors: `design/gert/conformance/tv-*.yaml` (267 total: 92+83+36+15+41)
-- Schema: `design/gert/conformance/schema.json`
+- Schema: `design/gert/conformance/vector.schema.json`
 - Issue #17 (gert): conformance harness
 - Issue #1 (gert-private): corpus YAML hygiene — closed by P0
 - PR #20 (gert): broken harness — to be closed, replaced by P1 scaffold

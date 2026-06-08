@@ -2,7 +2,7 @@
 # Category:    GCP-PATH
 # Grammar ref: design/gert/grammar/gcp.ebnf §3 (CapturePath), §4 (GDP), §5 (capture semantics), §6 (defaults), §7 (errors)
 # Spec ref:    design/gert/sections/03c-capture-paths.tex
-# Schema ref:  design/gert/conformance/schema.json
+# Schema ref:  design/gert/conformance/vector.schema.json
 # Author:      Tess (Conformance Tester)
 # Date:        2026-06-05T09:25:14.584-07:00
 #

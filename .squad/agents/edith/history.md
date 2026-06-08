@@ -126,7 +126,72 @@
 
 ---
 
-## Integrated to Main (2026-06-05T00:27:12-04:00)
+## 2026-06-07T19:14:39-07:00 — Runbook v1 JSON Schema (`design/gert/schemas/runbook.v1.schema.json`)
+
+### Task
+
+Authored the canonical `runbook/v1` JSON Schema per Barbara's ruling (`decisions/inbox/barbara-runbook-v1-schema-canonical-source.md`). This is the front-door artifact for gert-vscode, gert-tui, and future C#/TS runtimes.
+
+### Field Inventory Source
+
+The Go runtime structs were used as a **reference implementation checklist** (not as the canonical source):
+- `pkg/schema/runbook.go` — top-level `Runbook` struct, `Input`, `Output`, `ToolRef`, `ExtensionRef`, `StepDefaults`, `GovernanceConfig`, `GovernanceRule`, `RedactRule`, `FlowNode`
+- `pkg/schema/step.go` — `Step` (common fields), `RetryConfig`, `Contract`
+- `pkg/schema/steps.go` — all step-type payloads: `CLISpec`, `ToolCallSpec`, `IncludeSpec`, `ChoiceSpec`, `DecisionSpec`, `CollectorSpec`, `BranchSpec`, `ApproveSpec`, `AssertSpec`, `CompensateSpec`, `WaitForEventSpec`, `EndSpec`, `NoopSpec`, `DisplaySpec`, and nested types
+- `pkg/schema/tool.go` — `ToolRef`, `ToolInvocation`
+- `pkg/schema/regions/manifest.go` — `RegionsManifest`, `Region`
+
+Canonical authority remains the spec sections (`design/gert/sections/*.tex`) and grammar files (`design/gert/grammar/*.ebnf`).
+
+### Schema Design Decisions
+
+- **Draft:** JSON Schema draft 2020-12 (`$schema: https://json-schema.org/draft/2020-12/schema`)
+- **`$id`:** `https://gert.dev/schemas/runbook/v1` (per Barbara's decision document)
+- **Step discrimination:** Used `allOf[if/then]` with `unevaluatedProperties: false` at Step level. Each step type has its own `then` branch defining its payload properties. Type-specific fields are rejected for non-matching types. This is the most structurally correct pattern for draft 2020-12.
+- **Opaque GIS/GXL/GCP strings:** All string fields that hold expression templates are typed as `"type": "string"` with a description note. The schema does not validate expression syntax — that is runtime-only.
+- **`additionalProperties: false`** on every object definition. One exception: `vars` and `ToolInvocation.args` use `additionalProperties: {}` (any value) since Go uses `map[string]any`.
+- **Step ID pattern:** `^[a-z][a-z0-9_-]*$` applied to step, iterate, and parallel `id` fields per Barbara's boundary statement. Runbook root `id` is unconstrained (examples use dots: `incident-triage.network`). SQ-004 filed.
+- **`name` on Step:** Present in nav-test example, absent from Go struct. Included as optional legacy alias with SQ-001 filed.
+
+### Validation Results
+
+Validated against **23 runbook YAML files** in `gert/examples/` using AJV (draft 2020-12).
+
+| Outcome | Count | Notes |
+|---|---|---|
+| ✅ PASS | 23 | All examples pass |
+| ❌ FAIL | 0 | None |
+
+One schema fix was required during validation:
+- `resource-exhaustion.runbook.yaml` uses `type: list` for an input. The Go struct has no enum on `Input.Type`. Schema was updated to include `list` and `array`/`object` in the Input type enum. SQ-003 filed for Barbara to confirm the normative set.
+
+### Ambiguities Parked
+
+Filed `design/gert/schemas/` open questions in `.squad/decisions/inbox/edith-runbook-schema-questions.md`:
+- **SQ-001:** `name` field on steps — legacy alias for `title`?
+- **SQ-002:** `extension` step type — payload undefined; empty `then` may be too strict
+- **SQ-003:** Input `type` enum — `list` alias, normative set not specified in spec
+- **SQ-004:** Runbook root `id` pattern — examples use dots, pattern not applied at root level
+- **SQ-005:** `iterate`/`parallel` as step `type` values — in Go enum but not used as step types in any example
+
+### Files Delivered
+
+- `design/gert/schemas/runbook.v1.schema.json` — canonical schema (draft 2020-12, hand-authored)
+- `design/gert/schemas/README.md` — updated with full boundary statement, consumer rules, maintenance guide, and generation policy
+- `design/gert/schemas/examples/smoke-test.runbook.yaml` — CI smoke-test fixture (validated: PASS)
+- `.squad/decisions/inbox/edith-runbook-schema-questions.md` — open questions for Barbara
+
+### Conventions Confirmed (JSON Schema for Grammar-Backed Languages)
+
+When authoring a JSON Schema from a grammar-backed spec (EBNF → spec prose → Go structs):
+1. Start with the Go struct surface as a field checklist
+2. Model discriminated unions with `allOf[if/then]` + `unevaluatedProperties: false` (draft 2020-12)
+3. Treat all expression-typed string fields as opaque; note GIS/GXL/GCP in description
+4. Use `additionalProperties: false` on all objects except free-form maps (`map[string]any`)
+5. Validate against ALL existing examples before declaring done; fix schema if too strict
+6. File open questions rather than guess on ambiguous enum values or payload shapes
+
+
 
 ✅ **Day 2 memo merged to `.squad/decisions.md`** under section "GXL Phase 1 Day 2 — GIS/GCP Specs, Eval+Path Vectors, Conflict Arbitration". All deliverables, ratifications, discrepancies, and follow-ups captured. PJVM canonical home established at `03b §sec:gis:portable-json` per Stream B Day 2 memo.
 

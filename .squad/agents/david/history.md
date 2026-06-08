@@ -171,3 +171,43 @@ Industries have different retention requirements:
 
 **Leslie uses he/him pronouns.** All team members and the coordinator must refer to Leslie with he/him going forward.
 
+---
+
+## Learnings — 2026-06-07T19-07-00-07-00 — gert-tui NTFS Colon Recovery
+
+**What was bad:** 19 historical Scribe log files in `.squad/log/` and `.squad/orchestration-log/` had raw ISO-8601 colons in their filenames (e.g., `2026-04-29T01:00:25Z-scaffold-session.md`). Windows NTFS forbids `:` in path components, causing `git checkout` to fail silently mid-clone and leave the entire working tree empty (index also wiped to match — all 205 tracked files appeared as staged deletions in `git status`).
+
+**Diagnostic fingerprint:**
+- `git status --short` shows 205 `D ` (staged deletions) entries
+- `git ls-files` returns nothing (index is empty)
+- `git ls-tree -r HEAD --name-only | Select-String ":"` reveals the offending paths
+- `git checkout -- .` fails with `error: pathspec '.' did not match any file(s) known to git`
+- `core.protectNTFS = true` is the guard that prevents writing the bad paths
+
+**Rename pattern applied:** `T(\d{2}):(\d{2}):(\d{2})Z` → `T$1-$2-$3Z`
+
+**Fix method (bypasses NTFS entirely):**
+1. Fetch full recursive tree via `gh api repos/{owner}/{repo}/git/trees/HEAD?recursive=1`
+2. Build new blob-only tree array with colon paths renamed (skip `type=tree` entries)
+3. `POST /git/trees` → new tree SHA
+4. `POST /git/commits` with new tree + HEAD as parent
+5. `PATCH /git/refs/heads/main` to advance the ref
+6. `git fetch origin && git reset --hard origin/main` locally — clean restore in one shot
+
+**Key lesson:** Never attempt `git mv` or `git update-index` for colon-path recovery on Windows — the index itself rejects those entries. The GitHub API is the only reliable path on a Windows-only machine.
+
+**New git config that helped:** `core.protectNTFS = true` was already set (default on Windows git). `core.longpaths` was not set (blank = disabled) — not relevant here but worth enabling for repos with deep paths.
+
+---
+
+## Scribe Session — 2026-06-07T19:07:00-07:00
+
+**Summary:** Scribe consolidated David's recovery work into decisions.md and created orchestration logs. David's recovery memo (`david-ntfs-safe-filenames-policy.md`) is now part of the ratified NTFS-safe filenames policy for all GERT-family repos.
+
+**Key update:** Pre-commit hook rollout needed across gert-tui, gert-vscode, gert (runtime), and all future GERT-family repos. Owner: Coordinator.
+
+**Artifacts created:**
+- `.squad/orchestration-log/2026-06-07T19-07-00Z-david.md` (recovery summary)
+- Updated `.squad/decisions/decisions.md` (policy now ratified)
+- `.squad/log/2026-06-07T19-07-00Z-gert-tui-checkout-and-vscode-audit.md` (session log)
+

@@ -1,0 +1,122 @@
+# Minimal valid runbook — smoke test for CI schema validation.
+# Exercises: required root fields, a cli step, a tool step, a collector step,
+# a branch step, an iterate node, capture, and an end step.
+#
+# This is a STRUCTURAL fixture only. It is not intended to run successfully.
+apiVersion: runbook/v1
+
+id: schema-smoke-test
+name: Schema Smoke Test
+kind: reference
+description: Minimal fixture exercising all major step types for schema CI validation.
+
+vars:
+  target_host: example.com
+  check_count: "3"
+
+inputs:
+  env_name:
+    type: string
+    required: true
+    description: Environment name to validate
+    from: prompt
+
+defaults:
+  timeout: "60s"
+  continue_on_fail: false
+
+governance:
+  allow_commands: [curl, ping]
+  deny_env_vars: ["SECRET_*"]
+  redact:
+    - pattern: "bearer\\s+\\S+"
+      replace: "bearer <redacted>"
+
+toolRefs:
+  - name: curl
+    path: ../../tools/curl.tool.yaml
+
+imports:
+  child: child.runbook.yaml
+
+flow:
+  - step:
+      id: run_cmd
+      type: cli
+      title: Echo environment
+      run: echo "checking ${env_name}"
+      capture:
+        cmd_out: stdout
+
+  - step:
+      id: tool_check
+      type: tool
+      title: HTTP check
+      tool:
+        name: curl
+        action: head
+        args:
+          url: "https://${target_host}"
+      capture:
+        http_out: stdout
+
+  - step:
+      id: collect_notes
+      type: collector
+      title: Collect findings
+      prompt: "Review output: ${http_out}"
+      fields:
+        - name: notes
+          type: text
+          label: Notes
+          required: false
+          multiline: true
+
+  - step:
+      id: branch_result
+      type: branch
+      branches:
+        - condition: 'str.contains(http_out, "200")'
+          label: HTTP OK
+          steps:
+            - step:
+                id: include_child
+                type: include
+                title: Include child runbook
+                include:
+                  runbook: child.runbook.yaml
+                  with:
+                    host: "${target_host}"
+                  gate:
+                    stop_if: [resolved]
+
+        - else: true
+          label: HTTP not OK
+          steps:
+            - step:
+                id: display_failure
+                type: display
+                title: Show failure
+                display:
+                  content: "HTTP check failed: ${http_out}"
+                  format: text
+
+  - iterate:
+      id: loop_items
+      over: check_count
+      as: item
+      max: 5
+      steps:
+        - step:
+            id: noop_item
+            type: noop
+            title: Process ${item}
+            delay: 1s
+
+  - step:
+      id: done
+      type: end
+      title: Smoke test complete
+      outcome:
+        category: resolved
+        code: smoke_ok

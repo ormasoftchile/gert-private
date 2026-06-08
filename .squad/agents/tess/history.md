@@ -292,3 +292,25 @@ Phase 1 complete. All spec sections updated. Phase A starts in `ormasoftchile/ge
 **Cost:** 1-2 hours to execute (grep-and-replace + verify + commit)
 
 **Status:** Awaiting Barbara ratification. Once approved, will execute migration as single atomic PR.
+
+## Learnings — 2026-06-07T19:28:42-07:00 — Cross-Repo Schema Rename Execution
+
+**Blast Radius (actual vs. estimate):**
+- Estimate: 13–16 files (gert-private) + 3 files (gert), total ≤16 files, 1 code change
+- Actual: **10 files in gert-private** (schema.json rename, 5 TV-*.yaml comments, LaTeX §9, runtime-implementation-plan.md, tess/charter.md, decisions.md migration note) + **7 files in gert** (schema.json rename, loader.go, 5 TV testdata comments) = 17 total
+- Delta: Estimate missed decisions.md (append-only note), charter.md (living doc), and overcounted "Python script" (verify_corpus.py doesn't exist) and "README" (no conformance README). Net: accurate within expected range.
+
+**Unexpected findings:**
+- No `verify_corpus.py` exists; validation was done with a Node.js Ajv one-liner (Python 3.12 available but no json-schema library installed). Node's `ajv@8 + ajv-formats + js-yaml` installed ad hoc.
+- The schema's `$id` (`https://gert.internal/conformance/vector-schema/v1`) already used `vector-schema` — no update needed.
+- Pre-existing unstaged changes on `main` (from prior squad sessions) were in the working tree on branch creation. Required explicit selective `git add` instead of `git add -A` to avoid bundling unrelated squad session artifacts into the rename commit.
+- `node_modules/` created by ad-hoc validation deps was untracked but visible in `git status`; not committed (no `package.json` committed either — npm install was ephemeral).
+
+**Cross-repo PR-linking pattern:**
+- Create PR B (gert runtime) first to get URL, then create PR A (gert-private spec) with PR B URL in body, then `gh pr edit B` to add PR A URL. Two-step because both PRs need the other's URL.
+- Commit messages reference the decision ID (`barbara-schema-rulings-2026-06-07`) for traceability without PR numbers (which aren't known at commit time).
+
+**PRs delivered:**
+- PR A (gert-private): https://github.com/ormasoftchile/gert-private/pull/8
+- PR B (gert): https://github.com/ormasoftchile/gert/pull/36
+- Local validation: 5/5 TV-*.yaml PASS (Ajv), Go tests PASS (`ok internal/conformance 1.720s`)

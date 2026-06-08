@@ -1,7 +1,7 @@
 # tv-gxl-eval.yaml
 # Category:    GXL-EVAL (and cross-cutting GXL-TYPE vectors triggered by eval)
 # Grammar ref: design/gert/grammar/gxl.ebnf §5 (Semantics Annex), §4 (stdlib)
-# Schema ref:  design/gert/conformance/schema.json
+# Schema ref:  design/gert/conformance/vector.schema.json
 # Author:      Tess (Conformance Tester)
 # Date:        2026-06-05T00:27:12-04:00
 #

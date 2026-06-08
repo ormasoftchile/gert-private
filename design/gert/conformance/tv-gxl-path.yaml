@@ -1,7 +1,7 @@
 # tv-gxl-path.yaml
 # Category:    GXL-PATH
 # Grammar ref: design/gert/grammar/gxl.ebnf §3 (GDP production), §5.3 (Missing Path Behavior)
-# Schema ref:  design/gert/conformance/schema.json
+# Schema ref:  design/gert/conformance/vector.schema.json
 # Author:      Tess (Conformance Tester)
 # Date:        2026-06-05T00:27:12-04:00
 #

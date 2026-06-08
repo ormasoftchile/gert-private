@@ -211,3 +211,4 @@ The gert-vscode extension currently provides zero IDE assistance for GIS/GXL/GCP
 6. Diagnostics providers for expression syntax errors (real-time feedback)
 
 **Expected value:** Real-time GERT-specific IDE assistance, reducing context-switching to gert CLI and web UI.
+**Expected value:** Real-time GERT-specific IDE assistance, reducing context-switching to gert CLI and web UI.

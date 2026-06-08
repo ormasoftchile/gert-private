@@ -146,3 +146,33 @@ GERT is a governed, executable, traceable runbook engine (Go binary, local-first
 
 **Leslie uses he/him pronouns.** All team members and the coordinator must refer to Leslie with he/him going forward.
 
+---
+
+## GitHub Actions Cost Control — Workflow Disable Pattern (2026-06-07T19:28:42-07:00)
+
+**Directive:** User requested disabling all GitHub Actions across GERT-family repos to control spending. Re-enabling is case-by-case future work.
+
+**Operations executed:**
+- **List active workflows:** `gh workflow list --repo ormasoftchile/{repo} --all --json id,name,state,path`
+  - `--all` flag shows both active and disabled workflows; without it, only active workflows appear
+  - Returns JSON with numeric `id` (preferred for disable/enable) and `path` (human-readable for commit mapping)
+- **Disable workflows:** `gh workflow disable <id> --repo ormasoftchile/{repo}`
+  - Accepts both numeric `id` and `path`; numeric `id` is safer (path can contain special chars)
+  - No confirmation prompt; idempotent (re-running on already-disabled workflow is safe)
+  - Applies immediately; new commits won't trigger disabled workflows
+- **Cancel in-flight runs:** `gh run list --repo ormasoftchile/{repo} --status in_progress|queued --json databaseId,name,headBranch --limit 50`
+  - Then: `gh run cancel <id> --repo ormasoftchile/{repo}`
+  - Stops active compute spend within seconds
+
+**Security carve-out applied:**
+- **Kept Dependabot active** in `gert` repo. Rationale: Dependabot security scanning (vulnerability tracking) has higher ROI than cost savings. Security posture > cost for automated dependency audits.
+- Did not find Dependabot, CodeQL, or other security workflows in `gert-private`, `gert-vscode`, or `gert-tui`.
+
+**Outcome:** 8 workflows disabled across 4 repos (0 runs cancelled; no in-flight jobs at time of action). Documented in `.squad/decisions/inbox/john-actions-disabled-2026-06-07.md` with per-repo inventory and re-enable runbook.
+
+**Key learnings:**
+1. `gh workflow list --all` is mandatory to see disabled workflows for verification; without `--all`, verification appears to show zero workflows if all are disabled.
+2. Workflow `id` (numeric) is the stable identifier for disable/enable operations; `path` is human-readable but may cause issues with special characters.
+3. Security workflows (Dependabot, CodeQL, SAST/DAST) should be exempted from blanket cost-control directives — the cost of a vulnerability in production vastly exceeds automation spend.
+4. No in-flight runs existed at disable time, but if they had, `gh run cancel` would have stopped compute within seconds (faster than workflow disable, which only prevents future runs).
+

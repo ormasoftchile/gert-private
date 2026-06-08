@@ -1,7 +1,44 @@
 # Barbara — Project History (Summarized)
 
-## Overview
-Barbara is the spec editor and architecture specialist for the GERT web platform and GXL expression language. Work spans governance enforcement, Azure infrastructure, declaration/consent workflows, and language design.
+## Current Status Summary (2026-06-07)
+
+**Phase 1 COMPLETE.** GXL/GIS/GCP grammars (75 KB EBNF), spec sections (§03a/03b/03c/03d LaTeX), conformance corpus (211 vectors, 0 TBD).
+
+**Phase 2 blocking decisions finalized:**
+- **Runbook v1 schema canonical home:** `gert-private/design/gert/schemas/runbook.v1.schema.json` (hand-authored, language-neutral, Edith authored, 23/23 examples validate)
+- **Schema arbitration queue:** Edith filed 5 spec questions (SQ-001 to SQ-005) for Barbara ratification
+- **Conformance schema naming:** Tess recommends rename `schema.json` → `vector.schema.json` (awaiting Barbara ratification)
+- **Parse-gate proposal:** Deferred to separate cycle before Day 9 runtime kickoff
+
+**Current role:** Spec authority, architecture arbitration, Phase 2 decision arbiter
+
+**Immediate next steps:** (1) Arbitrate 5 Edith spec questions, (2) Ratify Tess schema rename, (3) Draft parse-gate proposal
+
+---
+
+## Consolidated Phase 1 Record
+
+**2026-06-04 to 2026-06-07:** Delivered and arbitrated:
+- Stream A/B/F: GXL/GIS/GCP EBNF grammars + LaTeX specs + parser gate spec (9 PLAN-* codes)
+- OQ resolutions: OI-GIS-01 (`\${` escape), OI-GCP-02 (bare-root captures), OQ1/OQ2 (short-circuit, capture.default scalars-only), PJVM (RFC 8259 types)
+- Stream D: 21 runbooks migrated (all P1–P5 exit criteria passed)
+- TESS-AMBIG-3..6: 4 ambiguities resolved (boolean ordering, array equality, field access on non-object/null)
+- Optional chaining: `?.` / `?.[N]` proposed and EBNF applied (GIS-only scope)
+- Runtime migration plan: Ratified 5 OQ-M decisions; Design repo = spec authority, Gert repo = implementation
+- GIS miss semantics: Ken's engine correct; hard error on mandatory-miss confirmed
+- GDP/keyword arbitration: `str`/`list`/`regex` dual-role confirmed; parser already correct
+
+**Web Platform & Architecture:**
+- A6 (MVP): App Service P1v3 $113/mo, Service Bus, Cosmos user_inputs, IUserInputGate (Choice/Text/Confirmation/FileUpload/Form)
+- A8 (Enterprise): Durable Functions with WaitForExternalEvent<T>() for approval gates
+- Campaign layer: tenant → campaign → audience → invitation → contract artifact → run
+- White-label portal: Magic-link auth, per-tenant custom domains via Static Web Apps
+- Declaration/consent: 22 scenarios mapped to 5 archetype patterns, 10 gaps identified
+
+**Key Learnings:**
+- Language-neutral canonical artifacts (schemas, vectors) must live in design repo, not runtime repos
+- First non-Go port reveals hidden language dependencies in generated contracts
+- Spec authority ≠ implementation ownership: design repo ratifies, runtime repos execute
 
 ## Key Milestones (Phase 1)
 
@@ -205,3 +242,61 @@ Phase 1 exit gate ✅ COMPLETE.
 **Phase H Impact:** Zero. Proceed with planned hard cutover (delete legacy engine, no compat shim, no CLI flag, no parser change).
 
 **Migration:** Authors who relied on missing-key-as-empty-string use optional chaining (`?.`) or capture defaults for soft-miss tolerance.
+
+## 2026-06-07T19:14:39-07:00 — Runbook v1 Schema Canonical Source Decision
+
+**Status:** DECIDED — Option A (design repo is canonical home).
+
+**Decision:** `design/gert/schemas/runbook.v1.schema.json` is the single source of truth for runbook structural validation. Hand-authored, language-neutral, consumed by all surfaces (IDE, CI, portals, future ports).
+
+**Key trade-offs considered:**
+- Go structs (Option B) are an implementation, not the source — they'd force C#/TS ports to reverse-engineer Go-specific output
+- Extension-local schema (Option C) guarantees drift across three+ consumers
+- LaTeX→JSON Schema generation doesn't exist; Go struct→schema generators produce Go-biased output — hand-authoring wins for precision
+- Design repo already hosts all normative artifacts; DESIGN ONLY directive explicitly supports this class of artifact
+
+**Boundary established:** Schema = structural gatekeeper (types, required fields, enums, patterns). Runtime = semantic gatekeeper (expression evaluation, path resolution, cross-step integrity, governance). Schema-valid ≠ executable.
+
+## Learnings
+
+**Pattern: "Single normative grammar + tool-generated/hand-authored artifacts for every consumer surface"**
+
+When a contract serves multiple language ecosystems (Go, C#, TS) and multiple consumer surfaces (IDE, CLI, CI, web portal), the canonical artifact MUST live in a language-neutral design repo. Implementation repos consume; they never own the contract. This pattern applies to:
+- Conformance vectors (already established via DRIFT-DETECTION-001)
+- Runbook JSON Schema (this decision)
+- GXL stdlib manifest (future — same pattern should apply)
+
+**Anti-pattern avoided:** "Runtime structs generate the schema" sounds DRY but creates a hidden language dependency. The first non-Go port would either duplicate the generation or consume a Go-biased artifact with Go type names leaking through. Paying the cost of hand-authoring once saves every future port from fighting a translation layer.
+
+## 2026-06-07T19:28:42-07:00 — Runbook Schema Arbitration & Spec Question Gate
+
+**Status:** DECISION RATIFIED + ARBITRATION NEEDED
+
+**Runbook v1 Schema Home — FINALIZED (2026-06-07T19:14:39-07:00)**
+- Canonical location: `gert-private/design/gert/schemas/runbook.v1.schema.json` (hand-authored, language-neutral)
+- Ownership: Barbara (architecture), Edith (day-to-day), review gate required for all schema changes
+- Consumer pattern: All surfaces (gert-vscode, gert-tui, runtime, future C#/TS) reference canonical location
+- Status: Unblocks gert-vscode Phase 2 (YAML schema, IDE integration)
+
+**Runbook Schema Authoring Complete (Edith)**
+- PR #7: Initial schema authored, validates all 23 example runbooks
+- 5 spec questions raised (SQ-001 to SQ-005), now in queue for Barbara arbitration
+- No blockers — schema structure sound; questions are design clarity only
+
+**Spec Questions Awaiting Arbitration:**
+| # | Question | Blocks |
+|---|----------|--------|
+| SQ-001 | Is `name:` field on Step a legacy alias for `title:`, deprecated, or missing? | Nothing immediately; (a) safe default chosen |
+| SQ-002 | What fields does `extension` step type carry? Payload fixed or open? | gert-vscode hover/completion for extension steps |
+| SQ-003 | Is `list` a normative type alias for `array` in input declarations? | Normative enum definition in spec §Input Declarations |
+| SQ-004 | Should runbook `id` pattern differ from step `id` pattern? | ID validation strictness for gert-vscode |
+| SQ-005 | Are `iterate` and `parallel` valid step `type` values? | Would affect schema if embedded inside step wrappers |
+
+**Recommendation:** Arbitrate all 5 in single session before Edith updates schema/spec sections.
+
+**Conformance Schema Naming Clarity (Tess)**
+- Evaluation complete: collision risk between test-vector schema and runbook schema
+- Recommendation: Rename `design/gert/conformance/schema.json` → `design/gert/conformance/vector.schema.json`
+- Blast radius: 13-16 files (1 code change, 12 documentation/comment updates)
+- Status: Awaiting Barbara ratification; atomic PR scope documented
+- Timeline: 1-2 hours to execute once approved

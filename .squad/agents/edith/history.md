@@ -127,6 +127,124 @@
 ---
 
 ## Integrated to Main (2026-06-05T00:27:12-04:00)
+## 2026-06-07T19:14:39-07:00 — Runbook v1 JSON Schema (`design/gert/schemas/runbook.v1.schema.json`)
+
+### Task
+
+Authored the canonical `runbook/v1` JSON Schema per Barbara's ruling (`decisions/inbox/barbara-runbook-v1-schema-canonical-source.md`). This is the front-door artifact for gert-vscode, gert-tui, and future C#/TS runtimes.
+
+### Field Inventory Source
+
+The Go runtime structs were used as a **reference implementation checklist** (not as the canonical source):
+- `pkg/schema/runbook.go` — top-level `Runbook` struct, `Input`, `Output`, `ToolRef`, `ExtensionRef`, `StepDefaults`, `GovernanceConfig`, `GovernanceRule`, `RedactRule`, `FlowNode`
+- `pkg/schema/step.go` — `Step` (common fields), `RetryConfig`, `Contract`
+- `pkg/schema/steps.go` — all step-type payloads: `CLISpec`, `ToolCallSpec`, `IncludeSpec`, `ChoiceSpec`, `DecisionSpec`, `CollectorSpec`, `BranchSpec`, `ApproveSpec`, `AssertSpec`, `CompensateSpec`, `WaitForEventSpec`, `EndSpec`, `NoopSpec`, `DisplaySpec`, and nested types
+- `pkg/schema/tool.go` — `ToolRef`, `ToolInvocation`
+- `pkg/schema/regions/manifest.go` — `RegionsManifest`, `Region`
+
+Canonical authority remains the spec sections (`design/gert/sections/*.tex`) and grammar files (`design/gert/grammar/*.ebnf`).
+
+### Schema Design Decisions
+
+- **Draft:** JSON Schema draft 2020-12 (`$schema: https://json-schema.org/draft/2020-12/schema`)
+- **`$id`:** `https://gert.dev/schemas/runbook/v1` (per Barbara's decision document)
+- **Step discrimination:** Used `allOf[if/then]` with `unevaluatedProperties: false` at Step level. Each step type has its own `then` branch defining its payload properties. Type-specific fields are rejected for non-matching types. This is the most structurally correct pattern for draft 2020-12.
+- **Opaque GIS/GXL/GCP strings:** All string fields that hold expression templates are typed as `"type": "string"` with a description note. The schema does not validate expression syntax — that is runtime-only.
+- **`additionalProperties: false`** on every object definition. One exception: `vars` and `ToolInvocation.args` use `additionalProperties: {}` (any value) since Go uses `map[string]any`.
+- **Step ID pattern:** `^[a-z][a-z0-9_-]*$` applied to step, iterate, and parallel `id` fields per Barbara's boundary statement. Runbook root `id` is unconstrained (examples use dots: `incident-triage.network`). SQ-004 filed.
+- **`name` on Step:** Present in nav-test example, absent from Go struct. Included as optional legacy alias with SQ-001 filed.
+
+### Validation Results
+
+Validated against **23 runbook YAML files** in `gert/examples/` using AJV (draft 2020-12).
+
+| Outcome | Count | Notes |
+|---|---|---|
+| ✅ PASS | 23 | All examples pass |
+| ❌ FAIL | 0 | None |
+
+One schema fix was required during validation:
+- `resource-exhaustion.runbook.yaml` uses `type: list` for an input. The Go struct has no enum on `Input.Type`. Schema was updated to include `list` and `array`/`object` in the Input type enum. SQ-003 filed for Barbara to confirm the normative set.
+
+### Ambiguities Parked
+
+Filed `design/gert/schemas/` open questions in `.squad/decisions/inbox/edith-runbook-schema-questions.md`:
+- **SQ-001:** `name` field on steps — legacy alias for `title`?
+- **SQ-002:** `extension` step type — payload undefined; empty `then` may be too strict
+- **SQ-003:** Input `type` enum — `list` alias, normative set not specified in spec
+- **SQ-004:** Runbook root `id` pattern — examples use dots, pattern not applied at root level
+- **SQ-005:** `iterate`/`parallel` as step `type` values — in Go enum but not used as step types in any example
+
+### Files Delivered
+
+- `design/gert/schemas/runbook.v1.schema.json` — canonical schema (draft 2020-12, hand-authored)
+- `design/gert/schemas/README.md` — updated with full boundary statement, consumer rules, maintenance guide, and generation policy
+- `design/gert/schemas/examples/smoke-test.runbook.yaml` — CI smoke-test fixture (validated: PASS)
+- `.squad/decisions/inbox/edith-runbook-schema-questions.md` — open questions for Barbara
+
+### Conventions Confirmed (JSON Schema for Grammar-Backed Languages)
+
+When authoring a JSON Schema from a grammar-backed spec (EBNF → spec prose → Go structs):
+1. Start with the Go struct surface as a field checklist
+2. Model discriminated unions with `allOf[if/then]` + `unevaluatedProperties: false` (draft 2020-12)
+3. Treat all expression-typed string fields as opaque; note GIS/GXL/GCP in description
+4. Use `additionalProperties: false` on all objects except free-form maps (`map[string]any`)
+5. Validate against ALL existing examples before declaring done; fix schema if too strict
+6. File open questions rather than guess on ambiguous enum values or payload shapes
+
+## 2026-06-07T19:28:42-07:00 — Barbara Rulings Followup (SQ-001–005)
+
+**Task:** Apply all 7 Edith action items from Barbara's schema rulings dispatch
+(`.squad/decisions/inbox/barbara-schema-rulings-2026-06-07.md`).
+
+**Schema changes delivered** (`design/gert/schemas/runbook.v1.schema.json`):
+
+| Item | Change |
+|---|---|
+| SQ-001 | Removed `name` field from Step properties; updated Step description to document the `title`/`name` distinction |
+| SQ-002 | Replaced empty extension `then: {}` with full payload sub-schema: `extension.name` (required string), `extension.action` (required string), `extension.args` (optional additionalProperties map) |
+| SQ-003 | Tightened Input type enum: removed non-normative `integer` and `list`; added `array` and `object` after authoring spec prose |
+| SQ-004 | Set `$id` to `https://schemas.gert.dev/runbook/v1.json` per §Self-Description; prior value was `https://gert.dev/schemas/runbook/v1` |
+| SQ-005 | Added `iterate` and `parallel` to step type enum; added corresponding `if/then` payload blocks for step-type usage of both |
+
+**Spec prose changes delivered** (`design/gert/sections/03-schema-vnext.tex`):
+
+| Item | Change |
+|---|---|
+| §Input Declarations | Added normative `array` and `object` input type paragraphs with RFC 2119 wording, serialization model (JSON array / prompt comma-split), GCP compatibility note, and NOT RECOMMENDED guidance for object prompt-sourcing |
+| §Step Types table | Updated count 15 → 16; added `extension` row citing `\S\ref{subsec:step-extension}`; added normative note on `iterate`/`parallel` dual TreeNode form |
+| §Step Types taxonomy figure | Updated caption from "15 types" to "16 types" |
+| §Step extension subsection | New `\subsection{extension step}\label{subsec:step-extension}` with payload contract table, normative rules list, and YAML example |
+
+**Example cleanup delivered** (in `gert` repo, branch `edith/schema-rulings-followup`):
+
+| File | Change |
+|---|---|
+| `nav-test/nav-test.runbook.yaml` | Renamed step-level `name:` → `title:` on all 3 steps (SQ-001) |
+| `incident-triage/resource-exhaustion.runbook.yaml` | Changed `type: list` → `type: array` on `instances` input (SQ-003; `list` ruled non-normative) |
+
+**Validation results:**
+- ✅ All 23 example runbooks in `gert/examples/` pass against updated schema
+- LaTeX brace check: no unclosed environments; new subsection follows established `\subsection` → `\paragraph` → `\begin{center}...\end{center}` → `\begin{minted}` pattern
+- CI not run — disabled per cost-control directive (gert#35)
+
+**Schema patterns used:**
+
+- **Discriminated step payloads:** `allOf[if/then]` with `if: { required: ["type"], properties: { type: { const: "…" } } }` and `then: { required: [...], properties: {...} }`. `unevaluatedProperties: false` at Step root enforces no spurious fields across all branches.
+- **Dual-form iterate modeling:** FlowNode uses `oneOf: [{ required: ["step"] }, { required: ["iterate"] }, { required: ["parallel"] }]` for the standalone TreeNode form. Step.type enum includes `iterate` and `parallel` for the step-wrapper form. Both forms are independently valid; no shared ref is needed — IterateNode and the `iterate` step `then` block share the same field set but are separate schema branches.
+- **Extension payload:** `required: ["name","action"]`, `additionalProperties: false` at the `extension` object level, `args` with `additionalProperties: true` for open key-value maps. This pattern (closed container, open leaf) is the right choice when extension authors control the argument space.
+
+**Spec section locations confirmed:**
+- `§Input Declarations`: `03-schema-vnext.tex` lines ~360–390 (`\paragraph{type field}`)
+- `§Step Types table`: lines ~612–633
+- New `§extension step`: inserted before `\section{Tool Definition Schema}` at the end of step subsections
+- `§Self-Description`: lines ~50–80 (confirmed `$id` = `https://schemas.gert.dev/runbook/v1.json`)
+
+**Cross-references added:** `\S\ref{subsec:step-extension}` in Step Types table; `\S\ref{sec:gis:portable-json}` and `\S\ref{sec:gcp}` in input type prose.
+
+**Open questions:** None. All 5 SQ rulings were fully actionable. `list` → `array` rename was straightforward (no semantic ambiguity). `object` input NOT RECOMMENDED for prompt/env sourcing encoded inline per logical inference from PJVM model; no Barbara escalation needed.
+
+
 
 ✅ **Day 2 memo merged to `.squad/decisions.md`** under section "GXL Phase 1 Day 2 — GIS/GCP Specs, Eval+Path Vectors, Conflict Arbitration". All deliverables, ratifications, discrepancies, and follow-ups captured. PJVM canonical home established at `03b §sec:gis:portable-json` per Stream B Day 2 memo.
 

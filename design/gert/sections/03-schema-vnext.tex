@@ -365,6 +365,23 @@ The \texttt{type} field declares the value's type.  Supported values:
   \item \texttt{number} — Integer or float, passed as string in templates.
   \item \texttt{boolean} — \texttt{true} or \texttt{false}.
   \item \texttt{secret} — String, redacted in traces and log output.
+  \item \texttt{array} — An ordered sequence of PJVM values.  An \texttt{array}
+        input MUST be supplied as a JSON array when provided by the caller or as
+        a comma-separated string when sourced via \texttt{from: prompt} or
+        \texttt{from: env}; the runtime MUST split on commas and strip surrounding
+        whitespace from each element before binding the variable.  The resulting
+        value in the execution context is a PJVM array (see \S\ref{sec:gis:portable-json}).
+        \texttt{array} inputs are used as the iteration source in \texttt{iterate}
+        steps and standalone \texttt{iterate:} TreeNodes via the \texttt{over:}
+        field.  Item-type validation is not enforced by this schema; semantic
+        validators MAY add per-element type constraints.
+  \item \texttt{object} — An unordered map of string keys to PJVM values.  An
+        \texttt{object} input MUST be supplied as a JSON object by the caller.
+        Interactive prompt and environment-variable sourcing (\texttt{from: prompt},
+        \texttt{from: env}) are NOT RECOMMENDED for \texttt{object} inputs; the
+        runtime SHOULD reject such combinations with a semantic validation error.
+        The resulting value in the execution context is a PJVM object and may be
+        traversed with GCP dotted-path expressions (see \S\ref{sec:gcp}).
 \end{itemize}
 
 \paragraph{from: binding syntax}
@@ -628,9 +645,18 @@ The defines fifteen step types:
 \texttt{compensate}       & Declare a saga compensation action (\S\ref{subsec:step-compensate}) \\
 \texttt{noop}             & No-operation step; applies delay and capture without side effects (\S\ref{subsec:step-noop}) \\
 \texttt{end}              & Declare a terminal outcome (\S\ref{subsec:step-end}) \\
+\texttt{extension}        & Invoke a capability exported by a registered extension (\S\ref{subsec:step-extension}) \\
 \hline
 \end{tabular}
 \end{center}
+
+\paragraph{Note on \texttt{iterate} and \texttt{parallel} TreeNode forms}
+In addition to the step-type usage above, \texttt{iterate} has a \textbf{dual structural role}:
+it may appear as a standalone \texttt{TreeNode} in the \texttt{flow} array as
+\texttt{-\ iterate:\ \{\ \ldots\ \}} in lieu of \texttt{-\ step:\ \{\ type:\ iterate,\ \ldots\ \}}.
+Both forms are normative; the standalone form is syntactic shorthand.
+\texttt{parallel} does NOT have a standalone TreeNode form — it appears only as
+\texttt{type:\ parallel} inside a step wrapper.
 
 % ── Step-type taxonomy diagram ────────────────────────────────────────────────
 \begin{figure}[htbp]
@@ -688,7 +714,7 @@ The defines fifteen step types:
     \end{scope}
 
   \end{tikzpicture}
-  \caption{Step type taxonomy — 15 types organized by category.}
+  \caption{Step type taxonomy — 16 types organized by category.}
   \label{fig:step-type-taxonomy}
 \end{figure}
 
@@ -3043,6 +3069,77 @@ Declares a terminal outcome and halts execution.
       code: dns_healthy
       meta:
         resolution_time: "{{ .elapsed }}"
+\end{minted}
+
+% ============================================================
+\subsection{extension step}
+\label{subsec:step-extension}
+% ============================================================
+
+An \texttt{extension} step invokes a named capability action exported by a
+registered extension.  Extensions are root directories listed in the runbook's
+top-level \texttt{extensions} array; each extension exports one or more named
+actions.  The \texttt{extension} step type provides the normative mechanism for
+capabilities that are NOT a tool action (e.g.\ receive-webhook,
+get-oncall-schedule, emit-metric): such capabilities MUST use
+\texttt{type:\ extension} rather than \texttt{type:\ tool}.
+
+\paragraph{Payload contract}
+
+The payload is carried in an \texttt{extension:} field on the step.  The
+following fields are normative:
+
+\begin{center}
+\begin{tabular}{lllp{5cm}}
+\hline
+\textbf{Field}  & \textbf{Type}  & \textbf{Required} & \textbf{Description} \\
+\hline
+\texttt{name}   & string & Yes & Extension name.  MUST match an entry in the
+                                  runbook-level \texttt{extensions} array. \\
+\texttt{action} & string & Yes & Action identifier exported by the extension.
+                                  MUST be a non-empty string. \\
+\texttt{args}   & map    & No  & Key-value arguments passed to the action.
+                                  Keys and value types are extension-defined.
+                                  The schema permits any additional properties
+                                  in this map. \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{Normative rules}
+
+\begin{itemize}
+  \item A step with \texttt{type:\ extension} MUST include an \texttt{extension:}
+        block with both \texttt{name} and \texttt{action} present.
+  \item The \texttt{name} value MUST match (case-sensitive) the \texttt{name}
+        field of an entry in the runbook-level \texttt{extensions} array.
+        The semantic validator MUST reject a runbook where no matching extension
+        is registered.
+  \item The \texttt{action} string is opaque to the GERT runtime; it is
+        passed verbatim to the extension host.  The extension host is responsible
+        for action routing and MAY return a semantic error if the action is
+        unknown.
+  \item \texttt{args} values MAY be GIS template strings; the runtime MUST
+        expand them before passing to the extension host.  Structural validation
+        by this schema is limited to confirming \texttt{args} is an object when
+        present.
+\end{itemize}
+
+\paragraph{Example}
+
+\begin{minted}{yaml}
+- step:
+    id: fetch_oncall
+    type: extension
+    title: "Fetch on-call schedule for ${team}"
+    extension:
+      name: pagerduty
+      action: get-oncall-schedule
+      args:
+        team: "${team}"
+        window: "24h"
+    capture:
+      oncall_name: stdout
 \end{minted}
 
 % ============================================================

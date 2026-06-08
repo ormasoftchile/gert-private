@@ -1142,6 +1142,7 @@ The gert-vscode Phase 2 work (YAML schema + snippets) cannot start until this is
 
 Before gert-vscode Phase 2 begins (i.e., before the grammar work from Phase 1 is merged).
 
+>>>>>>> origin/main
 ---
 
 ## DECISIONS MERGED FROM INBOX (2026-06-07T19:28:42Z)
@@ -1719,4 +1720,5 @@ Execute as a single atomic PR to gert-private:
 
 Approve to proceed, and I will execute the migration in a follow-up PR.
 
+>>>>>>> origin/main
 >>>>>>> origin/main

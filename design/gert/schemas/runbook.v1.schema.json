@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gert.dev/schemas/runbook/v1",
+  "$id": "https://schemas.gert.dev/runbook/v1.json",
   "title": "GERT Runbook v1",
   "description": "Structural contract for *.runbook.yaml files with apiVersion: runbook/v1. Validates structure and types only — GXL/GIS/GCP expression semantics are enforced at runtime, not by this schema. See design/gert/schemas/README.md for the full boundary statement and consumer rules. Hand-authored per Barbara's ruling (decisions/inbox/barbara-runbook-v1-schema-canonical-source.md).",
   "type": "object",
@@ -117,7 +117,7 @@
 
     "Step": {
       "type": "object",
-      "description": "A single step in the runbook flow. The 'type' field discriminates which type-specific properties are required. All common fields (id, type, title, when, timeout, delay, retry, capture, etc.) apply to every step type. String fields that accept GIS templates are opaque to this schema — expression semantics are enforced at runtime.",
+      "description": "A single step in the runbook flow. The 'type' field discriminates which type-specific properties are required. All common fields (id, type, title, when, timeout, delay, retry, capture, etc.) apply to every step type. Steps use 'title' (not 'name') for display labels — 'name' is a root-level runbook field only. String fields that accept GIS templates are opaque to this schema — expression semantics are enforced at runtime.",
       "required": ["id", "type"],
       "properties": {
         "id": {
@@ -131,7 +131,7 @@
           "enum": [
             "cli", "tool", "include",
             "choice", "decision", "collector",
-            "branch",
+            "branch", "iterate", "parallel",
             "approve", "assert", "compensate", "extension",
             "wait_for_event",
             "end", "noop", "display"
@@ -140,10 +140,6 @@
         "title": {
           "type": "string",
           "description": "Short human-readable label rendered in UI and reports. Evaluated as GIS at runtime; structural validation only at parse time."
-        },
-        "name": {
-          "type": "string",
-          "description": "Alternative step label. Present in some runbooks as a legacy field — prefer 'title'. See edith-runbook-schema-questions.md SQ-001 for clarification request."
         },
         "subtitle": {
           "type": "string",
@@ -446,8 +442,88 @@
         },
         {
           "if": { "required": ["type"], "properties": { "type": { "const": "extension" } } },
-          "then": {},
-          "description": "Extension step payload is not yet normatively defined. See edith-runbook-schema-questions.md SQ-002."
+          "then": {
+            "required": ["extension"],
+            "properties": {
+              "extension": {
+                "type": "object",
+                "description": "Extension step payload. Invokes a named action exported by a registered extension.",
+                "required": ["name", "action"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Name of the extension (MUST match an entry in the runbook-level 'extensions' array)."
+                  },
+                  "action": {
+                    "type": "string",
+                    "description": "Action identifier exported by the extension. MUST be a non-empty string."
+                  },
+                  "args": {
+                    "type": "object",
+                    "description": "Optional key-value arguments passed to the extension action. Keys and value types are extension-defined.",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "iterate" } } },
+          "then": {
+            "required": ["over", "steps"],
+            "properties": {
+              "over": {
+                "type": "string",
+                "description": "Variable name whose value is the iteration source (comma-separated string or array). Evaluated as GIS at runtime; structural validation only at parse time."
+              },
+              "as": {
+                "type": "string",
+                "description": "Variable name bound to the current iteration item within the steps block."
+              },
+              "max": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Maximum number of iterations allowed."
+              },
+              "until": {
+                "type": "string",
+                "description": "GXL boolean condition. Iteration stops when this expression evaluates to true. Evaluated as GXL at runtime; structural validation only at parse time."
+              },
+              "collect": {
+                "type": "object",
+                "description": "Accumulator map. Keys are variable names; values are GIS template strings evaluated after each iteration and appended to the accumulator list.",
+                "additionalProperties": { "type": "string" }
+              },
+              "concurrency": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Maximum number of concurrent iteration executions. Default: 1 (sequential)."
+              },
+              "steps": {
+                "type": "array",
+                "description": "Flow nodes executed for each iteration item.",
+                "items": { "$ref": "#/$defs/FlowNode" },
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "parallel" } } },
+          "then": {
+            "required": ["branches"],
+            "properties": {
+              "branches": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/ParallelBranch" },
+                "minItems": 2,
+                "description": "Concurrent execution branches."
+              },
+              "join": { "$ref": "#/$defs/ParallelJoin" }
+            }
+          }
         }
       ],
       "unevaluatedProperties": false
@@ -652,8 +728,8 @@
       "properties": {
         "type": {
           "type": "string",
-          "description": "Expected PJVM type of the input value. 'list' is accepted as a runtime alias for 'array'. See edith-runbook-schema-questions.md SQ-003 for normative enum pending spec confirmation.",
-          "enum": ["string", "number", "integer", "boolean", "array", "object", "list"]
+          "description": "Expected PJVM type of the input value. Per §Input Declarations: string, number, boolean, and secret are the core types; array and object are normatively specified as of the 2026-06-07 spec update.",
+          "enum": ["string", "number", "boolean", "secret", "array", "object"]
         },
         "required": {
           "type": "boolean",

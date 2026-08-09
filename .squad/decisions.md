@@ -2049,3 +2049,251 @@ Barbara's Option A ratification (mandatory-miss-as-error) proved low-risk in pra
 
 
 Note: path renamed to vector.schema.json on 2026-06-07 per Barbara ratification (entry barbara-schema-rulings-2026-06-07).
+
+---
+
+## 2026-08-09 — GERT Tool Packages MVP — Spec Authored (Barbara ruling actioned)
+
+**By:** Edith (Spec Editor)
+**Ruling:** `.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md` (Barbara, ratified 2026-08-09, AR-TP-1..10) — moved from `inbox/` to `archive/` as fully actioned; no clauses reopened, no contradictions found.
+
+**What shipped:** The complete Tool Packages MVP is now normative spec text, not a proposal:
+
+- **Bindings (AR-TP-1):** `requires:` is canonical; `toolPackages:` is rejected (`PKG-020`, no alias, no dual-read); `toolRefs:` binds/narrows only; `alias` removed from the `ToolRef` schema; `source`/`actions` retained as deprecated (D-001/D-002), non-enforcing, warning-only (`PKG-W002`/`PKG-W001`).
+- **Resolution (AR-TP-2):** Two-phase (catalog freeze, then per-file bind) discovery, 5 deterministic tiers, same-tier collision is `PKG-006`, undeclared cross-tier shadowing is `PKG-022` (the one intentional breaking change vs. prior "later wins" text), enumeration fully sorted for byte-identical catalog digests.
+- **Schemas (AR-TP-3):** New `tool-package/v1`, `config/v1`, `package-lock/v1` schemas; `runbook.v1.schema.json` gained `requires`/`PackageRequirement` additively.
+- **Versioning (AR-TP-4):** Strict SemVer 2.0.0, small conjunctive constraint grammar, validation only — no solving.
+- **Substitution (AR-TP-5):** Declared in `.tool.yaml`, resolved relative to the declaring file, exact I/O signature match, governance composed by the ruled invariant table (never widened), max depth 4, traced as nested spans.
+- **Paths (AR-TP-6):** POSIX-only authored paths, realpath containment, junction/reparse handling, escape is `PKG-007` hard fail.
+- **Digests/trace/resume (AR-TP-7):** Raw-byte SHA-256, order-independent sha256sum-style digests; 5 new trace events; resume hard-refuses on drift (`PKG-009`, overridable), replay is non-fatal on drift.
+- **Scoping (AR-TP-8):** Tool-name binding is lexically scoped per file (asymmetric with shared variable scope); package set is global per run; lazy includes are still package-analysed at plan time.
+- **Conformance (AR-TP-9/9b):** Full `PKG-001..028` + `PKG-W001..003` error catalog registered in `03d-parse-time-enforcement.tex`; 7 new categories + `PackageExpected` shape registered in `conformance/vector.schema.json` for Tess to author `tv-pkg-resolve.yaml` against (not authored by Edith — file ownership per ruling).
+- **No shims (AR-TP-10):** Pre-1.0, no compatibility shims; the cross-tier shadowing behaviour change is documented as intentionally breaking.
+
+**Files changed:** see `.squad/agents/edith/history.md` entry "2026-08-09T14:44:49-07:00 — GERT Tool Packages MVP — Full Spec Authoring" for the full file list.
+
+**Validation:** `verify_corpus.py` 280/280 vectors validate (no regressions); full `tectonic` LaTeX build succeeds; all schemas Draft 2020-12 valid; example package + r23 fixture validate against their schemas.
+
+**Deferred to Tess:** `conformance/tv-pkg-resolve.yaml` and its conformance vectors — explicitly out of Edith's scope per the ruling's file-ownership split.
+
+**Status:** Ratified ruling fully actioned into spec. Ready for review.
+
+---
+
+## 2026-08-09 — GERT Tool Packages MVP — Gate Review #1 (REJECTED)
+
+**By:** Barbara (Lead / Architect)  
+**Date:** 2026-08-09T14:47-07:00  
+**Requested by:** Cristián Ormazábal Ortega  
+**Reviews:** Edith's Tool Packages MVP spec/schemas/fixtures against `.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md` (AR-TP-1..10, ratified)  
+**Verdict:** **REJECTED** — 15 required corrections (R1–R15); architecture direction sound, defects are locally fixable wiring and under-specification.  
+**Reviser designated:** **Don** (Backend Dev / runtime semantics). **Edith is locked out** per reviewer lockout protocol.
+
+**Full entry:** `.squad/decisions/inbox/barbara-tool-packages-gate-review.md`
+
+### R1–R15 Blocking Issues (Summary)
+
+| # | Category | Issue |
+|---|----------|-------|
+| R1–R5 | Semantic contradictions / under-specification | Action shape (map vs. list), `impl:` collision, undefined output capture, invalid reference example, unstated path bases |
+| R6–R10 | Wiring failures | PKG-020/021 unreachable, `dependencies` schema contradiction, `apiVersion` mismatch, tier-3 incompatible, collision rule contradiction |
+| R11–R15 | Wiring failures (medium severity) | Undefined replay semantics, unreconciled `tool.version`, unenforced lock invariant, missing error codes, no real/mock acceptance scenario |
+
+### Requirements
+
+1. **R1:** Establish one canonical `tool/v1` action shape; reconcile `args/output` with `inputs/outputs`
+2. **R2:** Disambiguate per-action `impl:` key (collides with top-level mobile `impl:`)
+3. **R3:** Define `outputs.<name>` capture namespace for substituted actions
+4. **R4:** Rewrite reference substitute so it produces declared output via valid GCP
+5. **R5:** Create explicit "Resolution base per path kind" table; verify no escapes
+6. **R6:** Add mandated pre-schema raw-document scan for `toolPackages:` and `alias:`
+7. **R7:** Fix `dependencies` schema/PKG-016 contradiction
+8. **R8:** Normalize `apiVersion` values across examples and schemas
+9. **R9:** Make tier-3 addressing schema-compatible (qualified `name` only)
+10. **R10:** Split collision paragraph into cross-source vs. same-source cases
+11. **R11:** Define substitution replay behavior (relates to non-fatal `replay/packageDrift`)
+12. **R12:** Reconcile step-level `tool.version` as deprecated/intersected constraint
+13. **R13:** Tighten lock-root pattern to structurally forbid raw absolute paths
+14. **R14:** Assign error codes for unspecified conditions
+15. **R15:** Provide concrete unchanged-runbook scenario with mode variations
+
+### Deferred Tess Work
+
+Tess's `conformance/tv-pkg-resolve.yaml` (≥46 vectors) blocked pending R1–R9 resolution. Vector target list specified; do not author until R1–R9 land.
+
+### Gate Disposition
+
+**REJECTED.** Fifteen required corrections identified. Architecture ruling remains authoritative; no re-litigation. R1–R5 are highest-risk semantic areas (substitution, path safety); R6–R15 are wiring failures that make ruled error codes unreachable or ruled mechanisms unusable. All locally fixable.
+
+**Reviser:** Don (independent, Edith locked out). Re-submit for second gate pass.
+
+---
+
+## 2026-08-09 — GERT Tool Packages MVP — Rejection Revision (R1–R15), by Don (independent)
+
+**By:** Don (Backend Developer), acting independently as revision owner. Edith (original
+author) was locked out per Cristian's directive and did not advise or contribute to this
+revision.
+
+**Subject:** Barbara rejected Edith's Tool Packages MVP spec/schemas/fixtures
+(`.squad/decisions/inbox/barbara-tool-packages-gate-review.md`, 15 blocking items
+R1–R15). This entry records Don's resolution of all 15, plus the optional R16
+(`warnings:` on `PackageExpected`), without reopening the ratified architecture ruling
+(`.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md`, AR-TP-1..10).
+
+**Resolution summary (see `.squad/decisions/inbox/don-tool-packages-revision-r1-r15.md`
+for the full R1–R15 matrix, file list, validation outcome, and Tess follow-up notes):**
+- R1: `actions:` is always a list; unified `args:` vocabulary; `output:` vs `outputs:` kept deliberately distinct.
+- R2: per-action `impl:` renamed `execute:` to stop colliding with top-level mobile `impl:`.
+- R3: new `outputs.<name>` GCP capture root for substituted-action outputs (`grammar/gcp.ebnf`).
+- R4: reference substitute (`drain-node.yaml`) reworked to actually produce its declared output via valid GCP, not a literal.
+- R5: new "Resolution base per path kind" table in `06-tool-runtime.tex` naming containment roots explicitly.
+- R6: PKG-020/PKG-021 made reachable via a mandated pre-schema raw-document scan.
+- R7: `dependencies` schema no longer contradicts PKG-016 reachability.
+- R8: `apiVersion` values corrected across manifest examples.
+- R9: tier-3 addressed only via qualified `name`, never `package` (schema-compatible with MCP single-label names).
+- R10: §05 collision paragraph split into cross-source (precedence) vs. same-source (hard error).
+- R11: substitution replays like `invoke` (executes against the caller's scenario file); tied explicitly to non-fatal `replay/packageDrift`.
+- R12: `ToolInvocation.version` redefined as plan-time-evaluated, intersected, deprecated in favor of `toolRefs[].version`.
+- R13: lock-file `root` pattern structurally forbids raw absolute paths.
+- R14: new `PKG-029` (package+path mutual exclusivity) and `PKG-030` (unresolved name) error codes.
+- R15: r23 fixture now documents an unchanged-runbook real/dry-run/replay acceptance scenario with a worked scenario-file override map.
+- R16: `PackageExpected.warnings` added to `conformance/vector.schema.json`.
+
+**Validation:** All touched JSON schemas valid; all touched YAML fixtures parse;
+`verify_corpus.py` 280/280 vectors validate (no regression from the `vector.schema.json`
+change); full `tectonic` LaTeX build of `main.tex` succeeds with no new errors or
+undefined references (the two pre-existing undefined refs are in untouched files, out of
+scope).
+
+**Deviations flagged for Barbara's second gate pass (not fixed, out of scope):** a
+pre-existing terminology overload between §07's trace-event replay and §13's
+execution-mode replay (both called "replay"); the corpus-wide `apiVersion: runbook/v2`
+issue (Barbara's non-blocking note #5, separately ticketed).
+
+**Deferred to Tess (unchanged from the ruling):** the ≥46-vector
+`conformance/tv-pkg-resolve.yaml` corpus. Not authored in this revision per explicit
+task scope — Tess should author it against the now-resolved contracts once this revision
+clears gate review.
+
+**Status:** Revision complete; returned to Barbara for second gate pass.
+
+---
+
+## 2026-08-09 — GERT Tool Packages MVP — Gate Review #2 (REJECTED, narrow scope)
+
+**By:** Barbara (Lead / Architect)  
+**Date:** 2026-08-09T15:40-07:00  
+**Requested by:** Cristián Ormazábal Ortega  
+**Reviews:** Don's R1–R15 revision against `.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md` (AR-TP-1..10) and `.squad/decisions/inbox/barbara-tool-packages-gate-review.md`  
+**Revision under review:** `.squad/decisions/inbox/don-tool-packages-revision-r1-r15.md` (Don, independent)  
+**Verdict:** **REJECTED** — narrow scope: S1 (documentation) and S2 (documentation) sweep required. R1–R15 verified resolved; architecture locked.  
+**Reviser designated:** **Ken** (Backend Dev). **Edith and Don are both locked out** — they authored the original and the revision now under review.
+
+**Full entry:** `.squad/decisions/inbox/barbara-tool-packages-gate-review-2.md`
+
+### R1–R15: Verified Resolved (by manual re-derivation)
+
+All 15 items re-derived from actual artifacts (not taken on trust) and verified resolved:
+- R1–R5: Semantic contradictions fixed (action shape, `impl:` collision, output capture, reference example, path bases)
+- R6–R15: Wiring failures fixed (PKG-020/021 reachable, schema contradictions, apiVersion, tier-3, collision, replay, version, lock invariant, error codes, scenarios)
+- R16 (optional): `warnings:` added to `PackageExpected`
+
+**Validation re-run:** `verify_corpus.py` 280/280, `jsonschema` 0 errors on all fixtures, `\label`/`\ref` closure 0 unresolved.
+
+### S1 — Documentation Issue: §03 `\subsection{toolRefs}` teaches deleted rules
+
+**Location:** `03-schema-vnext.tex` lines ~170–188
+
+**Problem:** Schema chapter (first place readers look for document shape) still instructs authors to use `alias:` (now `PKG-021` hard error) and default discovery path `tools/<name>.tool.yaml` (deleted by AR-TP-2 ratified tier model).
+
+**Fix Required:** Rewrite subsection to drop `alias`, drop default-discovery sentence, cross-reference §06 ratified tier model instead of restating it locally.
+
+### S2 — Documentation Issue: Three `.tool.yaml` listings use forbidden mapping-shaped `actions:`
+
+**Locations:** 
+1. `03-schema-vnext.tex:3175` (`actions: {get-pods: ...}`)
+2. `03-schema-vnext.tex:3296` (`actions: {check: ...}`)
+3. `08-security-and-trust.tex:320` (`actions: {deploy: ... sensitive_inputs ...}`)
+
+**Problem:** §06 now mandates `actions:` is always a list, never a mapping. Three listings contradict this. §08 case contains the only normative statement of `sensitive_inputs` placement.
+
+**Fix Required:** Convert all three to list form (`- name: ...`), preserving all fields including `sensitive_inputs`.
+
+### Optional Cleanups Approved
+
+Four mechanical, non-blocking cleanups authorized:
+1. Stale `inbox/` ruling citations → `archive/` (15 occurrences)
+2. Package name drift `com.acme.` → `acme.incident-tools` (30 occurrences)
+3. `LocalStructured` → `LocalOutputs` §3.4a mis-citation
+4. r23 dry-run narrative accuracy
+
+### Gate Disposition
+
+**REJECTED**, narrowly. All R1–R15 verified genuine resolved and locked. Two new blockers (S1, S2) identified — pure documentation sweep with no design decisions needed. The correct answers are already written in §06 and §08; §03 and §08 just need to be brought into alignment. Spec goes to user next; reader opening schema chapter first must not be told to author keys that parse gate rejects.
+
+**Reviser:** Ken (independent, Edith and Don locked out). Scope strictly limited to S1/S2. Re-submit for third gate pass; will be diff-only check + validation re-run.
+
+---
+
+## 2026-08-09 — GERT Tool Packages MVP — S1/S2 Documentation Sweep (Ken, independent)
+
+**By:** Ken (Backend Developer), acting independently as revision owner. Edith (original author) and Don (first revision author) were locked out per Cristián's directive.
+
+**Subject:** Barbara's second gate identified two documentation-only issues (S1, S2) requiring mechanical sweep. Scope explicitly limited to §03 and §08; AR-TP-1..10 and R1–R15 remain closed and were not reopened.
+
+**Resolution summary (see `.squad/decisions/inbox/ken-tool-packages-revision-s1-s2.md` for full matrix and validation):**
+
+- **S1 resolved:** `03-schema-vnext.tex` §03 `\subsection{toolRefs}` rewritten: removed `alias:` example (replaced with one-line `PKG-021` note), removed default-discovery-path sentence, added cross-references to §06 ratified tier model. All cross-references verified.
+- **S2 resolved:** All three mapping-shaped `actions:` listings converted to canonical list form (`- name: ...`); `sensitive_inputs` preserved under §08's converted entry. Corpus-wide scan: zero mapping-shaped `actions:` blocks remain.
+- **Optional cleanups completed:** Stale `inbox/` ruling citations swept to `archive/` (0 remaining); `com.acme.` → `acme.incident-tools` normalized (30 occurrences consistent); `LocalStructured` → `LocalOutputs` §3.4a mis-citation corrected; r23 dry-run narrative made accurate; one clarifying sentence on `StepCapture` form scope.
+
+**Validation:** `verify_corpus.py` 280/280, all 5 schemas valid JSON, `jsonschema` 0 errors, `tectonic` build 0 new errors, `\label`/`\ref` closure 0 unresolved, full diff review confirms only S1/S2 changes + optional cleanups (no collateral edits).
+
+**No semantic changes:** No schema modifications, no error codes changed, no grammar productions altered, no runtime semantics modified. AR-TP-1..10 and R1–R15 remain byte-compatible with Gate 2 acceptance.
+
+**Status:** Revision complete; returned to Barbara for third (final) gate pass.
+
+---
+
+## 2026-08-09 — GERT Tool Packages MVP — Gate Review #3 (final): APPROVED
+
+**By:** Barbara (Lead / Architect), at Cristian Ormazabal Ortega's request.
+**Reviews:** Ken's S1/S2 sweep (`.squad/decisions/inbox/ken-tool-packages-revision-s1-s2.md`),
+authored independently with Edith and Don locked out.
+**Full entry:** `.squad/decisions/inbox/barbara-tool-packages-gate-review-3.md`
+
+**Verdict: APPROVED. The specification is ready for Cristian's review.**
+
+- **S1 resolved.** `03-schema-vnext.tex` `\subsection{toolRefs}` no longer teaches `alias:` (now
+  `PKG-021`, hard parse-gate error) and no longer teaches the deleted `tools/<name>.tool.yaml`
+  default-discovery rule; it now states the negation and cross-references the ratified
+  frozen-catalog/tier model in §06 instead of restating it. All three cross-references resolve.
+- **S2 resolved.** All three mapping-shaped `actions:` listings converted to the canonical list
+  form; `sensitive_inputs` preserved under §08's converted `deploy` entry. Corpus-wide scan of
+  every `actions:` block (`.tex`/`.yaml`/`.md`): zero mapping-shaped occurrences remain.
+- **No stale alias / default-discovery guidance survives in any normative example.** Remaining
+  `alias` hits are prohibitions, the unrelated `imports:` alias map, or GXL/GCP function aliases.
+- **Ken's optional cleanups altered no accepted semantics.** Stale `inbox/` ruling citations swept
+  to `archive/` (0 remaining); `com.acme.` -> `acme.incident-tools` normalized consistently and
+  still schema-valid; `LocalStructured` -> `LocalOutputs` §3.4a mis-citation corrected; r23's
+  dry-run narrative made accurate; one clarifying sentence added that `StepCapture` gains no
+  `step.{id}.outputs.{name}` form (MVP scope choice). No schema, error code, grammar production,
+  or runtime semantic changed. AR-TP-1..10 and R1-R15 remain closed.
+- **Validation re-run independently:** `verify_corpus.py` 280/280; all 5 JSON Schemas valid;
+  `gert-package.yaml` and `drain-node.yaml` validate with 0 errors; `\label`/`\ref` closure 293
+  labels / 0 unresolved. r23's single `apiVersion: runbook/v2` error is the known corpus-wide
+  pre-existing issue.
+
+**Deferred, Tess-owned (unblocked, not blocking):** `conformance/tv-pkg-resolve.yaml`, >=46
+vectors, against the now-stable surfaces (`PKG-*` enum, `TV-PKG-*` ids, `PackageExpected` incl.
+`warnings:`, `outputs.<name>`, `execute:`, `PKG-029`/`PKG-030`, `tab:tool-path-bases`,
+replay-as-`invoke`). Gate-2 §3 target list stands.
+
+**Non-blocking pre-existing issues (own tickets):** corpus-wide `apiVersion: runbook/v2`; the
+§07/§13 `replay` terminology overload; the spec-wide under-specification of downstream behaviour
+after an upstream mode-skip; the optional r23 `assessment.md` companion. One editorial nit: a
+`\S\ref` macro leaks verbatim inside a `minted` comment at `03-schema-vnext.tex:184` — typographic
+only, fold into the next §03 touch.
+
+**No reviser designated. No further gate pass required.**

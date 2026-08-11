@@ -1,7 +1,7 @@
 ﻿# Squad Decisions
 
-**Last Updated:** 2026-06-05T22:31:50-04:00
-**Inbox Merged:** 17 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; phase2-day1-open-questions-resolved; tess-gcp-vectors; don-phase2-day2; don-phase2-day3; don-phase2-day4; copilot-directive-design-only-repo; barbara-runtime-migration-plan; barbara-tess-ambig-3456-arbitration; don-stream-e-day2-dogfood)
+**Last Updated:** 2026-08-10T17:45:22-07:00
+**Inbox Merged:** 19 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; phase2-day1-open-questions-resolved; tess-gcp-vectors; don-phase2-day2; don-phase2-day3; don-phase2-day4; copilot-directive-design-only-repo; barbara-runtime-migration-plan; barbara-tess-ambig-3456-arbitration; don-stream-e-day2-dogfood; barbara-tool-packages-final-gate-decision; barbara-pkg-path-002-workspace-escape-ruling)
 
 ---
 
@@ -1763,6 +1763,95 @@ main → phase-a-pjvm → phase-b → phase-c → phase-d
 - ✅ Phase C (GXL Evaluator/Stdlib) — PR #11 shipped (92/92 vectors)
 - ✅ Phase D (GXL Path Engine) — PR #12 shipped (36/36 vectors)
 - ✅ Phase E (GIS Path Resolver) — PR #13 shipped (15/15 vectors)
+
+---
+
+## 2026-08-09 — Tool Packages MVP: Final Gate APPROVED; Workspace Escape Ruling Binding
+
+**Last Updated:** 2026-08-09T19:33-07:00
+**Inbox Merged:** 2 files (barbara-tool-packages-final-gate-decision; barbara-pkg-path-002-workspace-escape-ruling)
+
+### Summary
+
+Barbara's final implementation gate (second pass) confirms the Tool Packages MVP runtime is ready for production. Every blocker (B1–B5) and all nine §3 required fixes are resolved in code. David's independent revision is accepted in full. The workspace-escape ruling (TV-PKG-PATH-002) corrects the conformance vector and sharpens §06/§03d normative text: workspace-level path kinds report external-root escapes as `PKG-W003` (report), never `PKG-007` (rejection).
+
+### Blockers Verified
+
+| # | Item | Status |
+|---|------|--------|
+| B1 | Plan-time substitution validation | ✅ Resolved — `flowwalk.Walker` visitor added; `dryrun` coverage verified live |
+| B2 | Digest closure | ✅ Resolved — raw `*yaml.Node` walk; sorted digests; closure files only |
+| B3 | Catalog digest from package digest | ✅ Resolved — deferred export entries; tier-1 uses `pkgDigest` |
+| B4 | Removed/added package on resume | ✅ Resolved — `checkResumePackageDrift` treats manifest as authoritative; sorted pairs |
+| B5 | `outputs.<name>` capture root | ✅ Resolved end-to-end — GDP parser/resolver added; plan validation enforced |
+
+### Nine §3 Fixes Verified
+
+1. `ConstraintSources` real — ordered per-package site list threaded through `loadPackage`
+2. PKG-002 provenance — package and site(s) named in both `catalog.go` and `bind.go`
+3. Build metadata in constraints — `+` added to `unsupportedPatterns`; versions retain build metadata
+4. PKG-006 ordering — sorted before iteration; deterministic
+5. PLAN-010 typed error — new `errkit.ErrPLAN010`; unwrap chain matches `ErrToolNotFound`
+6. PKG-018 normalisation — export uniqueness comparison includes `NormalizeForComparison(..., true)`
+7. `maxLinkHops` — explicit hop-count check; Windows symlinks verified manually (tests skip on Windows)
+8. Output coercion — step fails on declared-type mismatch; no silent degradation
+9. `--package-map` provenance — `origin` added to `package/resolved` payload; trace records sources
+
+### Build & Testing
+
+- `go build ./...` clean
+- `go test ./...` green (single pre-existing flaky `TestSSE_FilterByRunID` unrelated to packages)
+- Target suites re-run individually: `internal/planner`, `pkg/pkgsubst`, `pkg/gcp/parser`, `pkg/capture`, `internal/conformance` — all green
+
+### Constraints & Hygiene
+
+- Protected files untouched — byte-identical to pre-revision state
+- Spec not reopened — no `design/` modifications during revision window
+- Tree state preserved — nothing staged or committed
+- David's work verified directly in code, not from summary
+
+### Workspace-Escape Ruling (TV-PKG-PATH-002 Correction)
+
+The conformance vector TV-PKG-PATH-002 incorrectly expected `PKG-007` for a workspace-root escape by a workspace-level `requires[].path`. **The ruling:** Workspace-level kinds are report-only (`PKG-W003`), never rejection. Don's `pkg/pkgpath` implementation is correct; no runtime change required.
+
+**Corrections made:**
+- `tv-pkg-resolve.yaml` TV-PKG-PATH-002: rewritten with external package tree; expected outcome now tier-1 entry + `PKG-W003` warning
+- `tv-pkg-resolve.yaml` TV-PKG-PATH-008: same defect corrected identically
+- `tv-pkg-resolve.yaml` TV-PKG-PATH-003: note reworded for clarity
+- §06 `sec:tool-path-containment`: normative paragraph added
+- §03d error catalog: `PKG-007` and `PKG-W003` conditions sharpened
+
+**Validation:**
+- `python design/gert/scripts/verify_corpus.py` → `OK 365/365 vectors validate`
+- Pre-existing `latex.py` failure unrelated to this ruling
+
+### Caveat: Cross-Process Resume
+
+Cross-process `gert run --resume` remains unsupported (pre-existing reason: no `ExecutionPlan` persistence in `DirRunStore`). Therefore `--allow-package-drift` and `PKG-009` are in-process-only today.
+
+### Accepted Non-Goals
+
+- Deep governance `deny_commands`/`allow_commands` enforcement inside substitute bodies
+- Cross-process resume plan persistence (pre-existing)
+- Replay mode (deferred)
+- §5 option (a) full per-file lexical `toolRefs` binding (deferred; PKG-017 fail-closed refusal in place)
+
+### Follow-ups
+
+1. ✅ Implement §5 option (a): include-closure + per-file `BindFile` binding; retire PKG-017 refusal
+2. 📝 Document single-file `requires:`/`toolRefs:` restriction in user-facing README
+3. 🔌 Wire `GovernanceEvaluator` into top-level and nested engines (pre-existing)
+4. 💾 Persist `ExecutionPlan` in `DirRunStore` for true cross-process resume (pre-existing)
+5. 🧪 Enable `pkgpath` hop-limit tests on Windows (verified manually; tests skip)
+6. 🔒 Extend `checkLinkHopBound` to count hops across intermediate path components (hardening)
+7. 🐛 Investigate flaky `internal/serve/TestSSE_FilterByRunID` (pre-existing, unrelated)
+8. 📚 Resolve pre-existing corpus issues: `ToolDef.Actions` map-vs-array, apiVersion mismatch, replay terminology, rules composition
+
+### Disposition
+
+**APPROVED.** The Tree is ready for Cristián's review and commit. No third gate pass required.
+
+**Reference:** `.squad/decisions/archive/barbara-tool-packages-final-gate-decision-archived.md`, `.squad/decisions/archive/barbara-pkg-path-002-workspace-escape-ruling-archived.md`
 - ✅ Phase F (GCP Capture Engine) — PR #14 shipped (41/41 vectors)
 
 **TOTAL CONFORMANCE: 267/267 (100%)** — all corpus vectors authored, implemented, and passing. All conformance-driven development work COMPLETE.
@@ -2297,3 +2386,315 @@ after an upstream mode-skip; the optional r23 `assessment.md` companion. One edi
 only, fold into the next §03 touch.
 
 **No reviser designated. No further gate pass required.**
+
+---
+
+## 2026-08-09T15:59:36-07:00 — Tool Packages MVP: Runtime Implementation (Don)
+
+**By:** Don (Backend Developer), at Cristián Ormazábal Ortega's request.
+**Repo:** `C:\One\OpenSource\gert` (runtime repo). **Status: not committed** (working-tree only,
+per task instructions) — this is a status/decision entry, not a merge record.
+**Full entry:** `.squad/agents/don/history.md` (2026-08-09 section) has the complete file/scope
+inventory.
+
+**Decision: ship a realistic, fully-tested core subset now rather than a shallow full-surface
+attempt.** Implemented and unit-tested: PKG-001..030/PKG-W001..003 error codes; strict SemVer +
+MVP constraint grammar; secure path resolution with symlink containment; `tool-package/v1`,
+`config/v1`, `package-lock/v1` schema types; the PKG-020/021 pre-schema forbidden-key scan; the
+full two-phase (`Build`/`BindFile`) five-tier catalog freeze and resolution engine with all
+ratified collision rules (PKG-006/011/022/029/030) and digest algorithm; a new
+`internal/adapter.BuildPackageCatalog`/`ResolveToolRefsViaCatalog` API pair for Ken's future CLI
+wiring, added alongside (not replacing) the existing path-only `ResolveToolRefs`.
+
+**Explicitly deferred, reported not hidden:** substitution (`execute.kind: runbook`) end-to-end;
+evidence/trace event emission and resume/replay drift behavior (`PKG-009`,
+`--allow-package-drift`, `replay/packageDrift`); real MCP/extension tier-3 discovery (only an
+extension point exists); `.gert/config.yaml` loading into `pkg/run/run.go`; a fully faithful
+two-resolution-base implementation for `requires[].path` (project-scope vs runbook-scope) —
+currently a workspace-then-runbook-dir fallback heuristic. Also flagged, not fixed: the existing
+runtime's `ToolDef.Actions` is a `map[string]*ToolAction`, diverging from the ratified spec's
+"actions MUST be an array" rule — converting it was judged out of scope (large, unrelated,
+sweeping breaking change) for this task.
+
+**Bug fixed during implementation:** `toolRefs[].version` was originally a resolution no-op
+(the runtime `ToolDef` type carries no version field); fixed by threading
+`schema.ToolDef.Version` through to a new `pkgcatalog.Entry.Version` field and enforcing
+`semver.Constraint.Satisfies` in the package-pin and tier-4 path binding, per the ratified
+"checked against the resolved tool definition's meta.version" rule. One pre-existing test fixture
+had been silently passing under the old no-op and was corrected.
+
+**Validation:** `go build ./...` and full `go test ./...` are green across the entire repo with
+zero regressions (including all 22 pre-existing runbook parser fixtures). The mandated dirty-tree
+constraint files (`native.go`/`native_test.go`/the example runbook/the untracked `.code-workspace`)
+were inspected once, never modified, and verified unchanged at session end.
+
+**Deferred, still-owned-by-others work is unaffected:** Tess's `conformance/tv-pkg-resolve.yaml`
+remains unblocked and untouched; the `PKG-*`/tier surfaces it will test against are now
+implemented and unit-tested (not conformance-vector-tested) in `pkg/pkgcatalog`.
+
+**No reviser designated for this entry. Next owner (Ken for CLI wiring, or whoever picks up
+substitution/evidence/resume) should treat `pkg/pkgcatalog`/`pkg/semver`/`pkg/pkgpath` as stable,
+tested building blocks, not scaffolding to be redesigned.**
+
+---
+
+## 2026-08-09T17:58-07:00 — Tool Packages MVP: Implementation Gate Review (Barbara) — REJECTED
+
+**By:** Barbara (Lead/Architect), at Cristian Ormazabal Ortega's request.
+**Under review:** the complete uncommitted working tree of `C:\One\OpenSource\gert`
+(Don: runtime core + final integration pass; Ken: CLI wiring), against AR-TP-1..10, the
+TV-PKG-PATH-002 binding ruling, the gate-3-approved spec, `gcp.ebnf` 3.4a, and Tess's
+85-vector corpus. Production wiring read directly; agent summaries used only to locate code.
+**Full entry:** `.squad/decisions/inbox/barbara-tool-packages-implementation-gate-review.md`.
+
+**Verdict: REJECTED. Revision owner: David (Integration Engineer)** — Don and Ken are locked
+out as authors of the code under review; the residual work is integration/wiring, which is
+David's competence. Edith and Tess remain locked out of runtime code by role.
+
+**Verified correct (not re-litigable):** SemVer + constraint grammar; secure path resolution
+and exact conformance to my TV-PKG-PATH-002 workspace-escape ruling; two-phase Build/BindFile
+with no post-freeze mutation; five tiers with tier-3 bare-name stripping; PKG-006 hard
+collision and genuine PKG-022 enforcement; the full binding contract incl. the Phase-0
+raw-YAML PKG-020/PKG-021 scan; non-fatal warning discipline; `.gert/config.yaml` genuinely
+loaded on the production path; `--package-map` partial override proven with a byte-identical
+runbook through the real CLI; substitution declaration/scope isolation/signature exactness;
+exact governance composition arithmetic incl. a true `allow_commands` intersection; the three
+trace events emitted at the real Phase-C boundary with a shared run_id; dry-run side-effect
+avoidance; resume PKG-009 refusal and `governance/packageDriftAccepted` with both digests and
+operator. Protected user edits byte-identical; dirty tree preserved; zero regressions.
+
+**Blockers:** (B1) `pkgsubst.Plan` has one call site — inside the executor — so PKG-013/014/
+015/026/027/028 fire only when a step executes; unreachable steps and all of dry-run are
+unvalidated, contradicting 5.4/5.5/5.6 verbatim. (B2) package digest closure omits
+`execute.path` substitutes and package-internal includes, so a substitute runbook can be
+rewritten without changing any digest — defeating 7.5 resume integrity. (B3) catalog digest
+uses the export file digest where 7.3 requires the package digest for tier-1. (B4) resume
+drift iterates only currently-present packages, so a removed package is never detected and
+PKG-001 is unreachable. (B5) the ratified `outputs.<name>` capture root (`gcp.ebnf` 3.4a,
+`LocalOutputs`) is absent from the runtime GCP parser. Plus a sixth, found in review: the
+include closure is never traversed — child `requires:`/`toolRefs:` are ignored, so resolution
+is dynamically scoped, the exact model 8.1 rejected; implement it or fail closed. Nine
+lower-severity required fixes are listed in section 3 of the full entry.
+
+**Don's reported gaps, classified:** deep governance deny/allow enforcement — ACCEPTABLE
+NON-GOAL (the evaluator is orphaned repo-wide, so substitution grants no relative escalation;
+conditional on B1 landing, ticketed). Capture of substitution outputs — BLOCKER (B5): the
+grammar was ratified and simply not implemented. In-memory resume plan — ACCEPTABLE NON-GOAL,
+genuinely pre-existing; Don's refusal to fake a passing CLI test was the right call; ticket
+plan persistence and document drift-checking as in-process-only. Empty `ConstraintSources` —
+REQUIRED FIX, not a non-goal: the provenance already exists in `mergeRequirements`, and a
+permanently-empty field in an evidence record is worse than an absent one. Absent replay mode
+— ACCEPTABLE NON-GOAL, confirmed no replay entry point exists anywhere.
+
+**A second gate pass is required, scoped to B1-B5, the include-closure item, and section 3.**
+
+---
+
+## 2026-08-09 — Tool Packages MVP (runtime): FINAL IMPLEMENTATION GATE — APPROVED
+
+**Barbara (Lead / Architect), second gate pass.** Full entry:
+`.squad/decisions/inbox/barbara-tool-packages-final-gate-decision.md`. Reviewed David's
+independent revision (Don and Ken locked out, and they made no contribution) against my
+rejecting first pass, AR-TP-1..10, the TV-PKG-PATH-002 ruling, and the gate-3 spec.
+
+**Verdict: APPROVED. Ready for Cristián.** No third gate pass required.
+
+All six blockers verified resolved in the code that actually runs: (B1) plan-time
+substitution validation via a structural `flowwalk` visitor invoked before `Plan`/`Start`
+in the shared `runWithMode`, so dry-run and unreachable-by-`when:` steps are validated,
+with cycles/depth decided statically by DFS frames; (B2) digest closure now covers
+`execute.path` substitutes and package-internal includes, cycle-guarded and sorted;
+(B3) tier-1 entries carry the package digest, so `CatalogDigest()` proves what §7.3 says;
+(B4) the manifest's `PackageDigests` is authoritative — a removed package is PKG-001 by
+name, an added one PKG-009; (B5) the ratified `outputs.<name>` capture root is implemented
+end-to-end with the step-context check at plan validation, plus a genuine latent-bug find
+(`schemaToolDefFromRuntime` dropping `Execute`/`Outputs`, which would have silently
+defeated B1 and B5); (§5) the include closure fails closed with a typed PKG-017 rather
+than resolving dynamically — the sanctioned fallback (b), with option (a) ticketed.
+
+All nine §3 fixes verified, including real `ConstraintSources`, PKG-002 provenance, PKG-003
+on build metadata, deterministic PKG-006 ordering, typed PLAN-010 that still unwraps to
+`ErrToolNotFound`, live PKG-018 normalisation, failing (not silent) output coercion, and
+`origin` in the `package/resolved` payload. `maxLinkHops` I verified **myself on Windows**
+against real symlinks (10 hops → PKG-008; 8 hops → clean), since its tests skip there.
+
+Protected files byte-identical, no `design/` file touched during the revision window, tree
+dirty and uncommitted as instructed, `go build ./...` clean, `go test ./...` green apart
+from one unrelated timing flake in `internal/serve` that passes 5/5 on re-run.
+
+**Accepted non-goals:** deep governance enforcement inside substitute bodies (orphaned
+repo-wide, no relative escalation); cross-process resume plan persistence (pre-existing —
+Cristián must be told `--allow-package-drift`/PKG-009 are in-process-only today); replay
+mode; §5 option (a). **Follow-ups ticketed:** lexical `BindFile` binding, documenting the
+single-file `requires:`/`toolRefs:` restriction, `GovernanceEvaluator` wiring,
+`ExecutionPlan` persistence, Windows link-hop tests, hop counting across intermediate
+components, and the pre-existing corpus/terminology items.
+
+---
+
+## 2026-08-10 — Enum-Constrained Tool and Runbook Outputs MVP — RATIFIED ARCHITECTURE
+
+**By:** Barbara (Lead / Architect), at Cristián Ormazábal Ortega's request.
+**Date:** 2026-08-10T13:25:10-07:00
+**Full entry:** `.squad/decisions/archive/barbara-enum-constraint-mvp-architecture-ruling-archived.md`
+
+**Verdict: RATIFIED.** Architecture ruling (AR-ENUM-1..15) with three binding scope corrections (C1/C2/C3):
+- C1: `enum` forbidden on `type: secret`; member lists redacted on sensitive declarations (audit-trail safety)
+- C2: Package mock enum equality is conformance-only, not a runtime check (no in-run comparand)
+- C3: No `tool.v1.schema.json` in this MVP; tool-action `enum` lives in `06-tool-runtime.tex` prose
+
+Four declaration sites: tool action `args`/`outputs` (S1/S2), runbook `inputs`/`outputs` (S3/S4).
+String-only constraint; type-restricted; checked at parse time (declarations, defaults) and runtime (bindings).
+ENUM-001..009 error codes; ENUM-W001 warning (case-only-distinct); PKG-013 extended for substitution enum-set equality.
+Asymmetric Unicode normalization (declared members must be NFC; candidate values are NFC'd before comparison).
+No integer/identifier/label-value unification with collectors in this MVP. No enum on secrets. No enum identity in package digests.
+
+---
+
+## 2026-08-10 — Enum MVP: Specification Work (Edith) — OPEN / IN PROGRESS
+
+**By:** Edith (Spec Editor)
+**Date:** 2026-08-10T13:25-07:00
+**Status:** Analysis complete, awaiting Barbara's ruling on scope questions before authoring.
+**Full entry:** `.squad/decisions/inbox/edith-string-enum-args-io.md`
+
+Four schema/prose questions for Barbara's sign-off before Edith authors the normative sections:
+- Q1: Enum enforcement at parse time (literals) and runtime (bindings) — recommendation is both (mirrors GCP-TYPE-001 pattern)
+- Q2: Runbook `Output` schema vs prose conflict (schema newer, pre-enum); treating schema as canonical and rewriting L403-420 prose
+- Q3: Error-code family — recommend `SEM-0xx` for runbook inputs/outputs, `PKG-030` for tool-action violations
+- Q4: `pattern:`/`example:` on `Input` are prose-only (dead fields, schema doesn't have them); fix in same PR as adding `enum:` to avoid third generation of drift
+
+**Owner:** Edith. **Blockers:** Barbara's Q1-Q4 approval.
+
+---
+
+## 2026-08-10 — Enum MVP: Corpus Work (Tess) — COMPLETE
+
+**By:** Tess (Conformance Tester)
+**Date:** 2026-08-10
+**Status:** 58-vector corpus finalized; one schema gap found and documented.
+**Full entry:** `.squad/decisions/archive/tess-enum-corpus-notes-archived.md` + `.squad/decisions/archive/tess-enum-decl-006-correction-archived.md`
+
+**TV-ENUM-DECL-006 corrected:** YAML 1.2 core schema fact. Bare `yes`/`no` resolve to `!!str`, not `!!bool` (1.1 was the boolean resolver).
+Vector's fixture amended: `enum: [yes, no]` → `enum: [true, false]` (the canonical YAML-1.2-core-schema booleans, which DO trigger ENUM-002).
+Vector id/category/expectation intent preserved; count stays 58.
+
+**Finding: `$defs.Output` in `runbook.v1.schema.json` lacks `default` property** (unlike Input).
+AR-ENUM-6 rule 3 includes S4 (runbook output defaults) in the "default must be a member" sites, but the schema has no `default` key at S4.
+Documented as untestable-in-corpus, not a vector defect — a schema gap for later resolution (add `default` to Output, or explicit ruling that S4 defaults are schema-free).
+No other ambiguities found; all AR-ENUM-1..15 rules mapped cleanly.
+
+**Owner:** Tess (final). **Tess owns four further corpus amendments** (UNICODE-005/PLAN-005/RUNTIME-004/PLAN-003) to fix defects diagnosed during Ken's R2 harness run;
+she does not edit the frozen corpus otherwise.
+
+---
+
+## 2026-08-10 — Enum MVP: Initial Runtime Implementation (Don) — COMPLETE (SUPERSEDED)
+
+**By:** Don (Backend Developer)
+**Date:** 2026-08-10
+**Status:** Reported; implementation superseded by Ken's independent revision.
+**Full entry:** `.squad/decisions/archive/don-enum-mvp-implementation-report-archived.md`
+
+Implemented AR-ENUM-1..15 end-to-end in runtime (`gert` repo). Two findings escalated to Barbara:
+- Finding 1: `TV-ENUM-DECL-006` vector conflicts with this repo's YAML 1.2 resolver (not a code error, a vector/library conflict); requested Barbara's ruling.
+- Finding 2: No root-runbook output-materialization path exists in the engine (pre-existing gap, S4 enforcement unreachable, ticketed T-ENUM-ROOT-OUTPUTS).
+
+Full validation: `go build ./...` clean, `go test ./...` all 61 packages pass.
+
+**NOTE:** Don reported the genuine DECL-006 conflict and the root-output gap correctly. However, his implementation work included five runtime defects that silently defeated enum enforcement for large fixture families.
+Ken's independent R2 harness (built later) surfaced all five (GCP output resolution, dropped Enum field in catalog conversion, missing S2 default check, capture-after-failure masking, GIS-interpolation false rejection).
+Per Barbara's gate-rejection process, Don is locked out; Ken revises independently.
+
+---
+
+## 2026-08-10 — Enum MVP (runtime): Implementation Gate Review 1 (Barbara) — REJECTED
+
+**By:** Barbara (Lead / Architect)
+**Date:** 2026-08-10
+**Status:** Gate rejected; revision owner designated.
+**Full entry:** `.squad/decisions/archive/barbara-enum-mvp-implementation-gate-archived.md`
+
+Reviewed Don's complete uncommitted working tree (`C:\One\OpenSource\gert`) against AR-ENUM-1..15, Tess's 58-vector corpus, and §R1-R5 gate criteria.
+
+**Five blockers identified (R1–R5):**
+- R1: ENUM-008 caller-binding enforcement incomplete; missing `--var` path
+- R2: No faithful conformance harness; design-only vectors not mechanized
+- R3: Enum metadata not carried in `ValidatedPlan`
+- R4: ENUM-W001 warning not surfaced to end-user
+- R5: Replay path not validated
+
+All five are genuine, non-negotiable blockers. **Revision owner: Ken (Backend Developer).** Don and Ken locked out as authors; Ken revises independently from scratch per the gate-rejection protocol.
+
+---
+
+## 2026-08-10 — Enum MVP (runtime): Independent Revision (Ken) — COMPLETE + R1–R5 VERIFIED
+
+**By:** Ken (Backend Developer), independent reviser.
+**Date:** 2026-08-10
+**Status:** Revision complete; all R1–R5 blockers resolved; bugs found and fixed; harness green.
+**Full entry:** `.squad/decisions/archive/ken-enum-mvp-implementation-revision-archived.md`
+
+Revised R1–R5 from scratch against ratified architecture (AR-ENUM-1..15), 58-vector frozen corpus, and gate-rejection spec.
+
+**Final disposition matrix:**
+
+| Blocker | Status | Evidence |
+|---|---|---|
+| R1 — ENUM-008 caller-binding | **Resolved** | `schema.CheckCallerInputBindings` wired at `cmd/gert/run.go` entry and all RPC/API paths; `internal/executor/tool.go` CheckArgEnums on materialized tool args (incl. `--var`-sourced values). Regression test: `enum_r1_r4_regression_test.go`. |
+| R2 — 58-vector conformance harness | **Resolved** | `internal/conformance/enum_harness.go` + `enum_vector.go` + `enum_conformance_test.go` build real `gert` CLI, materialize each vector into workspace, run it (or drive `pkgcatalog.Build` for catalog vectors). **Final report: 48 passed, 10 skipped (named), 0 failed.** |
+| R3 — Enum metadata in ValidatedPlan | **Resolved** | `internal/planner/enumplan.go` populates `ValidatedPlan.EnumConstraints`; `internal/engine/engine.go` carries it once in `plan.validated` trace, declared order, C1-safe redaction. Regression test: `enum_trace_test.go`. |
+| R4 — ENUM-W001 surfaced | **Resolved** | `cmd/gert/run.go` surfaces ENUM-W001 to stderr without aborting. Regression test: `enum_r1_r4_regression_test.go`. |
+| R5 — Replay enum validation | **Resolved** | `internal/executor.CheckArgEnums` exported; `internal/replay.ReplayExecutor.WithEnumChecks` + `ReplayFromTrace` wiring apply identical check at replay boundary. Regression test: `enum_r5_test.go`. |
+
+**Ten genuine runtime bugs found and fixed** (not in Ken's charter, but revealed by building a faithful R2 harness):
+1. GCP output-value resolution (executeSubstitution was not resolving GCP paths in output values)
+2. Dropped `Enum` field in catalog/toolRefs conversion (schemaToolDefFromRuntime lost Enum on both Args and Outputs)
+3. Missing S2 default check (AR-ENUM-6 tool-output-default case never implemented)
+4. Capture-after-failure masking (failed step captures attempted anyway, hiding real ENUM-008/009)
+5. GIS-interpolated defaults falsely rejected at plan time (ENUM-006 stringified `"${count}"` literally)
+6. Missing `imports:` alias resolution for `include.runbook` (alias-by-name includes failed as literal file paths)
+7. Schema/struct drift on `expand:` property (runbook/include Expand field existed in Go but not in JSON schema)
+8. Stdout/stderr split in harness (plan-time errors go stderr, runtime failures go stdout; harness only checked stderr)
+9. Temp build directory polluting repo (enumharness-bin-* dirs in working tree)
+10. Validation-ordering fix (B1 substitution checks short-circuited before planner.Plan ran, masking ENUM-006/007)
+
+**Authoritative 58-vector execution report:**
+- 48 vectors pass ✓
+- 10 vectors skip with named, audited reasons (5 pre-existing ticketed gaps, 5 corpus/methodology defects)
+- 0 vectors fail
+- 0 vectors silently dropped
+
+All blockers substantively resolved. No architecture reopened. Dirty tree preserved (no commits, no stage, protected files byte-identical).
+
+---
+
+## 2026-08-10 — Enum MVP: Final Implementation Gate (Barbara) — APPROVED
+
+**By:** Barbara (Lead / Architect)
+**Date:** 2026-08-10T17:45-07:00
+**Status:** Final gate passed; implementation complete and approved.
+**Full entry:** `.squad/decisions/archive/barbara-enum-mvp-final-gate-approval-archived.md`
+
+Reviewed Ken's independent revision against R1–R5 spec, AR-ENUM-1..15, Tess's corrected 58-vector corpus, and Edith's AR-ENUM-3(3) prose fix.
+Verified directly: read current runtime diff (39 modified, 43 new paths), built and tested cleanly.
+Ran R2 harness myself independently: 58 vectors, **48 pass, 10 skip, 0 fail.** Executed four live CLI probes against scratch runbooks.
+No product artifact modified in either repository.
+
+**VERDICT: APPROVED.** R1–R5 all substantively resolved. No blocker remains.
+
+All five genuine bugs Ken found during harness construction are correct fixes, ratified in-scope consequences of the R2 requirement.
+The 10 skip reasons independently verified: 5 pre-existing ticketed gaps (T-ENUM-FROM-SOURCING, T-ENUM-ROOT-OUTPUTS), 5 corpus defects (each adjudicated against AR-ENUM-1..15, none are evasions).
+
+**Remaining limitations, all ticketed, none blocking:**
+- **T-ENUM-ROOT-OUTPUTS** — non-substituted root runbook never evaluates own `outputs:` (S4 site, no engine hook exists)
+- **T-ENUM-FROM-SOURCING** — `Input.From` (from: env/prompt/provider) never read by any runtime path
+- **T-ENUM-SENSITIVE-DECL** — no first-class sensitivity marker; EnumMeta.Redacted best-effort name-vs-governance.redact proxy, not a guarantee
+- **T-ENUM-REPLAY-WIRE** (new) — adapter.go replay branch unreachable today (ScenarioFile never assigned), documented at site
+
+Ken is released. His revision found and fixed five genuine runtime defects that hand-written tests could not surface; conformance harness is now the cheap gate wanted.
+
+**Tess** owns four further corpus amendments (UNICODE-005/PLAN-005/RUNTIME-004/PLAN-003), each keeping intent, count, and expectation; re-run harness after.
+**Edith** owns parallel §2a prose fix in `03-schema-vnext.tex` (strike YAML-1.1 aside from AR-ENUM-3 rule 3, add 1.2-core-schema-accurate trap example).
+
+No further gates required. Ready for Cristián.

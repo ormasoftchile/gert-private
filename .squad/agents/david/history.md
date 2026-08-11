@@ -211,3 +211,44 @@ Industries have different retention requirements:
 - Updated `.squad/decisions/decisions.md` (policy now ratified)
 - `.squad/log/2026-06-07T19-07-00Z-gert-tui-checkout-and-vscode-audit.md` (session log)
 
+
+
+---
+
+## Revision — 2026-08-09T15:59:36-07:00 — Tool Packages MVP gate-review resolution (independent revision owner)
+
+**Context:** Barbara rejected the Tool Packages MVP runtime implementation (Don/Ken authored, now locked out). Cristián assigned me as sole independent revision owner to resolve every blocking item and required lower-severity fix without consulting either locked-out author.
+
+**What I did:** Resolved all five blockers (B1 plan-time substitution validation, B2 digest closure over substitute runbooks/package-internal includes, B3 catalog digest from package digest not file digest, B4 resume drift PKG-001/PKG-009 for removed/added packages, B5 `outputs.<name>` GCP capture root) plus the sixth (§5 include closure) via Barbara's own explicitly sanctioned fail-closed fallback (chose (b) over full lexical `toolRefs` binding (a), given revision size). Also completed all nine §3 required lower-severity fixes (`ConstraintSources` provenance, PKG-002 messages, PKG-003 build-metadata rejection, deterministic PKG-006 ordering, typed PLAN-010, PKG-018 NFC/case wiring, explicit `maxLinkHops` enforcement, output-coercion fail-fast, `--package-map` origin in trace).
+
+**Bug found and fixed along the way (not part of the original review's own list, but blocking correct B1/B5 behavior):** `cmd/gert/packagemap.go`'s `schemaToolDefFromRuntime` was silently dropping `Execute`/`Outputs` when converting a resolved package/toolRefs-bound tool into the planner's schema-typed registry — this made every catalog-bound substitution action invisible to both the new plan-time validator and the new `outputs.<name>` step-context check. Fixed and covered by regression tests.
+
+**Also found and fixed:** a `yaml.v3` panic (duplicated-key) in a naive typed-unmarshal approach to B2's digest closure, caused by `schema.Step`'s many colliding inline-tagged fields — replaced with manual `*yaml.Node` walking (same technique the production parser already uses for this reason).
+
+**Result:** `go build ./...` clean; `go test ./...` all green (every package, including Tess's `internal/conformance` vectors); all four protected files verified byte-for-byte untouched; nothing staged/committed/branch-switched. Full blocker-resolution matrix and revision record filed at `.squad/decisions/inbox/david-tool-packages-revision.md`. One explicit, sanctioned gap remains: §5's full per-file lexical `toolRefs` binding (option (a)) is not implemented, only the fail-closed fallback (b) — flagged for Barbara/Cristián, not silently dropped.
+
+---
+
+## Revision — 2026-08-11T09:45:19-07:00 — Client Enum Parity gate-review resolution (independent revision owner)
+
+**Context:** Barbara rejected the client enum-parity implementation (Don's runtime DTO work, Ken's TUI helper, Leslie's VS Code prep — all now locked out). Cristián assigned me sole independent revision owner for B-1..B-6/F-1..F-11 across `gert`, `gert-tui`, `gert-vscode`, without consulting any of the three original authors.
+
+**What I did, by finding:**
+- **B-1/F-1/F-2 (`gert`):** Found the DTO (`graphdoc.InputDecl`, Don's work) was already correct; the bug was purely that `pkg/preview/render/graphjson.Document` never carried `doc.Inputs` through. Added the field + copy, then proved it with a real-binary CLI test (`cmd/gert/preview_graphjson_inputs_test.go`) rather than trusting the Go-type-level fix alone.
+- **B-2/F-3 (`gert`):** `InteractionField.Enum`/`FormField.Enum*` had no legitimate live producer without either a new schema binding (forbidden) or wiring `Input.From: prompt` (out of scope). Took Barbara's own sanctioned alternative and deleted the dead fields/constructor instead of inventing scope creep.
+- **B-3/F-4 (`gert`):** Replaced the web GUI's raw-JSON-only input box with a real `InputsForm` (closed selector in declared order, no auto-select, redacted free text, unset-vs-empty-string distinction), keeping the raw-JSON box as an outright-wins fallback.
+- **B-5/F-5 (`gert-tui`):** The TUI called `run.Start` (discards warnings) with a permanently-false no-op `engineWarning` shim. Switched to `run.StartWithWarnings`, added a real `SetParseWarnings` seam, and rendered warnings nonfatally in the status bar.
+- **B-4/F-6 (`gert-tui`, the largest piece):** `enumui.BuildEnumField` was a disconnected helper with only unit tests. Wired a real pre-run-start prompting path: parse the runbook via `pkg/preview.BuildDocument` before `run.StartWithWarnings` locks in `RunOptions.Vars`, derive missing enum-constrained fields, and host them in a standalone `tea.Program` around the *existing* `interaction.MultiFieldFormModel` widget (the same one collector-step forms already use) — never a new UI. Proved this at the app level, not the helper level: a test drives the real widget's `View()`/`Update()` and asserts declared-order rendering, no preselection, and byte-verbatim submission.
+- **F-7/F-8 (`gert-vscode`/`gert-tui`):** Updated stale "DTO does not exist yet" comments now that F-1/F-2 shipped it for real, and added a VS Code test that runs the actual `gert preview --format graphjson` binary and asserts `extractInputDecls` recovers the declared enum in order.
+- **F-9 (`gert-private`):** Built `design/gert/conformance/client-parity-matrix.md`, one row per CE-* ID citing its owning test, without touching the frozen `tv-enum.yaml`. Documented three honest gaps (a real-CLI VS Code test regression owned by another locked-out author's in-flight `pkg/schema` work, two GUI rows with no headless-browser harness, and an unautomated corpus-SHA check) rather than papering over them.
+- **F-11:** Reproduced and confirmed both flagged `gert-tui` failure clusters (`internal/tui`'s hardcoded macOS `/Volumes/Projects/...` paths; `internal/e2e`'s real DNS/ping dependency on `contoso.com` placeholder hosts) are genuinely pre-existing and unrelated — verified via `git status`/`git diff` showing the failing test files uninvolved in any dirty work, rather than assuming Barbara's own suspicion was correct.
+
+**Result:** `gert` full `go test ./...` green. `gert-tui` green except the two confirmed-environmental F-11 clusters. `gert-vscode` 26/27 (one pre-existing, out-of-scope failure caused by a live conflict in another author's protected concurrent `pkg/schema` work — reported explicitly per this task's conflict-reporting instruction, not silently patched). Nothing reverted/staged/committed/branch-switched in any of the four repos; every pre-existing dirty file preserved. Full B/F resolution matrix, per-repo file/test list, protected-file verification, and the three accepted limitations filed at `.squad/decisions/inbox/david-client-enum-parity-revision.md`.
+
+📌 Enum Client Parity Independent Revision (2026-08-11T09:45:19-07:00):
+- Assigned for B-1..B-6 blocker resolution (independent, locked-out authors untouched)
+- F-1..F-11: DTO delivery to graphjson, GUI form (declaration-driven selects), TUI wiring (pre-run-start form + warning display), error code paths, VS Code test, parity matrix
+- Protected concurrent work preserved byte-identical; real-binary execution verified all fixes
+- Three accepted non-blocking gaps documented (CE-V-04 conflict, GUI no headless test, corpus SHA drift)
+- Approved at final gate (Barbara verified)
+

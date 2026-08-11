@@ -300,3 +300,132 @@ When a contract serves multiple language ecosystems (Go, C#, TS) and multiple co
 - Blast radius: 13-16 files (1 code change, 12 documentation/comment updates)
 - Status: Awaiting Barbara ratification; atomic PR scope documented
 - Timeline: 1-2 hours to execute once approved
+
+## 2026-08-09T14:09:01-07:00 — Tool Packages Architecture Ruling (AR-TP-1..10)
+Issued binding architecture ruling package for the GERT Tool Packages MVP:
+`.squad/decisions/inbox/barbara-tool-packages-architecture-ruling.md`.
+Final calls: `requires:` is canonical (toolPackages rejected, PKG-020); toolRefs binds/narrows only;
+two-phase catalog (freeze then bind) with 5 tiers, same-tier collision = hard error, undeclared
+cross-tier shadowing = PKG-022; uniform higher-tier-wins across §05/§06 (both current texts were
+wrong and inconsistent); explicit exports (no implicit package scanning); SemVer 2.0.0 with a
+caret/tilde/relational conjunctive-only constraint subset (no ||, no wildcards, no partials);
+runbook-backed action substitution declared tool-relative with exact I/O signature match and
+governance composition that can only narrow (OR approval, union denies, intersect allows);
+POSIX-only package-internal paths with realpath containment and reparse-point/symlink escape as a
+hard error; sha256sum-style order-free package + catalog digests; resume refuses on digest drift
+unless explicitly overridden and audited; lexical tool-name scoping across includes with one global
+package set per run; 28 PKG-* codes + PLAN-010 + 3 warnings; ≥46 conformance vectors in 7 new
+categories. Deferred as explicit non-goals: remote catalogs, publishing, transitive deps, aliases,
+action allowlists, non-tool assets, multi-version coexistence.
+Next: Edith authors; I re-review §5 substitution and §7 digest text before the phase gate.
+
+## 2026-08-09T15:45:00-07:00 — Tool Packages Gate Review #3 (final, narrow): APPROVED
+Third and final architecture gate on the Tool Packages MVP. Entry:
+`.squad/decisions/inbox/barbara-tool-packages-gate-review-3.md`.
+Reviewed Ken's independent S1/S2 sweep (Edith and Don locked out for this cycle).
+S1 confirmed resolved: §03 `toolRefs` no longer teaches `alias:` (now PKG-021) or the deleted
+`tools/<name>.tool.yaml` default-discovery rule; it states the negation and cross-references the
+ratified frozen-catalog/tier model in §06. S2 confirmed resolved: all three mapping-shaped
+`actions:` listings converted to the list form, `sensitive_inputs` preserved in §08; corpus-wide
+scan shows zero mapping-shaped `actions:` blocks remain. Ken's four optional cleanups verified
+text-only: no schema, error code, grammar production, or runtime semantic changed; AR-TP-1..10 and
+R1-R15 stay closed. Re-ran validation myself rather than trusting the matrix: verify_corpus 280/280,
+5 JSON Schemas valid, gert-package.yaml and drain-node.yaml 0 errors, label/ref closure 293/0
+unresolved; r23's lone error is the known corpus-wide `apiVersion: runbook/v2` issue.
+Approved with no reviser designated. Spec is ready for Cristian's review.
+Remaining work is deferred Tess-owned conformance (`tv-pkg-resolve.yaml`, >=46 vectors, now fully
+unblocked) plus four non-blocking pre-existing tickets and one typographic nit (a `\S\ref` leaking
+verbatim inside a `minted` comment at `03-schema-vnext.tex:184`).
+Learning: three narrowing gates worked. Gate 1 (15 blockers) was design; gate 2 (2 blockers) caught
+chapters whose meaning this workstream changed but never edited — the highest-yield question at a
+gate is not "is the new text right" but "which untouched text did the new text just falsify."
+
+## 2026-08-09 — Tool Packages MVP runtime, final implementation gate (2nd pass): APPROVED
+Reviewed David's independent revision of the runtime working tree against my own rejecting first
+pass. Verified all six blockers in the code that runs, not the summary: plan-time substitution
+validation now runs unconditionally in the shared `runWithMode` before Plan/Start, so dry-run and
+unreachable-by-`when:` steps are validated and cycles/depth are decided by static DFS frames;
+digest closure covers `execute.path` substitutes and package-internal includes; tier-1 catalog
+entries carry the package digest; the resume manifest is authoritative so a removed package is
+PKG-001 by name; `outputs.<name>` is implemented end-to-end with the step-context check at plan
+validation; the include closure fails closed with typed PKG-017 instead of resolving dynamically.
+All nine lower-severity fixes verified. Protected files byte-identical, no design file touched,
+tree left dirty and uncommitted, build clean, tests green apart from one unrelated `internal/serve`
+timing flake that passes 5/5 on re-run. Approved with no reviser designated; ready for Cristian.
+Learning: the highest-yield thing I did this pass was not re-reading the diff — it was noticing
+which claims the test suite could not actually prove on this platform. `maxLinkHops` was "fixed"
+and its two tests skipped on Windows, so the only evidence for §3.7 was the code reading right. I
+built a real 10-link chain and drove it through the exported `pkgpath.Resolve` from a scratch
+module outside the product tree: PKG-008 at 10 hops, clean at 8. A skipped test is an unverified
+claim wearing a passing suite's colours; find those first and verify them by hand.
+
+## 2026-08-10T13:25:10-07:00 — `enum` String Constraint MVP: Architecture Ruling (AR-ENUM-1..15)
+Issued the binding ruling for the proposed `enum` MVP:
+`.squad/decisions/inbox/barbara-enum-constraint-mvp-architecture-ruling.md`. APPROVED with three
+binding corrections: (C1) `enum` forbidden on `type: secret` and the member list redacted on any
+`redact: true` / `sensitive_inputs` declaration — an enum on a redacted field is a value oracle and
+"expected one of [...]" in an error message defeats the redaction sitting next to it; (C2) "exact
+enum match across package mocks" discharged as a required conformance vector class, not a runtime
+check, because only one binding is loaded per run and inventing lock fields to fake in-run
+detectability is scope creep; (C3) no `tool.v1.schema.json` — §06 stays the sole normative source
+for `.tool.yaml`.
+Resolved: four declaration sites only (tool `args`/`outputs`, runbook `inputs`/`outputs`);
+string-only, enum is a constraint not a type; YAML 1.2 core-schema string resolution with no
+coercion (`enum: [yes, no]` fails loudly); no empty/whitespace/edge-whitespace members; NFC
+uniqueness; asymmetric normalisation (authors MUST be NFC, external candidates ARE normalised);
+codepoint equality, no case folding, case-only-distinct legal with ENUM-W001; two orderings stated
+separately (declared = presentation/plan/UI, canonical codepoint = comparison) with SET equality
+for contract identity so reordering is not a break; enum constrains values not presence; plan-time
+covers well-formedness + default + literal binds + PKG-013 signature, runtime covers everything
+interpolated with no partial evaluation; single-cause reporting (type error beats enum error);
+replay does not bypass; enums declaration-local across includes with no intersection semantics;
+metadata carried once in the ValidatedPlan/validation record and never in per-step event payloads;
+one new ENUM-001..009 family plus ENUM-W001, with substitution mismatch deliberately kept inside
+PKG-013 rather than a new code; grammars and schema apiVersions untouched; 12 ratified non-goals.
+Found four adjacent drifts while reading the objects Edith will edit; ruled D1 (stale
+`from: captures.*` output prose contradicting the schema's `value:` GCP form) fixed in the same PR
+because the enum output rules reference that exact object, D2/D3 (schema `Input` missing
+`pattern`/`example`, `from` enum contradicting §03) as separate tickets so they do not ride along.
+Next: Edith authors in dependency order (03d error catalog first); Tess writes `tv-enum.yaml`,
+>=54 vectors in 8 categories, blocked on the code numbers; I re-review §8, §10 and the catalog text
+at the gate.
+Learning: the sharpest question on a "just add a keyword" proposal is where the keyword becomes
+*visible*. Enum looked like a pure validation feature until I traced it into traces, JSON output and
+error messages — and on a redacted field the constraint metadata leaks exactly what the value
+redaction was protecting. Constraints are data about data; ask who gets to read them before asking
+whether they are enforced correctly.
+
+## 2026-08-10T14:50-07:00 — enum spec final gate (Gate 3): APPROVED
+
+Read Don's B6 fix under author lockout (Edith and David both out). One line at
+`03-schema-vnext.tex:586`: the canonical `outputs:` shape block's `value:` placeholder went from
+the GIS template `"${captured_value}"` to a bare GCP path `"captures.<captureName>"`, comment
+preserved. Exactly the remedy specified, and only that — `03-schema-vnext.tex` is the only design
+file touched since the re-gate, `captured_value` is now a zero-hit grep tree-wide, `tv-enum.yaml`
+byte-identical.
+Re-ran the sweep *structurally* rather than by grepping the literal — walked every `outputs:`
+mapping in every YAML/JSON/TeX file under `design/gert/` and enumerated the `value:` keys inside
+them. 11 sites, all bare GCP or literal-free; the other 208 `value:` occurrences in the tree are
+`expected.value`, `evidence[].value` and collector `options[].value`, correctly untouched. One
+shape for one field, tree-wide: D1/B1/B6 closed.
+Integrity: corpus `OK 423/423`; all five JSON Schemas parse; `$defs.Input`/`$defs.Output` match
+their shape blocks element-for-element and in order; `$defs.Output` genuinely has no `default`,
+which is what makes the B3 text true rather than merely asserted; 58 vectors, no duplicate ids,
+`ENUM-MOCK` present; zero duplicate labels, zero dangling refs, zero inline `\paragraph{`.
+Authorised runtime implementation in `C:\One\OpenSource\gert`, bounded by the ratified error
+family, the four sites, single-cause reporting, C1 redaction and frozen apiVersions, with
+`tv-enum.yaml` as the acceptance gate — run, not edited. D2–D5 stay open tickets; D2 explicitly
+NOT folded in despite being the same *smell* as B6, because it is a different class and a
+different cause.
+Learning: the check that missed B6 was the right check for the wrong half of the line. A grep for
+the stale *key* (`from: captures`) can never see a wrong *value* under the correct key. When a
+ruling says "one shape for this field", verify it by enumerating the field's occurrences
+structurally — enter the parent block and list what is declared inside it — not by searching for
+the shape you already know is wrong. You only find the drift you can already name; the sweep has
+to be over the field, not over the defect.
+
+📌 Enum Client Parity Session (2026-08-11T09:45:19-07:00 → 2026-08-11T11:42-07:00):
+- Issued AR-CE-1..10 architecture ruling (schema unity, DTO carriage, selector/fallback pattern, validation authority, error code mapping, redaction, trace, parity tests)
+- Gate 1: Identified B-1..B-6 blockers (DTO delivery, renderer, GUI form, TUI wiring, warnings, parity matrix); locked out Don/Ken; assigned David independent revision
+- Gate 2 (Final): Verified all F-1..F-11 fixes via real binaries (graphjson DTO, GUI form, TUI selector, error codes, warning visibility); approved READY FOR PRODUCTION; no architecture reopened; T-TUI-WARN-VIEWTEST mandatory follow-up
+

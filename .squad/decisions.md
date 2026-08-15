@@ -2698,3 +2698,75 @@ Ken is released. His revision found and fixed five genuine runtime defects that 
 **Edith** owns parallel §2a prose fix in `03-schema-vnext.tex` (strike YAML-1.1 aside from AR-ENUM-3 rule 3, add 1.2-core-schema-accurate trap example).
 
 No further gates required. Ready for Cristián.
+
+---
+
+## 2026-08-15 — Dynamic Runbook Includes Feature — COMPLETE (Phase 4 Sessions)
+
+**Status:** Feature implemented, tested, reviewed, approved. Ready for merge.
+
+**Summary:** Runtime-resolved (dynamic) runbook includes in the `gert` Go repo. Catalog-based dynamic include form (`include: {runbook_ref: "${...}", resolve_from: catalog, with: {...}}`) resolving an identity against approved package-export catalogs at execution time — never an arbitrary filesystem path. Driving use case: an ICM orchestrator that takes an incident ID, applies deterministic rules to suggest a TSG, checks whether that TSG exists as a gert runbook, asks the operator to confirm, then dynamically includes it.
+
+**Spawn Manifest — Sessions in order:**
+
+1. **Barbara** (architect, claude-opus-4.6) — authored the binding architecture contract that gated all implementation streams. Issued rulings B-1 through B-21 across multiple arbitration rounds. Served as the code-review gate. Outcome: **APPROVE WITH CONDITIONS** — all 11 user requirements MET, three documentation-only conditions.
+
+2. **Tess** (tester, claude-sonnet-4.6) — authored conformance vectors before implementation existed. Drove real CLI end-to-end. Found 5 defects by exercising the actual binary. Closed corpus at 26 pass / 3 skip / 0 fail. Outcome: corpus closed, all skips permanent with closing rulings.
+
+3. **Ken** (backend, claude-sonnet-4.6) — Stream 1: schema, parser, errkit error taxonomy (DINC-001..013). Fixed DEF-003 and DEF-005. Locked out after DINC-007 reclassification, unable to apply Barbara B-15 himself.
+
+4. **Don** (backend, claude-sonnet-4.6) — Streams 2 & 3: planner, preview/dry-run rendering, executor (`executeDynamic`). Fixed DEF-001 (two visitors bug), applied B-15 on Ken's behalf during lockout, fixed DEF-006 (entry governance never seeded).
+
+5. **David** (backend, claude-sonnet-4.6) — Stream 4: pin recording, replay re-binding, resume-drift detection. Filed two deferred defects (B-18, B-19/B-20). Corrected coordinator's description three times.
+
+**Architecture Rulings — B-1 through B-21 (Complete List):**
+
+All rulings below are from Barbara's binding contract and rulings document, incorporated with full authority:
+
+**B-1** (DINC-001): Rendered Reference Validation — Empty, path-like, or non-ASCII refs rejected before catalog lookup.
+**B-2** (DINC-002): Reference Scope — Bare IDs and package-qualified IDs only; no paths, no URIs, no relative components.
+**B-3** (DINC-003): Catalog-Only Constraint — Structurally enforced: no filesystem access, no exec.Command, no http.Client on resolution path.
+**B-4** (DINC-004): Include Cycle Detection — Tracked via call stack in context; cycle detected at runtime before execution.
+**B-5** (DINC-005): Include Depth Limit — Max 8 levels deep; exceeded depth raises DINC-005.
+**B-6** (DINC-006): Required Input Validation — Child inputs checked for required fields; missing required raises DINC-006.
+**B-7** (DINC-W007): Extra Input Key Warning — Child runbook receives unexpected input keys; emitted as warning, non-fatal.
+**B-8** (DINC-008): Input Enum Validation — Input values matched against declared enums; mismatch raises DINC-008.
+**B-9** (DINC-009): Output Schema Mismatch — Child output structure validated against child schema; mismatch raises DINC-009.
+**B-10** (DINC-010): Child Package Missing — Child's `requires:` entry not in frozen catalog; raises DINC-010.
+**B-11** (DINC-011): Child Tool Unresolvable — Child's `toolRefs:` entry not in frozen catalog; raises DINC-011.
+**B-12** (DINC-W001): Governance Widening Warning — Parent governance composed with child governance; any widening emits DINC-W001.
+**B-13** (DINC-W002): Deprecated Fields Warning — Deprecated field values emit DINC-W002.
+**B-14** (DINC-W003): Include Resolution Warning — Reserved for informational includes-resolution warnings.
+**B-15** (DINC-W007 reclassification): Errkit sentinel must classify as `DINC-W007`/class `"DINC-W"`, not `DINC-007`/class `"DINC"`. Required pre-ship.
+**B-16** (Frozen Catalog Invariant): Resolved package set is locked at plan time. Include execution cannot trigger new package downloads.
+**B-17** (On-Not-Found Behavior): `on_not_found: continue` allows runbook to not exist; sets `result.Vars["runbook_found"] = false`; step completes (not failed).
+**B-18** (DEFERRED): Static Include Governance Gap — Non-dynamic branch does not enforce composed governance. Deferred due to production risk.
+**B-19** (DEFERRED): when: Field Inert — `CollectorField.When` works; `Step.When` and `IncludeConfig.When` are inert. Code fix deferred; documentation applied.
+**B-20** (Documentation): when: Remediation — Schema `description` fields added to three inert `when:` entries. Example warning comment added.
+**B-21** (Documentation): require_approval Scope — Schema `description` added noting TTY-only enforcement; auto-approves non-interactive.
+
+**Conformance Corpus Status:**
+- **Total vectors:** 29 (designed corpus)
+- **Pass:** 26
+- **Skip:** 3 (permanent, documented)
+- **Fail:** 0
+
+**Deferred Defect Records (Open Work):**
+
+**B-18 — Static Include Governance Gap** (filed by David, 2026-08-15)
+Non-dynamic branch of `IncludeExecutor.Execute` does not enforce composed governance. Both eager-static and lazy-static affected. Dynamic includes (fixed) unaffected. Deferred due to production risk; requires separate migration with deprecation/flag plan. Full analysis in `.squad/decisions/inbox/defect-static-include-governance-gap.md`.
+
+**B-19 / B-20 — when: Field Inert in Two of Three Definitions** (filed by David)
+`CollectorField.When` works; `Step.When` and `IncludeConfig.When` are schema-accepted but inert at runtime. Code fix deferred; documentation remediation applied. Open work tracked separately.
+
+**B-21 — require_approval TTY-Only Enforcement** (ruled by Barbara)
+Enforced only in TTY/interactive mode; auto-approves non-interactive runs. Ruled acceptable as designed for v1 MVP. Documented in schema and examples.
+
+**Key Findings from Implementation:**
+- DEF-001: CLI preflight crash on every dynamic-include runbook (fixed by Don: two visitors bug)
+- DEF-003: Governance composed but never enforced in dynamic path (fixed by Ken: added enforcement at execution boundary)
+- DEF-006: Entry runbook governance never seeded (fixed by Don: seed governance at plan time)
+
+**Architecture Review:** Barbara's review gate approved with three documentation-only conditions, all satisfied. All 11 user requirements verified met.
+
+**Inbox Merged:** 13 files totaling ~200KB (barbara-dynamic-include-contract, barbara-dynamic-include-rulings, barbara-dynamic-include-review, tess-dynamic-include-vectors, tess-dynamic-include-open-questions, tess-dynamic-include-e2e, ken-dynamic-include-stream1, ken-dynamic-include-governance, don-dynamic-include-stream2, don-dynamic-include-stream3, david-dynamic-include-stream4, defect-static-include-governance-gap, defect-when-field-not-evaluated)

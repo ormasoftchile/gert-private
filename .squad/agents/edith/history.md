@@ -248,6 +248,55 @@ When authoring a JSON Schema from a grammar-backed spec (EBNF → spec prose →
 
 ✅ **Day 2 memo merged to `.squad/decisions.md`** under section "GXL Phase 1 Day 2 — GIS/GCP Specs, Eval+Path Vectors, Conflict Arbitration". All deliverables, ratifications, discrepancies, and follow-ups captured. PJVM canonical home established at `03b §sec:gis:portable-json` per Stream B Day 2 memo.
 
+### 2026-08-10 — Enum-Constrained Tool/Runbook Outputs MVP (AR-ENUM-1..15)
+
+Implemented Barbara's ratified architecture ruling `.squad/decisions/inbox/barbara-enum-constraint-mvp-architecture-ruling.md` in full, per her specified edit sequence (error catalog first, then `03-schema-vnext.tex`, then `06-tool-runtime.tex`, then the metadata/redaction trio + `16`). Also applied the sole ratified adjacent correction D1 (stale `from: captures.*` output prose → canonical `value:` GCP-path form) without folding in D2/D3.
+
+**Files changed:**
+- `sections/03d-parse-time-enforcement.tex` — new `\subsection{Enum Constraint Error Codes}` (`\label{sec:parse-gate:error-codes:enum}`): ENUM-001..009 table, ENUM-W001 warning table, ordering/single-cause/plan-vs-runtime/replay/C2-mock prose; `enum_constraints` added to ValidatedPlan + plan.validated trace bullets; PKG-013 catalog row extended for enum set-equality/no-variance.
+- `sections/03-schema-vnext.tex` — new normative `\paragraph{enum: value constraint (string only)}` for Input Declarations (`\label{para:enum-constraint}`, covers AR-ENUM-1..10); matching paragraph for Output Declarations; D1 fix (Output YAML example + prose: `from: captures.*` → `value:`, old form marked superseded/MUST NOT author); compatibility-policy note that introducing `enum` is a narrowing/breaking change; provider-schema disambiguation sentence (Provider Definition's `enum:` example is informative, not GERT-validated).
+- `sections/06-tool-runtime.tex` — `enum` added to Tool Definition Schema args/outputs vocabulary + example; new paragraph cross-referencing `para:enum-constraint`; PKG-013 no-variance bullets on Input/Output contract; ENUM-009 (output production-time)/ENUM-006 (default) references; replay-no-bypass sentence; new Non-Goals bullet for C2 (mock conformance obligation, no lock/digest fields invented).
+- `sections/07-runtime-events.tex`, `13-evidence-tracing-resumption.tex` — per-event payloads carry values only, never enum metadata; enum metadata travels once-per-run in `plan.validated`; replay doesn't bypass enum checks.
+- `sections/08-security-and-trust.tex` — new `\paragraph{Redacted enum member lists (C1)}`: enum forbidden on `secret` (already ENUM-001); for `redact`/`sensitive_inputs`/`governance.redact`, member lists redacted to counts everywhere including ENUM-008/009 diagnostics.
+- `sections/16-observability-diagnostics.tex` — run summary/JSON output mode unchanged; ENUM errors use the existing error envelope.
+- `schemas/runbook.v1.schema.json` — `enum` keyword added to `$defs.Input`/`$defs.Output` (sequence, minItems:1, uniqueItems:true, non-empty/non-whitespace string items); `Output.value` description corrected for D1.
+- `schemas/README.md` — new maintenance-trigger row for future value-constraint keywords.
+- `conformance/vector.schema.json` (Tess's schema surface, NOT her corpus) — `ENUM` added to `id` pattern; 8 new `category` values (ENUM-DECL/UNICODE/DEFAULT/PLAN/RUNTIME/SUBST/MOCK/TRACE); `SuccessExpected` extended with optional `warnings` (`^ENUM-W\d{3}$`); `ErrorExpected.error_class`/`error_code` extended for `ENUM`/`^ENUM-\d{3}$`. **Lesson learned:** a first attempt introduced a new `EnumExpected` type as a 4th `expected.oneOf` branch — its bare `{"required":["value"]}` shape was structurally ambiguous with the existing `SuccessExpected` branch, and `oneOf` (requiring exactly one match) rejected *every* pre-existing vector using `{"value": ...}` across the whole corpus. Fixed by reverting to extending the existing three types instead of adding a sibling. Always prefer extending existing `oneOf` branches over adding new ones unless the new type's required-key set is provably disjoint from every sibling.
+- Reference fixtures (untracked, new): `schemas/examples/acme-incident-tools/tools/kubectl.tool.yaml` (new `strategy` enum arg on `drain-node`), `.../runbooks/drain-node.yaml` (matching `strategy` input + interpolation use), `testdata/runbooks/r23-tool-package/schema.yaml` (`strategy: "graceful"` literal, an ENUM-007 plan-time-checkable candidate).
+
+### 2026-08-10 (later) — Correcting the YAML-1.1 aside in AR-ENUM-3 rule 3's rendering
+
+Per Barbara's `barbara-enum-mvp-implementation-gate.md` §2(a) disposition: my own rendering of AR-ENUM-3
+rule 3 in `03-schema-vnext.tex` and `03d-parse-time-enforcement.tex` carried a parenthetical/prose
+aside — "(`yes` under a 1.1-ish resolver, …)" and "the single most likely real-world trap
+(`enum: [yes, no]`)" — that contradicted the rule's own normative clause ("resolves to a string under
+the YAML 1.2 core schema"). The YAML 1.2 core schema resolves `bool` only from
+`true|True|TRUE|false|False|FALSE`; `yes`/`no` are strings under it and do not trigger ENUM-002.
+
+**Fix (prose-only, no semantic change):**
+- `03-schema-vnext.tex` (Input Declarations `enum` paragraph): removed `yes`/`no` from the
+  boolean/int/float/null example list, kept `true`/`false`/`1.0`/`~`; added an explicit clarifying
+  aside that unquoted `yes`/`no` resolve to strings under 1.2 and are NOT an ENUM-002 case; replaced
+  the "most likely trap" example with `enum: [true, false]`, which is an actual trap under a 1.2
+  resolver.
+- `03d-parse-time-enforcement.tex` (ENUM-002 error-catalog table row): same substitution — dropped
+  `yes`/`no` from the non-string-resolving example set, kept `true`/`false`/`1.0`/`~`, and appended a
+  short same-cell note that `yes`/`no` resolve to strings and are unaffected.
+- Did not touch the ruling document itself (`barbara-enum-constraint-mvp-architecture-ruling.md`,
+  archival/historical), `tv-enum.yaml` (already corrected by Tess/Don under the gate's sole
+  authorised vector edit), `gen_enum_vectors.py`, or any runtime code — out of scope per the gate's
+  disposition, which named only `03d`/`03-schema-vnext.tex` as Edith's edit targets.
+- Validated: `python scripts/verify_corpus.py` → `OK 423/423 vectors validate`; full spec recompiled
+  clean via `latexmk -pdf -shell-escape main.tex` (357-page PDF, no new errors around either edited
+  section — pre-existing bibliography-citation warnings are unrelated). Reverted the regenerated
+  `gert.pdf` build artifact afterward to avoid an unrelated binary diff.
+
+**Untouched per ruling:** grammars (`gxl/gis/gcp.ebnf` — AR-ENUM-13), no `tool.v1.schema.json` created (C3), Tess's `tv-enum.yaml` corpus not authored (only its schema/category surface prepared).
+
+**Validations:** `runbook.v1.schema.json` and `vector.schema.json` — valid JSON, valid against JSON-Schema meta-schema; synthetic positive/negative enum docs behave per spec; `python scripts/verify_corpus.py` → `OK 365/365 vectors validate` (all pre-existing corpus still green after the schema extension); 4 synthetic ENUM-category vectors (ENUM-DECL/UNICODE/SUBST/RUNTIME, using the three existing `expected` shapes) validate with 0 errors; all 3 fixture YAMLs parse via PyYAML; full LaTeX build (`scripts/latex.py build --engine auto`) succeeds — fresh 379-page PDF, only pre-existing undefined refs (`sec:gis:portable-json`, `sec:gcp`, present in HEAD before this change) remain, no new ones, no duplicate labels.
+
+No open questions for Barbara — the ruling was fully actionable without ambiguity; the `EnumExpected` issue was a self-resolved implementation detail, not a semantic gap. No new decision-inbox entry filed.
+
 ## 2026-06-04T20:14:36-07:00 — Stream E Removed (Scribe notification)
 
 **Action Item:** §5 Migration Plan (design/gert/expression-language-proposal.md) has been removed per user directive. Appendix A migration examples also removed and precedence appendix renumbered.
@@ -299,3 +348,32 @@ When authoring a JSON Schema from a grammar-backed spec (EBNF → spec prose →
 - `.squad/decisions/inbox/edith-runbook-schema-questions.md` — all 5 spec questions documented
 
 **Next Steps:** Awaiting Barbara's arbitration on all 5 spec questions. Once decided, will update schema and spec sections for precision. gert-vscode Phase 2 (YAML schema, IDE integration) unblocked once arbitrations complete.
+
+## 2026-08-09T14:44:49-07:00 — GERT Tool Packages MVP — Full Spec Authoring
+
+**Task:** Author the complete GERT Tool Packages MVP into the normative design artifacts per Barbara's ratified ruling `.squad/decisions/inbox/barbara-tool-packages-architecture-ruling.md` (AR-TP-1..10, ratified 2026-08-09). Sole semantic authority; no decisions reopened. No contradictions found in the ruling.
+
+**Pre-existing bug fixed (build hygiene):** `scripts/verify_corpus.py` referenced the pre-rename `conformance/schema.json` (renamed to `vector.schema.json` in PR #8); fixed so my own conformance-schema changes could be validated.
+
+**Schemas created:** `schemas/tool-package.v1.schema.json`, `schemas/project-config.v1.schema.json`, `schemas/package-lock.v1.schema.json` (AR-TP-3). All Draft 2020-12, hand-authored, `additionalProperties: false`.
+
+**Schemas modified:** `schemas/runbook.v1.schema.json` — added top-level `requires:`/`$defs/PackageRequirement`; rewrote `$defs/ToolRef` (added `package`/`version`, removed `alias` entirely — AR-TP-1, PKG-021 — kept `source`/`actions` as deprecated-but-schema-valid per AR-TP-10). `conformance/vector.schema.json` — registered 7 new categories (`PKG-RESOLVE`, `PKG-COLLIDE`, `PKG-VERSION`, `PKG-PATH`, `PKG-SUBST`, `PKG-DIGEST`, `PKG-ERROR`), extended `id` pattern for `TV-PKG-*`, added `$defs/PackageExpected` — this is the contract Tess authors `tv-pkg-resolve.yaml` (≥46 vectors) against; I did **not** author that file, only the schema surface it validates against, per the ruling's file-ownership split.
+
+**Spec sections rewritten/extended (per ruling §12):**
+- `sections/06-tool-runtime.tex` — largest change: two-phase/5-tier catalog discovery, `requires:`/`toolRefs:` binding rules + deprecation schedule (D-001/D-002), version constraint grammar, tool-package schema prose w/ examples, action substitution (declaration/input/output/governance contracts, depth 4), secure path resolution, digest/trace/resume summary, lexical scoping + global package set + lazy-include package analysis, explicit non-goals, one intentional breaking change (undeclared cross-tier shadowing → `PKG-022`, was silent precedence before).
+- `sections/05-extension-runtime.tex` — fixed "later wins" language to match the uniform tier/tie-is-error rule; extension tools always tier-3, always qualified.
+- `sections/03d-parse-time-enforcement.tex` — added `PLAN-010` + full `PKG-001..028`/`PKG-W001..003` error catalog tables.
+- `sections/07-runtime-events.tex` — 5 new trace events (`package/resolved`, `catalog/frozen`, `tool/substituted`, `governance/packageDriftAccepted`, `replay/packageDrift`).
+- `sections/08-security-and-trust.tex` — package verification (`gert verify` extension), package/catalog digest + lock file contract.
+- `sections/12-governance-policy.tex` — Substitution Governance Composition table (OR/union/intersection per field, never-superset invariant).
+- `sections/13-evidence-tracing-resumption.tex` — package map in run manifest, resume digest-check contract (`PKG-009` hard refusal, `--allow-package-drift` override), replay-mode non-fatal drift.
+- `sections/02-architecture.tex` — lexical tool-name scoping in Include Step Executor Contract (asymmetric with shared variable scope, by design); plan-time package analysis of lazy includes (`PKG-017` for late package binding after catalog freeze).
+- `sections/10-open-questions.tex` — closed the tool-package open questions with a "Closed: Tool Packages MVP" section; recorded remote catalogs / transitive deps / aliases / action-allowlist-enforcement / non-tool assets / multi-version coexistence as explicit non-goals with rationale.
+
+**Examples/fixtures added:** `schemas/examples/acme-incident-tools/{gert-package.yaml, tools/kubectl.tool.yaml, runbooks/drain-node.yaml}` (reference package + substitution demo, validated against schemas); `testdata/runbooks/r23-tool-package/schema.yaml` (fixture consuming the package + invoking the substituted action, validated). Annotated `testdata/runbooks/r01-k8s-incident/schema.yaml` and `r05-security-breach/schema.yaml` with `PKG-W001`/`PKG-W002` deprecation comments on existing `source:`/`actions:` usage (no structural change, per ruling).
+
+**Validation:** `verify_corpus.py` → `OK 280/280 vectors validate` throughout, no regressions. Full LaTeX build via `tectonic` (with `pygmentize` on PATH for `minted`) succeeds; only two pre-existing, unrelated undefined refs remain (`sec:gis:portable-json`, `sec:gcp`, both outside my edited files). All new/edited JSON schemas validated as Draft 2020-12; example YAML/tool/runbook files validated against their respective schemas.
+
+**Deferred (explicitly Tess's, not mine):** `conformance/tv-pkg-resolve.yaml` and its ≥46 vectors — I registered the category enum and `PackageExpected` shape only, per the ruling's "Tess authors, Edith registers" split.
+
+**Coordination:** Ruling moved from `.squad/decisions/inbox/` to `.squad/decisions/archive/` as fully actioned; summary appended to `.squad/decisions.md`.

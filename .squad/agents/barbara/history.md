@@ -39,3 +39,36 @@ Learning (B-32, 2026-08-15T18:06:00-07:00): Audience scoping on bearer tokens co
 - All deliverables verified and tested
 - Ready for production merge
 
+## 2026-08-16 — Team Orchestration Session: Runtime Portability Evaluation
+
+**Session:** Scribe coordination session with barbara, don, david  
+**Task:** Evaluate and document SQL Live-Site Operations "Runtime Portability for Gert Runbooks" implementation request
+
+**Key outputs from cross-agent session:**
+- Barbara: Architectural evaluation published to decisions.md (ACCEPT-WITH-MODIFICATIONS verdict)
+- Don: Ground-truth verification against source — all claims accurate except run-gert.ps1
+- David: Integration critique identifying three blockers + one phase-ordering risk
+
+**Cross-finding consensus:**
+- All three agents independently flagged schema non-goal contradiction as critical
+- All three flagged phase estimation (Phase 2 estimate dependent on unanswered OQ-2) as unreliable
+- David flagged phase-ordering risk (Phase 3 semantics required but Phase 1 ships HTTP with timeout hazard)
+
+**Deliverables merged to decisions.md:**
+- 3 inbox files archived
+- 3 orchestration logs written
+- Session log written to .squad/log/
+
+**Team notation:** Decision-making requires Cristiano's input on schema non-goal contradiction and OQ-2 resolution. All three architectural evaluations recommend identical remedy: accept additive schema changes, answer OQ-2 in Phase 0, implement tiered-preflight with Tier 0 static mandatory.
+
+## Learnings
+
+📌 Runtime Portability Evaluation (2026-08-16T16:00:00-07:00):
+- Evaluated inbound implementation request from SQL Live-Site Operations for runtime binding resolver, managed identity, workload identity, host bridge, and preflight validation.
+- Verdict: Accept-with-modifications. Core abstraction (profile → resolver → transport + auth) aligns with existing `ToolTransport` interface seam.
+- Key finding: "no tool contract schema changes" is contradicted by the ask's own requirements (capability declaration for preflight, action classification for approval policy). Additive schema changes are unavoidable.
+- Learning: when an ask declares "no schema changes" as a non-goal but requires new declarative metadata (contexts, classifications), the ask has an internal contradiction. Call it out immediately — the contradiction won't resolve itself and will block implementation if deferred.
+- Learning: preflight validation must separate STATIC bindability (does a binding EXIST for this context?) from DYNAMIC reachability (can we reach the endpoint / acquire a token RIGHT NOW?). These are different failure classes deserving different error codes and different operator messages. Conflating them produces confusing errors.
+- Learning: when a phase estimate depends on an unanswered architectural question (library vs. subprocess), the estimate is fiction. Require the question to be answered in a prior phase before accepting the estimate.
+- Decision written to `.squad/decisions/inbox/barbara-runtime-portability-ask-evaluation.md`.
+

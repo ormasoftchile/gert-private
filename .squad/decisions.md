@@ -1,7 +1,44 @@
 # Squad Decisions
 
-**Last Updated:** 2026-08-15T19:31:53Z
+**Last Updated:** 2026-08-16T15:59:48-07:00
 **Archive Trigger:** decisions.md >= 51200 bytes threshold; entries older than 7 days archived to decisions-archive.md
+
+---
+
+## 2026-08-16 — Architectural Evaluation: Runtime Portability for Gert Runbooks (Barbara)
+
+**Date:** 2026-08-16  
+**By:** Barbara (Lead / Architect)  
+**Requested by:** Cristiano (ormasoftchile)  
+**Input:** SQL Live-Site Operations implementation request, §1–§15  
+
+**Verdict: Accept-with-Modifications.** The ask is architecturally sound. The layering aligns with the seam that already exists: `pkg/tool.ToolTransport` interface and `ToolRuntime.Invoke` dispatch. However, §13's "no tool contract schema changes" non-goal contradicts the ask's own primary concern (capability preflight requires declared context support). Recommended: acknowledge the schema change is needed (additive, non-breaking); split preflight into static (Tier 0, default, mandatory) and dynamic tiers (Tier 2, opt-in); add `gert plan` dry-run; resolve whether library-vs-subprocess embedding is the target for Phase 2.
+
+**Full analysis:** See `.squad/decisions/archive/barbara-runtime-portability-ask-evaluation-2026-08-16.md` — comprehensive architecture ruling with phasing critique, contradiction analysis (schema vs. non-goal), and 5 error-code split for capability preflight.
+
+---
+
+## 2026-08-16 — Ground-Truth Report: Runtime Portability (Don)
+
+**Date:** 2026-08-16T15:59:48-07:00  
+**Prepared by:** Don (Backend Dev)  
+**For:** Barbara (architecture evaluation) and Gert Core Team
+
+**Verdict: All claims accurate except run-gert.ps1 (does not exist in Gert core).** 7 of 8 "exists" claims verified TRUE; `run-gert.ps1` claim FALSE (not in source, may be in consumer repo). All 5 "does not exist" claims verified absent. KEY FINDING: `ToolGovernance.AllowedEnvironments` and `RequiresCapabilities` already exist in schema (`pkg/schema/tool.go:50`) but are completely unenforced in runtime code — **zero references** in any Go file. This is a low-cost path to delivering Cristiano's core concern (preflight "not configured for this environment" error) without waiting for full runtime binding resolver. Also found: `mcp-http` transport fully implemented with SSE parsing, TokenGate enforcement, `AuthProvider` interface, and `AzureCLIAuthProvider`. Phase estimates: Phase 1 is optimistic (should be 6–8wk, not 4–6); Phase 2 wildly optimistic without answering OQ-2 (library vs subprocess); Phase 3 adds idempotency/reconnect infrastructure underspecified in current ask.
+
+**Full report:** See `.squad/decisions/archive/don-runtime-portability-ground-truth-2026-08-16.md` — complete verification matrix with 13 evidence bullets and phase-by-phase scope assessment.
+
+---
+
+## 2026-08-16 — Integration Critique: Runtime Portability (David)
+
+**Date:** 2026-08-16T15:59:48-07:00  
+**Prepared by:** David (Integration Engineer)  
+**For:** Cristiano and architecture team
+
+**Verdict: Three critical blockers in integration protocol; one critical phase-ordering risk; multiple tiering and error-taxonomy gaps.** (1) §10.1's preflight steps 2–3 answer the wrong question — they conflate static "is this configured?" with dynamic "can I reach it now?"; must split into Tier 0 (static, default, mandatory), Tier 1 (local reachability, opt-in), and Tier 2 (live, opt-in). (2) Error taxonomy `binding/tool-not-found` too coarse; must split into 5 codes: `config/tool-unresolved`, `config/no-binding-for-profile`, `config/binding-incomplete`, `auth/credential-failure`, `transport/endpoint-unreachable`. (3) Host bridge protocol missing four essential fields: `protocol_version`, host capability advertisement (required for Tier 0 preflight), `run_id/step_id` correlation (audit), and explicit `CancelRequest` message type for IPC. (4) **Phase-ordering risk:** §10.4 (reconnect/late-result handling) deferred to Phase 3 (8–12 weeks), but direct-HTTP MCP transport ships in Phase 1 with timeouts/disconnections that leave mutating-action state indeterminate. Mitigation: Phase 1 ships explicit "halt-on-timeout, no retry" policy, not undefined behavior. For destructive actions, must choose: implement proper Phase 3 semantics before ship, OR restrict Phase 1 to read-only tools only.
+
+**Full critique:** See `.squad/decisions/archive/david-runtime-portability-integration-critique-2026-08-16.md` — 3 areas (preflight, host bridge protocol, idempotency), 16 detailed findings, complete tiered-preflight specification, revised error taxonomy with operator messages, and explicit risk call-outs.
 
 ---
 

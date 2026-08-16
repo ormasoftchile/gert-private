@@ -22,6 +22,16 @@ Session: MCP HTTP Stream D (2026-08-16) — **FINAL**
 
 Detailed history: .squad/agents/tess/history-archive.md
 
+## 2026-08-16 — Cross-team findings: Runtime Portability evaluation may impact conformance work
+
+**Session:** Scribe coordination session (barbara, don, david) evaluated SQL Live-Site Operations "Runtime Portability for Gert Runbooks" ask.
+
+**Potential implications for Tess:**
+- Host bridge + runtime binding resolver will introduce new conformance vector families (host bridge protocol, preflight tiers, profile resolution, runtime portability across contexts)
+- Error taxonomy redesign proposed (5-code split from current `binding/tool-not-found`) will need new conformance vectors for each code path
+- If Phase 0 answers OQ-2 (library vs subprocess) before Phase 1 starts, the conformance corpus design may diverge significantly between the two models
+- No immediate action needed, but recommend following decision outcomes on schema changes and OQ-2 resolution
+
 ## Learnings
 
 ### From Stream D / Stream C final pass (2026-08-16)

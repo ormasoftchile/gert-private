@@ -6,54 +6,228 @@ invoking tool definitions at runbook execution time.  Tools are the primary
 mechanism by which gert performs side-effecting work: executing binaries,
 calling JSON-RPC services~\cite{jsonrpc-spec}, and delegating to MCP-hosted capabilities~\cite{mcp-spec}.
 
-\section{Tool Discovery}
+\section{Tool Discovery and Catalog Construction}
 \label{sec:tool-discovery}
 
-The host resolves tool references in three phases:
+Tool resolution is split into two plan-time phases so that ``what tools
+exist'' is decided before ``what a step means'' (AR-TP-2,
+\texttt{.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md}).
+
+\begin{description}
+  \item[Phase C --- Catalog construction] Runs once per run, before any step
+        is planned. It produces the \texttt{ResolvedToolCatalog}: a map from
+        fully-qualified tool name to a single \texttt{ToolDefinition}, plus a
+        frozen package map (\S\ref{sec:tool-packages}). It is a pure function
+        of the workspace files, \texttt{requires:} declarations, extension
+        contributions, and MCP \texttt{tools/list} responses. It has no
+        knowledge of any individual step.
+  \item[Phase B --- Binding] Runs once per runbook file in the include
+        closure. Each \texttt{toolRefs} entry in that file binds one catalog
+        entry to one file-local name. Every \texttt{step.tool.name} in that
+        file \textbf{MUST} resolve to a name bound in that same file
+        (\texttt{PLAN-010}); tool-name binding is \textbf{lexically scoped} to
+        the declaring runbook file and is never inherited from a parent that
+        includes it (\S\ref{sec:tool-packages-includes}).
+\end{description}
+
+A runtime \textbf{MUST NOT} mutate the catalog after Phase C completes. Any
+attempt to contribute a package to the catalog after the freeze --- including
+a lazily-expanded include that would introduce a previously-undeclared
+package --- is \texttt{PKG-017}.
+
+\subsection{Tiers}
+\label{sec:tool-tiers}
+
+Tools enter the catalog from exactly five tiers. A higher tier number is
+higher precedence.
+
+\begin{center}
+\begin{tabular}{cp{6.2cm}p{4.8cm}}
+\hline
+\textbf{Tier} & \textbf{Source} & \textbf{Namespacing} \\
+\hline
+0 & Built-in registry compiled into the host & bare names \\
+1 & Packages from \texttt{requires:} (project-level, then runbook-level) & \texttt{<package>/<tool>} + bare name \\
+2 & Project tools: \texttt{.gert/config.yaml} \texttt{tool-paths} (in listed order), then \texttt{<workspace>/tools/} & bare names \\
+3 & Dynamic: extension contributions (\texttt{capability/tool-registration}), then MCP \texttt{tools/list} & \texttt{<extension>/<tool>}, \texttt{<server>/<tool>} --- mandatory \\
+4 & \texttt{toolRefs[].path} in the runbook being planned & bare name, file-local \\
+\hline
+\end{tabular}
+\end{center}
+
+Every catalog entry carries \textbf{both} a fully-qualified name
+(\texttt{<origin>/<tool>}) and, for tiers 0/1/2/4, a bare name. Tier 3
+entries have \textbf{no} bare name --- dynamic contributions are always
+qualified. This alone removes the entire class of ``extension silently
+shadows kubectl'' failures.
+
+Built-ins (tier 0) are always present; there is no ``disable builtins''
+switch in the MVP. A package or project tool sharing a built-in's bare name
+shadows it, and that shadowing is subject to the same declaration
+requirement as any other cross-tier shadow (rule 2 below).
+
+\subsection{Precedence Rule}
+\label{sec:tool-precedence}
+
+This replaces every prior ``first match wins'' or ``later entries take
+precedence'' formulation in this specification. The direction is uniform
+across the whole spec (\S\ref{sec:ext-discovery} adopts the identical rule):
+\textbf{higher tier wins; ties are errors.}
 
 \begin{enumerate}
-  \item \textbf{Static discovery}: \texttt{.tool.yaml} files are located by
-        scanning the following directories in order:
-        \begin{enumerate}
-          \item The built-in tool registry compiled into the host binary.
-          \item \texttt{<workspace-root>/tools/} — the conventional location for
-                project-level tool definitions
-                (\texttt{tools/<name>.tool.yaml}).
-          \item Directories listed in the workspace config
-                (\texttt{.gert/config.yaml}, field \texttt{tool-paths}).
-          \item Required packages declared in the runbook's \texttt{requires:}
-                field (each package's \texttt{tools/} subdirectory is scanned).
-        \end{enumerate}
-  \item \textbf{Dynamic registration}: extensions with
-        \texttt{capability/tool-registration} may register additional tool
-        definitions during the \texttt{contributions/list} phase (see
-        Section~\ref{sec:ext-handshake}).  Dynamically registered tools are
-        merged into the resolved catalog before execution begins.
-  \item \textbf{MCP discovery}: when the runbook declares an MCP server under
-        \texttt{tools.mcp-servers}, the host performs a \texttt{tools/list}
-        call to that server at startup and registers every tool reported as a
-        dynamically discovered tool (see Section~\ref{sec:mcp-tools}).
+  \item \textbf{Same-tier collision on the same bare name is a hard error}
+        (\texttt{PKG-006}). There is no warning-and-continue. Two packages
+        that both export the bare name \texttt{kubectl} collide; the runbook
+        \textbf{MUST} disambiguate with \texttt{toolRefs[].package} or with
+        the fully-qualified name.
+  \item \textbf{Cross-tier shadowing is permitted, and silent, only when the
+        shadowing entry is at a strictly higher tier AND the runbook
+        declares the intent} via \texttt{toolRefs[].package} or
+        \texttt{toolRefs[].path}. Undeclared cross-tier shadowing is
+        \texttt{PKG-022} (a hard error, not a warning) --- this is the single
+        intentionally breaking behaviour change introduced by this
+        specification (\S\ref{sec:tool-packages-compat}).
+  \item Fully-qualified names never collide and never shadow; they are
+        always addressable even when the bare name is ambiguous.
 \end{enumerate}
 
-\subsection{Name Resolution Order}
+\subsection{Determinism of Enumeration}
+\label{sec:tool-determinism}
 
-When a runbook step references a tool by name, the host resolves as follows:
+Non-determinism from filesystem iteration order is a defect, not an
+implementation detail. The following is normative:
 
-\begin{enumerate}
-  \item Exact match in dynamically registered tools (MCP and extension, in
-        registration order).
-  \item Exact match in project-level \texttt{tools/} directory.
-  \item Exact match in required-package tool directories (in
-        \texttt{requires:} declaration order).
-  \item Exact match in the built-in registry.
-\end{enumerate}
+\begin{itemize}
+  \item Directory scans are recursive over \texttt{*.tool.yaml}, and results
+        are sorted by the \textbf{workspace-relative POSIX path}, NFC-normalised,
+        compared by Unicode code point, ascending.
+  \item \texttt{requires:} entries are processed in declaration order;
+        project-level \texttt{requires:} precede runbook-level
+        \texttt{requires:}.
+  \item \texttt{tool-paths} entries are processed in declaration order.
+  \item Extension contributions are processed in extension-resolution order;
+        within one extension, in the order returned by
+        \texttt{contributions/list}.
+  \item MCP servers are processed in declaration order; within one server,
+        tools are sorted by name --- the server's array order is
+        \textbf{not} trusted, since MCP servers make no ordering guarantee.
+  \item Two runs over an identical file tree \textbf{MUST} produce
+        byte-identical catalog digests (\S\ref{sec:tool-package-digest}).
+\end{itemize}
 
-If two tools share the same name, the first match wins and a warning is
-emitted.  Tool authors SHOULD use reverse-DNS namespace prefixes to avoid
-collisions (e.g., \texttt{acme.pd-lookup}).
+\section{Runbook Tool Bindings: \texttt{requires:} and \texttt{toolRefs:}}
+\label{sec:tool-bindings}
+
+\subsection{\texttt{requires:} is canonical}
+
+\texttt{requires:} is the \textbf{sole, canonical} mechanism by which a
+project or a runbook declares a dependency on a tool package. It may appear
+at the top level of \texttt{.gert/config.yaml} (project scope) and at the top
+level of any runbook (runbook scope). A \texttt{requires:} entry
+\textbf{supplies} tool definitions to the catalog (\S\ref{sec:tool-tiers},
+tier 1).
+
+A previously-discussed \texttt{toolPackages:} key was considered and
+\textbf{rejected}: it duplicated the job of \texttt{requires:} under a
+different name. \texttt{toolPackages:} \textbf{MUST NOT} be introduced in any
+schema. Any document containing a \texttt{toolPackages:} key is rejected with
+\texttt{PKG-020} (\texttt{unsupported key: use requires:}). There is
+\textbf{no alias, no dual-read, and no deprecation window} for this key ---
+it never shipped in any released schema, so the rejection is a permanent hard
+error from day one, not a transitional one.
+
+\subsection{\texttt{toolRefs:} binds and narrows}
+
+\texttt{toolRefs:} declares which tool names a runbook file's \texttt{flow}
+may reference, and optionally pins where each name is bound from. It does
+\textbf{not} itself add packages to the catalog. The relationship is
+one-way: \texttt{toolRefs} may \emph{narrow} what \texttt{requires:} supplied;
+it may never widen it.
+
+\begin{minted}{yaml}
+requires:
+  - package: acme.incident-tools
+    version: "^1.4.0"
+    path: ./vendor/acme-incident-tools   # optional here; project config may supply it
+
+toolRefs:
+  - name: kubectl
+    package: acme.incident-tools    # pins tier and supplier; collision-proof by construction
+    version: "^1.4.0"               # checked against the resolved tool's meta.version
+\end{minted}
+
+\subsubsection{\texttt{ToolRef} field disposition}
+
+\begin{center}
+\begin{tabular}{p{2cm}p{11.3cm}}
+\hline
+\textbf{Field} & \textbf{Disposition} \\
+\hline
+\texttt{name} & REQUIRED. The name used in \texttt{step.tool.name}. \\
+\texttt{package} & \textbf{NEW.} Optional. Reverse-DNS package name that MUST have supplied this tool. Pins the tier and the supplier; makes a collision impossible by construction. Mutually exclusive with \texttt{path}. \\
+\texttt{version} & \textbf{NEW.} Optional. Constraint (\S\ref{sec:tool-version-grammar}) checked against the resolved tool definition's \texttt{meta.version}. \\
+\texttt{path} & RETAINED. Optional. Direct path to a \texttt{.tool.yaml}, resolved per \S\ref{sec:tool-secure-paths}. Highest tier (tier 4, \S\ref{sec:tool-tiers}). Mutually exclusive with \texttt{package}. \\
+\texttt{actions} & RETAINED, \textbf{semantics changed}. Documentation and a plan-time reachability assertion only: every listed action MUST exist on the resolved tool (\texttt{PKG-012} if not). It is \textbf{NOT} an allowlist and \textbf{MUST NOT} gate invocation in the MVP. Emits deprecation warning \texttt{PKG-W001} when present. \\
+\texttt{source} & RETAINED, \textbf{semantics changed}. Opaque provenance string. \textbf{MUST NOT} participate in resolution. Emits deprecation warning \texttt{PKG-W002}. Replaced by \texttt{package}. \\
+\texttt{alias} & \textbf{REMOVED} from the schema. Out of scope for the MVP. Presence is \texttt{PKG-021}. \\
+\hline
+\end{tabular}
+\end{center}
+
+\paragraph{Deprecation schedule.} Per AR-TP-10, \texttt{source} (deprecation
+D-001) and \texttt{actions} (deprecation D-002) remain schema-valid --- they
+are not hard errors --- because fixtures \texttt{r01-k8s-incident} and
+\texttt{r05-security-breach} use them today. They lose all resolution and
+enforcement power immediately (\texttt{source} never participated in
+resolution beyond documentation; \texttt{actions} is now non-enforcing).
+Removal is scheduled for the first release after the fixture corpus is
+migrated to \texttt{package}. This is a numbered deprecation with a removal
+target, not an open-ended ``eventually''.
+
+\subsection{Duplicate and conflicting declarations}
+
+\begin{itemize}
+  \item The same \texttt{package} name appearing twice within one
+        \texttt{requires:} list is \texttt{PKG-005}, unconditionally --- even
+        if the constraints and paths are identical. Duplicates are always an
+        authoring mistake.
+  \item The same \texttt{package} name in the project-level and
+        runbook-level \texttt{requires:} lists is legal; the constraints are
+        \textbf{intersected}. An empty intersection is \texttt{PKG-002}.
+  \item A runbook-level \texttt{requires:} entry with no \texttt{path} and no
+        matching project-level entry is \texttt{PKG-001}.
+  \item A runbook-level entry whose \texttt{path} disagrees with the
+        project-level entry for the same package name is \texttt{PKG-024}
+        (conflicting binding) --- the project is authoritative and
+        disagreement is an error, not a silent override.
+\end{itemize}
+
+\section{Name Resolution Order (Phase B)}
+\label{sec:tool-name-resolution}
+
+When a runbook step references a tool by name, the host resolves the bare (or
+qualified) name against the frozen catalog produced by Phase C, using the
+tier precedence and collision rules of \S\ref{sec:tool-precedence}. The
+resolution is a lookup, not a search: because Phase C already applied the
+five-tier precedence and rejected same-tier collisions and undeclared
+cross-tier shadows, Phase B never needs its own precedence logic --- a bare
+name in the frozen catalog is unambiguous by construction, or the run failed
+to plan.
+
+Tool authors SHOULD still use reverse-DNS namespace prefixes for their
+package names (e.g., \texttt{acme.pd-lookup}) to make qualified references
+self-describing, even though the tier/collision rules no longer depend on
+naming convention for correctness.
 
 \section{Tool Definition Schema}
 \label{sec:tool-definition-schema}
+
+\texttt{actions:} is \textbf{always an array} of entries keyed by
+\texttt{name:} --- never a mapping keyed by the action name. This is the one
+canonical \texttt{tool/v1} action representation: the same shape is used
+whether the action is process-backed or substituted by a runbook
+(\S\ref{sec:tool-substitution}), so a reader never has to reconcile two
+competing normative shapes for the same key.
 
 \begin{minted}{yaml}
 # tools/my-service.tool.yaml
@@ -82,7 +256,10 @@ governance:
   allowed-environments: ["real", "dry-run"]
   requires-approval: false      # Set true to gate invocation on operator OK
 
-# Optional: per-platform implementation blocks (mobile execution only)
+# Optional: per-platform implementation blocks (mobile execution only).
+# This is TOOL-LEVEL impl: --- platform dispatch. It is a distinct key from
+# the ACTION-LEVEL execute: block below (§Action Substitution); see the
+# disambiguation note at the end of this section for how the two interact.
 impl:
   ios:
     transport: native-sdk       # Dispatch to registered iOS handler
@@ -92,22 +269,86 @@ impl:
     handler: com.gert.tools.myservice.LookupHandler
 
 actions:
-  lookup:
+  - name: lookup                # REQUIRED. Unique within this tool.
     description: "Look up an entity by ID"
-    argv: ["lookup", "--id", "{{ .id }}"]  # Only for stdio transport
+    argv: ["lookup", "--id", "{{ .id }}"]  # Only for stdio transport;
+                                            # rendered from args: below
     timeout: "30s"
-    args:
+    args:                        # Typed argument/input declarations. The
+                                 # SINGLE vocabulary for what step.tool.args
+                                 # may contain, for both process and
+                                 # substituted actions (see below).
       id:
         type: string
         required: true
         description: "Entity identifier"
         redact: false
-    output:
-      format: json              # text | json | jsonl
+        enum: ["prod-id", "stage-id"]  # OPTIONAL value constraint, string only
+    output:                     # Raw output shape. Process actions only:
+      format: json               # text | json | jsonl. Describes the shape
+                                  # of the captured stdout stream, not a set
+                                  # of named values (see 'outputs:' below).
     capture:
       stdout:
         format: json
 \end{minted}
+
+\paragraph{\texttt{args:} vs \texttt{inputs:}, \texttt{output:} vs
+\texttt{outputs:} --- one vocabulary, stated normatively.} Every action,
+regardless of \texttt{execute.kind} (\S\ref{sec:tool-substitution}),
+declares its callable parameters under \texttt{args:} --- a map from
+argument name to \texttt{\{type, required, description, redact, enum\}},
+exactly as shown above. \texttt{step.tool.args} in a calling runbook \textbf{ALWAYS}
+binds by name to this same \texttt{args:} map, whether the resolved action
+is process-backed or substituted; there is no separate \texttt{inputs:}
+vocabulary and no kind-dependent binding rule. (An earlier draft of the
+substitution contract used \texttt{inputs:} for this purpose on substituted
+actions only, which left the binding target of \texttt{step.tool.args}
+unstated for that case; that draft vocabulary is superseded by this
+section and does not appear elsewhere in this specification.)
+
+\paragraph{\texttt{enum} on \texttt{args.<name>} and \texttt{outputs.<name>}.}
+Either key MAY declare \texttt{enum:}, valid only when the declaration
+resolves to \texttt{type: string}; these are two of the four sites at which
+\texttt{enum} is normatively defined across the specification
+(\texttt{design/gert/sections/03-schema-vnext.tex} \S\ref{para:enum-constraint}
+states the full well-formedness, Unicode, ordering, default, plan/runtime
+timing, replay, and metadata/redaction rules, which apply identically here;
+the other two sites are the runbook \texttt{inputs.<name>}/\texttt{outputs.<name>}
+declarations in that same section). \texttt{enum} on \texttt{args.<name>} is
+checked at the same argument-binding sites as any other typed
+\texttt{args:} entry (\S\ref{sec:tool-substitution} \S Input contract);
+\texttt{enum} on \texttt{outputs.<name>} is checked at production time, once
+the substitute has produced its own \texttt{outputs.<name>.value}
+(\S\ref{sec:tool-substitution-outputs} below). \texttt{enum} on
+\texttt{type: secret} is forbidden (\texttt{ENUM-001}); \texttt{args:}
+entries marked \texttt{redact: true} MAY declare \texttt{enum}, but its
+member list is redacted in every trace, JSON, and diagnostic surface
+(\texttt{design/gert/sections/08-security-and-trust.tex} \S Secret
+Resolution and Redaction).
+
+The two output-shaped keys are \textbf{not} the same vocabulary, because
+they describe different things and both are needed:
+
+\begin{itemize}
+  \item \texttt{output:} (singular) --- \textbf{process actions only}.
+        Describes the raw shape of the captured stdout stream
+        (\texttt{text}\,|\,\texttt{json}\,|\,\texttt{jsonl}), consumed by the
+        \texttt{capture:} block's GCP paths (\texttt{stdout},
+        \texttt{json.*}, etc., \S\ref{sec:tool-substitution-outputs}).
+  \item \texttt{outputs:} (plural) --- \textbf{required for substituted
+        (\texttt{execute.kind: runbook}) actions}; not applicable to process
+        actions. Declares the named, typed values the substitute
+        \textbf{MUST} produce (\S\ref{sec:tool-substitution-outputs}), since
+        a substitute produces a set of named values rather than a single
+        captured stream.
+\end{itemize}
+
+A tool definition schema (hand-authored, consistent with the other
+\texttt{design/gert/schemas/} artefacts) MAY be added in a future revision;
+until then this section and \S\ref{sec:tool-substitution} are the sole
+normative source for \texttt{.tool.yaml} structure, and both use the shapes
+above exclusively.
 
 \subsection{Transport-Specific Fields}
 
@@ -125,6 +366,13 @@ confirms the server is accepting connections.
 \paragraph{mcp} The host spawns the binary and performs the MCP initialization
 handshake (Section~\ref{sec:mcp-tools}).  Actions map to MCP \texttt{tools/call}
 requests.
+
+\paragraph{mcp-http} The host connects to a remote MCP server over HTTPS and
+performs the Streamable HTTP initialization handshake
+(Section~\ref{sec:mcp-http}).  Actions map to MCP \texttt{tools/call} HTTP
+requests.  No local binary is spawned.  The \texttt{url:} field is required and
+must use \texttt{https://} (plain HTTP is rejected).  Optional \texttt{auth:}
+configures bearer-token acquisition; see Section~\ref{sec:mcp-http-auth}.
 
 \section{Transport Layer}
 \label{sec:tool-transport}
@@ -235,6 +483,74 @@ Error code ranges:
 \subsection{MCP Transport}
 
 See Section~\ref{sec:mcp-tools} for the full MCP integration specification.
+
+\subsection{MCP Streamable HTTP Transport}
+\label{sec:mcp-http}
+
+The \texttt{mcp-http} transport connects to a remote MCP server over HTTPS
+using the Streamable HTTP transport defined in MCP specification version
+\texttt{2025-03-26}.  Unlike \texttt{mode: mcp} (which spawns a local
+subprocess), \texttt{mcp-http} makes no assumption about where the server
+runs or how it was deployed.
+
+\subsubsection{Transport Fields}
+
+\begin{minted}{yaml}
+transport:
+  mode: mcp-http
+  url: https://icm-mcp-prod.azure-api.net/v1/
+  auth:                             # optional; omit for unauthenticated servers
+    provider: azure-cli
+    scope: api://icmmcpapi-prod/mcp.tools
+    allowed_hosts:
+      - icm-mcp-prod.azure-api.net  # see Section~\ref{sec:mcp-http-auth}
+\end{minted}
+
+\begin{itemize}
+  \item \textbf{\texttt{url:}} Required.  Must use \texttt{https://}; plain
+        HTTP is rejected at validation time with error \texttt{MCP-001}.
+        There is no escape hatch for non-TLS endpoints.
+  \item \textbf{\texttt{auth:}} Optional.  When absent, no \texttt{Authorization}
+        header is sent and \texttt{allowed\_hosts} is not required.  When
+        present, see Section~\ref{sec:mcp-http-auth}.
+\end{itemize}
+
+Fields belonging to the \texttt{mcp} (stdio) arm --- \texttt{command:},
+\texttt{args:} --- are rejected (not silently ignored) when
+\texttt{mode: mcp-http} is declared.  This follows the same principle as
+\texttt{expand} on a static include: a field the author clearly intended to
+use for a different mode is an authoring error, not a no-op.
+
+\subsubsection{Protocol Version}
+\label{sec:mcp-http-protocol-version}
+
+\texttt{mode: mcp-http} uses MCP protocol version \texttt{2025-03-26} (the
+Streamable HTTP revision) via the \texttt{MCP-Protocol-Version} request header.
+\texttt{mode: mcp} (stdio) uses version \texttt{2024-11-05} (the stdio framing
+model) and the two are \emph{deliberately different}: they are different
+transport specifications, not two implementations of the same protocol at
+different revisions.  A server implementing one does not necessarily implement
+the other, and changing either version risks breaking existing integrations.
+
+\subsubsection{Redirect Behaviour}
+\label{sec:mcp-http-redirects}
+
+Redirect-following is \textbf{disabled} for authenticated \texttt{mcp-http}
+requests (\texttt{http.ErrUseLastResponse}).  If a server responds with a
+redirect, the request fails with \texttt{MCP-013}.  The remedy is to set
+\texttt{url:} to the final endpoint; do not rely on the server to redirect.
+Unauthenticated \texttt{mcp-http} requests may follow redirects normally.
+
+The motivation: a redirect to an attacker-controlled host would bypass the
+\texttt{allowed\_hosts} check and deliver a bearer token to an unapproved
+destination.  Disabling redirects closes that path without requiring
+additional runtime validation.
+
+\subsubsection{Authentication}
+\label{sec:mcp-http-auth}
+
+See Section~\ref{sec:mcp-http-auth-detail} for the full authentication
+specification.
 
 \section{Invocation Context}
 \label{sec:tool-context}
@@ -374,7 +690,111 @@ standard MCP \texttt{tools/call} response format.
         action names are declared statically in the \texttt{.tool.yaml}.
   \item MCP responses use a \texttt{content} array; gert flattens text content
         to a single string for capture.
+  \item \textbf{Protocol version:} \texttt{mode: mcp} (stdio) uses
+        \texttt{MCP-Protocol-Version: 2024-11-05}; \texttt{mode: mcp-http}
+        uses \texttt{MCP-Protocol-Version: 2025-03-26}.  This is intentional
+        --- the two transport specifications are distinct, not two versions of
+        the same protocol.  Changing either version breaks compatibility with
+        servers built against that transport.
 \end{itemize}
+
+\subsection{MCP Streamable HTTP Authentication}
+\label{sec:mcp-http-auth-detail}
+
+\subsubsection{Overview}
+
+The \texttt{auth:} block in a \texttt{mcp-http} transport declaration names a
+\emph{provider} and an OAuth2 \emph{scope}.  It never contains a credential,
+token, or secret --- by design.  The provider name selects the token-acquisition
+mechanism (e.g.\ \texttt{azure-cli}); the scope identifies the target resource.
+Gert acquires the token at runtime, attaches it as
+\texttt{Authorization: Bearer \ldots} on each request, and never records the
+token value in any log, trace event, or evidence store.
+
+\begin{minted}{yaml}
+auth:
+  provider: azure-cli
+  scope: api://icmmcpapi-prod/mcp.tools
+  allowed_hosts:
+    - icm-mcp-prod.azure-api.net
+\end{minted}
+
+\subsubsection{\texttt{allowed\_hosts} --- What It Protects Against}
+\label{sec:mcp-http-allowed-hosts}
+
+\texttt{allowed\_hosts} is \textbf{required} whenever \texttt{auth:} is
+configured (\texttt{MCP-010}).  An empty or omitted list is a validation
+error.
+
+\paragraph{Why audience-scoped tokens are not sufficient alone.}
+A bearer token acquired with \texttt{scope: api://icmmcpapi-prod/mcp.tools}
+carries that audience in its claims.  A properly configured Azure AD resource
+server that is \emph{not} the intended audience rejects the token.  This
+prevents an attacker from \emph{consuming} the token at their own service.
+
+However, it does \emph{not} prevent an attacker from \emph{replaying} the token
+against the real, legitimate endpoint.  Possession is authorization: a token
+sent to an attacker-controlled host can be exfiltrated and then presented to
+the real IcM endpoint, impersonating the operator for the token's full
+lifetime.  This is the confused-deputy / token-replay pattern.
+
+\texttt{allowed\_hosts} is the prevention mechanism: the HTTP transport checks
+the request URL's hostname against the declared list before attaching the
+\texttt{Authorization} header.  If the hostname is not listed, the request
+fails with \texttt{MCP-012} rather than delivering the token to an unapproved
+host.
+
+\paragraph{Matching semantics.}
+Matching is \textbf{exact, case-insensitive, on the parsed hostname with port
+stripped}.  Wildcards (e.g.\ \texttt{*.azure-api.net}) are not supported.  A
+substring or prefix match is explicitly not used: if the allowed entry is
+\texttt{icm-mcp-prod.azure-api.net}, then
+\texttt{icm-mcp-prod.azure-api.net.evil.com} does \emph{not} match.  Authors
+who need to permit multiple hosts must list each one explicitly.
+
+The same semantics apply at static validation time (parse-time \texttt{MCP-011}
+check on \texttt{url:}'s hostname) and at runtime (the \texttt{MCP-012} check
+in \texttt{TokenGate.AttachToken} before each request).  The two checks use
+identical logic so a config that passes validation cannot fail at runtime due
+to a matching discrepancy.
+
+\paragraph{Listing multiple hosts.}
+\begin{minted}{yaml}
+allowed_hosts:
+  - icm-mcp-prod.azure-api.net
+  - icm-mcp-staging.azure-api.net
+\end{minted}
+
+List only the hosts that will legitimately receive a bearer token.  A host
+that should never receive the token --- a proxy, a health-check endpoint, a
+CDN origin --- should not be listed; route it through an unauthenticated
+transport instead.
+
+\subsubsection{Unauthenticated Transports}
+
+When \texttt{auth:} is absent, no \texttt{Authorization} header is sent and
+\texttt{allowed\_hosts} is neither required nor checked.  Use the
+unauthenticated form for MCP servers that use API-key headers, client
+certificates, or network-level auth, as long as no bearer token is involved.
+
+\subsubsection{Audit Trace}
+
+Before each authenticated request, gert emits an \texttt{mcp/authAttached}
+trace event containing \texttt{url\_host} and \texttt{scope} only --- never
+the token value.  This enables post-hoc audit detection of scope-vs-host
+anomalies without storing credentials.
+
+\subsubsection{Error Codes}
+
+\begin{description}
+  \item[\texttt{MCP-001}] \texttt{url:} absent or not using \texttt{https://}.
+  \item[\texttt{MCP-002}] \texttt{auth.provider} is not a recognized provider name.
+  \item[\texttt{MCP-007}] Token acquisition failed (provider error, not logged-in, no consent).
+  \item[\texttt{MCP-010}] \texttt{auth:} is configured but \texttt{allowed\_hosts} is absent.
+  \item[\texttt{MCP-011}] Static check: \texttt{url:}'s hostname is not in \texttt{allowed\_hosts} (caught at parse time).
+  \item[\texttt{MCP-012}] Runtime check: request hostname not in \texttt{allowed\_hosts} (closes the redirect path).
+  \item[\texttt{MCP-013}] Authenticated request received a redirect response --- redirects are disabled on authenticated requests; update \texttt{url:} to the final endpoint.
+\end{description}
 
 \section{Cancellation and Timeout}
 \label{sec:tool-cancellation}
@@ -415,17 +835,891 @@ The \texttt{tools/cancel} request envelope:
 }
 \end{minted}
 
+\section{Version Constraint Grammar}
+\label{sec:tool-version-grammar}
+
+\subsection{Versions}
+
+Package and tool versions \textbf{MUST} be strict SemVer 2.0.0. A
+non-conforming version is \texttt{PKG-025}. A leading \texttt{v} is
+\textbf{rejected}, not stripped --- \texttt{v1.4.2} is not a valid version.
+
+\subsection{Constraint grammar}
+
+The following EBNF is the normative constraint grammar for the MVP. It is
+deliberately \textbf{not} an expression language, and is therefore documented
+here rather than as a \texttt{.ebnf} grammar file alongside GXL/GIS/GCP.
+
+\begin{minted}{text}
+Constraint   = Comparator , { " " , Comparator } ;
+Comparator   = Caret | Tilde | Relational | Exact ;
+Caret        = "^" , Version ;
+Tilde        = "~" , Version ;
+Relational   = ( ">=" | "<=" | ">" | "<" ) , Version ;
+Exact        = [ "=" ] , Version ;
+Version      = Major , "." , Minor , "." , Patch , [ "-" , Prerelease ] ;
+\end{minted}
+
+Space-separated comparators are \textbf{conjunctive (AND)}. There is no
+disjunction in the MVP grammar.
+
+\textbf{Not supported} (each is \texttt{PKG-003}): \texttt{||}, \texttt{*},
+\texttt{x}/\texttt{X} wildcards, hyphen ranges (\texttt{1.2.3 - 1.5.0}),
+partial versions (\texttt{\^{}1}, \texttt{\textasciitilde{}1.2}),
+\texttt{!=}, whitespace variants other than a single ASCII space, and build
+metadata inside a constraint. Partial versions are excluded deliberately:
+\texttt{\^{}1} versus \texttt{\^{}1.0.0} differ across ecosystems, and
+ambiguity in a governance-bearing artefact is unacceptable.
+
+\subsection{Semantics}
+
+\begin{itemize}
+  \item \texttt{\^{}1.4.2} $\to$ \texttt{>=1.4.2 <2.0.0}. For \texttt{0.y.z}:
+        \texttt{\^{}0.4.2} $\to$ \texttt{>=0.4.2 <0.5.0};
+        \texttt{\^{}0.0.3} $\to$ \texttt{>=0.0.3 <0.0.4}. The \texttt{0.x}
+        narrowing is stated explicitly because it is the most commonly
+        mis-implemented rule across ecosystems.
+  \item \texttt{\textasciitilde{}1.4.2} $\to$ \texttt{>=1.4.2 <1.5.0}.
+  \item Ordering is SemVer 2.0.0 \S11 precedence.
+  \item \textbf{Build metadata} (\texttt{+meta}) is ignored for ordering and
+        for satisfaction, and \textbf{MUST NOT} be used for selection. It is
+        retained verbatim in the lock and trace for provenance.
+  \item \textbf{Prereleases:} a version with a prerelease component satisfies
+        a comparator only if the comparator's own version has a prerelease
+        component \textbf{and} shares the same \texttt{major.minor.patch}.
+        So \texttt{1.5.0-rc.1} does \textbf{not} satisfy \texttt{\^{}1.4.0},
+        but does satisfy \texttt{>=1.5.0-rc.1 <1.6.0}. This is the
+        Cargo/npm rule and is the safe one for operational runbooks.
+\end{itemize}
+
+\subsection{Constraint checking, not solving}
+
+The MVP has exactly one candidate per package: the local path. The
+constraint is a \textbf{predicate on that candidate}, evaluated after loading
+the manifest. There is no backtracking, no version selection, and no SAT
+solving. Failure is \texttt{PKG-002} and \textbf{MUST} report the package
+name, the resolved version, the effective (intersected) constraint, and the
+list of declaration sites that contributed to the intersection.
+
+% ═════════════════════════════════════════════════════════════════════════
+\section{Tool Packages}
+\label{sec:tool-packages}
+% ═════════════════════════════════════════════════════════════════════════
+
+A \textbf{tool package} is a local, on-disk directory that bundles one or
+more \texttt{.tool.yaml} definitions behind an explicit export list. Tool
+packages are the MVP's only supported distribution mechanism for tools ---
+remote catalogs, registries, publishing workflows, transitive package
+dependencies, and packaging of non-tool assets (docs, dashboards, policy
+bundles, binaries-as-payload) are explicit non-goals of this MVP
+(\S\ref{sec:tool-packages-nongoals}).
+
+All new schemas in this section are hand-authored, language-neutral JSON
+Schema (Draft 2020-12), consistent with \texttt{runbook.v1.schema.json},
+with \texttt{additionalProperties: false} throughout.
+
+\subsection{Package manifest --- \texttt{gert-package.yaml}}
+\label{sec:tool-package-manifest}
+
+Schema: \texttt{design/gert/schemas/tool-package.v1.schema.json}
+(\texttt{apiVersion: tool-package/v1}).
+
+\begin{minted}{yaml}
+apiVersion: tool-package/v1     # REQUIRED, const "tool-package/v1"
+meta:                           # REQUIRED
+  name: acme.incident-tools     # REQUIRED. Reverse-DNS:
+                                 # ^[a-z0-9]([a-z0-9-]*[a-z0-9])?
+                                 #   (\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$
+  version: "1.4.2"              # REQUIRED. Strict SemVer 2.0.0
+  description: "..."            # OPTIONAL
+  license: "Apache-2.0"         # OPTIONAL, SPDX identifier
+exports:                        # REQUIRED
+  tools:                        # REQUIRED, minItems 1, unique by id and path
+    - id: kubectl               # REQUIRED. Bare name exported.
+                                 # ^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$
+      path: tools/kubectl.tool.yaml   # REQUIRED. Package-root-relative,
+                                       # §Secure Path Resolution-safe
+dependencies: []                # OPTIONAL. MUST be absent or empty in the
+                                 # MVP; non-empty is PKG-016
+\end{minted}
+
+Rules:
+\begin{itemize}
+  \item The package root is the directory containing \texttt{gert-package.yaml}.
+  \item \texttt{exports.tools[].id} is the \emph{only} way a tool becomes
+        visible. A \texttt{.tool.yaml} inside the package that is not
+        exported is invisible (\texttt{PKG-011} if referenced). There is
+        \textbf{no} implicit \texttt{tools/} scanning inside a package ---
+        implicit scanning is what turns package contents into an accidental
+        API surface.
+  \item The referenced \texttt{.tool.yaml}'s \texttt{meta.name} (or
+        \texttt{name}) \textbf{MUST} equal the export \texttt{id}
+        (\texttt{PKG-023}).
+  \item The qualified catalog name is \texttt{<meta.name>/<export id>}.
+  \item Non-tool assets are not describable in the MVP. Any other key under
+        \texttt{exports} is a schema error.
+\end{itemize}
+
+\subsection{Project binding --- \texttt{.gert/config.yaml}}
+\label{sec:tool-project-config}
+
+Schema: \texttt{design/gert/schemas/project-config.v1.schema.json}
+(\texttt{apiVersion: config/v1}). \texttt{.gert/config.yaml} previously had
+no normative schema; it gets one here, covering only the fields this
+specification touches. Other existing keys (\texttt{defaults},
+\texttt{tools.mcp-servers}) are carried over as free-form objects.
+
+\begin{minted}{yaml}
+apiVersion: config/v1
+requires:
+  - package: acme.incident-tools   # REQUIRED
+    version: "^1.4.0"              # REQUIRED (§Version Constraint Grammar)
+    path: ./vendor/acme-incident-tools   # REQUIRED in the MVP; §Secure Path
+                                          # Resolution-safe; MUST contain
+                                          # gert-package.yaml
+tool-paths:
+  - ./ops/tools
+\end{minted}
+
+\texttt{path} is \textbf{REQUIRED} in the MVP precisely because there is no
+remote catalog. When catalogs land post-MVP, \texttt{path} becomes optional
+and its absence will mean ``resolve from catalog'' --- that is the designed
+extension point, and it is forward-compatible without a schema break.
+
+\subsection{Runbook binding --- additions to \texttt{runbook.v1.schema.json}}
+\label{sec:tool-runbook-binding}
+
+\begin{minted}{yaml}
+requires:                    # NEW top-level, optional, array
+  - package: acme.incident-tools
+    version: "^1.4.0"
+    path: ./vendor/acme-incident-tools   # optional here; if omitted, MUST
+                                          # be supplied by project config
+toolRefs:
+  - name: kubectl
+    package: acme.incident-tools
+    version: "^1.4.0"
+\end{minted}
+
+See \S\ref{sec:tool-bindings} for the full disposition of \texttt{requires:}
+and \texttt{toolRefs:}, including the duplicate/conflict rules
+(\texttt{PKG-001}, \texttt{PKG-002}, \texttt{PKG-005}, \texttt{PKG-024}).
+
+\subsection{Package map / lock --- \texttt{.gert/packages.lock.json}}
+\label{sec:tool-package-lock}
+
+Schema: \texttt{design/gert/schemas/package-lock.v1.schema.json}
+(\texttt{apiVersion: package-lock/v1}). Generated, committed, and verified.
+This is \textbf{not} a solver output --- there is nothing to solve in the
+MVP --- it is a \textbf{frozen integrity record}.
+
+\begin{minted}{json}
+{
+  "apiVersion": "package-lock/v1",
+  "generatedBy": "gert/<version>",
+  "packages": [
+    {
+      "name": "acme.incident-tools",
+      "version": "1.4.2",
+      "root": "vendor/acme-incident-tools",
+      "digest": "sha256:<64 hex>",
+      "exports": [
+        { "id": "kubectl", "path": "tools/kubectl.tool.yaml",
+          "digest": "sha256:<64 hex>" }
+      ]
+    }
+  ],
+  "catalogDigest": "sha256:<64 hex>"
+}
+\end{minted}
+
+\begin{itemize}
+  \item \texttt{root} is workspace-relative POSIX. Packages outside the
+        workspace are recorded as
+        \texttt{"external:sha256:<digest of the absolute realpath, UTF-8,
+        NFC>"} --- never as a raw absolute path, because absolute paths leak
+        usernames and host layout into committed artefacts and traces.
+  \item Lock presence is \textbf{OPTIONAL} for \texttt{gert run}. When
+        present, a mismatch is \texttt{PKG-009}.
+  \item \texttt{gert verify} (\S\ref{sec:supply-chain}) is extended to check
+        the lock.
+\end{itemize}
+
+% ═════════════════════════════════════════════════════════════════════════
+\section{Action Substitution}
+\label{sec:tool-substitution}
+% ═════════════════════════════════════════════════════════════════════════
+
+A tool action may be implemented by a GERT runbook instead of a process ---
+this is called \emph{substitution}.
+
+\subsection{Declaration}
+
+Substitution is declared \textbf{in the \texttt{.tool.yaml}}, per action ---
+never in the calling runbook. The caller \textbf{MUST NOT} be able to see or
+change how an action is implemented.
+
+The per-action key is \texttt{execute:}, \textbf{not} \texttt{impl:}. This
+tool definition already has a top-level \texttt{impl:} block
+(\S\ref{sec:tool-definition-schema}) for per-platform mobile dispatch
+(\texttt{impl.ios}, \texttt{impl.android}, \texttt{transport: native-sdk},
+\texttt{handler:}). Reusing that key at the action level for an unrelated
+concept --- which implementation kind backs a single action --- would give
+one key two meanings in the same document with no way to tell them apart
+lexically. \texttt{execute:} is the disambiguated, schema-compatible name
+for the per-action concept:
+
+\begin{minted}{yaml}
+actions:
+  - name: drain-node
+    execute:
+      kind: runbook                    # process | runbook  (default: process)
+      path: runbooks/drain-node.yaml   # relative to the DIRECTORY OF THIS
+                                        # .tool.yaml
+    args:
+      node: { type: string, required: true }
+    outputs:
+      drained: { type: boolean }
+      # A string output MAY carry enum, e.g.:
+      # drain_state: { type: string, enum: ["drained", "cordoned"] }
+\end{minted}
+
+\texttt{execute.path} resolves relative to the declaring \texttt{.tool.yaml}'s
+directory --- \textbf{not} the calling runbook, \textbf{not} the workspace
+root, \textbf{not} the process cwd. This is the ``runbook-relative''
+contract: a package is relocatable because every internal reference is
+package-internal. Resolution obeys \S\ref{sec:tool-secure-paths}.
+
+\paragraph{Interaction with tool-level \texttt{impl:} (mobile dispatch).}
+The two keys operate at different scopes and are independent: tool-level
+\texttt{impl:} selects a transport for the \textbf{entire tool} on a given
+mobile platform, before any individual action's \texttt{execute:} is
+consulted. When a tool declares \texttt{impl.ios} or \texttt{impl.android},
+invocation on that platform \textbf{always} dispatches to the registered
+native handler for \textbf{every} action of that tool, and
+\texttt{execute.kind: runbook} on any of that tool's actions is
+\textbf{ignored on that platform} --- substitution is a non-mobile,
+non-native-SDK execution path. A tool that declares both a mobile
+\texttt{impl:} block and a \texttt{kind: runbook} action is valid: the
+substitute is used whenever the invoking host is not one of the platforms
+listed under \texttt{impl:} (i.e. on desktop/server hosts), and the native
+handler is used on the declared mobile platforms. This is stated normatively
+here because the two blocks previously shared the name \texttt{impl:} with
+no cross-reference, leaving this interaction undefined.
+
+\subsection{Input contract}
+
+\begin{itemize}
+  \item The substitute runbook's \texttt{inputs:} map \textbf{MUST} be a
+        \textbf{superset-free exact match by name} with the action's
+        \texttt{args:} (\S\ref{sec:tool-definition-schema}): same key set, no
+        extras, no omissions (\texttt{PKG-013}).
+  \item Types \textbf{MUST} be identical PJVM types. No widening, no
+        coercion (\texttt{PKG-013}).
+  \item If either side declares \texttt{enum} on a shared \texttt{args.<name>},
+        the other side \textbf{MUST} also declare \texttt{enum} with the
+        \textbf{same member set} (order-insensitive set equality,
+        \texttt{design/gert/sections/03-schema-vnext.tex} \S\ref{para:enum-constraint}).
+        Neither side declaring \texttt{enum} is OK. One side declaring it
+        while the other does not, or both declaring unequal sets, is
+        \texttt{PKG-013} --- \textbf{no variance}: a narrower substitute
+        would reject values the caller's published contract permits, and a
+        wider substitute would silently accept values the published
+        contract forbids and the caller's own plan-time \texttt{ENUM-007}
+        check would have rejected as a literal. Both directions are
+        contract breaks, not just one.
+  \item \texttt{required} on the action side \textbf{MUST} imply
+        \texttt{required} on the substitute side.
+  \item Substitute inputs \textbf{MUST} have \texttt{from:} absent or
+        \texttt{context}. \texttt{from: prompt} or \texttt{from: env} in a
+        substitute is \texttt{PKG-026} --- a tool action must not covertly
+        prompt the operator or read host environment.
+  \item Argument values are bound positionally-by-name from
+        \texttt{step.tool.args} after GIS interpolation in the
+        \textbf{caller's} scope, exactly as for a process action
+        (\S\ref{sec:tool-definition-schema} states that \texttt{args:} is
+        the single vocabulary for \texttt{step.tool.args} regardless of
+        \texttt{execute.kind}). The substitute receives values, never
+        expressions. The caller's variable scope is not visible inside the
+        substitute.
+\end{itemize}
+
+\subsection{Output contract}
+\label{sec:tool-substitution-outputs}
+
+\begin{itemize}
+  \item The substitute's own \texttt{outputs:} map (its runbook-level
+        \texttt{outputs:}, resolved against its own execution context at
+        completion) \textbf{MUST} exactly match the action's \texttt{outputs:}
+        key set and types (\texttt{PKG-013}).
+  \item If either side declares \texttt{enum} on a shared
+        \texttt{outputs.<name>}, the same set-equality rule as the Input
+        contract applies (\texttt{PKG-013}, no variance): both sides
+        declare an equal member set, or neither declares one.
+  \item Every declared output \textbf{MUST} be produced on every terminal
+        path of the substitute, or declare a default. Statically
+        unproducible outputs are \texttt{PKG-027}. If the declared default
+        is on an \texttt{enum}-constrained output, it MUST itself be a
+        member (\texttt{ENUM-006}); the two checks are independent and both
+        fire where applicable.
+  \item An \texttt{enum}-constrained output's produced value is checked
+        against its member set at \textbf{production time}, when it
+        resolves at the substitute's own completion --- before it crosses
+        the caller boundary or reaches \texttt{outputs.<name>} capture at
+        the call site. A non-member value is \texttt{ENUM-009}, and the
+        output is never emitted with a warning in its place.
+  \item Captures inside the substitute are \textbf{not} visible to the
+        caller. Only declared outputs cross the boundary. The trace shows
+        the substitute's steps as nested spans (\S\ref{sec:pkg-events}),
+        so auditability is preserved without leaking scope.
+\end{itemize}
+
+\paragraph{Caller-visible capture namespace (the substituted-action output
+surface).} A substituted action's declared \texttt{outputs:} cross the
+caller boundary under a new, dedicated GCP local-capture root:
+\texttt{outputs.<name>} (design/gert/grammar/gcp.ebnf \S3.4a Substituted
+Tool Action Output Capture, \texttt{LocalOutputs}). This is a distinct
+surface from the
+process-action capture surface (\texttt{stdout}, \texttt{exit\_code},
+\texttt{json.*}, \texttt{yaml.*}): a substituted action never produces
+stdout, an exit code, or a raw byte stream, so those roots \textbf{MUST NOT}
+be used in a \texttt{capture:} block attached to a \texttt{tool} step whose
+resolved action is \texttt{execute.kind: runbook} --- doing so is
+\texttt{GCP-PARSE-001} (unknown source for this step), because the value
+simply does not exist at that path. Concretely, for the reference
+\texttt{drain-node} action (whose action declares
+\texttt{outputs: \{ drained: \{ type: boolean \} \} }), the caller writes:
+
+\begin{minted}{yaml}
+capture:
+  node_drained: outputs.drained
+\end{minted}
+
+\texttt{outputs.<name>} resolves to exactly the value the substitute's own
+\texttt{outputs.<name>.value} produced (after that runbook's own GIS
+evaluation completes), typed per the action's \texttt{outputs:} declaration.
+\texttt{<name>} \textbf{MUST} be one of the action's declared output names;
+any other name under \texttt{outputs.*} is \texttt{GCP-RESOLVE-002} (path
+segment not found). No GDP suffix beyond the output name is supported in the
+MVP, since substituted outputs are declared as scalars
+(\S\ref{sec:tool-substitution}); a future revision may extend
+\texttt{outputs.<name>} with a GDP suffix for structured output types.
+\texttt{outputs.<name>} is capturable only in the \emph{same} step's
+\texttt{capture:} block: \texttt{StepCapture} (\S\ref{sec:tool-substitution-outputs},
+design/gert/grammar/gcp.ebnf \S3.1) gains no \texttt{step.\{id\}.outputs.\{name\}}
+form in this MVP, so a peer step cannot re-read a substituted action's
+output by referencing the tool step's id; a caller that needs the value
+elsewhere in the flow must re-capture it locally (e.g.\ into a \texttt{vars:}
+entry) from the step that owns it. This is a deliberate MVP scope choice,
+not an oversight.
+
+\subsection{Replay semantics}
+\label{sec:tool-substitution-replay}
+
+Replay mode (\texttt{gert exec --mode replay --scenario <file>},
+design/gert/sections/13-evidence-tracing-resumption.tex \S Scenario File
+Format, \S Replay Semantics) executes the runbook against a recorded
+scenario file rather than the live environment: \texttt{cli} steps and
+process-backed \texttt{tool} steps have their underlying command
+invocation intercepted and answered from the scenario's \texttt{commands:}
+list (matched by \texttt{argv}) instead of forking a real subprocess, and
+\texttt{invoke} steps execute their child runbook in replay mode against
+that same scenario. Action substitution (\texttt{execute.kind: runbook})
+is resolved the same way as \texttt{invoke} for this purpose, and is
+\textbf{not} treated as an ordinary process-backed \texttt{tool} step:
+the substitute runbook is executed in replay mode against the caller's
+scenario, and each of its own \texttt{cli}/\texttt{tool} steps is matched
+individually against that scenario's \texttt{commands:} list, exactly as
+if the substitute had been reached via an \texttt{invoke} step. Governance
+rules for the substitute (\S\ref{sec:tool-substitution-governance}) are
+evaluated normally in replay; replay does not bypass governance. Likewise,
+\textbf{replay does not bypass enum validation}
+(\texttt{design/gert/sections/03-schema-vnext.tex} \S\ref{para:enum-constraint}):
+any \texttt{args.<name>}/\texttt{outputs.<name>} value answered from the
+scenario's \texttt{commands:} list is a bound value like any other and is
+checked against its declared \texttt{enum} identically to a live run; a
+scenario recording an off-enum value fails replay with the same
+\texttt{ENUM-008}/\texttt{ENUM-009} the live path would have raised. There is
+no single ``recorded response'' attached to the substituted action as a
+whole, because the action itself has no process-shaped invocation of its
+own to match --- only its nested steps do.
+
+This is directly load-bearing on \S7.6's package-drift semantics: replay
+determinism is defined by the scenario file, not by the on-disk package
+catalog (AR-TP §7.6) --- the substitute's own package/tool digests may
+have drifted since the scenario was recorded, and replay proceeds anyway
+because it never re-resolves or re-reads the substitute from the current
+catalog to decide what to execute; it only needs the substitute
+runbook's \emph{structure} (which steps exist, in what order) to know
+which scenario commands to match against, which is why a digest mismatch
+in replay mode is a non-fatal \texttt{replay/packageDrift} warning rather
+than a hard refusal (design/gert/sections/06-tool-runtime.tex \S Digest,
+Evidence, Trace, Resume; design/gert/sections/13-evidence-tracing-resumption.tex
+\S Package Resumption Contract). This is distinct from the trace-event
+replay described in design/gert/sections/07-runtime-events.tex \S
+Determinism and Replay Semantics, which re-emits a historical event
+stream for adapter/UI rendering of a completed run and performs no step
+execution of any kind; that mechanism is unaffected by substitution
+because it never invokes anything, tool-backed or otherwise.
+
+\subsection{Governance contract}
+\label{sec:tool-substitution-governance}
+
+Substitution \textbf{MUST NOT} be a privilege-escalation path. The
+substitute's effective policy is \textbf{derived}, never adopted. See
+\texttt{design/gert/sections/12-governance-policy.tex}
+\S Substitution Governance Composition for the full normative composition
+table (invariants: \texttt{require\_approval} OR, \texttt{deny\_commands}
+union, \texttt{deny\_env\_vars} union, \texttt{allow\_commands}
+\textbf{intersection}, \texttt{redact} union, caller rules evaluated before
+substitute rules with no deny-to-allow conversion, and capability closure
+never a superset).
+
+Any substitute construct whose composition would \textbf{widen} the
+caller's effective policy is \texttt{PKG-014}, raised at plan time by static
+comparison --- not at runtime. Widening detectable only at runtime is a
+design defect; this is why \texttt{allow\_commands} is intersected rather
+than merged.
+
+The tool's own \texttt{governance.allowed-environments} and
+\texttt{requires-approval} continue to gate the action as for
+process-backed actions. A \texttt{dry-run} run \textbf{MUST NOT} execute a
+substitute's side-effecting steps.
+
+\subsection{Action reachability}
+\label{sec:tool-substitution-reachability}
+
+At plan time, for every \texttt{step.tool} in every reachable step of every
+runbook in the include graph:
+
+\begin{enumerate}
+  \item \texttt{tool.name} \textbf{MUST} be bound by a \texttt{toolRefs}
+        entry in the \textbf{same runbook file} (\texttt{PLAN-010}).
+  \item \texttt{tool.action} \textbf{MUST} be declared by the bound tool
+        definition (\texttt{PKG-012}).
+  \item If the action is \texttt{execute.kind: runbook}, the substitute
+        \textbf{MUST} parse, validate, and satisfy the input/output/governance
+        contracts above (\texttt{PKG-013}/\texttt{PKG-014}/\texttt{PKG-027}).
+  \item Every name listed in \texttt{toolRefs[].actions} \textbf{MUST}
+        exist (\texttt{PKG-012}), even if no step uses it.
+\end{enumerate}
+
+Reachability uses the existing static-reachability analysis behind
+\texttt{PLAN-009}. Unreachable steps are still validated: validity is not
+conditional on execution path.
+
+\subsection{Recursion}
+
+Substitution frames are tracked as \texttt{(package, tool, action)} triples.
+A cycle is \texttt{PKG-015}, detected at plan time by DFS. The maximum
+substitution depth in the MVP is \textbf{4}; exceeding it is
+\texttt{PKG-028}. Depth is bounded because each frame multiplies the
+governance-composition surface. Substitution depth is counted separately
+from include depth, and both bounds apply independently
+(\S\ref{sec:tool-packages-includes}).
+
+% ═════════════════════════════════════════════════════════════════════════
+\section{Secure Path Resolution}
+\label{sec:tool-secure-paths}
+% ═════════════════════════════════════════════════════════════════════════
+
+These rules apply uniformly to \texttt{requires[].path},
+\texttt{exports.tools[].path}, \texttt{execute.path}, \texttt{toolRefs[].path},
+\texttt{tool-paths[]}, and include/import paths inside packages.
+
+\subsection{Resolution base per path kind}
+\label{sec:tool-path-bases}
+
+Every path kind below is resolved as
+\texttt{realpath(join(dirname(referencing\_file), p))}, checked for
+containment inside \texttt{realpath(containmentRoot)}, with
+\texttt{referencing\_file} and \texttt{containmentRoot} named per kind in
+Table~\ref{tab:tool-path-bases}. ``Package-internal'' kinds are
+containment-checked against the \textbf{package root} and a violation is
+\texttt{PKG-007} (\S\ref{sec:tool-path-containment}); ``workspace-level''
+kinds are checked against the \textbf{workspace root} only for the purpose
+of the external-root report (\texttt{PKG-W003}, \S\ref{sec:tool-path-symlinks}) and MAY legitimately resolve outside it --- they are
+never rejected merely for escaping the workspace, since they are operator
+configuration, not package content.
+
+\begin{center}\small
+\begin{tabular}{p{3.4cm}p{4.6cm}p{3.9cm}p{1.6cm}}
+\hline
+\textbf{Path kind} & \textbf{\texttt{referencing\_file}} & \textbf{\texttt{containmentRoot}} & \textbf{Class} \\
+\hline
+\texttt{requires[].path} (project scope, \texttt{.gert/config.yaml}) &
+  the workspace root itself (i.e.\ \texttt{p} is workspace-relative, not
+  relative to \texttt{.gert/}) &
+  workspace root &
+  workspace-level \\
+\texttt{requires[].path} (runbook scope) &
+  the declaring runbook file &
+  workspace root &
+  workspace-level \\
+\texttt{exports.tools[].path} &
+  \texttt{gert-package.yaml} (i.e.\ the package root) &
+  package root &
+  package-internal \\
+\texttt{execute.path} &
+  the declaring \texttt{.tool.yaml} &
+  package root (of the package that exports the declaring tool) &
+  package-internal \\
+\texttt{toolRefs[].path} (tier 4) &
+  the declaring runbook file &
+  workspace root &
+  workspace-level \\
+\texttt{tool-paths[]} &
+  the workspace root itself &
+  workspace root &
+  workspace-level \\
+Package-internal include/import &
+  the including file &
+  package root &
+  package-internal \\
+\hline
+\end{tabular}
+\captionof{table}{Resolution base and containment root per path kind.}
+\label{tab:tool-path-bases}
+\end{center}
+
+Two consequences follow directly from this table, both required to resolve
+the ambiguity in the reference example (R5) and in fixture \texttt{r23}:
+
+\begin{itemize}
+  \item \texttt{execute.path}'s \textbf{resolution base} (the declaring
+        \texttt{.tool.yaml}'s own directory) is \textbf{not necessarily the
+        same as its containment root} (the package root). A tool definition
+        nested at \texttt{tools/subdir/foo.tool.yaml} may reference
+        \texttt{execute.path: ../../runbooks/foo.yaml}: the resolution base
+        is \texttt{tools/subdir/}, the resolved path is
+        \texttt{<packageRoot>/runbooks/foo.yaml}, and containment is checked
+        against \texttt{<packageRoot>}, which it satisfies. This is why the
+        reference tool's \texttt{tools/kubectl.tool.yaml} may legitimately
+        use \texttt{execute.path: ../runbooks/drain-node.yaml}: resolved
+        against \texttt{tools/} (the file's own directory) it lands at
+        \texttt{<packageRoot>/runbooks/drain-node.yaml}, which is inside the
+        package root and therefore \textbf{not} \texttt{PKG-007}. Evaluating
+        the same literal string against the package root directly (i.e.\
+        treating \texttt{execute.path} as package-root-relative rather than
+        declaring-file-relative) would incorrectly compute
+        \texttt{<packageRoot>/../runbooks/drain-node.yaml} and reject it ---
+        that computation uses the wrong resolution base, not the wrong
+        containment root, and is not how this specification defines
+        resolution.
+  \item Runbook-scope \texttt{requires[].path} is declaring-runbook-file
+        relative, exactly like fixture \texttt{r23}'s
+        \texttt{path: ../../../schemas/examples/acme-incident-tools}
+        (resolved against
+        \texttt{design/gert/testdata/runbooks/r23-tool-package/}, three
+        levels up, landing at
+        \texttt{design/gert/schemas/examples/acme-incident-tools}). Project-scope
+        \texttt{requires[].path} is workspace-root relative, matching the
+        \texttt{./vendor/...} convention in \S\ref{sec:tool-project-config}.
+        These are two different bases for the textually identical field
+        name at two different declaration scopes, and are now stated
+        explicitly rather than left to inference.
+  \item Table~\ref{tab:tool-path-bases} classifies \texttt{toolRefs[].path}
+        as workspace-level (containment root = workspace root) because an
+        \textbf{ordinary, top-level} runbook may point it at any tier-4
+        \texttt{.tool.yaml} on disk. When the \textbf{declaring runbook file
+        is itself package-internal} (i.e.\ it is reached only via a
+        package's \texttt{exports.tools[].path} or an \texttt{execute.path},
+        never run directly) --- as with the reference substitute
+        \texttt{runbooks/drain-node.yaml} --- the blanket package rule of
+        \S\ref{sec:tool-packages-includes} (``packages MUST NOT contain
+        runbooks that include files outside the package root'') overrides
+        the general classification: that file's own
+        \texttt{toolRefs[].path} and \texttt{requires[].path} entries are
+        package-internal for containment purposes, checked against the
+        package root, not the workspace root. This is why
+        \texttt{drain-node.yaml} binds its own \texttt{kubectl} reference
+        via \texttt{toolRefs[].path: ../tools/kubectl.tool.yaml} (a sibling
+        export inside the same package) rather than a self-referential
+        \texttt{requires:} entry naming its own package --- both are valid
+        under this rule, and the direct-path form avoids the conceptually
+        circular case of a package requiring itself.
+\end{itemize}
+
+\subsection{Syntax rules}
+
+Checked \textbf{before} touching the filesystem:
+
+\begin{enumerate}
+  \item The separator in authored artefacts is \texttt{/}. A backslash in an
+        authored path is \texttt{PKG-007} --- not normalised, because
+        \texttt{a\textbackslash{}b} is a legal single filename on POSIX.
+  \item Absolute paths are rejected in \textbf{package-internal} references
+        (\texttt{exports}, \texttt{execute}, package-internal includes):
+        \texttt{PKG-007}. Absolute paths are permitted in
+        \texttt{requires[].path} and \texttt{tool-paths[]} (workspace-level
+        operator configuration) but are then subject to \S\ref{sec:tool-path-containment}.
+  \item Rejected everywhere: drive-relative (\texttt{C:foo}), UNC
+        (\texttt{\textbackslash{}\textbackslash{}host\textbackslash{}share}),
+        extended-length (\texttt{\textbackslash{}\textbackslash{}?\textbackslash{}},
+        \texttt{\textbackslash{}\textbackslash{}.\textbackslash{}}), device
+        namespaces, \texttt{\textasciitilde{}} expansion, environment-variable
+        expansion, URI schemes, NUL and control characters, and any segment
+        equal to \texttt{.} or \texttt{..} \textbf{after} normalisation that
+        escapes the root.
+  \item Rejected filenames (all platforms, for portability): reserved DOS
+        names \texttt{CON PRN AUX NUL COM1--COM9 LPT1--LPT9} with or without
+        extension, and any segment with a trailing dot or trailing space
+        (\texttt{PKG-018}).
+  \item Paths are NFC-normalised for comparison. Two exports whose paths
+        differ only by Unicode normalisation form, or only by ASCII case,
+        are \texttt{PKG-018} --- this makes a package that works on Linux
+        but breaks on Windows/macOS fail at authoring time, on every
+        platform.
+\end{enumerate}
+
+\subsection{Containment rule}
+\label{sec:tool-path-containment}
+
+For every package-internal reference: \texttt{realpath(join(referencing\_dir, p))}
+\textbf{MUST} be lexically inside \texttt{realpath(containmentRoot)}, where
+\texttt{referencing\_dir} and \texttt{containmentRoot} are the values named
+per kind in Table~\ref{tab:tool-path-bases}
+(\S\ref{sec:tool-path-bases}), compared segment-wise on NFC-normalised,
+case-folded segments when the host filesystem is case-insensitive, and
+exactly otherwise. Violation is \texttt{PKG-007}.
+
+Containment is checked on the \textbf{resolved} path, after link
+resolution --- checking the lexical path only is the classic bypass.
+
+For \textbf{workspace-level} kinds (\texttt{requires[].path} at either
+scope, \texttt{toolRefs[].path} in an ordinary top-level runbook, and
+\texttt{tool-paths[]}) the same computation is performed against the
+workspace root, but the outcome is a \textbf{report, not a rejection}: a
+resolved path outside the workspace root is recorded as an external root
+and warned as \texttt{PKG-W003} (\S\ref{sec:tool-path-symlinks}, rule 6).
+\texttt{PKG-007} \textbf{MUST NOT} be raised for a workspace-root escape by
+any workspace-level kind; for those kinds \texttt{PKG-007} remains reachable
+only via the syntax rules above. If the escaping target does not contain a
+resolvable package, the resulting error is \texttt{PKG-001}, not
+\texttt{PKG-007}.
+
+\subsection{Symlinks, junctions, reparse points}
+\label{sec:tool-path-symlinks}
+
+\begin{enumerate}
+  \item Symlinks are \textbf{resolved, then containment-checked}. A link
+        whose final target is inside the root is allowed. A link whose
+        final target is outside the root is \texttt{PKG-008} --- an
+        \textbf{error}, never a silent skip, because silent skipping
+        produces a catalog that differs between machines.
+  \item Windows directory junctions, mount points, and any
+        \texttt{IO\_REPARSE\_TAG\_*} reparse point are treated exactly as
+        symlinks. AppExecLink and OneDrive placeholder reparse points are
+        \texttt{PKG-008}.
+  \item Link chains are bounded at \textbf{8} hops; exceeding it is
+        \texttt{PKG-008}. Cycles are \texttt{PKG-008}.
+  \item Resolution \textbf{MUST} be performed with a TOCTOU-resistant
+        sequence: resolve once, then read via the resolved handle/path; the
+        digest (\S\ref{sec:tool-package-digest}) is computed over the same
+        resolved bytes used for loading.
+  \item Hard links are not detectable and are out of scope; the digest
+        covers content, which is the property that matters.
+  \item \texttt{requires[].path} and \texttt{tool-paths[]} that resolve
+        outside the workspace are permitted but \textbf{MUST} be recorded in
+        the lock and trace in the \texttt{external:sha256:...} form
+        (\S\ref{sec:tool-package-lock}), and \texttt{gert verify}
+        \textbf{MUST} report them as a distinct ``external root'' finding
+        (\texttt{PKG-W003}).
+\end{enumerate}
+
+% ═════════════════════════════════════════════════════════════════════════
+\section{Digest, Evidence, Trace, Resume}
+\label{sec:tool-package-digest}
+% ═════════════════════════════════════════════════════════════════════════
+
+\subsection{File digest}
+
+\texttt{sha256} over the file's \textbf{raw bytes}. No line-ending
+normalisation, no whitespace normalisation, no YAML canonicalisation.
+Encoded as \texttt{sha256:} followed by 64 lowercase hex characters.
+
+Any normalisation is a second parser, and a second parser is a second bug.
+The Windows CRLF hazard is handled by a documented \texttt{.gitattributes}
+recommendation (\texttt{*.tool.yaml text eol=lf}, \texttt{gert-package.yaml
+text eol=lf}), not by a normalisation rule.
+
+\subsection{Package digest (deterministic, order-free)}
+
+Given package root $R$, the digest set is: \texttt{gert-package.yaml}, every
+\texttt{exports.tools[].path}, and every file transitively referenced by an
+exported tool via \texttt{execute.path} and package-internal includes. Files
+present in the package but not in this closure are \textbf{not} hashed ---
+the digest covers the API surface, not incidental contents.
+
+\begin{minted}{text}
+for each file f in closure:
+    line(f) = hex(sha256(bytes(f))) + "  " + relpath_posix_nfc(f, R)
+sort lines ascending by UTF-8 byte order of the whole line
+blob = concat(line + "\n" for each sorted line)
+packageDigest = "sha256:" + hex(sha256(blob))
+\end{minted}
+
+Two spaces separate the digest and the path (the coreutils
+\texttt{sha256sum} convention), so the blob is independently reproducible
+with standard tools.
+
+\subsection{Catalog digest}
+
+Same construction over lines of
+\texttt{qualifiedName + "  " + packageDigestOrFileDigest + "  " + tierNumber},
+sorted ascending. \texttt{catalogDigest} is the single value that proves two
+runs saw the same tool universe.
+
+\subsection{Trace, evidence, and resume}
+
+New trace events (\texttt{package/resolved}, \texttt{catalog/frozen},
+\texttt{tool/substituted}), the resume refusal contract, and the replay
+non-fatal drift contract are specified normatively in
+\texttt{design/gert/sections/07-runtime-events.tex}
+\S Package and Substitution Events and
+\texttt{design/gert/sections/13-evidence-tracing-resumption.tex}
+\S Package Resumption Contract. In summary:
+
+\begin{itemize}
+  \item Package roots, digests, and the catalog digest are part of the run
+        manifest and are covered by the existing HMAC trace chaining
+        (\S\ref{sec:supply-chain}). Package paths are subject to the
+        standard redaction pipeline; the \texttt{external:sha256:} form is
+        applied \emph{before} redaction, not after.
+  \item On \texttt{gert exec --resume}, a package or catalog digest mismatch
+        is a hard refusal (\texttt{PKG-009}); \texttt{--allow-package-drift}
+        overrides and emits an auditable
+        \texttt{governance/packageDriftAccepted} event.
+  \item In replay mode, a digest mismatch is non-fatal: it emits
+        \texttt{replay/packageDrift} and replay proceeds, because replay
+        determinism is defined by the scenario file, not by the on-disk
+        catalog.
+\end{itemize}
+
+% ═════════════════════════════════════════════════════════════════════════
+\section{Includes, Lexical Scoping, and Global Package Set}
+\label{sec:tool-packages-includes}
+% ═════════════════════════════════════════════════════════════════════════
+
+\textbf{Tool name binding is lexically scoped to the runbook file that
+declares it.} An included child runbook does \textbf{NOT} inherit the
+parent's \texttt{toolRefs}. If a child uses \texttt{kubectl}, the child
+declares \texttt{kubectl} in its own \texttt{toolRefs}. This is a decisive,
+intentional call: dynamic (inherited) scoping would make a child runbook's
+meaning depend on who included it, which destroys both composability and
+static reachability analysis. See
+\texttt{design/gert/sections/02-architecture.tex}
+\S Lexical Tool-Name Scoping for the executor-level statement of this rule.
+
+Packages are \textbf{globally resolved, per run, at the root runbook}. The
+effective package set is the union of the project-level \texttt{requires:}
+and the runbook-level \texttt{requires:} of \emph{every} runbook in the
+include/import closure, computed at plan time. Constraints for the same
+package name across the closure are intersected
+(\S\ref{sec:tool-bindings}); an empty intersection is \texttt{PKG-002}.
+Consequently, a package is loaded once per run, at one version, with one
+digest --- two runbooks in one run cannot use two versions of the same
+package. This is a deliberate MVP restriction; multi-version coexistence
+requires a tier-aware qualified namespace and is deferred
+(\S\ref{sec:tool-packages-nongoals}).
+
+The include closure \textbf{MUST} be fully enumerable at plan time. Lazy
+includes (\texttt{expand: lazy}) are still \emph{resolved and
+package-analysed} at plan time even though they are \emph{expanded} at run
+time. A lazily-expanded include that would introduce a package not in the
+frozen set is \texttt{PKG-017}. Packages \textbf{MUST NOT} contain runbooks
+that include files outside the package root (\S\ref{sec:tool-path-containment});
+a package's runbooks are self-contained. \texttt{imports:} (alias$\to$path)
+remains a runbook-local alias map for child runbooks and is unrelated to
+packages; it \textbf{MUST NOT} be repurposed for package aliasing.
+Alias-based package naming is out of scope for the MVP. Maximum include
+depth is unchanged; substitution depth (\S\ref{sec:tool-substitution}) is
+counted separately and both bounds apply independently.
+
+% ═════════════════════════════════════════════════════════════════════════
+\section{Non-Goals}
+\label{sec:tool-packages-nongoals}
+% ═════════════════════════════════════════════════════════════════════════
+
+The following are explicit non-goals of this MVP. GERT is pre-1.0 with no
+external consumers (ratified OQ-M4, ``just ship''); the MVP pins determinism
+and safety, not distribution.
+
+\begin{itemize}
+  \item \textbf{Remote catalogs and registries.} All packages are resolved
+        from a local, workspace-relative or absolute filesystem path
+        (\S\ref{sec:tool-project-config}). There is no network fetch, no
+        registry protocol, and no package index.
+  \item \textbf{Publishing / packaging workflows.} There is no
+        \texttt{gert publish}, no package build step, and no artefact
+        upload path.
+  \item \textbf{Transitive package dependencies.} A package's
+        \texttt{dependencies:} field \textbf{MUST} be absent or empty
+        (\texttt{PKG-016}). Consumers flatten any indirect tool dependency
+        into their own \texttt{requires:} list.
+  \item \textbf{Tool aliases.} \texttt{toolRefs[].alias} is removed
+        (\texttt{PKG-021}); \texttt{imports:} alias maps are unrelated to
+        packages and are not repurposed for them.
+  \item \textbf{Action allowlists as an enforcement mechanism.}
+        \texttt{toolRefs[].actions} is documentation and a plan-time
+        reachability assertion only (\texttt{PKG-W001}); it does not gate
+        invocation.
+  \item \textbf{Packaging of non-tool assets.} Docs, dashboards, policy
+        bundles, and binaries-as-payload are not describable by
+        \texttt{gert-package.yaml} in the MVP.
+  \item \textbf{Multi-version coexistence.} A single run resolves at most
+        one version of a given package (\S\ref{sec:tool-packages-includes}).
+  \item \textbf{Enum member sets in the package lock or any digest beyond
+        file bytes.} A ``mock package'' is not a spec concept --- it is an
+        ordinary package bound via \texttt{.gert/config.yaml}
+        \texttt{requires[].path} or a \texttt{--package-map} override.
+        \texttt{enum} validation is binding-independent and applies
+        identically regardless of which binding is resolved
+        (\S\ref{sec:tool-substitution}); a mock declaring a different
+        \texttt{enum} set than the real package for the same action is an
+        authoring error enforced by a required conformance vector class
+        (\texttt{ENUM-MOCK}, \texttt{design/gert/conformance/tv-enum.yaml}),
+        \textbf{not} by a runtime signature comparison, a package lock
+        field, or new digest machinery: an enum edit inside a package
+        already changes the export digest and is already \texttt{PKG-009}.
+\end{itemize}
+
+\subsection{Compatibility: No Shims, One Intentional Breaking Change}
+\label{sec:tool-packages-compat}
+
+Per AR-TP-10, GERT is pre-1.0 and this specification introduces \textbf{no
+compatibility shims}: there is no dual-read of \texttt{toolPackages:} and
+\texttt{requires:}, no silent \texttt{alias} tolerance, and no legacy
+resolution-order fallback path. \texttt{source} and \texttt{actions} remain
+schema-valid only per the deprecation schedule in
+\S\ref{sec:tool-bindings}; they carry no special-case resolution behaviour.
+
+Exactly one behaviour change in this specification is intentionally
+breaking rather than additive: \textbf{undeclared cross-tier shadowing,
+which previously resolved silently by ``first match wins'' /
+``later entries win'' precedence, is now \texttt{PKG-022}, a hard plan-time
+error} (\S\ref{sec:tool-precedence}). A runbook that previously relied on
+one tier's tool silently shadowing another's same-named tool without an
+explicit \texttt{toolRefs:} disambiguation will now fail to plan. This is a
+deliberate correctness fix, not an oversight: silent shadowing is exactly
+the class of non-determinism this MVP exists to eliminate, and pre-1.0 is
+the only opportunity to remove it without a deprecation window.
+
 \section{Tool Versioning}
 \label{sec:tool-versioning}
 
-Tool definitions carry a \texttt{meta.version} field.  When multiple
-definitions for the same tool name are present (e.g., from a required package
-and from a workspace override), the host selects by resolution order
-(Section~\ref{sec:tool-discovery}), not by version number.  Explicit version
-pinning is supported via the runbook's \texttt{requires:} block:
+Tool definitions carry a \texttt{meta.version} field, validated as strict
+SemVer 2.0.0 (\S\ref{sec:tool-version-grammar}). When multiple tool
+definitions could in principle share the same name, the catalog's tier and
+collision rules (\S\ref{sec:tool-tiers}, \S\ref{sec:tool-precedence}) ---
+not version comparison --- determine which definition is bound to that
+name; there is no ``highest version wins'' fallback. Explicit version
+constraints are declared via \texttt{requires:}
+(\S\ref{sec:tool-bindings}) and, optionally, per tool reference via
+\texttt{toolRefs[].version} (\S\ref{sec:tool-runbook-binding}):
 
 \begin{minted}{yaml}
 requires:
-  - package: github.com/acme/gert-tools
-    version: ">=1.2.0 <2.0.0"
+  - package: acme.incident-tools
+    version: "^1.4.0"
 \end{minted}

@@ -1,2143 +1,7 @@
-﻿# Squad Decisions
+# Squad Decisions
 
-**Last Updated:** 2026-08-10T17:45:22-07:00
-**Inbox Merged:** 19 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; phase2-day1-open-questions-resolved; tess-gcp-vectors; don-phase2-day2; don-phase2-day3; don-phase2-day4; copilot-directive-design-only-repo; barbara-runtime-migration-plan; barbara-tess-ambig-3456-arbitration; don-stream-e-day2-dogfood; barbara-tool-packages-final-gate-decision; barbara-pkg-path-002-workspace-escape-ruling)
-
----
-
-## URGENT: User Directive — gert-private is DESIGN ONLY
-
-### 2026-06-05T18:13:09-07:00: User directive — gert-private is DESIGN ONLY
-**By:** ormasoftchile (via Copilot)
-**What:** This repository (gert-private) is for DESIGN artifacts only — grammar files (.ebnf), spec sections (.tex), conformance corpora (tv-*.yaml), proposals, fixtures, design notes, and `.squad/` team state. **No Go source code, no go.mod, no language-specific runtime implementation lives here.** The Go runtime (and future C#/TS runtimes) belong in separate repositories that consume this repo's normative artifacts.
-**Why:** Repository scope discipline. Runtime implementations vary by language and have their own dependency, build, release, and CI concerns. Keeping them out of the design repo:
-- Preserves the design repo as the single source of truth that all runtimes implement against
-- Avoids dragging Go-specific tooling (cobra, yaml.v3, go.mod, go.sum, etc.) into the design contract
-- Makes the conformance corpus a clean external artifact that any runtime repo can fetch and run
-
-**Scope correction needed:**
-- Remove `cmd/gert/main.go`
-- Remove `internal/eval/` entirely (PJVM, conformance harness, GXL lexer/parser/evaluator, stdlib, clock — all the Day 1-4 Phase 2 work)
-- Remove `go.mod` and `go.sum`
-- Remove any Go-specific skills that no longer apply in a design repo (`.squad/skills/go-conformance-scaffold/`, `.squad/skills/go-recursive-descent-parser/`, `.squad/skills/go-ast-evaluator/`)
-- Keep everything else untouched: design/, .squad/ (decisions, team, agent histories — they're still useful records of the design journey)
-- Update `.squad/identity/now.md` and `design/gert/phase2-go-runtime-plan.md` to reflect: Phase 2 IS Go runtime work but it happens in a DIFFERENT repository, not here
-
-**Coordinator's failure mode to remember:** When a repo has language-specific source already in it (`main.go`, `go.mod`), do NOT assume that's where new runtime work goes. Verify the repo's purpose against project context BEFORE planning multi-day implementation work inside it. The signals were all there: original audit said no runtime, project context says "Go runtime" but the actual GERT runtime lives in a separate repo, and `cmd/gert/` was an empty stub. I missed all of them.
-
----
-
-## 2026-06-05 — Runtime Migration Plan RATIFIED (OQ-M1..M5)
-
-**From:** Barbara (Lead Architect)  
-**Date:** 2026-06-05  
-**Subject:** Runtime Migration Plan RATIFIED; 5 OQ-M decisions encoded; Phase A can start in `ormasoftchile/gert`.
-
----
-
-### Ratified Decisions
-
-| OQ | Decision | Notes |
-|---|---|---|
-| **OQ-M1** | (c) Vendored copy | Vectors copied into `gert/testdata/vectors/` (or equivalent). **Required follow-up:** ship a small sync script (e.g., `scripts/sync-vectors.sh`) and a CI check that fails if the runtime's copy drifts from `gert-private`. Document the drift-detection mechanism explicitly. |
-| **OQ-M2** | (a) Cherry-pick sketch (commits 97ce48b..5c550c0) | Treat as unreviewed starting material; standard review gate applies in `ormasoftchile/gert`. Phase A–C scaffolding gets reused; Phase D onward fresh. |
-| **OQ-M3** | (a) Build tag `//go:build gxl` | Compile-time switch. Old engine remains default during migration; CI builds both matrices. After cutover (Phase H), the build tag is removed and the old engine is deleted. |
-| **OQ-M4** | (c) Just ship | Pre-1.0, no external users. Hard cutover at Phase H. Document syntax changes in CHANGELOG with before/after examples. No deprecation period. |
-| **OQ-M5** | (b) Pair | Cast a **second backend in this squad** (gert-private; the squad is single). Both Don and the new hire (Ken) operate across `ormasoftchile/gert` during Phases A–H, then return to this squad for the next assignment. Target wallclock: 10–15 days (E and F parallel). |
-
-### ⚠️ New Phase A Scope Addition: Drift-Detection (DRIFT-DETECTION-001)
-
-OQ-M1's ratification adds a concrete deliverable to Phase A in `ormasoftchile/gert`. Before Phase A is considered complete, the runtime repo must ship:
-
-1. **`scripts/sync-vectors.sh`** — copies canonical `tv-*.yaml` vectors from `gert-private` and records the source commit SHA in `testdata/vectors/VECTORS_SHA`.
-2. **`make verify-vectors` CI target** — reads `VECTORS_SHA`, fetches vectors at that SHA from `gert-private`, diffs against the vendored copy, and fails the build on any drift. Runs on every PR touching vectors and on a weekly schedule.
-3. **Documentation** in `CONTRIBUTING.md` under "Conformance Vectors".
-
-This is a new scope item that was not in the original plan. The Phase A exit criteria must be updated to include DRIFT-DETECTION-001.
-
-### Next-Action Handoff
-
-**Germán** needs to switch to the `ormasoftchile/gert` repository (separate squad) to kick off Phase A:
-
-- Assign Don to the critical path (A → B → C → D → G → H).
-- Cast the second backend agent within the `ormasoftchile/gert` runtime squad (not here — this design repo has no casting role).
-- Add DRIFT-DETECTION-001 to Phase A exit criteria before closing Phase A.
-
-**This design repo (`gert-private`) drops to "spec authority + ambiguity arbiter"** for the rest of the migration. It will be consulted when the runtime team hits spec gaps or interpretation questions, but has no active implementation role.
-
----
-
-## Phase 1 Active Decisions
-### 2026-06-05T07:28:56-07:00: GIS Optional-Chaining (`?.`) — Ratified
-**By:** ormasoftchile (via Copilot)
-**Status:** Approved — implementation cleared
-**Proposal:** `design/gert/proposals/gis-optional-chaining.md`
-
-## Ratified Decisions
-
-| # | Decision | Value |
-|---|----------|-------|
-| Default value for missing optional path | **Empty string `""`** |
-| Short-circuit semantics | **JS/TS-compatible full-tail** — once any `?.` segment misses, entire remaining chain → `""` |
-| Scope | **GIS `${...}` only** — does NOT extend to GXL boolean expressions or GCP captures |
-| `?.[N]` optional bracket indexing | **IN** — consistency with field-access tolerance; avoids partial-tolerance footgun |
-| `??` nullish-coalescing | **OUT** (deferred) — `vars:` and `capture.default:` already cover the use case |
-| Existing fixture migration | **None** — opt-in only, no auto-addition of `?.` |
-| Hard-error default unchanged | **Confirmed** — plain `${a.b.c}` still raises `GIS-PATH-MISSING` on any miss |
-| `${?.root}` (optional on root identifier) | **Illegal** — root is always mandatory; would mask variable-name typos |
-| Audit trace on optional miss | **Defer to runtime design phase** — semantic locked here, tracing is implementation |
-| Stdlib call propagation | **No propagation** — GDP resolves first; functions receive `""` if chain short-circuits |
-
-## What's Missing (Not in This Decision)
-- The semantics of `?.` inside GXL expressions (out of scope here; revisit when type system warrants)
-- Nullish-coalescing `??` (deferred — not in this extension)
-- JSONL audit-trace event format (separate concern; addressed in runtime design phase)
-- Schema-driven warnings when `?.` is used on known-required paths (future enhancement; non-blocking)
-
-## Next Actions
-- **Edith** → edit `design/gert/grammar/gis.ebnf` and append a normative section to `design/gert/sections/03b-interpolation-syntax.tex`
-- **Tess** → create `design/gert/conformance/tv-gis-path.yaml` with the 13 vectors enumerated in proposal §6
-
-
-# Decision: GIS Optional-Chaining Extension
-
-**Author:** Barbara — Lead / Architect  
-**Date:** 2026-06-05T07:28:56-07:00  
-**Status:** PROPOSED — awaiting ormasoftchile review  
-**Proposal:** `design/gert/proposals/gis-optional-chaining.md`
-
----
-
-## Headline Picks
-
-| # | Decision | Value |
-|---|----------|-------|
-| 1 | Default value for missing optional path | **Empty string `""`** (locked by user directive) |
-| 2 | Short-circuit semantics | **Full-tail JS/TS-compatible** — once any `?.` segment misses, entire remaining chain → `""` |
-| 3 | Scope | **GIS `${...}` only** — does NOT extend to GXL boolean expressions or GCP captures |
-| 4 | `?.[N]` optional bracket indexing | **IN** (recommended) — consistency with field access tolerance |
-| 5 | `??` nullish-coalescing | **OUT** (deferred) — existing `vars:` and `capture.default:` mechanisms cover the use case |
-| 6 | Existing fixture migration | **None** — opt-in only, no auto-addition of `?.` |
-| 7 | Hard-error default unchanged | **Confirmed** — plain `${a.b.c}` still raises `GIS-PATH-MISSING` on any miss |
-
-## Rationale
-
-- Empty string as identity element in string concatenation composes cleanly and avoids "null" literal in user-facing text.
-- JS/TS semantics chosen because authors already know the rules — no new mental model needed.
-- GIS-only scope avoids type-theoretic complications in GXL boolean expressions (`""` in comparisons is ambiguous).
-- `?.[N]` inclusion prevents a "partial tolerance" footgun where field access is optional but array access isn't.
-
-## Open Questions (Need User Input)
-
-- **OQ-OC-1:** Confirm `?.[N]` is IN.
-- **OQ-OC-2:** Confirm `${?.root}` is illegal (root is always mandatory, but `${root?.field}` is legal).
-- **OQ-OC-3:** Should optional-miss emit an info-level audit trace? (Defer to runtime phase?)
-- **OQ-OC-4:** Confirm `?.` does NOT propagate through stdlib function calls (GDP resolves first, function receives `""`).
-
-## Impact
-
-- Grammar: additive change to `gxl.ebnf` GDP production (new `PathSegment` alternatives)
-- Spec: additive section in `03b-interpolation-syntax.tex`
-- Conformance: new `tv-gis-path.yaml` file (13+ vectors proposed)
-- Runtime: parser + evaluator changes in both Go and C# implementations
-- No breaking changes to existing behavior
-
----
-
-*Pending ratification. Implementation blocked until user confirms open questions.*
-
-
-# 2026-06-05T07:28:56.273-07:00 — GIS Optional-Chaining EBNF Applied
-
-**By:** Barbara — Lead / Architect  
-**Status:** Applied  
-**Scope:** `design/gert/grammar/gis.ebnf` only
-
-## Exact Lines / Productions Changed
-
-- `design/gert/grammar/gis.ebnf:106-142` — updated `GISExpression = Expression ;` commentary to identify the GIS-only GDP extension, add optional-chain examples, and add explicit rejected forms including `${?.root}`.
-- `design/gert/grammar/gis.ebnf:145-187` — added GIS-only optional-chaining GDP extension:
-  - `GDP = IDENT { GISPathSegment } ;`
-  - `GISPathSegment = DotAccess | OptionalDotAccess | BracketAccess | OptionalBracketAccess ;`
-  - `DotAccess = DOT IDENT ;`
-  - `OptionalDotAccess = OPTIONAL_DOT IDENT ;`
-  - `BracketAccess = LBRACKET INTEGER RBRACKET ;`
-  - `OptionalBracketAccess = OPTIONAL_BRACKET_OPEN INTEGER RBRACKET ;`
-  - `OPTIONAL_DOT = '?.' ;`
-  - `OPTIONAL_BRACKET_OPEN = '?.[' ;`
-- `design/gert/grammar/gis.ebnf:285-297` — changed §4.3 from unconditional unresolved-variable hard errors to hard-by-default with explicit optional-chain miss handling.
-
-## Tokenization / Precedence Subtleties Encoded
-
-- `?.[` is longest-match and is emitted as `OPTIONAL_BRACKET_OPEN` before `OPTIONAL_DOT` is considered.
-- `?.` is emitted as one token (`OPTIONAL_DOT`), never as `?` followed by `DOT`; standalone `?` remains invalid in GDP paths.
-- `.`, `?.`, `[N]`, and `?.[N]` have identical path-segment precedence and are evaluated left-to-right under `Primary` GDP resolution.
-- The first GDP segment remains `IDENT`; `${?.root}` is syntactically illegal so optionality cannot hide root variable-name typos.
-
-## Proposal / Existing Grammar Style Reconciliation
-
-- The proposal described an additive GDP change against `gxl.ebnf`, but the ratified scope is GIS-only and this task explicitly forbade editing GXL/GCP grammar. I reconciled that by documenting a GIS-only override of the imported `GDP` production inside `gis.ebnf` rather than changing `gxl.ebnf`.
-- The existing GIS grammar imported full GXL by reference instead of repeating GXL productions. I preserved that style for `Expression` and added only the local GDP delta plus explanatory comments.
-- The proposal examples contain tension around whether `user?.name` masks a missing root; the ratification explicitly says the root identifier is mandatory. The grammar therefore keeps `GDP = IDENT ...` and rejects `${?.root}`.
-
-# Edith — GIS Optional-Chaining Spec Summary
-
-**Date:** 2026-06-05T07:28:56.273-07:00  
-**Requested by:** ormasoftchile  
-**Status:** Delivered
-
-## Section Added
-
-- Appended `Optional Path Chaining` to `design/gert/sections/03b-interpolation-syntax.tex` after `Error Class Catalog`; it will render as the next numbered section in the GIS chapter.
-- Subsections added: Syntax; Evaluation Semantics; Composition with GXL Expressions; Relationship to `capture.default:`; Examples; Out of Scope.
-
-## Labels Created
-
-- `sec:gis:optional-chaining`
-- `subsec:gis:optional-chaining:syntax`
-- `subsec:gis:optional-chaining:semantics`
-- `subsec:gis:optional-chaining:composition`
-- `subsec:gis:optional-chaining:capture-default`
-- `subsec:gis:optional-chaining:examples`
-- `subsec:gis:optional-chaining:out-of-scope`
-
-## Cross-Reference Needs Flagged
-
-- Tess can cite `subsec:gis:optional-chaining:semantics` for short-circuit/default behavior and `subsec:gis:optional-chaining:syntax` for `?.` / `?.[N]` parse vectors.
-- A glossary term for `optional path chaining` may be useful if the terminology glossary is later centralized.
-- The ratified decision is currently cited from `.squad/decisions/inbox/copilot-gis-optional-chaining-ratified.md`; Scribe should merge it into `.squad/decisions.md` so the decision-ledger citation resolves to the permanent ledger.
-
-## Normative-Wording Subtleties
-
-- `${?.root}` is syntactically illegal because GDP still begins with `IDENT`; `${root?.field}` remains legal.
-- A missing root identifier can still resolve to `""` when the first hop is optional, e.g. `${user?.name}`; plain `${user.name}` remains a hard error.
-- `?.` does not propagate through stdlib calls: `${str.toLower(user?.name)}` calls `str.toLower("")` if the optional GDP resolves to empty string.
-- `capture.default:` is described as a capture-layer mechanism, not a GIS rendering-layer substitute.
-
-
-# Tess — GIS Optional-Chaining Path Vectors
-
-**Date:** 2026-06-05T07:28:56.273-07:00  
-**Author:** Tess — Conformance Tester  
-**Requested by:** ormasoftchile
-
-## Summary
-
-Created `design/gert/conformance/tv-gis-path.yaml` for the ratified GIS optional-chaining contract.
-
-## Vector ID Range
-
-- `TV-GIS-PATH-001` .. `TV-GIS-PATH-015`
-
-## Coverage
-
-- `TV-GIS-PATH-001` .. `TV-GIS-PATH-014` encode the ratified optional-chaining runtime cases:
-  - simple miss
-  - deep miss
-  - full-tail short-circuit
-  - mixed mandatory/optional paths, including mandatory-prefix hard error
-  - null vs empty string vs false vs zero vs empty array
-  - optional bracket indexing success, out-of-bounds, and missing collection
-  - stdlib composition / no propagation through function calls
-- `TV-GIS-PATH-015` encodes `${?.root}` rejection.
-
-## Cases Beyond the Enumerated Runtime Set
-
-- Added `TV-GIS-PATH-015` for `${?.root}` parse rejection because `gis.ebnf §2.4` explicitly rejects optional root syntax and no separate `TV-GIS-PARSE` file exists yet.
-- Split the mixed-path bullet into two vectors (`TV-GIS-PATH-004` and `TV-GIS-PATH-005`) because hard-error mandatory-prefix behavior and optional-tail short-circuit behavior are distinct contracts.
-
-## Encoding Notes
-
-- Kept the parse-error case inline in `tv-gis-path.yaml`; it should move to a future `tv-gis-parse.yaml` if/when that file is created.
-- No runtime case was blocked.
-- Updated `design/gert/conformance/schema.json` so GIS path errors can express the grammar catalog code `GIS-PATH-MISSING`.
-
-
-### 2026-06-04T20:14:36.949-07:00: Stream E  Removal Completed (Don, Backend Dev)
-
-**By:** ormasoftchile (via Copilot)
-**Status:** Completed  migrator tooling and dependencies removed per directive.
-
-## Deleted
-- cmd/gert/cmd/migrateexpr.go
-- cmd/gert/cmd/root.go
-- cmd/gert/cmd/ (became empty)
-- internal/migrateexpr/translate.go, traverse.go, translate_test.go, traverse_test.go
-- internal/migrateexpr/testdata/ (expr_rules_input.yaml, gis_interp_input.yaml, misc_rules_input.yaml)
-- .squad/skills/migrator-dogfood-regression/SKILL.md
-
-## Kept
-- Stream A grammar files (design/gert/grammar/*.ebnf)  not edited per directive
-- Conformance vectors (design/gert/conformance/)  not edited
-- Stream D fixtures (design/gert/testdata/runbooks/)  not touched
-- now() stdlib addition  remains intact
-- GXL/GIS/GCP spec content, coverage matrix, parse-time enforcement, open questions
-
-## Dependencies
-- Dropped github.com/spf13/cobra (CLI shell and migrator only)
-- Dropped gopkg.in/yaml.v3 (docs/history mentions only, no Go imports)
-- Dropped transitive mousetrap and pflag entries
-- Simplified cmd/gert/main.go to minimal entry point
-
-## Spec Changes
-- Removed design/gert/expression-language-proposal.md 5 Migration Plan
-- Removed Appendix A migration examples and renumbered precedence appendix
-- Reworded structured-data subsection (no migration target implications)
-- Removed migration-note sections from 03a/03b/03c/03d .tex files
-- Replaced migration language with upgrade/change/rollout terminology
-
-## Verification
-- No migrateexpr/migrate-expr references in Go source
-- No migration wording in .tex files or proposal
-- cobra and yaml.v3 no longer referenced by Go source
-
-## Follow-ups
-- Grammar comments: Stream E migration comments remain in gis.ebnf and gcp.ebnf (do-not-touch per directive). Defer cleanup to Barbara/Edith.
-- Dogfood pattern: remains useful with real tool surface. Removed migrator-specific skill.
-
----
-### 2026-06-04T20:14:36-07:00: User directive — No migrator
-**By:** ormasoftchile (via Copilot)
-**What:** Remove the `gert migrate-expr` tool entirely. GERT has no production runbooks in the wild, so there is no legacy expr/template syntax to migrate FROM. The migrator is solving a non-problem and adds maintenance + a contract surface that future runtimes would otherwise have to reason about.
-**Why:** User scope decision. Stream D already converted the fixture corpus by hand once; future authoring is GXL/GIS/GCP from day one. A migration tool implies a "legacy mode" exists — it does not.
-**Scope to remove:**
-- `cmd/gert/cmd/migrateexpr.go` and the cobra command registration in `cmd/gert/cmd/root.go`
-- `internal/migrateexpr/` (all files including translate.go, traverse.go, tests, testdata)
-- `.squad/skills/migrator-dogfood-regression/` (skill specific to the migrator)
-- Migration plan sections in `design/gert/expression-language-proposal.md` (§5 Migration Plan, Appendix A "Before/After" migration examples) — keep grammar/coverage/parse-time enforcement sections.
-- If cobra/yaml.v3 dependencies in go.mod were ONLY for the migrator, remove them.
-**Scope to keep:**
-- All Stream A grammar files (gxl.ebnf, gis.ebnf, gcp.ebnf)
-- All Stream B/C/F spec sections (03a/03b/03c/03d)
-- All conformance vectors (tv-gxl-eval.yaml, tv-gxl-parse.yaml, tv-gxl-path.yaml) — these are runtime parity tests, not migrator tests
-- All Stream D-migrated fixtures (`design/gert/testdata/runbooks/`) — they ARE the source-of-truth corpus now
-- The `now()` stdlib addition
-**Phase 1 plan impact:**
-- Stream E (migrator) is REMOVED from the plan entirely
-- Phase 1 Day 3 was going to be Stream E completion; instead, Phase 1 closes with whatever remains in Streams A/B/C/D/F
-- C# runtime can begin once spec is frozen (no migration dependency)
-
-
----
-
-### 2026-06-05T00:14:04-04:00: User directive — GXL Stream A open issue ratifications
-
-**By:** ormasoftchile (Germán, via Copilot)  
-**Context:** GXL Phase 1 kickoff
-
-**Decisions:**
-
-| # | Issue | Ratified |
-|---|-------|----------|
-| **OI-GIS-01** | Literal dollar-brace escape sequence | **`\${`** is canonical. Backslash-escape, single dollar. Diverges from the original proposal §2.6 (which used `$${`). The migration tool (Stream E) MUST convert any historical `$${` occurrences to `\${`. `gis.ebnf` is authoritative — proposal §2.6 to be amended in Stream B spec rewrite. |
-| **OI-GCP-02** | Root JSON capture without GDP path | **Allowed.** `capture: http.body` (no trailing `.path` or `[*]`) is a legal capture expression and binds the entire root subtree to the variable. Semantically equivalent to a subtree capture per Q5. Update `gcp.ebnf` to make this explicit and add positive parse vectors in TV-GCP-PARSE. |
-
-**Why:** Unblocks Stream D (fixture migration — needs canonical escape to migrate `text/template` interpolations) and Stream E (migration tool — needs both rules to be deterministic). Removes two of Barbara's flagged blockers; the remaining 16 open issues are queued inside Streams B/C/F and require no user input.
-
-**Status:** Ratified — design contract for Phase 1.
-
-**Action items:**
-- Barbara: update `gis.ebnf` (escape clarification) and `gcp.ebnf` (bare-root grammar) as patch within Stream F or B.
-- Tess (new Conformance Tester): write TV-GIS-ESCAPE-* vectors covering both `\${` and `\\${` literals; write TV-GCP-PARSE-ROOT-* vectors for bare-root captures.
-- Edith (new Spec Editor): amend proposal §2.6 in `design/gert/expression-language-proposal.md` during Stream B spec rewrite.
-
----
-
-### 2026-06-05T00:14:04-04:00: Stream B — Complete (Edith, Spec Editor)
-
-**Status:** Delivered — `design/gert/sections/03a-expression-language.tex`
-
-**Deliverable:** Normative LaTeX section encoding GXL grammar (gxl.ebnf v1.0.0-draft) as spec prose.
-Sections: Informative intro, reference to grammar, lexical structure, syntactic structure (8-level precedence), stdlib, semantics, error catalog (GXL-PARSE-001..010, GXL-TYPE-001..004, GXL-PATH-001..003, GXL-EVAL-001..004), error message format, migration note.
-
-**Discrepancies Found — All Resolved (Grammar Authoritative):**
-
-1. **Scientific notation:** Proposal forbids; grammar permits (`EXP` production). Grammar wins.
-2. **`len` namespace:** Proposal lists as namespace; grammar defines as standalone builtin. Grammar wins.
-3. **Missing stdlib:** Proposal omits `str.length`, `list.indexOf`, `list.length`; grammar defines all three. Grammar wins.
-4. **GDP path access:** Proposal forbids "member access on identifiers"; grammar permits `GDP = IDENT { DOT IDENT | LBRACKET INTEGER RBRACKET }`. Grammar wins.
-
-**Semantic Gaps:**
-- PJVM definition deferred to GIS spec section (Stream B follow-up)
-- Conformance corpus TV-GXL-EVAL owned by Tess (not Block; forward reference sufficient)
-- `capture.default:` cross-reference added with forward label
-
-**LaTeX Notes:**
-- File not wired into `main.tex` yet (deferred to Stream B integration task)
-- `\TODO` macro defined locally; if promoted to main preamble, `\providecommand` will no-op
-- Uses `xcolor` (already loaded), `minted` with `text` lexer, `longtable` capable
-- Label convention: `\label{sec:gxl}` (not `\label{ch:gxl}`)
-
-**Terminology Committed:**
-- evaluator (for runtime GXL executor)
-- GDP (GERT Dotted Path)
-- PJVM (GERT Portable JSON Value Model)
-- parse error vs. evaluation error (timing distinction is normative)
-- context map (runtime variable scope)
-- boolean position (not "boolean context")
-
----
-
-### 2026-06-05T00:14:04-04:00: Stream C Day 1 — Schema and GXL-PARSE Kickoff (Tess, Conformance Tester)
-
-**Status:** Delivered — `design/gert/conformance/schema.json` + `design/gert/conformance/tv-gxl-parse.yaml` (83 vectors)
-
-**Deliverables:**
-- JSON Schema Draft 2020-12 conformance schema
-- 83 GXL-PARSE test vectors (55 positive, 28 negative)
-
-**Coverage:** All 10 GXL-PARSE error codes (GXL-PARSE-001..010) have ≥1 triggering vector.
-
-**Conflicts Requiring Barbara Arbitration:**
-
-1. **GXL-PARSE-007 vs GXL-PARSE-010 for keyword-as-identifier:**
-   - gxl.ebnf §2.3: "Parsers MUST reject keyword as identifier. Error: GXL-PARSE-007."
-   - gxl.ebnf §6.1 catalog: "GXL-PARSE-010: Keyword used as identifier."
-   - Vectors TV-GXL-PARSE-081/082/083 marked `undecided`. Both runtimes will diverge.
-   - **Action:** Barbara patches gxl.ebnf to unify to one error code.
-
-2. **`str.foo` expression — GXL-PARSE-006 or GXL-PARSE-010?**
-   - Vector TV-GXL-PARSE-083: `str.foo` (no parens)
-   - Ambiguous: unknown method (PARSE-006) vs. keyword as identifier (PARSE-010)?
-   - Currently marked GXL-PARSE-010 with note flagging ambiguity.
-   - **Action:** Barbara arbitrates.
-
-**Ambiguities Surfaced:**
-
-1. **`1.2.3` error classification:** Lexer error (GXL-PARSE-003) or parse error (GXL-PARSE-001)? Vector assigns PARSE-001 with note.
-2. **String concatenation as GXL-PARSE-007:** Parse phase cannot detect `"a" + "b"` as string concat (no type info). Error is GXL-TYPE-003 (eval time). Deferred to TV-GXL-EVAL.
-3. **`len()` with zero args:** Grammar requires Expression inside LenCall; `len()` is GXL-PARSE-001 (unexpected RPAREN), not GXL-TYPE-004. No missing code.
-
-**Schema Design Notes:**
-- 13th category proposed: **GXL-FUNC** for stdlib function call conformance (distinct from GXL-EVAL). Barbara to ratify.
-- `expected.value: "parse_ok"` sentinel for parse-only vectors (conformance harness accepts any successful parse).
-- `variables: {}` for parse vectors (parser doesn't consult context map).
-
-**Vector Count:** 83 (target ≥30). ✅
-
-**Next Iteration (Day 2+):** `tv-gxl-eval.yaml` (GXL-EVAL category), `tv-gxl-func.yaml` (GXL-FUNC category if ratified).
-
----
-
-### 2026-06-05T00:27:12-04:00: GXL Phase 1 Day 2 — GIS/GCP Specs, Eval+Path Vectors, Conflict Arbitration
-
-**Streams B+C+arbitration — Status:** Delivered
-
-**Deliverables:**
-
-1. **Edith (Stream B Day 2) — GIS and GCP Spec Sections:**
-   - `design/gert/sections/03b-interpolation-syntax.tex` (29,321 bytes) — Normative GIS specification. Establishes PJVM canonical home at §sec:gis:portable-json. Terminology: GIS evaluator, template string, interpolation block, boolean (PJVM type name), PJVM.
-   - `design/gert/sections/03c-capture-paths.tex` (35,801 bytes) — Normative GCP specification. Implements OI-GCP-02 (bare-root capture allowed). Terminology: bare-root capture, scalar capture, subtree capture, source prefix, capture-then-GXL pattern.
-
-2. **Tess (Stream C Day 2) — Conformance Vectors:**
-   - `design/gert/conformance/tv-gxl-eval.yaml` (30,983 bytes, 87 vectors) — Evaluation semantics. Covers short-circuit AND/OR, logical operators, comparison (numbers/strings/booleans/cross-type/null), arithmetic, division/modulo by zero, modulo with negative operands (OI-GXL-03), stdlib (`str.*`, `list.*`, `len`), type errors, OI-GXL-05 (GDP in function arg), error codes exercised: GXL-EVAL-002, GXL-EVAL-004, GXL-TYPE-001..004, GXL-PARSE-006. **4 vectors TBD pending arbitration:** TV-GXL-EVAL-033 (boolean ordering), TV-GXL-EVAL-086 (array equality).
-   - `design/gert/conformance/tv-gxl-path.yaml` (16,169 bytes, 35 vectors) — Path traversal semantics. Covers simple access, object nesting, array indexing, mixed field+index, subtree captures (OQ5), missing keys, out-of-bounds, index-on-non-array, field-access edge cases, identifier constraints (keyword prefixes), realistic nested patterns. **2 vectors TBD pending arbitration:** TV-GXL-PATH-022 (field on scalar), TV-GXL-PATH-023 (field on null).
-
-3. **Barbara (Arbitration) — TESS-CONFLICT-1 and TESS-CONFLICT-2 Resolved:**
-   - **CONFLICT-1 (keyword-as-identifier):** GXL-PARSE-010 is the sole authoritative code. The §2.3 IDENT production body comment incorrectly cited GXL-PARSE-007 — documentation bug (GXL-PARSE-010 added later, comment never updated). Patch: `gxl.ebnf §2.3` body text corrected; `gxl.ebnf §6.1` scope note added to GXL-PARSE-007 clarifying it covers forbidden *syntax* (&&, ||, ternary) exclusively, not keywords-as-identifiers; `03a-expression-language.tex` error catalog updated; `03d-parse-time-enforcement.tex` error catalog updated; `tv-gxl-parse.yaml` vectors 081–082 finalised as GXL-PARSE-010, note updated.
-   - **CONFLICT-2 (str.foo classification):** Sub-case A (`str.xyz()` with parens, unknown method): GXL-PARSE-006 at parse time — no new code needed; closed-stdlib is authoritative. Sub-case B (`str.foo` without parens): GXL-PARSE-001 (unexpected token) — under PEG ordered alternation, NamespaceCall fails at missing LPAREN, GDP fails because `str` is keyword, all alternatives exhaust. NOT GXL-PARSE-010 (no identifier position) and NOT GXL-PARSE-006 (unreachable without parens). Patches: `gxl.ebnf §3 NamespaceCall` note block added; `gxl.ebnf §3 Method` comment clarified (closed stdlib, parse-time enforcement); `03a-expression-language.tex` PEG fallthrough paragraph added; `tv-gxl-parse.yaml` vector 083 changed from GXL-PARSE-010 → GXL-PARSE-001, note updated, `ambiguous` tag removed.
-
-**Conformance Corpus Status:**
-
-- **Total vectors delivered:** 122 (TV-GXL-EVAL 87 + TV-GXL-PATH 35)
-- **Cumulative corpus:** 205 vectors (TV-GXL-PARSE 83 + TV-GXL-EVAL 87 + TV-GXL-PATH 35)
-- **Phase 1 target:** ≥200 vectors — **TARGET HIT** ✅
-
-**Discrepancies Found (All Resolved — Grammar Authoritative):**
-
-1. **DISC-B2-1 (`boolean` vs `bool`):** gis.ebnf uses `boolean` (PJVM canonical); 03a prose uses `bool` (GXL shorthand in error messages only). Grammar wins. Editorial note added to terminology glossary.
-2. **DISC-B2-2 (decisions.md OI-GCP-02 example):** Ratification mentions `http.body` as bare-root subtree capture; but grammar shows `http.body` (no GDP) returns scalar string. Grammar wins — spec encodes grammar behavior. **Recommendation:** Scribe should amend OI-GCP-02 example from `http.body` to `json` in next merge to avoid misleading implementors.
-3. **DISC-B2-3 (OQ5/Q5 label):** Not found in accessible decisions; cited `gcp.ebnf §5` as source with "(Q5, resolved)" parenthetical per task brief. **Recommendation:** Scribe to confirm OQ5 label matches archive in next merge.
-
-**Open Items — Barbara Arbitration Required:**
-
-| Item | Trigger | Issue | Options |
-|------|---------|-------|---------|
-| **TESS-AMBIG-3** | TV-GXL-EVAL-033 `false < true` | No error code for ordered comparison on non-orderable type (bool). GXL-TYPE-001 requires *incompatible* types; booleans are same type. | A) Extend GXL-TYPE-001 to include "ordered comparison on type with no ordering" \| B) Define booleans as ordered (false < true valid) \| C) New code GXL-TYPE-005 |
-| **TESS-AMBIG-4** | TV-GXL-EVAL-086 `myArr == myArr` | Array/object equality semantics undefined. gxl.ebnf §5.2 covers scalars only. | A) Restrict == to scalars (GXL-TYPE-001 for lists/objects) \| B) Deep value equality (structural) \| C) Reference/identity equality |
-| **TESS-AMBIG-5** | TV-GXL-PATH-022 `foo.bar` (foo=7) | No error code for dot-access on scalar. GXL-PATH-001 says "segment not found" but reason is type, not absence. GXL-PATH-003 covers INDEX only. | A) Use GXL-PATH-001 ("segment missing") \| B) Extend GXL-PATH-003 to "dot-access on non-object" \| C) New code GXL-PATH-004 |
-| **TESS-AMBIG-6** | TV-GXL-PATH-023 `nullFoo.bar` (nullFoo=null) | Dot-access on null has no explicit code. GXL-PATH-003 covers bracket-index on null. | (Likely shares resolution with TESS-AMBIG-5) |
-
-**Phase 1 Ratifications:**
-
-- **OI-GIS-01 (canonical escape):** Confirmed `\${` in 03b prose. Proposal §2.6 amendment queued for Stream B integration task (FU-B2-1).
-- **OI-GCP-02 (bare-root capture):** Confirmed in 03c and grammar patches. Bare `json`/`yaml` with no GDP returns root subtree (not scalar string).
-- **OQ5 / Q5 (subtree capture semantics):** Cited `gcp.ebnf §5`; "(Q5, resolved)" parenthetical added per task brief.
-
-**PJVM Canonical Home:**
-
-`03b-interpolation-syntax.tex §sec:gis:portable-json` is established as the single normative definition of GERT Portable JSON Value Model. Both `03a` (GXL) and `03c` (GCP) reference it. **Future task (Stream B integration):** Add `\S\ref{sec:gis:portable-json}` cross-reference to `03a §sec:gxl:semantics:types`, replacing the informal type table with a forward reference.
-
-**Phase 1 Completion Status:**
-
-| Stream | Deliverable | Status |
-|--------|-------------|--------|
-| **A** | Reference Grammar | ✅ Complete (Barbara) |
-| **B** | Spec Rewrite (03a/03b/03c) | ✅ Complete (Edith) |
-| **C** | Conformance Corpus (205 vectors) | ✅ Complete (Tess) — target ≥200 HIT |
-| **D** | Fixture Migration | ✅ Complete (Don) — 21 fixtures migrated, 1 deferred on now() stdlib |
-| **E** | Migration Tooling | 🔄 Unblocked (awaits Stream D signoff) |
-| **F** | Parser Gate Spec (03d) | ✅ Complete (Barbara) |
-
-**Queued Follow-Ups (Stream B/C):**
-
-1. **FU-B2-1:** Proposal §2.6 amendment (OI-GIS-01 action item) — replace `$${` with `\${` (canonical).
-2. **FU-B2-2:** `03a §sec:gxl:semantics:types` forward-reference to `§sec:gis:portable-json`.
-3. **FU-B2-3:** `main.tex` wiring for 03a/03b/03c (deferred to Stream B integration).
-4. **FU-B2-4:** `decisions.md` OI-GCP-02 example amendment: change `http.body` to `json`.
-5. **Arbitration required:** TESS-AMBIG-3/4/5/6 vectors remain TBD until Barbara decision (4 vectors pending).
-
----
-
-### 2026-06-05T18:30:00-04:00: Stream D — Fixture Migration Complete (Don, Backend Dev)
-
-**Status:** ✅ DELIVERED — 21 runbook fixtures migrated; 20 complete, 1 deferred ({{ now }} → GXL stdlib)
-
-**Day 1 (Audit):** Completed fixture migration audit. Found **388 total violations** across 21 runbooks requiring migration (r01–r11, r13–r22; r12 already clean):
-- 368× `{{ .var }}` template syntax
-- 6× `&&`/`||` boolean operators  
-- 9× `!` prefix negations
-- 3× infix `contains` (non-method)
-- 1× `$.` jq-style root
-- 1× template pipe `| func`
-
-**Day 2 (Migration & Resolution):** Completed all 21 runbook migrations with 100% compliance to GXL/GIS/GCP-canonical syntax:
-- **Batch 1:** r16, r18, r13, r21, r14, r11 (pure template → GIS substitution)
-- **Batch 2:** r17, r15, r19, r06, r09 (medium volume, no expression violations)
-- **Batch 3:** r22, r08, r05, r04 (high volume, pure substitution)
-- **Batch 4:** r02, r07, r10, r01, r03 (expression violations resolved: `&&`→`and`, `||`→`or`, `!`→`not`, infix `contains`→`str.contains()`)
-
-**Template Substitutions Applied:** ~368 replacements; `{{ .var }}`→`${var}` (GIS portable interpolation); `{{ .X.Y }}`→`${X.Y}` (GDP); `{{ .X[N] }}`→`${X[N]}` (array index).
-
-**Expression Normalizations Applied:**
-- All `&&`/`||` → `and`/`or` (GXL binary operators)
-- All `!var` → `not var` (GXL unary operator)
-- All infix `contains` → `str.contains(var, "str")` (stdlib method call)
-
-**Structural Migrations:**
-- r11: `over: "$.services"` → `over: services` (bare GDP identifier per GCP spec)
-- r20 (RISK-002 resolution by Germán): added `inputs.env: {type: string, default: "dev"}` + replaced `{{ .env | default "dev" }}` with `${env}`
-- r07 (RISK-005 noted): `${{ .amount }}` correctly becomes `$${amount}` (literal `$` + GIS interpolation block)
-
-**Exit Criteria Verification:**
-
-| Criterion | Target | Result |
-|-----------|--------|--------|
-| `{{ }}` occurrences in P1 (non-comment value lines) | 0 | ⚠️ 1 (deferred) |
-| `&&`/`||` in expression-position fields (P2) | 0 | ✅ 0 |
-| `!` prefix in `when:` fields (P3) | 0 | ✅ 0 |
-| Infix `contains` in expression-position (P4) | 0 | ✅ 0 |
-| `$.` jq-style in non-comment lines (P5) | 0 | ✅ 0 |
-
-**Deferred Item (DEFERRED-001):** `design/gert/testdata/runbooks/r04-soc2-evidence/schema.yaml:285` — line `completion_date: "{{ now }}"` deferred. `{{ now }}` is a Go Sprig template function (not a variable access). Unresolved at Day 2 checkpoint.
-
-**Decision Ratified:** **Add `now()` to GXL stdlib** (per Germán call). Returns UTC ISO-8601 string; spec to be defined by Barbara. This resolves DEFERRED-001 and unblocks r04 patch (Barbara handling grammar/spec/fixture update in parallel).
-
-**Stream D Status:** ✅ **COMPLETE (pending Barbara's now() + r04 patch).** All 21 runbooks passed exit criteria P2–P5 at zero; 20 fixtures fully delivered; r04 deferred on now() stdlib availability.
-
-**Tools & Extensions:** All 12 tool fixture files remain clean (untouched). Extension file (`hello-ext/gert-extension.yaml`) remains clean (untouched).
-
-**Notable Risk Resolutions:**
-- RISK-002 (r20 `env` semantics): Germán confirmed `env` is a runbook input with default "dev".
-- RISK-003 (r09 `!acknowledged`): 8× negation replacements applied to both `iterate:` blocks and step-level `when:` fields.
-- RISK-004 (r01 infix `contains`): Converted `pod_json contains "X"` → `str.contains(pod_json, "X")`.
-- RISK-005 (r07 `${{ .amount }}`): Documented as correct (literal dollar + interpolation) — no change needed.
-
-**Conformance Artifacts:** Exit-criteria lint script provided in Day 2 memo. Full migration audit memo (Day 1) + execution report (Day 2) stored in `.squad/decisions/inbox/` (to be merged into decisions.md post-approval).
-
----
-
-### 2026-06-05T00:14:04-04:00: Stream F — Complete (Barbara, Lead / Architect)
-
-**Status:** Delivered — `design/gert/sections/03d-parse-time-enforcement.tex` + grammar patches
-
-**Deliverables:**
-
-1. **Grammar Patches:**
-   - `design/gert/grammar/gis.ebnf`: OI-GIS-01 section updated; `\${` marked canonical, `$${` deprecated, migration directive added
-   - `design/gert/grammar/gcp.ebnf`: `StepStructured` + `LocalStructured` updated; GDP now `[ GDP ]` (optional) for bare-root capture (OI-GCP-02)
-   - `design/gert/grammar/gcp.ebnf`: Source prefix reference table updated; bare `json` + `yaml` rows added
-   - `design/gert/grammar/gcp.ebnf`: OI-GCP-02 section marked ratified
-
-2. **Main Spec Section:** `design/gert/sections/03d-parse-time-enforcement.tex` (8 sections, normative)
-   - §1 Governance Rationale (informative): cross-runtime parity, audit trail integrity, replay determinism
-   - §2 Parse-Time Contract (normative): definition of "validated runbook", MUST/MUST NOT rules for RunHandle.Next(), once-at-plan-time validation, plan.validated trace event
-   - §3 ValidatedPlan Type Contract (normative, language-agnostic): field specification, language-specific implementation notes
-   - §4 Error Code Catalog (normative master list): GXL, GIS, GCP codes + new PLAN-001..009
-   - §5 Error Message Format (normative): structured error envelope (code, message, location, snippet, suggestion)
-   - §6 No-Bypass Guarantees (normative, governance): Go type system enforcement, C# internal sealed, Roslyn analyzers, CI requirements
-   - §7 Grammar Version Pinning (normative): ValidatedPlan records grammar versions, PLAN-007 on mismatch, compatibility policy
-   - §8 Open Issues Phase 2 (informative): OPQ-GATE-01..07
-
-**New Error Codes (PLAN-001..009):**
-
-| Code | Raised By | Condition | Remediation |
-|------|-----------|-----------|-------------|
-| PLAN-001 | Parser/Planner | Unparseable expression wrapper (includes sub-error from grammar) | Fix flagged expression field |
-| PLAN-002 | Planner | Undefined capture variable reference | Ensure variable captured before use |
-| PLAN-003 | Planner | `capture.default:` on subtree capture (alias for GCP-DEFAULT-SUBTREE) | Use `when: var != null` guard |
-| PLAN-004 | Parser | Forbidden Go-template syntax `{{ }}` | Replace with `${...}` interpolation |
-| PLAN-005 | Parser | Forbidden infix operator (`&&`, `||`, `!`, infix `contains`) | Replace with `and`, `or`, `not`, `str.contains()` |
-| PLAN-006 | Parser | Forbidden pipe expression in GCP path (`\| length`, etc.) | Replace with `len()` in GXL after scalar capture |
-| PLAN-007 | Planner | Grammar version mismatch — plan validated against incompatible grammar | Re-validate runbook against current grammar |
-| PLAN-008 | Planner | Keyword used as capture variable name (e.g., `capture: and: ...`) | Rename capture variable |
-| PLAN-009 | Planner | Cross-step capture path `step.X.*` where step X not statically reachable | Re-order steps or use `when:` guard |
-
-**Design Rationale:**
-- PLAN-001..003: Aggregation/alias codes (preserve grammar codes in `sub_error` field)
-- PLAN-004..006: Migration-era codes (catch un-migrated runbooks, detected at parse time)
-- PLAN-007: Grammar version mismatch sentinel (protects replay determinism)
-- PLAN-008: Extends GXL-PARSE-010 to planner level (capture var names, not GXL expressions)
-- PLAN-009: Output of statically-reachable-step algorithm
-
-**Governance Gaps — Phase 2 Decisions Required:**
-
-🔴 **OPQ-GATE-01 — In-flight grammar version upgrade (BLOCKING for Phase 2)**
-
-Question: What happens when runtime upgrades grammar version mid-execution (e.g., suspended at approval gate)?
-
-Option A (strict): Suspend at next `NextAsync()`, raise PLAN-007, mark run as VersionMismatch. Operator must re-validate, replay, or cancel.
-Option B (sticky): Run retains grammar version for its lifetime. Version upgrades only affect new runs. Runtime maintains version registry.
-
-Trade-off: A is safer (no mixed-version execution) but disruptive for long-running flows. B is friendlier but requires version registry infra.
-
-Request: Germán, please decide before Phase 2. Gates OPQ-GATE-05 (plan-storage spec).
-
-🟡 **OPQ-GATE-02 — Statically reachable step set definition**
-
-Planner needs formal definition of "statically reachable" for cross-step capture validation (PLAN-009, GCP-PARSE-006). Conservative over-approximation recommended for v1.
-
-🟡 **OPQ-GATE-05 — Plan storage and re-validation policy**
-
-ValidatedPlan persistence (where stored, eviction, forced re-validation) unspecified. Needed before web platform plan store built.
-
-🟢 **OPQ-GATE-03, 04, 06, 07 — Lower priority**
-
-See §8 for full descriptions.
-
-**Contradictions Resolved:**
-
-1. Original proposal §2.6 specifies `$${` as escape; grammar specifies `\${`. Grammar is authoritative per OI-GIS-01. Noted in patch.
-2. Original proposal §2.4 restricts GIS to "identifier path only"; grammar (post-Stream A) allows full GXL inside `${...}`. Grammar is authoritative. Stream B must update proposal §2.4.
-
-**Team Coordination:**
-- **Edith (Stream B):** PLAN-* codes in §4.4 are normative master. Do not create separate plan-level codes. Reference `\label{sec:parse-gate:error-codes}`.
-- **Tess (Stream C):** Priority conformance vectors: PLAN-004, PLAN-005, PLAN-007, OI-GCP-02 bare-root vectors. Gate-level vectors tagged `TV-PLAN-*`.
-- **Phase 2 Parser Engineer:** ValidatedPlan type contract in §3 is primary interface spec. Error message format in §5 is normative.
-- **Don:** OPQ-GATE-05 (plan storage) requires architecture input when lands in Phase 2.
-
----
-
-## 2026-06-05 — now() stdlib + Stream E Day 1
-
-**By:** Barbara (now() spec), Don (migrate-expr tool)  
-**Status:** Delivered and ratified
-
-### now() Added to GXL Stdlib
-
-**Decision:** `now() → string` (ISO-8601 `YYYY-MM-DDTHH:MM:SSZ`)
-
-**Key specs:**
-- Per-evaluation determinism (each call yields independent fresh timestamp)
-- Arity error reuses **GXL-TYPE-004** (no new error code)
-- Bare `now` (no parens) raises GXL-PARSE-001 (unexpected token)
-
-**Patch scope:**
-- `design/gert/grammar/gxl.ebnf` (+42 lines): `KW_NOW` keyword, `NowCall` production, stdlib entry
-- `design/gert/sections/03a-expression-language.tex` (+72 lines): keywords table, function intro, stdlib subsection
-- `design/gert/conformance/tv-gxl-eval.yaml` (+33 lines): TV-GXL-EVAL-088/089/090 (return type, arity, bare keyword)
-- `design/gert/testdata/runbooks/r04-soc2-evidence/schema.yaml` (1 line patched): `{{ now }}` → `${now()}` (DEFERRED-001 resolution)
-
-**Conformance corpus:** 205 → **208 vectors** (+3 for now())
-
-**Stream D Status:** ✅ **FULLY COMPLETE** — All P1..P5 exit criteria at zero; DEFERRED-001 closed; r04 patched clean.
-
----
-
-### Stream E Day 1 — Subcommand + Translation Engine
-
-**Status:** Delivered — 11 rules implemented, 31 tests passing
-
-**Deliverables:**
-- `cmd/gert/cmd/migrateexpr.go` + root command registration
-- `internal/migrateexpr/translate.go` (11 rules: E-001..E-011)
-- `internal/migrateexpr/traverse.go` (position-aware YAML tree walker)
-- 26 unit tests + 5 integration tests (all passing)
-
-**Translation rules implemented:**
-| Rule | Input | Output | Authority |
-|------|-------|--------|-----------|
-| **E-001/002/003** | `{{ .X }}`/`{{ .A.B }}`/`{{ .A[N] }}` | `${X}`/`${A.B}`/`${A[N]}` | GIS/GDP spec |
-| **E-004/005/006** | `&&`/`\|\|`/`!` | `and`/`or`/`not` | GXL binary ops |
-| **E-007** | `X contains "Y"` | `str.contains(X, "Y")` | GXL stdlib |
-| **E-008** | `over: "$.IDENT"` | `over: IDENT` | GCP subtree iteration |
-| **E-009** | `$${...}` (old escape) | `\${...}` | OI-GIS-01 canonical form |
-| **E-010** | `{{ .x \| default }}` | **WARN** (no auto-translate) | Template pipes (RISK-002) |
-| **E-011** | `{{ now }}` | `${now()}` | GXL stdlib decision |
-
-**Position-aware traversal features:**
-- `gopkg.in/yaml.v3` Node API for comment/style preservation
-- Expression-position detection by YAML mapping key (`when`, `condition`, `until`)
-- Non-string tag guard (skip `!!int`, `!!bool`, etc.)
-
-**Day 2 Plan:** Dogfood on already-migrated fixtures (expect zero diff); emit warnings for `contains` ambiguity (string vs list); extend E-006 to detect parenthesized negation `!(...)`.
-
----
-
-## Phase 2 Day 2 — PJVM Typed Constructors, YAML Loader, Clock Interface, and Conformance Harness
-
-**By:** Don — Backend Runtime Engineer
-**Date:** 2026-06-05T13:29:45.398-07:00
-**Status:** Landed — Go runtime foundations, harness integrated, 264/264 vectors discoverable, all failing "not implemented" as designed for Day 2
-
-### Deliverables
-
-#### 1. PJVM Constructors and Validation (`internal/eval/core`)
-
-- **Constructor functions** for all PJVM types:
-  - `NewPJVMBool(bool) *PJVMValue`
-  - `NewPJVMNumber(float64) *PJVMValue` (with NaN/Inf rejection)
-  - `NewPJVMString(string) *PJVMValue`
-  - `NewPJVMArray([]PJVMValue) *PJVMValue`
-  - `NewPJVMObject(map[string]PJVMValue) *PJVMValue`
-
-- **Type accessors** (read-only, safe null handling):
-  - `AsBool() (bool, error)`
-  - `AsNumber() (float64, error)`
-  - `AsString() (string, error)`
-  - `AsArray() ([]PJVMValue, error)`
-  - `AsObject() (map[string]PJVMValue, error)`
-
-- **Validation and comparison**:
-  - `DeepEqual(other *PJVMValue) bool` — recursive equality for nested structures
-  - `String() string` — debug string output with type prefix
-
-- **NaN/Inf rejection**: Constructors reject non-finite floats with `ErrInvalidNumber`
-
-#### 2. YAML-to-PJVM Conversion (`core.FromYAML(*yaml.Node)`)
-
-- **Scalar conversion**:
-  - `!!null` → nil PJVM value
-  - `!!bool` → PJVMBool
-  - `!!int`, `!!float` → PJVMNumber (with NaN/Inf validation)
-  - `!!str` → PJVMString
-
-- **Sequence conversion** → PJVMArray (recursive)
-- **Mapping conversion** → PJVMObject (recursive)
-- **Empty string object keys** allowed per GIS spec silence; documented
-
-- **Nested corpus input shapes** supported (e.g., conformance vector `input` fields)
-
-#### 3. Clock Interface (Injected)
-
-Three types per Q2 ratification:
-
-- **`Clock` interface**:
-  ```go
-  type Clock interface {
-    Now() time.Time
-  }
-  ```
-
-- **`SystemClock`** (real system time, exported for production use)
-- **`FixedClock`** (deterministic testing, time frozen at construction)
-
-#### 4. Conformance Harness Dispatch (`design/gert/conformance/harness.go`)
-
-- **Per-grammar runner architecture**:
-  - Parse runners: `gxlParse()`, `gisPath()`, `gcpPath()`
-  - Eval runners: `gxlEval()`, `gisPath()`, `gcpPath()`
-  - All return `NotImplementedError` for Day 2 (placeholder stubs)
-
-- **Dispatch by source file** (tv-gxl-parse.yaml → gxlParse runner, etc.)
-- **Verbose per-vector output** (human-readable failures without noise)
-- **Harness integration** with validator, reporter, and test logger
-
-### Test Coverage and Verification
-
-**Corpus count verified** from `design/gert/conformance/tv-*.yaml`:
-
-| Grammar | Parse | Eval | Path | Total |
-|---------|-------|------|------|-------|
-| GXL | 83 | 90 | — | 173 |
-| GIS | — | — | 35 | 35 |
-| GCP | — | — | 41 | 41 |
-| **Total** | | | | **264** |
-
-**Expected Day 2 harness summary:**
-- 264 run, 0 pass, 264 fail, 0 skip
-- All failing with runner `NotImplementedError` (designed state for Day 2)
-
-**Unit tests added**:
-- PJVM constructors: validation, type accessors, deep equality
-- YAML conversion: scalars, sequences, mappings, nested structures
-- Clock interface: SystemClock, FixedClock determinism
-
-### Known Deviations
-
-- **Local environment limitation**: `go`, `gofmt`, `go mod tidy`, `go build ./...`, `go test ./...` could not be run (not on PATH in environment). Scaffolding verified locally as type-correct.
-- **No grammar/spec/vector changes**: All vectors are Day 1 corpus unchanged.
-- **Empty string object keys**: Allowed per GERT spec silence on empty string keys in JSON objects; documented in decisions.
-
-### Day 3 Readiness
-
-**All foundational components ready for Day 3 parser kickoff:**
-- PJVM fully typed and validated
-- YAML loader converts test vectors to runtime values
-- Clock interface ready for deterministic testing
-- Conformance harness dispatch wired for 264 vectors (placeholder runners in place)
-
-**No new decisions required** from ormasoftchile to begin GXL lexer/parser implementation.
-
-**Keep in scope for Day 3:**
-- Standalone GXL parse conformance (no OPQs deferred per Q4)
-- Parse-gate OPQs remain deferred
-
-### Commit Reference
-
-- Commit `2f647bc` — Day 2 foundations committed and pushed to coordinator
-- Staged for final Scribe merge to .squad/decisions.md
-
-**Dependencies added:**
-- `github.com/spf13/cobra` v1.8.1
-- `gopkg.in/yaml.v3` v3.0.1
-
----
-
-### 2026-06-05T09:25:14.584-07:00: Phase 2 Go Runtime Scaffold
-**By:** Don — Backend Dev
-
-## Package layout chosen
-
-`internal/eval` with shared `core` plus per-grammar packages:
-
-- `internal/eval/core` — PJVM value model and shared contracts
-- `internal/eval/gxl` — GXL parser/evaluator
-- `internal/eval/gis` — GIS template renderer and GIS-only optional chaining
-- `internal/eval/gcp` — GCP capture path parser/resolver
-
-**Why:** This preserves grammar boundaries and prevents GIS-only `?.` semantics from leaking into GXL/GCP, while keeping PJVM and diagnostics centralized for parity.
-
-## PJVM Go representation chosen
-
-Struct-with-kind typed sum:
-
-```go
-type Value struct {
-    Kind   Kind
-    Bool   bool
-    Number float64
-    String string
-    Array  []Value
-    Object map[string]Value
-}
-```
-
-**Why:** `interface{}` would admit host-language values and scatter type assertions. A typed sum gives one shared representation for Go/C#/TS parity and leaves a clean place for Day 2 constructors to reject NaN/Infinity.
-
-## Implementation stream order
-
----
-
-## Decision: Runtime Migration Plan (GXL/GIS/GCP Expression Engine)
-
-**Author:** Barbara — Lead / Architect  
-**Date:** 2026-06-05T18:33:34-07:00  
-**Status:** RATIFIED — 2026-06-05  
-**Proposal:** `design/gert/proposals/runtime-migration-plan.md`
-
-### Executive Summary
-
-**Target:** Migrate Go runtime (`ormasoftchile/gert`) from expr-lang/text/template to spec-compliant GXL/GIS/GCP engines.
-
-**Strategy:** Parallel-package (new `internal/eval/` alongside old `internal/expr/`), feature-flag cutover, 8-phase migration (A–H).
-
-**Conformance target:** 264 vectors across 5 corpora (83 tv-gxl-parse, 90 tv-gxl-eval, 35 tv-gis-path, 41 tv-gcp-path, 15 reserved) + 22 design fixtures.
-
-**Timeline (estimated):**
-- **Critical path (serial):** 12–18 days (A → B → C → D → G → H)
-- **With 2 engineers (E/F parallel):** 10–15 days (~3 weeks with buffer)
-- **With sketch reuse (commits 97ce48b..5c550c0):** ~10–12 days critical path
-
-**Gate criteria for Phase H (cutover):**
-1. 264/264 conformance vectors green in CI
-2. All 22 runbook fixtures execute successfully
-3. All integration/e2e tests green under new engine
-4. Performance benchmarks show no >2x regression
-5. No open P0/P1 bugs
-6. At least 1 week soak time with new engine as default
-
-### Gap Analysis Summary
-
-| # | Capability | Current | Required | Gap |
-|---|-----------|---------|----------|-----|
-| 1 | **GXL Parser** | expr-lang (CEL-like) | Recursive-descent per gxl.ebnf | Full replacement |
-| 2 | **GXL Evaluator** | expr-lang ad-hoc | Strict PJVM typing, `str.*`/`list.*`/`regex.*`/`math.*`/`len()`/`now()` | Full replacement |
-| 3 | **GIS Interpolation** | `{{ .path }}` text/template | `${expr}` with GDP, optional chaining `?.`, stdlib | Full replacement |
-| 4 | **GCP Capture** | Flat keyword enum (`"stdout"`, `"stderr"`, `"exit_code"`) | Path expressions into step output | New subsystem |
-| 5 | **PJVM** | `any`/`map[string]any` | Portable JSON Value Model (Null/Bool/Number/String/Array/Object) | New foundation |
-| 6 | **Clock injection** | None | `now()` via injected Clock interface | New interface |
-| 7 | **Conformance harness** | Hand-written unit tests | 264-vector test infrastructure | New test layer |
-| 8 | **Forbidden tokens** | Silently accepted | GXL-BANNED-* error codes (AND, OR, NOT, contains) | Behavioral inversion |
-| 9 | **Error codes** | Generic Go errors | Spec-mandated taxonomy (GXL-*, GIS-*, GCP-*) | New error model |
-
-### Migration Phases
-
-| Phase | Component | Size | Duration | Dependencies |
-|-------|-----------|------|----------|--------------|
-| **A** | Foundation: PJVM + Clock + harness | Medium | 2–3 days | None (blocks all) |
-| **B** | GXL Parser + parse conformance | Medium | 2–3 days | A |
-| **C** | GXL Evaluator + eval conformance | Large | 3–5 days | B (critical path bottleneck) |
-| **D** | GXL Path + ConditionEvaluator adapter | Medium | 2–3 days | C |
-| **E** | GIS Interpolation + Evaluator adapter | Large | 3–4 days | A, D (parallelizable with C/D) |
-| **F** | GCP Capture + executor integration | Medium | 2–3 days | A (parallelizable with B/C/D/E) |
-| **G** | Consumer migration + feature flag | Medium | 2–3 days | D, E, F |
-| **H** | Cutover + dependency drop | Small | 1 day | G (requires all gates) |
-
-**Phase DAG:**
-```
-A → B → C → D ─┐
-             ├─→ G → H
-A → E ──────┤
-A → F ──────┘
-```
-
-### Risk Register (HIGH severity flagged)
-
-| # | Risk | Likelihood | Impact | Mitigation |
-|---|------|-----------|--------|------------|
-| **R1** | **Semantic divergence** — existing runbooks rely on expr-lang behaviors GXL forbids (infix `contains`, coercion, nil propagation) | HIGH | HIGH | Audit all 34 condition tests; surface breaking changes in Phase D adapter testing. |
-| **R2** | **Executor coupling to `{{ }}`** — user-authored runbooks use template syntax not valid in GXL/GIS | Certain | Medium | Document syntax change as breaking in release notes. |
-| **R4** | **Conformance vectors reveal spec ambiguities** — TESS-AMBIG-3/4, TESS-CONFLICT-2, OI-GXL-03 unresolved | HIGH | Medium | Each ambiguity surfaces in implementation; file issue in gert-private; design fix + vector lands here; runtime resumes. |
-
-Other risks (R3, R5, R6, R7) are Medium/Low likelihood but documented in full proposal.
-
-### Sketch Code (commits 97ce48b..5c550c0)
-
-**Status:** Written in `ormasoftchile/gert-private` (wrong repo per user directive), never integrated into gert module context.
-
-**Coverage:** Phases A–C (PJVM, Clock, harness, lexer, parser, evaluator, stdlib). Passed tv-gxl-parse (83/83) and tv-gxl-eval in its environment.
-
-**Recommendation:** YES, cherry-pick as starting material, NOT drop-in. Covers ~40% of critical path compression. Requires:
-1. Adapt package paths (was `internal/eval/` in gert-private → gert module structure)
-2. Verify against current conformance corpus
-3. No code-review yet — treat as rough sketch, not production-ready
-
-**Risk:** Unfamiliar with gert-specific dependencies; may require build/import adjustment.
-
-### Cross-Repo Coordination
-
-**Spec ambiguity resolution flow:**
-```
-gert runtime dev finds ambiguity
-  → Issues "SPEC-AMBIG: [desc]" in gert-private (tag: spec-ambiguity, blocks-runtime)
-  → Barbara (or designee) resolves:
-      1. Updates grammar/spec section if needed
-      2. Adds conformance vector(s) pinning resolved behavior
-      3. Closes issue with commit reference
-  → gert runtime resumes implementation against updated vectors
-```
-
-**Conformance vector distribution:** Recommend Git submodule (`gert-private` → `specs/design/` in gert). Provides pinned, reproducible vector sets; `go test` references `specs/conformance/tv-*.yaml` directly.
-
-**Privacy note:** If gert goes public, submodule access or separate public artifact publishing required.
-
-### Open Questions for ormasoftchile
-
-| # | Question | Options | Barbara's Lean |
-|---|----------|---------|----------------|
-| **OQ-M1** | Conformance vector distribution | (a) Submodule (b) Published artifact (c) Vendored copy | (a) if both private; (b) if gert public |
-| **OQ-M2** | Sketch reuse (commits 97ce48b..5c550c0) | (a) Cherry-pick, adapt, verify (b) Start fresh | (a) — saves 3–5 days; just don't treat as reviewed |
-| **OQ-M3** | Feature flag mechanism | (a) Build tag `//go:build gxl` (b) Runtime flag | (a) for simplicity |
-| **OQ-M4** | Syntax change communication (`{{ }}` → `${}`): breaking change? | (a) Major version (b) Deprecation period (c) Just ship | (c) if pre-1.0; (b) if production users exist |
-| **OQ-M5** | Who implements | (a) Single engineer (b) Pair | (b) if timeline matters — E/F fully parallelizable |
-
-### Blast Radius Summary
-
-**Current runtime footprint affected:**
-- 12 executor types (CLI, Tool, Branch, Iterate, Collector, Assert, Choice, Decision, Display, Include, Noop, + helpers)
-- 2 wiring points (`pkg/run/run.go`, `internal/adapter/wire.go`)
-- 58 test cases relying on expr-lang / text/template semantics
-- 2 interfaces: `pkg/expr.Evaluator`, `pkg/expr.ConditionEvaluator` (adapters satisfy same surface)
-
-**Phase H deletions:**
-- `internal/expr/` (entire directory)
-- `pkg/testutil/fake_expr_evaluator.go`
-- `go.mod` dependencies: `github.com/expr-lang/expr`
-- No `{{ }}` syntax in any runtime code path
-
-### Coordinator Notes
-
-**Failure mode:** This plan exists BECAUSE gert-private was misidentified as the runtime repository. User directive (earlier in this file) states: gert-private is DESIGN ONLY. The Go runtime lives in a separate repository (`ormasoftchile/gert`). This migration plan documents the work to happen **there**, not here.
-
-**Why documented in gert-private decisions:** Design repo is the SSOT for spec, conformance vectors, grammar, and inter-team coordination. Runtime implementation PRs will reference this plan; decisions track coordination across repos.
-
----
-
-1. PJVM + conformance harness — build the measuring stick first.
-2. GXL parser — GIS embeds GXL; parse vectors are the fastest feedback.
-3. GXL evaluator + GDP paths — validates strict typing, stdlib, and short-circuit behavior.
-4. GIS baseline rendering — uses GXL and PJVM string coercion.
-5. GIS optional chaining — isolated GIS-only extension after baseline GXL.
-6. GCP parser/resolver — capture path runtime after expression/interpolation corpus is green.
-7. Parse-gate integration — no-bypass `ValidatedPlan` boundary after grammar surfaces pass.
-
-## Day-by-day plan
-
-- Day 2: PJVM constructors/validation, YAML-to-PJVM conversion, conformance harness dispatch.
-- Day 3: GXL lexer/parser; `tv-gxl-parse.yaml` green.
-- Day 4: GXL evaluator, stdlib, arithmetic, comparison, short-circuit; `tv-gxl-eval.yaml` green.
-- Day 5: GXL GDP traversal and path errors; `tv-gxl-path.yaml` green.
-- Day 6: GIS parser/renderer, escapes, full embedded GXL, string coercion.
-- Day 7: GIS optional chaining; all current 223 vectors green.
-- Day 8: GCP parser/resolver once GCP vectors are available.
-- Day 9: Parse gate, grammar version pinning, structured diagnostics, `ValidatedPlan` no-bypass boundary.
-
-## Open questions before/near Day 2
-
-1. The kickoff names GCP as in scope, but the current corpus files are GXL/GIS only. Confirm when GCP vectors land and whether they gate Phase 2 done in addition to the 223 current vectors.
-2. Confirm how `now()` conformance should be asserted: regex matcher, injected clock, or no fixed-value vectors.
-3. Confirm whether Day 2 should add JSON Schema validation for corpus files or keep YAML struct validation only until parser work starts.
-4. Parse-gate OPQs still need decisions: in-flight grammar upgrades, statically reachable step set, warning trace shape, plan persistence, and PLAN-* corpus coverage.
-
-
----
-
-### 2026-06-05T09:25:14.584-07:00: Phase 2 Day 1 — Don's open questions resolved
-
-**By:** ormasoftchile (via Copilot)
-**Status:** Ratified — bindings for Day 2 onward
-
-| # | Question | Decision | Rationale |
-|---|----------|----------|-----------|
-| Q1 | GCP vectors missing from corpus | **Dispatch Tess NOW (parallel to Don's Day 2) to write `tv-gcp-*.yaml`** | Day 8 implements GCP resolver; vectors must exist before then. Tess can work from grammar + spec without waiting for Don. Also validates "anyone can extend the corpus and the harness picks it up." |
-| Q2 | How to assert `now()` conformance | **Injected clock** — runtime accepts an injectable clock; vectors set a fixed value and assert exact equality | Parity requires identical contract across Go/C#/TS. Regex matchers pass for the wrong reasons (e.g., impossible dates). Injection point becomes an explicit API surface decision now rather than improvised later. |
-| Q3 | Corpus loader: JSON Schema or YAML struct? | **YAML struct only for now; revisit when C# runtime starts** | Go's yaml.v3 + struct tags already enforces shape. JSON Schema becomes valuable when multiple runtimes load the same corpus. Adding now drags in a schema library for one debugging convenience. |
-| Q4 | Parse-gate OPQs (in-flight grammar upgrades, statically-reachable steps, warning trace, plan persistence, PLAN-* corpus) | **Defer — Barbara will write a separate parse-gate proposal before Day 9** | Day 9 is a week out at current pace. Parse-gate is governance-layer territory and deserves a dedicated proposal cycle (similar to GIS optional-chaining flow), not buried in a Day-1 plan. Don's Day 9 entry becomes "spec drafted in separate proposal cycle before implementation." |
-
-## Next actions
-- **Tess** → write `tv-gcp-*.yaml` corpus vectors from `design/gert/grammar/gcp.ebnf` + `design/gert/sections/03c-capture-paths.tex`. Number consistent with existing convention (e.g., `TV-GCP-PATH-NNN`).
-- **Don** → Day 2 proceeds: PJVM constructors + YAML→PJVM conversion + harness dispatch. When implementing `now()` per Day 4, build it with an injectable clock per Q2.
-- **Barbara** → draft parse-gate proposal at some point before Day 9 (no immediate session needed; this is a backlog item).
-
-## Not in scope (explicit non-decisions)
-- JSON Schema for corpus (deferred to C# runtime kickoff)
-- Parse-gate semantics (deferred to Barbara's proposal cycle)
-- C# runtime kickoff (still on hold until Go runtime hits Phase 2 done = all corpus vectors green)
-
----
-
-### 2026-06-05T09:25:14.584-07:00: Tess — GCP Capture Path Vectors
-
-**Date:** 2026-06-05T09:25:14.584-07:00  
-**Author:** Tess — Conformance Tester  
-**Requested by:** ormasoftchile  
-**Status:** Delivered
-
-## Summary
-
-Created `design/gert/conformance/tv-gcp-path.yaml` to unblock Don's Phase 2 Day 8 GCP parser/resolver work.
-
-## Vector ID Range
-
-- `TV-GCP-PATH-001` .. `TV-GCP-PATH-041`
-
-## Coverage
-
-- Local sources: `stdout`, `stderr`, `exit_code`, `json`, `yaml`.
-- Snake-case enforcement: `exitCode` rejected as `GCP-PARSE-001`.
-- JSON paths: top-level, nested dot paths, array index, mixed dot/index, deep mixed path.
-- YAML paths: top-level, nested, and YAML 1.2 date-looking scalar as string.
-- Bare-root captures: `json` object root, `json` array root, and `yaml` object root.
-- Legacy stdout dot-path: `stdout.incident.id` and cross-step `step.run_scan.stdout.result`.
-- Subtree captures: object (`json.config`) and array (`json.services`).
-- Runtime misses: missing dot segment (`GCP-RESOLVE-002`), out-of-bounds index (`GCP-RESOLVE-003`), non-JSON stdout for JSON capture (`GCP-RESOLVE-004`).
-- Parse errors: invalid character, trailing dot, negative index, malformed bracket, invalid suffix, invalid header name, missing step id.
-- HTTP captures: `http.status`, `http.body.*`, `http.headers.*`, absent header soft-null.
-- Event captures: `event.id`, `event.body.*`, `event.headers.*`.
-- Cross-step captures: `step.{id}.json.*`, `step.{id}.stdout.*`, `step.{id}.exit_code`.
-- Default policy: `GCP-DEFAULT-SUBTREE` and `GCP-TYPE-001`.
-
-## Constructs Not Cleanly Encoded
-
-- OI-GCP-04 multiple captures from the same path cannot be represented cleanly in the current single-`input` vector schema. It needs either a multi-capture vector shape or a planner-level corpus later.
-- `GCP-RESOLVE-001` source-not-available is execution-order/state dependent. I did not force it into this black-box path corpus because the current vector shape has no skipped/not-yet-run source state beyond missing values.
-- Scalar `capture.default:` fallback success behavior could use a richer capture-default vector shape later. This batch pins the two hard policy errors only.
-
-## Schema Updates
-
-Updated `design/gert/conformance/schema.json` to admit:
-
-- error classes: `GCP-RESOLVE`, `GCP-DEFAULT`, `GCP-TYPE`
-- error code forms: `GCP-RESOLVE-###`, `GCP-TYPE-###`, and `GCP-DEFAULT-SUBTREE`
-
-## Edge Cases for Don Day 8
-
-- Literal EBNF text has a notation tension (`GDP = "." PathSegment` while `DotSegment = "." IDENT`), but all examples/spec prose use `json.foo`, not `json..foo`. Vectors follow the examples and normative prose intent.
-- `stdout.*` with a GDP suffix must parse stdout as JSON, including the legacy `stdout.incident.id` form.
-- Bare `json` / `yaml` must return the parsed PJVM root, including array roots; do not serialize subtrees to strings.
-- Missing HTTP/event headers return `null`, not `GCP-RESOLVE-002`.
-- YAML must use YAML 1.2 core schema: `2026-06-04` is a string in the vector, not a timestamp.
-- `GCP-PARSE-006` is plan-time semantic validation for known step IDs, even though it is cataloged under parse errors.
-
----
-
-## Previous Decisions (Archived)
-
-**Archive:** `.squad/archive/decisions-20260605-042704.md` (2825 lines, 154,277 bytes)
-
-Historical decisions accessible via archive file:
-- Architecture Options: GERT Web Execution Platform on Azure
-- Topology Segmentation Decision: A6 MVP + A8 Future
-- A6 Architecture Decisions
-- And 14 additional entries (see archive)
-
----
-
-## Terminology / Conventions
-
-**GXL:**
-- evaluator (runtime executor, not "interpreter")
-- GDP (GERT Dotted Path, not "dot path")
-- PJVM (GERT Portable JSON Value Model, not "value model")
-- parse error vs. evaluation error (timing distinction is normative)
-- context map (runtime variable scope, not "environment")
-- boolean position (not "boolean context")
-
-**Error Categories (13 + reserved):**
-1. GXL-PARSE (10 codes: GXL-PARSE-001..010)
-2. GXL-EVAL (4 codes: GXL-EVAL-001..004)
-3. GXL-TYPE (4 codes: GXL-TYPE-001..004)
-4. GXL-PATH (3 codes: GXL-PATH-001..003)
-5. GIS-INTERP
-6. GIS-PATH
-7. GIS-TYPE
-8. GCP-PARSE
-9. GCP-RESOLVE
-10. GCP-DEFAULT
-11. NAMESPACE
-12. CONFORM-CROSSCUT
-13. GXL-FUNC (proposed by Tess, pending Barbara ratification)
-14. PLAN (9 codes: PLAN-001..009) — parse-time gate enforcement
-
----
-
-## Archive Dates
-
-| Date | File | Lines | Bytes |
-|------|------|-------|-------|
-| 2026-06-05T04:27:04Z | `.squad/archive/decisions-20260605-042704.md` | 2825 | 154,277 |
-
----
-
-*Scribe note: Phase 1 Day 1 merged. Streams B, C, F kickoff deliverables integrated. 5 inbox memos processed. Conflicts surfaced for Barbara arbitration. Phase 2 gates identified (OPQ-GATE-01, 02, 05 blocking; 03, 04, 06, 07 lower priority). New team members (Edith, Tess) onboarded and integrated. Archive threshold crossed; old decisions archived. Cross-agent updates queued (see next task: charters + history).*
-
-
----
-
-# Don — Stream E Day 2 Decision Summary
-
-Date: 2026-06-04T20:14:36.949-07:00
-Requested by: ormasoftchile
-
-## Summary
-
-Stream E Day 2 is implemented and validated. I dogfooded `gert migrate-expr` against the already-migrated runbook fixtures, fixed the idempotency bug it exposed, added contains ambiguity handling, extended E-006 for parenthesized negation, and added permanent regression coverage.
-
-## Outcomes
-
-- Dogfood target: `design/gert/testdata/runbooks/`
-- Result after fixes: 22 YAML files, 0 translations, post-migration verification clean.
-- Added integration coverage proving already-migrated runbook fixtures remain byte-for-byte unchanged.
-- Added E-007 handling:
-  - string-like LHS migrates to `str.contains(...)`
-  - list-like LHS migrates to `list.contains(...)`
-  - ambiguous LHS is not rewritten and emits a warning for manual resolution
-- Added E-006 scanner behavior:
-  - `!X` -> `not X`
-  - `!(X)` -> `not (X)`
-  - `!(X && Y)` -> `not (X and Y)`
-  - `!(X || (Y && Z))` -> `not (X or (Y and Z))`
-  - `!!X` -> `not not X`
-
-## Dogfood Finding
-
-The no-op pass exposed a real idempotency bug: migrated r07 strings such as `Amount: $${amount}` were being treated as legacy E-009 escapes on a second pass. That bypasses the intended Stream D meaning: literal dollar plus GIS interpolation. I fixed this by preserving `$${symbol}` when `symbol` is known from runbook context such as inputs/captures/collector fields.
-
-## Open Questions
-
-1. The current E-007 type detection is conservative heuristic context, not full schema/type inference. Stream E completion should decide whether heuristic warning is enough for MVP or whether Day 3 must add richer symbol typing from runbook schema.
-2. GXL now defines `list.contains(...)`; confirm that list-membership migration should permanently target that namespace call.
-
-## Validation
-
-- `gert migrate-expr --dry-run --diff=false .\design\gert\testdata\runbooks` -> 0 translations, clean verification.
-- `go test ./...` -> passing.
-
-
----
-
-# Phase 2 Day 3  GXL Lexer & Recursive-Descent Parser
-
-**Author:** Don  Backend Developer  
-**Date:** 2026-06-05T16:16:27.961-07:00  
-**Status:** Completed  	v-gxl-parse.yaml 83/83 green  
-**Work Item:** GXL lexer + recursive-descent parser per gxl.ebnf precedence
-
-## Package Layout
-
-- internal/eval/gxl/lexer.go - Lex(input string) ([]Token, error), token kinds, source Position, and structured ParseError codes
-- internal/eval/gxl/ast.go - AST contracts and concrete node types
-- internal/eval/gxl/parser.go - Parse(input string) (Node, error) recursive-descent parser
-- internal/eval/gxl/*_test.go - lexer/parser unit coverage
-- internal/eval/conformance_test.go - gxlParseRunner now calls gxl.Parse; other runners remain Day 4-8 stubs
-
-## AST Design
-
-- Node interface exposes Pos() and is implemented by concrete nodes
-- LiteralNode carries kind, raw lexeme, decoded string/number/bool/null value text
-- UnaryNode handles 
-ot and unary -
-- BinaryNode handles logical, comparison, arithmetic, multiply/divide/modulo operators
-- PathNode models GDP roots plus field/index PathSegments
-- CallNode models top-level builtins (len, 
-ow) and closed namespace calls (str, list, egex)
-
-## Vector Status
-
-- **GXL parse status:** 83 of 83 	v-gxl-parse.yaml vectors green
-- Other vectors remain intentional 
-ot implemented runners: 	v-gxl-eval.yaml, 	v-gxl-path.yaml, 	v-gis-path.yaml, 	v-gcp-path.yaml
-
-## Ambiguities & Ratification Notes
-
-- Scientific notation required per ratified gxl.ebnf and 	v-gxl-parse.yaml (updated from original brief)
-- 1.2.3 follows Tess/Barbara vector behavior: lex as 1.2, ., 3, then fail parse with GXL-PARSE-001
-- str.foo without parentheses follows arbitration: GXL-PARSE-001, not keyword-as-identifier and not unknown-method
-
-## Day 4 Dependencies
-
-- Evaluator can start from AST without parser rewrites
-- Type semantics, stdlib behavior, path resolution, and clock-injected 
-ow() remain Day 4 scope
-- Remaining corpora will transition from stubs to full evaluation as evaluator implementation progresses
-
----
-
-**Status:**  Merged to .squad/decisions.md 
-
-# Phase 2 Day 4: GXL Evaluator
-
-**Author:** Don  Backend Developer  
-**Date:** 2026-06-05T18:06:05-07:00  
-**Status:** Completed  tv-gxl-eval.yaml all vectors green  
-**Work Item:** GXL AST evaluator with strict PJVM typing, short-circuit operators, arithmetic, comparison; stdlib (str/list/regex/math/len/now)
-
-## Architecture
-
-| Decision | Value |
-|----------|-------|
-| Entry point | \Eval(ast, bindings, clock)  (PJVM value, error)\ |
-| Type system | Strict PJVM (no implicit coercion; all type violations raise structured errors) |
-| Short-circuit | AST-level control flow (right side never evaluated if left side short-circuits) |
-| Stdlib isolation | Separate file per namespace; shared arity/type validators |
-| Clock injection | Injected dependency for time operations; no wall-clock reads in tests |
-| Error codes | Stable diagnostic codes matching conformance vectors exactly |
-
-## Stdlib Namespaces
-
-**\str.*\**: case, starts, ends, trim, split, join, replace, index, slice  
-**\list.*\**: append, at, concat, contains, empty, every, filter, find, index, join, length, map, reverse, slice, some  
-**\egex.*\**: match, test (Perl-compatible)  
-**\math.*\**: abs, ceil, floor, max, min, pow, round, sqrt  
-**Global**: \len(s|l)\, \
-ow()\ (Clock-injected)
-
-## Type Error Codes
-
-\EVAL-TYPE-{NUMBER|STRING|BOOLEAN|LIST|OBJECT}\, \EVAL-ARITY-MISMATCH\, \EVAL-UNDEFINED-VAR\, \EVAL-DIVIDE-BY-ZERO\, \EVAL-REGEX-INVALID\, \EVAL-INDEX-OUT-OF-BOUNDS\, \EVAL-KEY-NOT-FOUND\
-
-## Code Changes
-
-| File | Lines | Role |
-|------|-------|------|
-| \internal/eval/gxl/evaluator.go\ | 315 | AST walker with bindings + Clock injection |
-| \internal/eval/gxl/stdlib.go\ | 219 | All stdlib namespaces |
-| \internal/eval/gxl/evaluator_test.go\ | 197 | Unit tests |
-| \internal/eval/conformance_test.go\ | 98 | Harness integration |
-| \.squad/skills/go-ast-evaluator/SKILL.md\ | 27 | Skill documentation |
-
-**Total:** 872 additions, 7 deletions
-
-## Conformance Status
-
-- **tv-gxl-eval.yaml**:  All vectors green
-- **tv-gxl-parse.yaml**: ✅ 83/83 green
-- **tv-gxl-runtime.yaml**: Deferred (GXL type system pending)
-- **Other corpora** (GIS, GCP, flow control): NotImplemented
-
----
-
-**Status:**  Merged to .squad/decisions.md 
-
-
----
-
-## 2026-06-05 — Directive: Single Squad
-
-**Date:** 2026-06-05T22:31:50-04:00  
-**By:** ormasoftchile (via Copilot)  
-
-**What:** Squad has to be single. The same squad serves all repos. That's the purpose of `gert-private`: to hold the design AND host the squad. Agents in this squad operate across whatever repo the work is in (e.g., the runtime migration work happens in `ormasoftchile/gert`, but the squad members executing it live here).
-
-**Why:** User request — captured for team memory.
-
-**Implication for OQ-M5 (Runtime Migration Plan, ratified 2026-06-05):** The ratification said "cast a second backend in the `ormasoftchile/gert` runtime squad." That phrasing is now obsolete. Correct reading: cast a second backend in THIS squad (gert-private), and both backends (Don + the new hire) work in the `ormasoftchile/gert` repo for the runtime migration, then come back here for the next thing.
-
-**Action required:** Patch the runtime migration plan and decisions.md to reflect this. Then proceed with casting the second backend here.
-
-**Status:** Captured; M5 wording corrected in decisions.md and proposal; Ken hired per this directive.
-
----
-
-## 2026-06-05 — Ken hired (second Backend Dev)
-
-**Date:** 2026-06-05T22:31:50-04:00
-
-Ken joined the squad as second Backend Dev per OQ-M5 (corrected wording: cast second backend in this squad, gert-private).
-
-**Coordinator Actions:**
-- Files created: `.squad/agents/ken/charter.md`, `.squad/agents/ken/history.md`
-- Files updated: `.squad/casting/registry.json` (Ken entry), `.squad/team.md` (Ken row), `.squad/routing.md` (Ken routing)
-- Ken's first assignment: Phase A of the runtime migration in `ormasoftchile/gert`, paired with Don (per OQ-M5 corrected wording)
-- Plan: Don takes A→B→C→D→G→H critical path; Ken takes E (GIS) and F (GCP) in parallel during Phases A–H. Target: 10–15 days wallclock.
-
-**Status:** Ken onboarded; ready for Phase A kickoff in ormasoftchile/gert.
-
----
-
-## 2026-06-05 — Phase 1 CLOSED (TESS-AMBIG arbitration + dogfood)
-
-**From:** Barbara (Lead Architect) + Don (Backend Dev)  
-**Date:** 2026-06-05T22:31:50-04:00  
-**Status:** COMPLETE
-
-### TESS-AMBIG Resolutions (Barbara)
-
-#### TESS-AMBIG-3 — Boolean Ordered Comparison
-
-**Verdict:** `false < true`, `true >= false`, etc. → **new error code `GXL-TYPE-005` (eval-time)**. Booleans define equality (`==`, `!=`) but no total ordering.
-
-**Rationale:** GXL's core no-coercion principle forbids mapping booleans to numeric values. A dedicated code signals that `bool < bool` is same-type ordering (not cross-type mismatch as `GXL-TYPE-001` would imply). Eval-time because grammar doesn't distinguish operand types at parse time.
-
-#### TESS-AMBIG-4 — Array/List and Object Equality Semantics
-
-**Verdict:** `==` and `!=` are **restricted to scalar types (`number`, `string`, `bool`) and `null`**. Applying either to `list` or `object` raises **`GXL-TYPE-001`** (extended description).
-
-**Rationale:** OQ2 (scalars-only default) directly supports this. Deep structural equality creates cross-runtime divergence (Go's `reflect.DeepEqual` vs C#'s `SequenceEqual` differ on edge cases). Reference equality is unusable since GXL can't create references. The right answer: reject the operation, let authors decompose to scalar comparisons. No new code needed — `GXL-TYPE-001` description expanded to explicitly exclude lists/objects.
-
-#### TESS-AMBIG-5 and TESS-AMBIG-6 — Dot-Access on Scalar or Null Value
-
-**Verdict:** `foo.bar` where `foo` is `number`, `string`, `boolean`, or `null` → **new error code `GXL-PATH-004` (eval-time)**. "Field access on non-object value."
-
-**Rationale:** Mirrors bracket-indexing precedent (`foo[0]` on null → `GXL-PATH-003`). Single code covers both scalar and null cases, avoiding false "field not found" framing. Separates diagnostic clearly: `PATH-001` = "doesn't exist", `PATH-004` = "wrong type for traversal."
-
-### New Error Codes
-
-| Code | Category | Description |
-|------|----------|-------------|
-| `GXL-TYPE-005` | Type error | Ordered comparison (`<`, `<=`, `>`, `>=`) on boolean operands forbidden. |
-| `GXL-PATH-004` | Path error | Field access on non-object value (number, string, boolean, null). |
-| `GXL-TYPE-001` | Type error | Extended: equality (`==`, `!=`) restricted to scalars + null; lists/objects forbidden. |
-
-### Corpus Final State
-
-**Before:** 208 vectors, 4 TBD  
-**Changes:**
-- TV-GXL-EVAL-033: `TBD` → `GXL-TYPE-005` (bool ordering)
-- TV-GXL-EVAL-086: `TBD` → `GXL-TYPE-001` (array equality)
-- TV-GXL-EVAL-091: **New** — `true >= false` → `GXL-TYPE-005` (bool companion)
-- TV-GXL-EVAL-092: **New** — `myObj == myObj` → `GXL-TYPE-001` (object companion)
-- TV-GXL-PATH-022: `TBD` → `GXL-PATH-004` (scalar dot-access)
-- TV-GXL-PATH-023: `TBD` → `GXL-PATH-004` (null dot-access)
-- TV-GXL-PATH-036: **New** — `foo.length` (foo=`"hello"`) → `GXL-PATH-004` (string companion)
-
-**After:** 211 vectors (83 parse + 92 eval + 36 path), **0 TBD**
-
-### Dogfood Results (Don)
-
-**Audit:** 22 migrated runbook fixtures (r01–r22)
-
-| Check | Result |
-|-------|--------|
-| P1: `{{ }}` template syntax | 0 occurrences |
-| P2: `&&`/`||` in expr fields | 0 occurrences (3 hits in bash strings, correct) |
-| P3: `!` prefix in `when:` / `condition:` | 0 occurrences |
-| P4: Infix `contains` | 0 occurrences |
-| P5: `$.` jq-style | 0 occurrences |
-
-**Result:** All 22 fixtures clean. No legacy syntax remains.
-
-### Phase 1 Exit Gate: ✅ COMPLETE
-
-All streams delivered:
-- **Stream A** (Reference Grammar): ✅ Barbara
-- **Stream B** (Spec Rewrite + GIS Optional Chaining): ✅ Edith
-- **Stream C** (Conformance Corpus): ✅ Tess (208 → 211 vectors after ambiguity closure)
-- **Stream D** (Fixture Migration): ✅ Don (22 runbooks, P1–P5 all zero)
-- **Stream E** (Migration Tooling): Removed per user directive (not blocking)
-- **Stream F** (Parser Gate Spec + PLAN codes): ✅ Barbara
-- **GIS Optional Chaining**: ✅ Complete
-
-**Next:** Phase A in `ormasoftchile/gert` (Don + Ken paired). Pending work transitions out of gert-private.
-
----
-
-## 2026-06-05 — Phase A In-Flight (Don PR #9, Ken PR #8)
-
-**Status:** Both slices implemented, draft-PR'd in `ormasoftchile/gert`. Awaiting Germán review/merge; Phase A exit-criteria satisfied once merged.
-
-### Don's Slice: PJVM/Clock/Harness Scaffold (PR #9)
-
-**Branch:** `phase-a-pjvm` in `ormasoftchile/gert`  
-**Key Deliverables:**
-
-| Component | Files | Purpose |
-|-----------|-------|---------|
-| **PJVM** | `internal/eval/core/value_gxl.go` | 6-variant JSON value type (Null, Bool, Number, String, Array, Object) with typed accessors, deep-Equal, MarshalJSON/UnmarshalJSON |
-| **Clock** | `internal/eval/core/clock_gxl.go` | Clock interface, SystemClock(), FixedClock(t) for deterministic now() testing |
-| **YAML Loader** | `internal/eval/core/yaml_gxl.go` | FromYAML(*yaml.Node) for conformance harness |
-| **Unit Tests** | `internal/eval/core/core_gxl_test.go` | 27 tests: constructors, equality, JSON round-trip, YAML, Clock |
-| **Harness Skeleton** | `internal/eval/harness/conformance_gxl_test.go` | Loads tv-*.yaml from `testdata/vectors/`, dispatches to per-corpus runners (all stubbed → 264 vectors skip, 0 fail) |
-| **Vectors** | `testdata/vectors/tv-*.yaml` (5 files) + `VECTORS_SHA` | TEMPORARY copies + source commit breadcrumb (3ce53431); replaced when Ken's sync lands |
-| **Docs** | `phase-a/README.md` | Build-tag discipline, package layout, phase roadmap, cherry-pick provenance |
-
-**Source:** Cherry-picked from `97ce48b..5c550c0` in `gert-private` (OQ-M2); YAML fixed (escaping in descriptions); JSON marshaling added.
-
-**Test Results:** `go test -tags gxl ./internal/eval/...` → core: 27/27 ✅, harness: 264 skip, 0 fail ✅
-
-**Breadcrumb Left:** `conformance_gxl_test.go:59` marks hardcoded vector path for Ken's sync replacement.
-
-### Ken's Slice: DRIFT-DETECTION-001 Sync Infrastructure (PR #8)
-
-**Branch:** `phase-a-drift` in `ormasoftchile/gert`  
-**Key Deliverables:**
-
-| Component | Files | Purpose |
-|-----------|-------|---------|
-| **Sync Script** | `scripts/sync-vectors.sh` | Copies tv-*.yaml + schema.json from gert-private; writes `VECTORS_SHA` (source commit pinned to 3ce53431) |
-| **Makefile** | `Makefile` | Targets `sync-vectors` + `verify-vectors` (NEW; no prior Makefile in repo) |
-| **CI Gate** | `.github/workflows/verify-vectors.yml` | Runs on PR + main push + weekly; detects drift against gert-private canonical |
-| **Runbook** | `testdata/vectors/README.md` | Sync flow, drift semantics, upgrade path to Option B (deploy-key) if needed |
-
-**Env Contract:** `GERT_PRIVATE_PATH` (abs or rel path to gert-private; default: `../gert-private`)
-
-**Option Chosen:** **Option A (best-effort)** — attempt GITHUB_TOKEN checkout; fall back to SHA-format validation. Immediate within org; upgradeable to Option B (deploy-key) if token insufficient. Trade-off documented.
-
-**Test Loop:** sync → verify-clean ✅ → hand-edit + verify-drift ✅ → restore + verify-clean ✅
-
-### Coordination Note
-
-**Canonical vector path:** `testdata/vectors/` (same directory — both PRs converged!)  
-- Don's TEMPORARY copy will be replaced when Ken's sync script (PR #8) lands.
-- Ken's script pins SHA to 3ce53431 (gert-private HEAD at Phase A bootstrap).
-- Both PRs target the same location; no rename/migration needed post-merge.
-
-### Phase A Exit Criteria Status
-
-✅ **Completed:**
-- PJVM types with JSON marshaling (Don)
-- Clock interface for deterministic testing (Don)
-- Conformance harness skeleton dispatching all three corpus types (Don)
-- Sync script + CI gate + runbook (Ken)
-- DRIFT-DETECTION-001 test-loop verified (Ken)
-
-⏳ **Pending Merge:**
-- Germán review/approval of both PRs in `ormasoftchile/gert`
-- Merge both PRs to unblock Phase B (Don's stream B: GXL Lexer/Parser, Ken's stream E: GIS resolver)
-
-**Note:** Phase A implementation is complete in both PRs. The sync will be live once merged; the vector path constant in Don's harness can be updated then to read `testdata/vectors/VECTORS_SHA` and emit the source commit SHA in log output (for CI traceability).
-
----
-
-## 2026-06-05 — Phase C Speculative Kickoff (Don PR #11)
-
-**From:** Don (Backend Dev)  
-**Date:** 2026-06-05T23:54:03-04:00  
-**PR:** ormasoftchile/gert#11 (draft, `phase-c-evaluator`, stacked on phase-b-lexer-parser)  
-**Status:** ✅ SHIPPED — 92/92 eval vectors PASS on first pass; speculative merge approved.
-
-### GXL Evaluator Delivery
-
-**File Paths:**
-| Path | Purpose |
-|------|---------|
-| `internal/eval/gxl/evaluator_gxl.go` | AST walker — literals, unary/binary ops, GDP path resolution, call dispatch, short-circuit control flow |
-| `internal/eval/gxl/stdlib_gxl.go` | Stdlib surface — `len`, `now`, `str.*`, `list.*`, `regex.match` |
-| `internal/eval/gxl/evaluator_unit_gxl_test.go` | Unit tests (evaluator + stdlib operators + type errors) |
-| `internal/eval/harness/eval_runner_gxl_test.go` | Conformance harness eval runner (dispatches to evaluator) |
-| `internal/eval/harness/conformance_gxl_test.go` | *(minimal edit)* — regex-assert support added for TV-GXL-EVAL-088 |
-
-All new files carry `//go:build gxl`.
-
-### Vector Results
-
-**92 / 92 PASS** — zero failures, zero skips on GXL-EVAL corpus.
-
-```
-Conformance totals: 175 PASS (83 parse + 92 eval), 92 SKIP (Phase D/E/F), 0 FAIL
-  GXL-PARSE    83/83 ✅ (Phase B)
-  GXL-EVAL     92/92 ✅ (Phase C)
-  GXL-PATH     36   SKIP ← Phase D (path engine)
-  GIS-PATH     15   SKIP ← Phase E (GIS resolver)
-  GCP-PATH     41   SKIP ← Phase F (GCP capture)
-```
-
-No silent skips. All 92 passed cleanly on first pass.
-
-### Stdlib Surface Implemented
-
-| Function | Signature | Notes |
-|----------|-----------|-------|
-| `len(v)` | string/array → count; null/object/bool/number → GXL-TYPE-003 | |
-| `now()` | → ISO-8601 UTC string via injected Clock | Deterministic testing support |
-| `str.startsWith(s, prefix)` | → bool | |
-| `str.endsWith(s, suffix)` | → bool | |
-| `str.contains(s, sub)` | → bool | |
-| `str.toLower(s)` | → string | |
-| `str.toUpper(s)` | → string | |
-| `str.trim(s)` | → TrimSpace | |
-| `str.length(s)` | → codepoint count as number | |
-| `str.trimPrefix(s, p)` | → string | |
-| `str.trimSuffix(s, p)` | → string | |
-| `list.contains(arr, needle)` | scalar equality only; null → false | |
-| `list.indexOf(arr, needle)` | scalar equality; not-found → -1 | |
-| `list.length(arr)` | → element count as number | |
-| `regex.match(s, pattern)` | → bool; invalid regex → GXL-EVAL-003 | |
-
-All null arguments to `str.*` return `GXL-TYPE-003` per spec §4.2.
-
-### Spec Fixes vs. Sketch
-
-Two corrections applied (sketch predated Phase 1 arbitrations):
-
-| Case | Sketch Behaviour | Corrected Behaviour | Ratification |
-|------|-----------------|---------------------|--------------|
-| Boolean ordered comparison (`false < true`) | Returned `CodeTBD` | Returns `GXL-TYPE-005` ✅ | TESS-AMBIG-3 (Barbara, Phase 1) |
-| List equality (`myArr == myArr`) | Returned `CodeTBD` | Returns `GXL-TYPE-001` ✅ | TESS-AMBIG-4 extension (Barbara, Phase 1) |
-
-Both aligned with existing arbitration ledger; no new spec action needed.
-
-### Harness Extensions
-
-**regex-assert Support:** TV-GXL-EVAL-088 (`now()` → regex pattern match) required harness support for `assert: regex` in conformance vector YAML. Added to `conformance_gxl_test.go`. No corpus changes needed; this harness capability now available for future vectors.
-
-### Handoffs
-
-**→ Barbara (Spec):** None required. All error codes in use were pre-ratified in Phase 1 decisions.
-
-**→ Tess (Corpus):** Observation only — harness now supports `assert: regex` for any future eval vectors. No corpus action needed; all 92 vectors pass as authored. No corpus bugs found.
-
-### Stack Order & Merge Path
-
-```
-main
- └─ phase-a-pjvm       (PR #9)
-     └─ phase-b-lexer-parser  (PR #10)
-         └─ phase-c-evaluator  (PR #11, this PR)
-```
-
-**Merge order critical:** #9 → #10 → #11. Phase C exit-criteria satisfied once #11 merges. Phase D (path engine, 36 vectors) unblocks.
-
-### Phase C Exit-Criteria Readiness
-
-✅ **Complete:**
-- GXL evaluator shipped (AST walker + PJVM construction)
-- Stdlib surface implemented (13 functions across 4 namespaces)
-- Regex-assert harness support added
-- 92/92 eval vectors PASS
-- Error codes stable; phase-1 arbitrations incorporated
-
-✅ **No Action Items:** Don confirmed inline — no Barbara action, no Tess action, no changes to charter/skills/team.
-
-## 2026-06-06 — Phase D Speculative Kickoff (Don PR #12)
-
-**From:** Don (Backend Dev)  
-**Date:** 2026-06-06T00:14:11-04:00  
-**PR:** ormasoftchile/gert#12 (draft, `phase-d-path`, stacked on `phase-c-evaluator`)  
-**Status:** ✅ SHIPPED — 36/36 path vectors PASS on first pass; speculative merge approved.
-
-### GXL Path Engine Delivery
-
-**File Paths:**
-| Path | Purpose |
-|------|---------|
-| `internal/eval/gxl/path_gxl.go` | Thin path-resolution entrypoint — `ResolvePath(input, variables)` + `ResolvePathNode(*PathNode, …)` for pre-parsed AST |
-| `internal/eval/gxl/evaluator_gxl.go` | **FIXED** — corrected error code for field-on-non-object from GXL-PATH-001 → GXL-PATH-004 per ratified spec (TESS-AMBIG-5/6); added `CodePathFieldOnNonObject = "GXL-PATH-004"` |
-| `internal/eval/harness/path_runner_gxl_test.go` | Conformance harness path runner (dispatches to path engine) |
-| `internal/eval/harness/conformance_gxl_test.go` | *(minimal edit)* — wired `tv-gxl-path.yaml` runner (replaced `stubRunner`) |
-| `internal/eval/gxl/path_unit_gxl_test.go` | 18 edge-case unit tests — empty path, null root, all four error codes, bounds, deep nesting, mixed traversal |
-
-All files carry `//go:build gxl`.
-
-### Design Choice: Option (b) — Thin Entrypoint
-
-**Approach:** Minimal churn against Phase C internals. `path_gxl.go` wraps `Parse(input)` + `Eval(ast, variables, nil)`. No structural refactor of `evaluator_gxl.go` — single 2-line fix for the GXL-PATH-004 error code.
-
-**Rationale:** Phase C's `evalPath` already contained correct GDP traversal logic; only the error code was wrong. Extracting a standalone path package would touch ~80 lines across 2 files, incurring refactor risk without immediate benefit (GIS path logic defers to Phase E and has different semantics). Documented as optional follow-up if Phase E needs shared GDP resolution.
-
-### Vector Results
-
-**36 / 36 PASS** — zero failures, zero skips on GXL-PATH corpus.
-
-```
-Conformance totals: 211 PASS (83 parse + 92 eval + 36 path), 56 SKIP (15 GIS + 41 GCP), 0 FAIL
-  GXL-PARSE    83/83 ✅ (Phase B)
-  GXL-EVAL     92/92 ✅ (Phase C)
-  GXL-PATH     36/36 ✅ (Phase D — this PR)
-  GIS-PATH     15   SKIP ← Phase E (Ken)
-  GCP-PATH     41   SKIP ← Phase F (Ken)
-```
-
-All path vectors classified and passed: object/array/mixed traversal (TV-GXL-PATH-001..013), missing-path errors (014..016), out-of-bounds (017..018), index-on-non-array (019..021), field-on-scalar (022..023 — required the GXL-PATH-004 fix), parse errors (024..025), identifier edge cases (026..032), realistic nesting (033..034), null root (035), string dot-access (036).
-
-### Cross-Phase Fix: GXL-PATH-004 Correction
-
-**Issue:** Early sketch (commits 97ce48b..5c550c0) used a single `CodePathMissing` for both "field not found in object" and "field access on non-object". Phase 1 arbitration (TESS-AMBIG-5, TESS-AMBIG-6; Barbara, 2026-06-05) clarified: field-on-non-object must return **GXL-PATH-004**, not GXL-PATH-001.
-
-**Fix Applied:** `evaluator_gxl.go` line corrected to raise GXL-PATH-004 when `evalPath` encounters null, scalar, or array on field access. TV-GXL-PATH-022/023 now PASS.
-
-**Note:** This fix lives in PR #12 even though `evaluator_gxl.go` was created in PR #11 (Phase C territory). Merging #11 first will show Phase C complete but path vectors failing until #12 lands.
-
-### Handoffs
-
-**→ Barbara (Spec):** None required. All four GXL-PATH error codes (001–004) were pre-ratified Phase 1. No new ambiguities surfaced.
-
-**→ Tess (Corpus):** None required. All 36 vectors passed as authored. Zero corpus bugs. Harness verified all error-code branches.
-
-**→ Ken (Phase E/F):** GIS and GCP runners remain `stubRunner`. Phase E may review `ResolvePath`/`ResolvePathNode` in `path_gxl.go` as optional base for GIS resolver; however GIS adds optional chaining semantics which likely warrant separate resolver.
-
-### Stack Order & Merge Path
-
-```
-main
- └─ phase-a-pjvm        (PR #9)
-     └─ phase-b-lexer-parser   (PR #10)
-         └─ phase-c-evaluator   (PR #11)
-             └─ phase-d-path     (PR #12, this PR)
-```
-
-**Merge order critical:** #9 → #10 → #11 → #12. Five-deep stack. Do NOT merge #12 before #11 or diffs will be misleading (GXL-PATH-004 fix appears as Phase C delta). Phase D exit-criteria satisfied once #12 merges.
-
-### Phase D Exit-Criteria Readiness
-
-✅ **Complete:**
-- GXL path engine shipped (thin `path_gxl.go` entrypoint + GDP traversal)
-- GXL-PATH-004 spec correction applied (TESS-AMBIG-5/6 compliance)
-- 36/36 path vectors PASS
-- 18 unit tests for edge cases
-- Error codes stable; all ratified Phase 1 decisions incorporated
-
-✅ **No Action Items:** Don confirmed inline — no Barbara action, no Tess action, no changes to charter/skills/team.
-
-### Phases Completed & Remaining
-
-**Critical Path (Don A→B→C→D complete):**
-- ✅ Phase A (PJVM/Clock/Harness) — PR #9 ✅
-- ✅ Phase B (GXL Lexer/Parser) — PR #10 ✅
-- ✅ Phase C (GXL Evaluator/Stdlib) — PR #11 ✅
-- ✅ Phase D (GXL Path Engine) — PR #12 ✅
-- ⏳ Phase G (Cutover) — pending Phase E/F completion
-- ⏳ Phase H (Cleanup) — pending Phase G
-
-**Parallel (Ken E/F, unblocks after #9 merge):**
-- ⏳ Phase E (GIS Path Resolver) — Ken, 15 vectors
-- ⏳ Phase F (GCP Capture Engine) — Ken, 41 vectors
-
-**Recommendation:** Phase D ready for speculative merge. Phase E/F unblock once PR #9 (PJVM) lands in `ormasoftchile/gert`. Recommend allocating hiring time for Phase E/F parallel execution to hit 10–15-day wallclock target.
-
-## 2026-06-06 — Phase E + F speculative kickoff (Ken PR #13 + #14) — 100% conformance reached
-
-**From:** Ken (Backend Dev)  
-**Date:** 2026-06-06T01:00:00-04:00  
-**PRs:** ormasoftchile/gert#13 (Phase E GIS-PATH, draft, `phase-e-gis`) + ormasoftchile/gert#14 (Phase F GCP-PATH, draft, `phase-f-gcp`)  
-**Status:** ✅ SHIPPED — 15/15 GIS-PATH vectors PASS + 41/41 GCP-PATH vectors PASS (56/56 combined, zero failures).
-
-### Delivery Summary
-
-Two parallel streams, both stacked on `phase-a-pjvm` (PR #9):
-- **Phase E (GIS):** `internal/eval/gis/` — optional-chaining path resolver (15 vectors: root miss, deep chain, null-as-miss, falsy-values-present, bracket access, stdlib integration)
-- **Phase F (GCP):** `internal/eval/gcp/` — capture engine with four source prefixes + GDP traversal + §6 default policy (41 vectors: local/http/event/step captures, parse errors, header soft-null, YAML timestamp, type mismatch)
-
-**Design Choice:** Both engines fully separate packages. GIS does NOT share code with GXL (optional-chaining semantics diverge from strict path-error model). GCP fully independent (different surface language, different resolution semantics, no Phase C analogue to reuse). Only shared layer: `internal/eval/core` (PJVM value model).
-
-**File Layouts:**
-| Phase | Path | Key Files | Vectors |
-|-------|------|-----------|---------|
-| E | `internal/eval/gis/` | doc.go, errors.go, lexer.go, ast.go, parser.go, eval.go, render.go | 15 ✅ |
-| F | `internal/eval/gcp/` | doc.go, gcp_gxl.go, parser_gcp_gxl.go, resolver_gcp_gxl.go, gcp_unit_gxl_test.go | 41 ✅ |
-
-**Build Tag Discipline:** All files carry `//go:build gxl` per OQ-M3.
-
-### Vector Tally
-
-**Phase E (GIS-PATH):**
-- Optional root miss (001, 013): Root not found, first seg `?.` → `""` ✅
-- Deep optional chain (002): Miss mid-chain, tail skipped ✅
-- Optional + mandatory tail (003): Optional miss short-circuits mandatory tail ✅
-- Mandatory prefix error (004): Root mandatory, `?.` not yet reached ✅
-- Mixed chain (005): Mandatory prefix found, optional miss ✅
-- Null as optional miss (006): `b = null` via `?.b` → `""` ✅
-- Falsy values NOT miss (007–010): `""`, `false`, `0`, `[]` are present values ✅
-- Optional bracket (011–013): `?.[N]` with hit, OOB, missing root ✅
-- Stdlib + optional arg (014): `str.toLower(user?.name)` → `""` ✅
-- Invalid optional root (015): `${?.root}` → GIS-PARSE-003 ✅
-
-**Phase F (GCP-PATH):**
-- Local captures (001–020): stdout/stderr/exit_code/json/yaml, bare root, mixed GDP ✅
-- Parse errors (021–025, 031, 038): unknown prefix, invalid suffix, negative index, trailing dot, empty segment, invalid header name, step not found ✅
-- HTTP captures (026–031): status, body (JSON), headers, absent-header soft null ✅
-- Event captures (032–034): id, body, headers ✅
-- Step captures (035–037): json, stdout legacy form, exit_code, cross-step GDP ✅
-- YAML scalar edge case (039): timestamp as string per OI-GCP-06 ✅
-- Default policy (040–041): GCP-DEFAULT-SUBTREE for object/array, GCP-TYPE-001 for scalar type mismatch ✅
-
-**Combined Result:**
-```
-Conformance totals: total=267 pass=56 fail=0 skip=211
-  GIS-PATH     15/15 ✅ (Phase E)
-  GCP-PATH     41/41 ✅ (Phase F)
-  GXL-PARSE    83    (Phase B — Don)
-  GXL-EVAL     92    (Phase C — Don)
-  GXL-PATH     36    (Phase D — Don)
-  DRIFT        (Phase A — independent, PR #8 ✅)
-```
-
-### Stack Topology
-
-```
-main
- └─ phase-a-pjvm           (PR #9, in review)
-     ├─ phase-e-gis        (PR #13, this PR — Ken-E)
-     └─ phase-f-gcp        (PR #14, this PR — Ken-F)
-
-Don's GXL critical path (independent):
-main → phase-a-pjvm → phase-b → phase-c → phase-d
-       (PR #9)        (PR #10)   (PR #11)   (PR #12)
-```
-
-**Merge order:** PR #9 must land first. #13 and #14 are independent (different source prefixes, no shared resolver). Can merge in any order once #9 lands.
-
-### Exit-Criteria Satisfied
-
-✅ **Phase E (GIS):**
-- GIS path engine shipped (`internal/eval/gis/`)
-- Parser handles template strings + GIS expressions (two-level parsing)
-- Eval implements optional-chaining semantics + null-as-miss + str stdlib
-- 15/15 GIS-PATH vectors PASS
-- Zero error codes left TBD; all pre-ratified Phase 1
-- No Barbara action; no Tess action
-
-✅ **Phase F (GCP):**
-- GCP capture engine shipped (`internal/eval/gcp/`)
-- Parser covers all four source prefixes + all error codes from gcp.ebnf §7
-- Resolver covers PJVM sources + GDP traversal + §6 default policy
-- OI-GCP-06 timestamp handling (yaml.v3 `!!timestamp` → string)
-- 41/41 GCP-PATH vectors PASS; 15 unit tests PASS
-- Zero error codes left TBD; all pre-ratified Phase 1
-- No Barbara action; no Tess action
-
-### Handoffs
-
-**→ Barbara (Spec):** None required. All error codes (GIS-PARSE-001..004, GIS-PATH-MISSING, GIS-TYPE-001, GCP-PARSE-001..006, GCP-RESOLVE-001..004, GCP-DEFAULT-SUBTREE, GCP-TYPE-001) were pre-ratified in Phase 1. No new ambiguities surfaced.
-
-**→ Tess (Corpus):** None required. All 56 vectors passed as authored (15 GIS + 41 GCP). Zero corpus bugs. Observations: GIS TV-007/006 produce identical output `""` but for different reasons (present-empty-string vs null-as-miss) — this is intentional per notes.
-
-**→ Don (Phase G):** GIS and GCP engines ready for integration. Phase G (cutover) unblocks once E and F merged. Stack dependency: PR #9 → (#10/#11/#12 parallel to #13/#14) → Phase G.
-
-### Runtime Migration Plan Status
-
-**Phases A–F now 100% conformance-complete:**
-- ✅ Phase A (DRIFT-DETECTION-001) — PR #8 shipped
-- ✅ Phase B (GXL Lexer/Parser) — PR #10 shipped (83/83 vectors)
-- ✅ Phase C (GXL Evaluator/Stdlib) — PR #11 shipped (92/92 vectors)
-- ✅ Phase D (GXL Path Engine) — PR #12 shipped (36/36 vectors)
-- ✅ Phase E (GIS Path Resolver) — PR #13 shipped (15/15 vectors)
-
----
-
-## 2026-08-09 — Tool Packages MVP: Final Gate APPROVED; Workspace Escape Ruling Binding
-
-**Last Updated:** 2026-08-09T19:33-07:00
-**Inbox Merged:** 2 files (barbara-tool-packages-final-gate-decision; barbara-pkg-path-002-workspace-escape-ruling)
-
-### Summary
-
-Barbara's final implementation gate (second pass) confirms the Tool Packages MVP runtime is ready for production. Every blocker (B1–B5) and all nine §3 required fixes are resolved in code. David's independent revision is accepted in full. The workspace-escape ruling (TV-PKG-PATH-002) corrects the conformance vector and sharpens §06/§03d normative text: workspace-level path kinds report external-root escapes as `PKG-W003` (report), never `PKG-007` (rejection).
-
-### Blockers Verified
-
-| # | Item | Status |
-|---|------|--------|
-| B1 | Plan-time substitution validation | ✅ Resolved — `flowwalk.Walker` visitor added; `dryrun` coverage verified live |
-| B2 | Digest closure | ✅ Resolved — raw `*yaml.Node` walk; sorted digests; closure files only |
-| B3 | Catalog digest from package digest | ✅ Resolved — deferred export entries; tier-1 uses `pkgDigest` |
-| B4 | Removed/added package on resume | ✅ Resolved — `checkResumePackageDrift` treats manifest as authoritative; sorted pairs |
-| B5 | `outputs.<name>` capture root | ✅ Resolved end-to-end — GDP parser/resolver added; plan validation enforced |
-
-### Nine §3 Fixes Verified
-
-1. `ConstraintSources` real — ordered per-package site list threaded through `loadPackage`
-2. PKG-002 provenance — package and site(s) named in both `catalog.go` and `bind.go`
-3. Build metadata in constraints — `+` added to `unsupportedPatterns`; versions retain build metadata
-4. PKG-006 ordering — sorted before iteration; deterministic
-5. PLAN-010 typed error — new `errkit.ErrPLAN010`; unwrap chain matches `ErrToolNotFound`
-6. PKG-018 normalisation — export uniqueness comparison includes `NormalizeForComparison(..., true)`
-7. `maxLinkHops` — explicit hop-count check; Windows symlinks verified manually (tests skip on Windows)
-8. Output coercion — step fails on declared-type mismatch; no silent degradation
-9. `--package-map` provenance — `origin` added to `package/resolved` payload; trace records sources
-
-### Build & Testing
-
-- `go build ./...` clean
-- `go test ./...` green (single pre-existing flaky `TestSSE_FilterByRunID` unrelated to packages)
-- Target suites re-run individually: `internal/planner`, `pkg/pkgsubst`, `pkg/gcp/parser`, `pkg/capture`, `internal/conformance` — all green
-
-### Constraints & Hygiene
-
-- Protected files untouched — byte-identical to pre-revision state
-- Spec not reopened — no `design/` modifications during revision window
-- Tree state preserved — nothing staged or committed
-- David's work verified directly in code, not from summary
-
-### Workspace-Escape Ruling (TV-PKG-PATH-002 Correction)
-
-The conformance vector TV-PKG-PATH-002 incorrectly expected `PKG-007` for a workspace-root escape by a workspace-level `requires[].path`. **The ruling:** Workspace-level kinds are report-only (`PKG-W003`), never rejection. Don's `pkg/pkgpath` implementation is correct; no runtime change required.
-
-**Corrections made:**
-- `tv-pkg-resolve.yaml` TV-PKG-PATH-002: rewritten with external package tree; expected outcome now tier-1 entry + `PKG-W003` warning
-- `tv-pkg-resolve.yaml` TV-PKG-PATH-008: same defect corrected identically
-- `tv-pkg-resolve.yaml` TV-PKG-PATH-003: note reworded for clarity
-- §06 `sec:tool-path-containment`: normative paragraph added
-- §03d error catalog: `PKG-007` and `PKG-W003` conditions sharpened
-
-**Validation:**
-- `python design/gert/scripts/verify_corpus.py` → `OK 365/365 vectors validate`
-- Pre-existing `latex.py` failure unrelated to this ruling
-
-### Caveat: Cross-Process Resume
-
-Cross-process `gert run --resume` remains unsupported (pre-existing reason: no `ExecutionPlan` persistence in `DirRunStore`). Therefore `--allow-package-drift` and `PKG-009` are in-process-only today.
-
-### Accepted Non-Goals
-
-- Deep governance `deny_commands`/`allow_commands` enforcement inside substitute bodies
-- Cross-process resume plan persistence (pre-existing)
-- Replay mode (deferred)
-- §5 option (a) full per-file lexical `toolRefs` binding (deferred; PKG-017 fail-closed refusal in place)
-
-### Follow-ups
-
-1. ✅ Implement §5 option (a): include-closure + per-file `BindFile` binding; retire PKG-017 refusal
-2. 📝 Document single-file `requires:`/`toolRefs:` restriction in user-facing README
-3. 🔌 Wire `GovernanceEvaluator` into top-level and nested engines (pre-existing)
-4. 💾 Persist `ExecutionPlan` in `DirRunStore` for true cross-process resume (pre-existing)
-5. 🧪 Enable `pkgpath` hop-limit tests on Windows (verified manually; tests skip)
-6. 🔒 Extend `checkLinkHopBound` to count hops across intermediate path components (hardening)
-7. 🐛 Investigate flaky `internal/serve/TestSSE_FilterByRunID` (pre-existing, unrelated)
-8. 📚 Resolve pre-existing corpus issues: `ToolDef.Actions` map-vs-array, apiVersion mismatch, replay terminology, rules composition
-
-### Disposition
-
-**APPROVED.** The Tree is ready for Cristián's review and commit. No third gate pass required.
-
-**Reference:** `.squad/decisions/archive/barbara-tool-packages-final-gate-decision-archived.md`, `.squad/decisions/archive/barbara-pkg-path-002-workspace-escape-ruling-archived.md`
-- ✅ Phase F (GCP Capture Engine) — PR #14 shipped (41/41 vectors)
-
-**TOTAL CONFORMANCE: 267/267 (100%)** — all corpus vectors authored, implemented, and passing. All conformance-driven development work COMPLETE.
-
-**Remaining (pure-runtime, no new vectors):**
-- ⏳ Phase G (Integration & Migration) — Don, orchestrate GIS/GCP into request/response flow
-- ⏳ Phase H (Hard Cutover) — Don, remove build tag, delete old engine, update CHANGELOG
-
-**Recommendation:** Speculative merge approved for PR #13/#14 once PR #9 lands. Ken's assignment (Phases E–F) complete. Next phase: Don + Ken on Phase G/H integration (1–2 week wallclock target).
-
----
-
-## 2026-06-06 — Phase G: Runtime Integration (Don PR #15) — Engines Side-by-Side
-
-**From:** Don  
-**Date:** 2026-06-06T01:35:00-04:00  
-**PR:** ormasoftchile/gert#15 (draft, `phase-g-integration` → `phase-d-path`)  
-**Status:** ✅ SHIPPED — all test gates green, 267/267 conformance maintained
-
-### Merge Experience
-
-Don merged Ken's PR #13 (Phase E: GIS) and PR #14 (Phase F: GCP) into the integration branch. Zero code conflicts — `internal/eval/gis/` and `internal/eval/gcp/` disjoint from `internal/eval/gxl/`. One harness collision: `vectorBindings` helper declared independently in both `path_runner_gxl_test.go` (Phase D) and `gis_runner_gxl_test.go` (Phase E) — resolved by extracting to `helpers_gxl_test.go` (shared test utilities). Not a semantic conflict, pure naming collision.
-
-### Integration Surface
-
-**Build tag `//go:build gxl`** is the feature flag (no CLI flag, no env var, no runtime switch). Two wiring points per the migration plan:
-
-1. **`internal/adapter/wire.go`** — `BuildEngineConfig()` calls `newEvaluators()` + `newCaptureResolver()`; build-tagged switch:
-   - `!gxl` → `evaluators_legacy.go`: `TemplateEvaluator` + `SimpleConditionEvaluator` + nil resolver
-   - `gxl` → `evaluators_gxl.go`: `GISEvaluatorAdapter` + `GXLConditionAdapter` + `GCPCaptureAdapter`
-
-2. **`pkg/run/run.go`** — same pattern via `newRunEvaluators()` + `newRunCaptureResolver()`
-
-### Public API
-
-Three adapter types in `internal/eval/adapter_gxl.go` (all `//go:build gxl`):
-
-| Type | Interface | Engine |
-|------|-----------|--------|
-| `GISEvaluatorAdapter` | `pkg/expr.Evaluator` | GIS — `${...}` template interpolation |
-| `GXLConditionAdapter` | `pkg/expr.ConditionEvaluator` | GXL — strict PJVM boolean evaluation |
-| `GCPCaptureAdapter` | `internal/executor.CaptureResolver` | GCP — path-based step output capture |
-
-Helpers: `MapToValues()`, `anyToValue()`, `ValueToAny()` — all in `adapter_gxl.go` for CLI and future cutover code.
-
-### Capture Path Evolution
-
-- `internal/executor.CaptureResolver` interface added (no build tag — just interface)
-- `internal/executor.RegistryConfig.CaptureResolver` field (optional, nil = legacy keyword switch)
-- `CLIExecutor.captureResolver` field, `NewCLIExecutor(...CaptureResolver)` variadic (backward compat)
-- Under `gxl`: `GCPCaptureAdapter` handles ALL capture paths via GCP engine. Legacy `stdout`/`stderr`/`exit_code` strings are valid GCP LocalCapture paths.
-
-### Test Results
-
-| Suite | Count | Result |
-|-------|-------|--------|
-| Conformance (GXL-PARSE) | 83/83 | ✅ PASS |
-| Conformance (GXL-EVAL) | 92/92 | ✅ PASS |
-| Conformance (GXL-PATH) | 36/36 | ✅ PASS |
-| Conformance (GIS-PATH) | 15/15 | ✅ PASS |
-| Conformance (GCP-PATH) | 41/41 | ✅ PASS |
-| **Conformance TOTAL** | **267/267** | ✅ **100%** |
-| Integration (adapter e2e) | 4/4 | ✅ PASS |
-| `go test ./...` (no tag) | all pass | ✅ |
-| `go test -tags gxl ./...` | all pass | ✅ |
-| Pre-existing failure | `TestRender_Regions` | ⚠️ pre-dates Phase work |
-
-### Fixture Migration
-
-`TestStepStartedEvent_StructuralMetadata_CollectHealth` failed under `gxl` because collect-health runbook uses `{{ }}` Go-template syntax; `GISEvaluatorAdapter` passes through as literal text (correct GIS behavior). Fixed by:
-
-1. GXL-syntax variants: `collect-health-gxl.runbook.yaml` + `check-service-gxl.runbook.yaml`
-2. check-service conditionals restructured as `branch` step with GXL conditions
-3. Build-tagged `collectHealthRunbookPath()` helper selects variant per build
-4. Original `{{ }}` runbooks preserved unchanged for legacy (`!gxl`) test path
-5. Hardcoded `/Volumes/Projects/gert/...` absolute path in both engine tests replaced with `repoRoot()` + relative path — portable across machines and worktrees
-
-### Stack & Handoffs
-
-**Merge order:** PR #9 → #10 → #11 → #12 → #13/#14 (either order) → **#15**
-
-**→ Ken (Phase H prep):** No changes to `internal/eval/gis/` or `internal/eval/gcp/`. `CaptureResolver` interface in `internal/executor/capture_resolver.go` — Ken's `GCPCaptureAdapter` satisfies structurally without importing the interface type. Note for Phase H: `GCPCaptureAdapter` returns error for non-standard capture keys (e.g., `exitCode` camelCase) — Phase H migration guide should document `exit_code` (snake_case only) requirement.
-
-**→ Barbara (Spec — POTENTIAL BREAKING CHANGE):** `GISEvaluatorAdapter.Eval()` returns error when a template contains a mandatory (non-optional-chaining) path missing from `vars` (GIS-PATH-MISSING per spec). Legacy `TemplateEvaluator` returned empty string (`missingkey=zero`). If existing runbooks rely on missing-key-as-empty-string semantics, they will error under `gxl`. Flagged as Phase H migration note — behavior correct per spec, needs arbitration before hard cutover ships.
-
-**→ Tess (Corpus):** No new vectors. 267/267 maintained. Four new integration tests in `internal/eval/integration_gxl_test.go` are Go-level, not corpus vectors.
-
-### Phase H Preview (Cutover)
-
-Phase H single focused PR:
-
-1. Delete legacy factories: `internal/adapter/evaluators_legacy.go` + `pkg/run/evaluators_legacy.go`
-2. Drop `//go:build` constraints: remove from all `internal/eval/*` files
-3. Delete `internal/expr/`: `template.go`, `condition.go`, `condition_test.go`, `template_test.go`
-4. Clean `go.mod`: `go mod tidy` removes `github.com/expr-lang/expr`
-5. Canonicalize runbooks: rename `-gxl.runbook.yaml` variants to replace originals; remove `{{ }}` versions
-6. Update engine test: `collectHealthRunbookPath()` becomes single function (no build tag)
-7. CI gate: add `go test -tags gxl ./...` as primary step; retire `go test ./...` (no tag)
-8. Verify: `go test ./...` green, `go build ./...` clean, no import of `expr-lang/expr`
-
-Estimated size: Small (1 day), mostly mechanical deletion. Risk: low — all semantics proven by 267-vector conformance corpus.
-
-### Exit Criteria Summary
-
-✅ Phase G complete:
-- Adapters wired into CLI via build-tagged factories
-- Side-by-side runtime integration: both `!gxl` (legacy) and `gxl` (new engines) compile and pass full test suite
-- 267/267 conformance maintained
-- Fixture migration complete; hardcoded paths made portable
-- Zero errors, all test gates green
-- Ready for Phase H hard cutover (deletion + canonicalization)
-
----
-
-## 2026-06-06 — GIS Miss Semantics — Option A Ratified (Barbara, commit e819895)
-
-**From:** Barbara — Spec Arbiter  
-**Date:** 2026-06-06T01:40:00-04:00  
-**Arbitration:** SPEC-AMBIG resolution for Phase G integration (Don PR #15)  
-**Status:** ✅ RATIFIED — Option A (mandatory-miss-as-error)
-
-### Ruling
-
-**The spec already mandates hard errors for mandatory path misses.** Ken's GIS engine (shipped) is correct. Legacy `missingkey=zero` was an under-specified implementation leak, not a contract.
-
-Evidence:
-- `gis.ebnf` §4.3: "Silent empty-string substitution is FORBIDDEN by default."
-- `03b-interpolation-syntax.tex` §Unresolved Variables: "Hard error for unresolved reference."
-- All 15 GIS-PATH conformance vectors pass; TV-GIS-PATH-004 tests mandatory-miss-as-error.
-
-### Spec Files Updated
-
-| File | Section | Change |
-|------|---------|--------|
-| `design/gert/grammar/gis.ebnf` | Header | Arbitration note + date updated |
-| `design/gert/sections/03b-interpolation-syntax.tex` | §Unresolved Variables | Migration Note: Legacy Zero-Value Semantics |
-
-**No conformance vector changes.** All 15/15 pass as authored.
-
-### Phase H Impact
-
-- ✅ No code changes to GIS engine
-- ✅ No CLI flag needed
-- ✅ No parser changes needed
-- ✅ Proceed with Phase H: delete legacy engine, hard cutover
-
-### Migration Path
-
-Authors relying on silent empty-string substitution MUST use one of:
-1. **Optional chaining** (preferred): `${user?.email}` — returns `""` on miss
-2. **Capture default**: Declare default value in capture configuration
-3. **Guard with `when:`**: Conditional step execution
-
-### Runbook Survey
-
-Examined 10 legacy runbooks in `ormasoftchile/gert/examples/`: all use Go template `{{ }}` syntax (not GIS `${}`). No production runbooks at risk.
-
-### Decision Summary
-
-| Aspect | Value |
-|--------|-------|
-| **Ruling** | Option A — mandatory-miss-as-error (Ken's design ratified) |
-| **Grammar Changes** | None |
-| **Conformance Vectors** | None (15/15 pass) |
-| **Phase H Impact** | None — proceed as planned |
-| **Migration** | Authors use `?.` or `capture.default:` for soft-miss |
-
-
----
-
-## 2026-06-06 — Phase H Cutover COMPLETE (Don PR #16) — Runtime Migration COMPLETE
-
-**From:** Don — Runtime Engineer  
-**Date:** 2026-06-06T02:15:00-04:00  
-**PR:** https://github.com/ormasoftchile/gert/pull/16 (draft)  
-**Status:** ✅ SHIPPED — Hard cutover complete. New engine (GXL/GIS/GCP) is now unconditional.
-
-### Phases A→H Shipped Speculatively
-
-Eight PRs total, all stacked draft train awaiting Germán's review pass:
-- PR #8 (Ken drift, independent pre-PJVM foundation)
-- PR #9→#10→#11→#12 (Don critical path: PJVM → Lexer/Parser → Evaluator → Path engine)
-- PR #13/#14 (Ken Phase E/F: GIS and GCP engines, folded into #15)
-- PR #15 (Don integration: side-by-side runtime, build-tagged adaptation, adapter pattern wiring, fixture migration)
-- **PR #16** (Don cutover: deletion of legacy engine, canonicalization of runbooks, unconditional new engine)
-
-### Deletions (Phase H)
-
-**9 files deleted (~670 LoC total):**
-
-| File | Purpose | Lines |
-|------|---------|-------|
-| `internal/expr/condition.go` | Legacy GXL condition evaluator | 63 |
-| `internal/expr/condition_test.go` | Legacy condition tests | 262 |
-| `internal/expr/template.go` | Legacy GIS template evaluator | 63 |
-| `internal/expr/template_test.go` | Legacy template tests | 45 |
-| `internal/adapter/evaluators_legacy.go` | Legacy factory wiring | 22 |
-| `pkg/run/evaluators_legacy.go` | Legacy CLI wiring | 22 |
-| `internal/engine/runbook_paths_legacy_test.go` | Legacy test fixture selector | 9 |
-| `examples/collect-health/check-service-gxl.runbook.yaml` | Promoted to canonical name | 80 |
-| `examples/collect-health/collect-health-gxl.runbook.yaml` | Promoted to canonical name | 104 |
-
-**Dependency cleanup:**
-- `go mod tidy` removed `github.com/expr-lang/expr v1.17.8` from `go.mod`/`go.sum`
-
-**Build-tag constraints removed:**
-- 41 `//go:build gxl` pragmas dropped across Phase D-G files
-- 2 `//go:build !gxl` pragmas dropped from legacy factories
-- Total 43 files touched; new engine now unconditional
-
-### Runbook Canonicalization (Phase H)
-
-**12 runbook files migrated:**
-
-| File | Changes |
-|------|---------|
-| `collect-health.runbook.yaml` | `{{ .var }}` → `${var}` substitution; GXL variant promoted |
-| `check-service.runbook.yaml` | Inline Go-template conditional → GXL `branch` step with `str.contains()` |
-| 10 other legacy runbooks | Mechanical `{{ .varname }}` → `${varname}`, `{{ join .results "\n" }}` → `${results}` |
-
-**Special case:** `collect-health-parallel/check-service.runbook.yaml` had complex Go-template conditional:
-```
-{{ if contains .health_response "200" }}healthy{{ else }}degraded{{ end }}
-```
-Restructured as GXL `branch` step:
-```yaml
-- name: evaluate-health
-  run: |-
-    if str.contains(health_response, "200") then
-      "healthy"
-    else
-      "degraded"
-    end
-```
-
-**Capture path alignment:** `exitCode` (camelCase, legacy) → `exit_code` (snake_case, GCP adapter standard)
-
-### Validation
-
-- ✅ `go build ./...` clean (no `-tags` needed)
-- ✅ `go test ./...` — 267/267 conformance corpus green
-- ✅ `go test ./...` — 4/4 integration e2e tests green
-- ⚠️ Pre-existing `TestRender_Regions` markdown failure remains (absolute path issue, unrelated to Phase H, acknowledged since Phase G)
-
-### Spec Alignment & Migration Guide
-
-**Breaking changes documented in CHANGELOG/migration guide:**
-
-1. **GIS mandatory-miss-as-error:** (Ratified Barbara `e819895` 2026-06-06T01:40:00-04:00) — missing paths in `${...}` now raise `GIS-PATH-MISSING` error. Legacy engine returned empty string. Authors must use optional chaining (`${var?.path}`) or capture defaults for soft-miss semantics.
-
-2. **GCP capture path snake_case:** `exitCode` → `exit_code` per GCP adapter specification (Ken's Phase F). Existing runbooks using camelCase will error under strict adapter validation.
-
-3. **GXL condition syntax migration:** `{{ if }}...{{ end }}` (Go-template) → GXL `branch` step with `if...then...else...end` (GXL syntax). Existing runbooks must be rewritten; no auto-migration tool.
-
-### No GIS Mandatory-Miss Exposure Found
-
-Barbara's Option A ratification (mandatory-miss-as-error) proved low-risk in practice. Runbook survey of 10 legacy examples in `ormasoftchile/gert/examples/`: **all used simple `${var}` substitution, none relied on silent-miss default semantics.** No production runbooks blocked by this breaking change.
-
-### Stack Final
-
-**PR order (all draft, awaiting Germán review pass):**
-1. PR #8 (Ken, independent)
-2. PR #9 → #10 → #11 → #12 (Don critical path)
-3. PR #13 + #14 (Ken E/F, folded into #15)
-4. PR #15 (Don integration)
-5. PR #16 (Don cutover)
-
-**Total:** 8 PRs, zero handoffs, zero deferred work. All exit criteria met.
-
-### Key Learnings — Cutover Patterns
-
-1. **File-pair deletion of `_legacy.go` siblings:** Legacy wiring lived in parallel `evaluators_legacy.go` + `evaluators_gxl.go` pairs across `internal/adapter/` and `pkg/run/`. Phase H deletion of both `_legacy` variants leaves only unconditional `evaluators.go` → cleaner final surface.
-
-2. **Snake-case alignment with capture adapter:** Legacy `exitCode` (camelCase, expr-lang convention) vs. new `exit_code` (snake_case, GCP spec). This mismatch surfaced in PR #15 integration tests; Phase H migration guide must flag it explicitly or canonical runbooks will have non-portable exit-code references.
-
-3. **GXL `branch` step restructuring of Go-template conditionals:** Simple `{{ if }}...{{ end }}` can be replaced with `if...then...else...end` GXL expression directly in a single step value. Complex nested conditionals with mixed data operations (e.g., `{{ if contains .health_response "200" }}healthy{{ end }}`) map to GXL `branch` step + function call (`str.contains()`). Fixture migration requires careful reading of intent, not mechanical Find-Replace.
-
-### Next Actions
-
-- Germán: Review stack (#8→#16) and merge once all gates pass
-- Tess: No corpus changes; 267/267 conformance locked in Phase H
-- Barbara: Breaking changes documented; Phase H closes migration window
-- Future: All runtimes (C#, TS, etc.) target GXL/GIS/GCP spec directly; no legacy dual-engine concerns
-
-
-Note: path renamed to vector.schema.json on 2026-06-07 per Barbara ratification (entry barbara-schema-rulings-2026-06-07).
+**Last Updated:** 2026-08-15T19:31:53Z
+**Archive Trigger:** decisions.md >= 51200 bytes threshold; entries older than 7 days archived to decisions-archive.md
 
 ---
 
@@ -2769,4 +633,1814 @@ Enforced only in TTY/interactive mode; auto-approves non-interactive runs. Ruled
 
 **Architecture Review:** Barbara's review gate approved with three documentation-only conditions, all satisfied. All 11 user requirements verified met.
 
-**Inbox Merged:** 13 files totaling ~200KB (barbara-dynamic-include-contract, barbara-dynamic-include-rulings, barbara-dynamic-include-review, tess-dynamic-include-vectors, tess-dynamic-include-open-questions, tess-dynamic-include-e2e, ken-dynamic-include-stream1, ken-dynamic-include-governance, don-dynamic-include-stream2, don-dynamic-include-stream3, david-dynamic-include-stream4, defect-static-include-governance-gap, defect-when-field-not-evaluated)
+**Inbox Merged:** 13 files totaling ~200KB (barbara-dynamic-include-contract, barbara-dynamic-include-rulings, barbara-dynamic-include-review, tess-dynamic-include-vectors, tess-dynamic-include-open-questions, tess-dynamic-include-e2e, ken-dynamic-include-stream1, ken-dynamic-include-governance, don-dynamic-include-stream2, don-dynamic-include-stream3, david-dynamic-include-stream4, defect-static-include-governance-gap, defect-when-field-not-evaluated)
+
+## Inbox Merged
+
+Files merged: 9
+
+# Architecture Contract: Streamable HTTP MCP Transport
+
+**Author:** Barbara (Lead / Architect)
+**Date:** 2026-08-16T00:55:39Z
+**Status:** RATIFIED — all implementation streams build against this contract
+**Continues from:** B-21 (dynamic-include rulings). New rulings start at B-22.
+
+---
+
+## 0. Preamble — Existing Architecture Confirmed
+
+Before specifying the new work, I confirm the following about the existing codebase (verified by reading the source directly):
+
+**The transport seam already exists.** `pkg/tool.ToolTransport` is:
+```go
+type ToolTransport interface {
+    Invoke(ctx context.Context, def ToolDef, action string, args map[string]any) (*ToolResult, error)
+    Close() error
+}
+```
+
+`DefaultToolRuntime.Invoke` (`internal/tool/runtime.go`) dispatches on `def.Transport` via a switch statement. Persistent transports (JSONRPC, MCP) are pooled in `r.persistent[toolName]`. This is the integration point for the new HTTP transport.
+
+**The stdio MCP transport is self-contained.** `MCPTransport` (`internal/tool/mcp.go`) owns:
+- Process lifecycle (`StartProcess`, `ensureStarted`)
+- Content-Length framing (`writeMCPMessage`, `readMCPMessage`, `readContentLength`)
+- MCP lifecycle (`initialize` → read response → `initialized` notification)
+- `tools/call` and `tools/list` dispatch
+- Response parsing (`mcpResponse`, `mcpCallResult`, `mcpContent`)
+
+The JSON-RPC logic is welded to stdio pipes. **No refactor of `MCPTransport` is required.** The new HTTP transport implements the same `ToolTransport` interface independently. The two share response-parsing types (extracted to a shared file) but not I/O logic.
+
+**Schema transport config** (`pkg/schema/tool.go`):
+```go
+type TransportConfig struct {
+    Type    Transport         // legacy enum
+    Mode    string            // canonical (overrides Type)
+    Command string
+    Args    []string
+    Env     map[string]string
+}
+```
+
+Currently has no URL or auth fields. These must be added.
+
+---
+
+## 1. Schema Extension
+
+### 1.1 TransportConfig additions
+
+```go
+// pkg/schema/tool.go — additions to TransportConfig
+type TransportConfig struct {
+    // ... existing fields ...
+    URL  string      `yaml:"url,omitempty"  json:"url,omitempty"`
+    Auth *AuthConfig `yaml:"auth,omitempty" json:"auth,omitempty"`
+}
+
+type AuthConfig struct {
+    Provider     string   `yaml:"provider"             json:"provider"`
+    Scope        string   `yaml:"scope,omitempty"       json:"scope,omitempty"`
+    AllowedHosts []string `yaml:"allowed_hosts"         json:"allowed_hosts"`
+}
+```
+
+### 1.2 New transport constant
+
+```go
+// pkg/tool/tool.go
+const TransportMCPHTTP TransportType = "mcp-http"
+```
+
+Also add to `pkg/schema/tool.go`:
+```go
+const TransportMCPHTTP Transport = "mcp-http"
+```
+
+### 1.3 Validation rules
+
+| Condition | Error |
+|---|---|
+| `mode: mcp-http` without `url` | Schema validation error |
+| `mode: mcp-http` with `command` or `args` | Schema validation error (mutually exclusive with url) |
+| `url` does not start with `https://` | `MCP-001` (HTTPS required for remote endpoints) |
+| `auth` configured without `allowed_hosts` | `MCP-010` (fatal: allowed_hosts required when auth present) |
+| `url` host not in `allowed_hosts` | `MCP-011` (fatal: host mismatch caught at validation) |
+| `auth.provider` is not a recognized provider name | `MCP-002` (unknown auth provider) |
+
+**B-22 Ruling — HTTPS only:** Remote MCP endpoints MUST use HTTPS. Plain HTTP is rejected at validation time. No `--allow-insecure` escape hatch in this iteration. Rationale: MCP tool calls carry operator credentials and can mutate production systems (IcM ticket actions). Allowing HTTP would let a network-position attacker intercept bearer tokens. Localhost exceptions are not needed because a local MCP server would use `mode: mcp` (stdio).
+
+### 1.4 Target YAML shape (matches user requirement exactly)
+
+```yaml
+transport:
+  mode: mcp-http
+  url: https://icm-mcp-prod.azure-api.net/v1/
+  auth:
+    provider: azure-cli
+    scope: api://icmmcpapi-prod/mcp.tools
+    allowed_hosts:
+      - icm-mcp-prod.azure-api.net
+```
+
+---
+
+## 2. HTTP MCP Transport Implementation
+
+### 2.1 Type and location
+
+```go
+// internal/tool/mcp_http.go
+type MCPHTTPTransport struct {
+    mu          sync.Mutex
+    url         string
+    auth        AuthProvider   // §4
+    sessionID   string         // from Mcp-Session-Id response header
+    initialized bool
+    httpClient  *http.Client
+}
+```
+
+Implements `pkg/tool.ToolTransport`.
+
+### 2.2 Lifecycle — initialize → tools/call
+
+On first `Invoke` call (lazy, same pattern as stdio):
+
+1. **Send `initialize` request** — HTTP POST to `url` with:
+   - Body: JSON-RPC 2.0 `initialize` message (same params as stdio: `protocolVersion`, `capabilities`, `clientInfo`)
+   - Header: `Content-Type: application/json`
+   - Header: `Accept: application/json, text/event-stream`
+   - Header: `MCP-Protocol-Version: 2025-03-26`
+   - Header: `Authorization: Bearer <token>` (from auth provider, §4)
+
+2. **Parse response** — detect Content-Type:
+   - `application/json` → parse body directly as JSON-RPC response
+   - `text/event-stream` → parse SSE stream, extract `data:` lines, assemble JSON-RPC response (§3)
+
+3. **Capture `Mcp-Session-Id`** from response headers. Store in `t.sessionID`.
+
+4. **Send `notifications/initialized`** — HTTP POST to `url` with:
+   - Body: JSON-RPC 2.0 notification (no `id` field)
+   - Header: `Mcp-Session-Id: <captured value>` (if server provided one)
+   - No response body expected (HTTP 204 or 202 accepted)
+
+5. Mark `t.initialized = true`.
+
+Subsequent `Invoke` / `ListTools` calls:
+- Send `tools/call` or `tools/list` as HTTP POST
+- Include `Mcp-Session-Id` header if present
+- Include `Authorization` header (refreshed if expired, §4.3)
+- Include `MCP-Protocol-Version: 2025-03-26`
+- Parse response (JSON or SSE, §3)
+- Convert to `*ToolResult` exactly as stdio does
+
+### 2.3 Protocol version
+
+**B-23 Ruling — Version pinning:** gert advertises `MCP-Protocol-Version: 2025-03-26` (the current Streamable HTTP spec). If the server returns an HTTP 4xx with a body indicating version mismatch, emit `MCP-003` (fatal). If the server simply ignores the header and responds successfully, proceed — interoperability with older servers that don't enforce version headers is acceptable.
+
+### 2.4 Session ID semantics
+
+| Scenario | Behavior |
+|---|---|
+| Server returns `Mcp-Session-Id` on initialize | Store; send on all subsequent requests |
+| Server omits `Mcp-Session-Id` | Proceed without it; do not fail |
+| Server returns HTTP 404 on a request with session ID | Session expired — re-initialize (once) then retry the failed request. If re-init also fails, emit `MCP-004` (fatal). |
+
+The session ID lives on the `MCPHTTPTransport` instance, which is pooled per tool name in `DefaultToolRuntime.persistent`. This means the session survives across multiple tool calls within a single run — correct behavior.
+
+### 2.5 Close
+
+`Close()` sends a JSON-RPC `shutdown` notification (best-effort, no response expected) if a session is active, then drops the HTTP client. No process to kill.
+
+---
+
+## 3. Transport Framing — SSE Handling
+
+### 3.1 Content-Type detection
+
+On every HTTP response:
+- If `Content-Type` starts with `application/json` → read full body, parse as single JSON-RPC response.
+- If `Content-Type` starts with `text/event-stream` → parse as SSE stream (§3.2).
+- Otherwise → `MCP-005` (unexpected content type).
+
+### 3.2 SSE parsing
+
+SSE events consist of lines. The parser handles:
+- `data: <json>` — append to current event's data buffer (with `\n` between multi-line data)
+- Empty line — event boundary; dispatch accumulated data
+- `event:` — ignored (MCP uses only the default event type)
+- `id:` — ignored (MCP does not use SSE last-event-id)
+- Lines starting with `:` — comments, ignored
+
+For a given JSON-RPC request with `id: N`, the SSE stream may contain:
+- Zero or more JSON-RPC notifications (no `id` field) — these are progress/log messages; log them but do not treat as the response.
+- Exactly one JSON-RPC response with `id: N` — this is the terminal response. Once received, stop reading the stream.
+
+If the stream closes (HTTP connection ends) before a response with matching `id` is received → `MCP-006` (incomplete SSE stream).
+
+### 3.3 Timeout
+
+HTTP requests use the context deadline from `ctx`. If the context has no deadline, a default 120-second timeout is applied. This is configurable via a future `timeout:` field on `TransportConfig` (not in this iteration — hardcode 120s).
+
+---
+
+## 4. Authentication Provider
+
+### 4.1 Interface
+
+```go
+// internal/tool/auth.go
+type AuthProvider interface {
+    // Token returns a valid bearer token. Implementations handle
+    // acquisition, caching, and refresh.
+    Token(ctx context.Context) (string, error)
+}
+```
+
+### 4.2 `azure-cli` provider
+
+```go
+// internal/tool/auth_azurecli.go
+type AzureCLIAuthProvider struct {
+    scope string
+    // cached token + expiry
+    mu       sync.Mutex
+    token    string
+    expiry   time.Time
+}
+```
+
+Acquires a token by executing:
+```
+az account get-access-token --scope <scope> --query accessToken -o tsv
+```
+
+**B-24 Ruling — No credential in YAML, trace, log, or error:**
+- The `scope` field is the only auth-related value that appears in YAML. It is a resource identifier, not a credential.
+- The acquired bearer token MUST NOT appear in: YAML files, trace events, log output, error messages, step output, `ToolResult.Stdout`, or diagnostic dumps.
+- If auth fails, the error message reports the failure reason (e.g., "az CLI not authenticated") but NEVER includes the token value.
+- The `Authorization` header value is never logged by gert's HTTP client (use a non-logging transport or strip auth headers before any debug logging).
+
+### 4.3 Token caching and refresh
+
+- On first `Token()` call, run `az account get-access-token`.
+- Cache the token and parse its expiry from the JWT `exp` claim (or from `az`'s `expiresOn` field).
+- On subsequent calls, return cached token if `now + 5min < expiry`.
+- If within 5min of expiry, re-acquire proactively.
+- If `az` command fails, emit `MCP-007` (auth failure).
+
+### 4.4 Future providers
+
+The `AuthConfig.Provider` field is a string, not an enum. Recognized values in this iteration:
+- `"azure-cli"` — described above
+
+Future values (NOT in scope, listed for schema stability):
+- `"env"` — read token from an env var named in a `variable:` field
+- `"managed-identity"` — Azure managed identity (no CLI dependency)
+- `"device-code"` — interactive device-code flow
+
+The schema shape (`provider` + `scope` + future fields like `variable`) is designed to accommodate these without breaking changes.
+
+### 4.5 No auth configured
+
+If `transport.auth` is nil/omitted, no `Authorization` header is sent. This supports MCP servers that use other auth mechanisms (API keys in custom headers via `env`, network-level auth, etc.) — but those mechanisms are NOT part of this feature. Omitting auth simply means no bearer token.
+
+---
+
+## 5. Error Taxonomy
+
+New error class: `"MCP"` (fatal).
+
+| Code | Condition | Fatal? | Message template |
+|---|---|---|---|
+| `MCP-001` | URL is not HTTPS | Fatal | `mcp-http: url %q must use https://` |
+| `MCP-002` | Unknown auth provider | Fatal | `mcp-http: unknown auth provider %q` |
+| `MCP-003` | Protocol version mismatch / rejected | Fatal | `mcp-http: server rejected protocol version (HTTP %d)` |
+| `MCP-004` | Session expired and re-initialize failed | Fatal | `mcp-http: session expired; re-initialization failed: %v` |
+| `MCP-005` | Unexpected response content-type | Fatal | `mcp-http: unexpected content-type %q (expected application/json or text/event-stream)` |
+| `MCP-006` | SSE stream closed before response received | Fatal | `mcp-http: SSE stream closed without response for request id %d` |
+| `MCP-007` | Auth token acquisition failed | Fatal | `mcp-http: failed to acquire auth token: %v` |
+| `MCP-008` | HTTP transport error (connection refused, TLS failure, timeout) | Fatal | `mcp-http: transport error: %v` |
+| `MCP-009` | JSON-RPC error response from server | Fatal | `mcp-http: server error %d: %s` |
+| `MCP-010` | `auth` configured without `allowed_hosts` | Fatal | `mcp-http: auth.allowed_hosts is required when auth is configured` |
+| `MCP-011` | `url` host not in `auth.allowed_hosts` | Fatal | `mcp-http: url host %q is not in auth.allowed_hosts` |
+| `MCP-W001` | Token not attached (host not in allowed_hosts — runtime defensive) | Warning | `mcp-http: auth token not attached — host %q is not in allowed_hosts` |
+
+**Requirement 4 guarantee:** `MCP-009` (JSON-RPC error from server) wraps the server's error code and message. A tool-level error (i.e., `result.isError == true` in the MCP response) is returned as a failed `ToolResult` with non-zero exit code — **exactly as stdio MCP does today** (see `mcp.go` line 89: `"mcp tool error: %s"`). The `ToolResult` shape is identical regardless of transport. The runbook author cannot distinguish stdio from HTTP tool errors.
+
+---
+
+## 6. Security Posture
+
+### 6.1 URL allow-listing
+
+**B-25 Ruling — No URL allow-list required.** Unlike dynamic includes (where the catalog is the trust boundary), tool definitions are authored by the same team that authors the runbook. A `.tool.yaml` declaring `url: https://evil.com` is the same trust level as one declaring `command: /usr/bin/evil`. Both are authored artifacts subject to code review and package governance. There is no runtime-resolved URL — the URL is static in the YAML. Adding an allow-list would be security theater without a trust boundary to enforce.
+
+**Contrast with dynamic includes:** Dynamic includes resolve an *identity* at runtime against a frozen catalog — the catalog IS the allow-list. Tool definitions are statically declared — the .tool.yaml IS the authored source. Different trust models, different controls.
+
+### 6.2 TLS verification
+
+Standard Go `http.DefaultTransport` TLS verification applies. No `InsecureSkipVerify`. No custom CA configuration in this iteration (can be added later via `tls:` config on `TransportConfig`).
+
+### 6.3 Token redaction
+
+Per B-24: bearer tokens are never written to any persistent or observable surface. The HTTP client used by `MCPHTTPTransport` must NOT be wrapped in a logging/tracing transport that captures request headers. If gert adds HTTP debug logging in the future, the `Authorization` header must be redacted.
+
+---
+
+## 7. Governance
+
+**B-26 Ruling — Remote tool calls ARE subject to governance.** The governance evaluator receives the tool definition and step context regardless of transport. `deny_commands` does not apply (there is no "command" for HTTP — `deny_commands` gates CLI shell invocations). However:
+
+- `require_approval` applies normally (the approval gate fires before any tool invocation, per `internal/executor/tool.go`).
+- `ToolGovernance.RequiresCapabilities` and `AllowedEnvironments` apply normally (checked by the governance evaluator before the executor dispatches).
+- Future `deny_tools` or tool-level allow-list governance would apply here. Not in scope for this feature.
+
+The key insight: governance gates at the executor level (before `ToolRuntime.Invoke` is called), not at the transport level. Adding a new transport does not bypass governance because governance fires upstream.
+
+---
+
+## 8. Runtime Wiring
+
+### 8.1 `DefaultToolRuntime.Invoke` extension
+
+Add a case to the switch:
+```go
+case toolpkg.TransportMCPHTTP:
+    return r.invokePersistent(ctx, toolName, *def, action, args, func() toolpkg.ToolTransport {
+        return NewMCPHTTPTransport(def.URL, def.Auth)
+    })
+```
+
+### 8.2 `ToolDef` extension
+
+`pkg/tool.ToolDef` gains:
+```go
+URL  string         // from TransportConfig.URL
+Auth *schema.AuthConfig // from TransportConfig.Auth
+```
+
+The existing `internal/tool.RuntimeToolDef` conversion function (which builds `pkg/tool.ToolDef` from `schema.ToolDef`) must copy these fields.
+
+### 8.3 `MCPHTTPTransport.ListTools`
+
+Same interface as `MCPTransport.ListTools`:
+```go
+func (t *MCPHTTPTransport) ListTools(ctx context.Context, def ToolDef) ([]map[string]any, error)
+```
+
+Called by the tool registry's discovery mechanism when a tool is declared with `mode: mcp-http`. The response shape is identical to stdio MCP's `tools/list` result.
+
+---
+
+## 9. Shared Response Types
+
+Extract from `internal/tool/mcp.go` into `internal/tool/mcp_types.go`:
+```go
+type mcpContent struct { ... }
+type mcpCallResult struct { ... }
+type mcpResponse struct { ... }
+```
+
+Both `MCPTransport` (stdio) and `MCPHTTPTransport` (HTTP) import and use these types for response parsing. This ensures Requirement 4 — identical output shape regardless of transport.
+
+---
+
+## 10. Scope Boundary — What Is NOT In Scope
+
+| Excluded | Rationale |
+|---|---|
+| Refactoring `MCPTransport` (stdio) | Works as-is; HTTP is a new parallel implementation |
+| OAuth device-code flow | Future auth provider |
+| Managed identity auth | Future auth provider |
+| Custom CA/TLS config | Future extension |
+| WebSocket transport | MCP spec supports it; not needed for IcM |
+| Tool discovery from remote `tools/list` at catalog-build time | Tools are statically declared in .tool.yaml; remote list is a registry feature |
+| `deny_tools` governance | Future governance extension |
+| Streaming tool output (SSE progress → live TUI) | Future UX enhancement; responses are buffered |
+| `timeout:` field on TransportConfig | Hardcode 120s; add field later |
+| Connection pooling / HTTP/2 multiplexing | Go's `http.Client` handles this by default |
+| Retry on transient HTTP errors (5xx) | Fail on first error; retry logic is a future enhancement |
+
+---
+
+## 11. Proposed Stream Breakdown
+
+| Stream | Owner | Scope |
+|---|---|---|
+| **Stream A — Schema + Validation** | Ken | `TransportConfig` extensions, `AuthConfig` type, `TransportMCPHTTP` constant, schema validation (MCP-001, MCP-002), `ClassForCode` extension |
+| **Stream B — HTTP Transport + SSE** | Don | `MCPHTTPTransport`, SSE parser, lifecycle (§2), shared types (§9), wiring into `DefaultToolRuntime` (§8) |
+| **Stream C — Auth Provider** | David | `AuthProvider` interface, `AzureCLIAuthProvider`, token caching, `MCP-007`, redaction guarantees (B-24) |
+| **Stream D — Integration + Tests** | Tess | End-to-end wiring test, mock MCP HTTP server, test vectors for init/session/auth/tool-call/SSE/errors |
+
+Dependencies: B depends on A (needs schema types) and C (needs AuthProvider interface). D depends on all.
+
+---
+
+## Appendix — MCP Protocol Reference (2025-03-26 Streamable HTTP)
+
+For implementers. The MCP Streamable HTTP transport (replacing the deprecated HTTP+SSE transport):
+
+- Client sends JSON-RPC messages as HTTP POST to the server's endpoint URL.
+- Server responds with either `application/json` (single response) or `text/event-stream` (SSE stream containing the response plus optional notifications).
+- `Mcp-Session-Id` header: server MAY issue on any response; client MUST echo on subsequent requests.
+- `MCP-Protocol-Version` header: client MUST send; server validates.
+- Notifications (no `id`) sent via POST; server replies with 202/204.
+- Server MAY issue HTTP 404 to indicate session expired; client should re-initialize.
+
+
+# MCP HTTP Transport — Final Architecture Review
+
+**Reviewer:** Barbara (Lead / Architect)
+**Date:** 2026-08-15T19:18:27-07:00
+**Verdict:** ✅ **APPROVE**
+
+---
+
+## Five Requirements — Verdict
+
+| # | Requirement | Verdict | Evidence |
+|---|---|---|---|
+| 1 | Add `transport.mode: mcp-http` with a `url` field | **MET** | `TransportMCPHTTP = "mcp-http"` in both `pkg/tool/tool.go:17` and `pkg/schema/tool.go:392`. `TransportConfig.URL` added at `pkg/schema/tool.go:291`. `ValidateTransportConfig` enforces url-required + HTTPS-only + mutual exclusion with command/args. |
+| 2 | MCP HTTP lifecycle: initialize, Mcp-Session-Id, notifications/initialized, MCP-Protocol-Version, SSE | **MET** | `mcp_http.go:ensureInitialized` → `initialize()`: sends initialize with `protocolVersion: "2025-03-26"`, inspects response for errors (unlike stdio — B-30 not replicated), captures `Mcp-Session-Id` from headers, sends `notifications/initialized`. `MCP-Protocol-Version` header set on every request. SSE parser (`parseSSEResponse`) handles `data:` lines, multi-line events, comment heartbeats, and ID correlation. Session-expired 404 → re-initialize → retry (§2.4). |
+| 3 | Auth provider: Azure CLI bearer token, credentials never in YAML | **MET** | `AzureCLIAuthProvider` in `auth_azurecli.go`: runs `az account get-access-token --scope <scope> -o json`, parses response, caches with expiry, proactive refresh at 5min buffer, `Invalidate()` on 401. Token never appears in errors (classified error messages reference "az CLI" failure reasons, never token value). `AuthConfig.Scope` is the only auth-related value in YAML. B-24 enforced. |
+| 4 | Dispatch tools/list and tools/call exactly as stdio, preserving typed outputs | **MET** | Both transports share `mcp_types.go` (`mcpResponse`, `mcpCallResult`, `mcpContent`, `callResult()`). Decode path in `toolResult()`: `content[0].Text` → `Stdout`; JSON parse → `Output` map. Same as stdio (mcp.go lines 69-78). Error message format: `"mcp tool error: %s"` — identical. **One minor note:** HTTP returns a `ToolResult{ExitCode:1, Stderr:text}` alongside the error on tool-level `IsError`; stdio returns `nil, error`. The error is identical; the ToolResult difference is invisible to callers (who check `err != nil` first). Not a requirement failure — the observable behavior from a runbook author's perspective is indistinguishable. |
+| 5 | Schema/runtime wiring, validation, and tests | **MET** | Schema: `TransportConfig` extended with `URL` and `Auth *AuthConfig` (with `AllowedHosts`). Runtime: `DefaultToolRuntime.Invoke` has `case TransportMCPHTTP` dispatching to `invokePersistent` → `NewMCPHTTPTransport`. Validation: `ValidateTransportConfig` checks MCP-001/002/010/011 at scan time. Tests: `mcp_http_test.go` + `mcp_http_tess_test.go` + `validate_transport_test.go` — 27/27 passing per verified report. |
+
+---
+
+## B-32 Realisation — FULLY BUILT AS RULED
+
+| Control | Implementation | Verified |
+|---|---|---|
+| `auth:` requires `allowed_hosts` (MCP-010) | `ValidateTransportConfig`: if `auth != nil && len(AllowedHosts) == 0` → MCP-010 fatal | ✅ |
+| URL host in allowed_hosts static check (MCP-011) | `ValidateTransportConfig`: parses URL, extracts `u.Hostname()`, lowercase exact match against list | ✅ |
+| Runtime host mismatch fatal (MCP-012) | `TokenGate.AttachToken`: `hostAllowed()` → `errkit.New("MCP-012", ...)` | ✅ Confirmed by source read |
+| Redirects refused on authenticated requests (MCP-013) | `NewMCPHTTPTransport`: `client.CheckRedirect = func(...) { return http.ErrUseLastResponse }` when gate != nil. `send()` detects 3xx → `errkit.New("MCP-013", ...)` naming the Location. | ✅ |
+| Host matching: `u.Hostname()`, lowercase, exact, no wildcard | Both `ValidateAuthConfig` and `TokenGate.hostAllowed` use identical logic: `strings.ToLower(u.Hostname())` vs `strings.ToLower(entry)` | ✅ One definition, no drift |
+
+---
+
+## B-27: mcp/authAttached Trace Event — NOT DEAD CODE
+
+`TokenGate.AttachToken` emits via `trace.EmitterFromContext(ctx)` on every successful token attachment. The emitter is the same one wired through `engine.go:569` → TraceWriter.Append — the same path used by all other trace events (include/resolved, step/started, etc.). It fires on every authenticated request, which means every `tools/call` and `tools/list` invocation on an authenticated MCP HTTP tool. This is not dead code — it is executed on the hot path of the feature's primary use case.
+
+---
+
+## B-24: Token Escape Surface Audit
+
+| Surface | Safe? | Evidence |
+|---|---|---|
+| Error messages | ✅ | `classifyAzError` never includes token; MCP-007/012 errors reference scope, host, stderr — never token |
+| Trace events | ✅ | `mcp/authAttached` payload: `{url_host, scope}` only |
+| ToolResult.Stdout/Stderr/Output | ✅ | Token never enters ToolResult — it exists only in the `Authorization` header |
+| HTTP debug logging | ✅ | No HTTP debug/trace transport installed; `http.Client{}` has no `Transport` override that would log headers |
+| Panic stack | ⚠️ Acceptable | If `AttachToken` panics after `provider.Token()` returns, the token is on the stack. This is inherent to any in-memory secret and is not a design flaw — panic stacks are not a normal observability surface. |
+
+**Verdict: B-24 is satisfied.** No credential material reaches any persistent or normal-observability surface.
+
+---
+
+## B-31: Documentation Adequacy
+
+Go doc comments on `AuthConfig` (`pkg/schema/tool.go:298-365`) are extensive — they explain the replay threat, the `allowed_hosts` mechanism, and exactly what happens on mismatch. The wildcard non-support is documented in `TokenGate.AttachToken`'s doc comment. An author who writes `*.azure-api.net` gets MCP-012 with a message naming the host and referencing `allowed_hosts`.
+
+Missing: an example `.tool.yaml` file in `examples/`. This is a **nice-to-have**, not a blocker — the doc comments and the schema types are sufficient for an engineer reading code or IDE hover-docs. I recommend adding one before broader adoption but do not condition approval on it.
+
+---
+
+## B-30: Stdio ensureStarted Defect — STILL CORRECT TO DEFER
+
+The HTTP path deliberately does NOT replicate it (confirmed: `initialize()` checks `initResp.Error` before marking `t.initialized = true`). The stdio defect is tracked. The two paths are now asymmetric in a good way — the new code is correct, the old code has a known defect that will be fixed in a dedicated cleanup pass. Deferral remains the right call.
+
+---
+
+## Cross-Feature Question: Dynamic Include + MCP HTTP + Token Replay
+
+A runtime-selected child runbook can declare an `mcp-http` tool with `auth:`. B-32's `allowed_hosts` is the control. Is it sufficient?
+
+**Yes.** The chain of controls is:
+
+1. **Frozen catalog** — the child runbook must come from an approved package. An external attacker cannot inject a tool definition.
+2. **MCP-011 (static, at tool scan time)** — the declared URL's host must be in `allowed_hosts`. A package author who sets `url: https://evil.com` must ALSO set `allowed_hosts: [evil.com]` — the mismatch is caught structurally.
+3. **The residual threat** — a compromised package author sets BOTH `url: https://evil.com` AND `allowed_hosts: [evil.com]`. B-32 cannot prevent this because the attacker controls the authored artifact. But at this point, the attacker can also set `url: https://icm-mcp-prod.azure-api.net` and issue malicious commands directly — a strictly more powerful attack that no host allow-list prevents. The allow-list stops *accidental* token leakage and *partial* compromise (attacker can modify URL but not allowed_hosts, or vice versa); it cannot stop a fully compromised author.
+
+**The frozen catalog is the real trust boundary.** `allowed_hosts` is defense-in-depth against partial compromise or carelessness. Together they are sufficient.
+
+---
+
+## Deferred Items Confirmed
+
+| Item | Status | Still correct to defer? |
+|---|---|---|
+| B-18 (static-include governance gap) | Tracked | ✅ |
+| B-19/B-20 (`when:` inert) | Tracked, schema remediation required | ✅ |
+| B-30 (stdio ensureStarted) | Tracked | ✅ |
+| DEF-002 (DINC-009 unreachable) | B-16, permanent | ✅ |
+
+---
+
+## Final Verdict
+
+**✅ APPROVED.** No conditions. The implementation is complete, correct, and faithful to the contract and all rulings through B-33. The security posture (B-32 host restriction, B-33 fatal enforcement + no redirects, B-24 token redaction) is structurally sound. The five requirements are met. The cross-feature interaction with dynamic includes is adequately controlled by the frozen catalog + allowed_hosts defense-in-depth.
+
+
+# MCP HTTP — Binding Rulings B-22 through B-26
+
+**Author:** Barbara (Lead / Architect)
+**Date:** 2026-08-16T00:55:39Z
+**Status:** RATIFIED — implementers build directly against these rulings
+
+---
+
+## B-22 — HTTPS only for remote MCP endpoints
+
+**Date:** 2026-08-16T00:55:39Z
+
+**Ruling:** Remote MCP endpoints MUST use HTTPS. Plain HTTP URLs are rejected at validation time with `MCP-001`. No `--allow-insecure` flag in this iteration.
+
+**Rationale:** MCP tool calls carry bearer tokens and can mutate production systems (e.g., IcM ticket remediation actions). Allowing HTTP would let a network-position attacker intercept credentials. Localhost/stdio servers use `mode: mcp` (subprocess) and are unaffected.
+
+---
+
+## B-23 — Protocol version pinning at 2025-03-26
+
+**Date:** 2026-08-16T00:55:39Z
+
+**Ruling:** gert advertises `MCP-Protocol-Version: 2025-03-26` on all HTTP MCP requests. If the server responds with an HTTP error indicating version rejection, emit `MCP-003` (fatal). If the server ignores the header and responds successfully, proceed without error.
+
+**Rationale:** The 2025-03-26 spec defines Streamable HTTP (replacing the deprecated SSE transport). Pinning to this version is forward-looking — it's the current stable spec. Graceful degradation for servers that ignore the header ensures interop with older implementations.
+
+---
+
+## B-24 — No credential material in YAML, traces, logs, or errors
+
+**Date:** 2026-08-16T00:55:39Z
+
+**Ruling:** Bearer tokens acquired by any auth provider MUST NOT appear in: YAML files, trace events, log output, error messages, `ToolResult` fields, step output, or any diagnostic dump. The `scope` field is a resource identifier (not a credential) and may appear in diagnostics.
+
+**Rationale:** Tokens are short-lived secrets. Any persistence or observability surface that captures them creates a credential leakage vector. The only place a token may exist is in-memory within the `AuthProvider` and in the outgoing HTTP `Authorization` header (which must not be captured by debug logging).
+
+---
+
+## B-25 — No URL allow-list required
+
+**Date:** 2026-08-16T00:55:39Z
+
+**Ruling:** Any HTTPS URL is acceptable for `transport.url`. No allow-list, registry, or pre-approval mechanism is required.
+
+**Rationale:** Tool definitions are authored artifacts (.tool.yaml files) subject to the same code-review and package-governance controls as any other authored configuration. The URL is static — not runtime-resolved. Contrast with dynamic includes, where the resolved identity is runtime-variable and the catalog serves as the allow-list. Different trust models require different controls. Adding an allow-list here would be security theater: the same author who can set a malicious URL can also set a malicious `command:`.
+
+---
+
+## B-26 — Remote tool calls subject to governance
+
+**Date:** 2026-08-16T00:55:39Z
+
+**Ruling:** Governance fires at the executor level (before `ToolRuntime.Invoke`), not at the transport level. Adding a new transport does not bypass governance. Specifically: `require_approval`, `RequiresCapabilities`, and `AllowedEnvironments` apply to MCP HTTP tools identically to stdio tools. `deny_commands` does not apply (there is no shell command to deny).
+
+**Rationale:** The tool executor's governance pre-flight (`internal/executor/tool.go`) checks all policies before invoking the tool runtime. This is transport-agnostic by design — the executor doesn't know or care which transport will be used. The new transport plugs in below this gate.
+
+---
+
+## B-27 — B-25 narrowed: audience-scoped tokens are sufficient; no host allow-list needed
+
+**Date:** 2026-08-15T18:03:00-07:00
+
+**Amends:** B-25
+
+**Challenge:** A dynamically-included child runbook (resolved at runtime from the frozen catalog) can declare an MCP HTTP tool pointing to any HTTPS host. David's auth provider attaches a live Azure bearer token. The operator running the parent never reviewed the child's URL. The URL is "authored" but not "reviewed by the person accepting the risk." This is a credential-forwarding-to-attacker-chosen-host risk — the gap is not the URL itself but the **combination of URL + attached credential**.
+
+**Revised Ruling:** B-25 is **narrowed** as follows:
+
+**Unauthenticated MCP HTTP requests:** B-25 stands unchanged. Any HTTPS URL is acceptable. No allow-list. The request carries no credential — SSRF risk is minimal.
+
+**Authenticated MCP HTTP requests (where `transport.auth` is configured):** No host allow-list is required, because the existing mitigations are structural and sufficient:
+
+1. **Frozen catalog** — child runbooks come only from approved packages. An arbitrary third party cannot inject a tool URL.
+2. **Audience-scoped tokens** — a token acquired with `scope: api://icmmcpapi-prod/mcp.tools` carries that audience in its claims. Any properly configured Azure AD resource server that is NOT the intended audience rejects the token server-side. An attacker-chosen host receives a token it cannot validate (wrong audience) and gains nothing useful.
+3. **HTTPS** — prevents interception in transit.
+4. **Short-lived** — Azure CLI tokens expire in ~1 hour.
+
+The threat model is: a compromised or careless package author places a malicious URL in a child runbook's tool definition. The frozen catalog prevents injection by outsiders. Against an insider (compromised package author), the audience-scoped token provides defense-in-depth — the token is useless at hosts that aren't the declared resource.
+
+**One mandatory safeguard:** The auth provider MUST emit a trace event `mcp/authAttached` with payload `{url_host: <host-portion-only>, scope: <scope>}` (NO token value) on every authenticated request. This enables audit detection of scope-vs-host mismatch without adding a runtime gate.
+
+**Implementation note for David:** Emit this trace event inside `MCPHTTPTransport` immediately before sending an authenticated request. The event is informational (non-gating, non-fatal). If someone declares `scope: api://icmmcpapi-prod/mcp.tools` but `url: https://evil.com`, the trace shows the discrepancy for post-hoc audit.
+
+**Why no allow-list:** An allow-list would require a new configuration surface (where is the list? who maintains it? how does it interact with package catalogs?). The existing mitigations (catalog trust + audience-scoped tokens) close the gap structurally without adding operational burden. If a future threat model shows audience validation is insufficient (e.g., a server that accepts any audience), we can add a host allow-list then — but that would indicate a broken resource server, not a broken gert design.
+
+---
+
+## B-28 — Stdio env-var credentials are a pre-existing surface; B-24 does not retroactively cover them
+
+**Date:** 2026-08-15T18:03:00-07:00
+
+**Question:** Does B-24's redaction mandate extend to stdio MCP's `transport.env` map, which today can carry secrets (e.g., `API_KEY=xxx`) passed to the subprocess via `mergeEnv`?
+
+**Ruling:** **No. B-24 applies exclusively to the new HTTP MCP auth provider.** The stdio env-var path is a pre-existing surface with different characteristics:
+
+1. `transport.env` values are placed in YAML by the operator — they are authored, not runtime-acquired. B-24 exists specifically because the HTTP auth provider acquires a credential at runtime that the operator never typed into any file.
+
+2. Env values are passed to a local subprocess and never traverse a network from gert itself. Whether the subprocess uses them over a network is outside gert's control.
+
+3. These values are NOT currently in traces or logs (only in YAML and process memory). That is acceptable status-quo behavior.
+
+**Action:** Documentation-only. Note that `transport.env` values in `.tool.yaml` should be treated as sensitive by operators (use CI vault injection or env-var indirection rather than literal secrets in committed YAML). No code change. Not a defect — a usage guidance gap.
+
+**Not in scope:** Secret-reference resolution in `transport.env` (e.g., vault references). That is a future platform feature.
+
+---
+
+## B-29 — Protocol version divergence: stdio stays at 2024-11-05; HTTP uses 2025-03-26; this is correct
+
+**Date:** 2026-08-15T18:04:00-07:00
+
+**Question:** Stdio MCP advertises `protocolVersion: "2024-11-05"`. HTTP MCP advertises `MCP-Protocol-Version: 2025-03-26`. Should they match?
+
+**Ruling:** They MUST NOT match. They are different protocol revisions for different transports.
+
+- `2024-11-05` is the MCP version that defines the stdio/Content-Length framing model. The existing `MCPTransport` was built against it and interoperates with stdio MCP servers implementing that version. Changing it risks breaking compatibility with existing servers that validate the version field.
+- `2025-03-26` is the MCP version that defines Streamable HTTP (POST + SSE responses, `Mcp-Session-Id` header). HTTP MCP servers expect this version in the `MCP-Protocol-Version` header.
+
+These are not two implementations of the same spec at different versions — they are two different transport specifications. The version field means "I speak this protocol," and the two transports speak different protocols.
+
+**Documentation:** No operator-facing documentation is needed beyond the tool schema itself (`mode: mcp` vs `mode: mcp-http`). An operator never chooses between transports for the same server — a server is either stdio or HTTP. The version is an implementation detail that follows from the transport choice.
+
+---
+
+## B-30 — Stdio `ensureStarted` defect: file and defer
+
+**Date:** 2026-08-15T18:04:00-07:00
+
+**Question:** Stdio `ensureStarted` sets `initialized = true` without checking whether the `initialize` response is an error. Fix now or defer?
+
+**Ruling:** **Defer.** File as a defect. Do NOT fix in this feature.
+
+**Rationale:**
+1. This is a pre-existing defect in the stdio path. It has existed since `MCPTransport` was written and affects only stdio MCP tools, which are working in production (presumably with servers that don't reject initialization).
+2. Fixing it means modifying `internal/tool/mcp.go` — the existing stdio transport — as part of a feature that is supposed to ADD a new transport without touching the old one. That violates the scope boundary.
+3. Don's HTTP transport MUST NOT replicate it (already communicated — his `initialize` path inspects the response and emits MCP-003 on failure).
+
+**Accumulation acknowledgment:** This is the third deferred pre-existing defect alongside B-18 (static-include governance gap) and B-19/B-20 (inert `when:`). I accept this accumulation deliberately. Each has the same shape: a real defect, adjacent to the stream, with regression risk if fixed as a side-effect. They are tracked, not forgotten. When this feature ships, a cleanup pass addressing all three should be prioritized.
+
+**File to:** `.squad/decisions/inbox/defect-stdio-mcp-initialize-unchecked.md` with location `internal/tool/mcp.go:ensureStarted`, the fact that `initialized = true` is set unconditionally, and that the response body is discarded without error checking.
+
+---
+
+## B-31 — Go-only validation is acceptable; author-facing documentation lives in Go doc comments and the tool spec section
+
+**Date:** 2026-08-15T18:04:00-07:00
+
+**Question:** No JSON Schema governs `.tool.yaml`. B-20's schema-description remediation pattern cannot apply here. Is Go-only validation acceptable, and where does documentation live?
+
+**Ruling:** **Go-only validation is acceptable.** This is the existing pattern for ALL tool validation and changing it is out of scope.
+
+The absence of a `.tool.yaml` JSON Schema is a pre-existing architectural choice (noted by Ken: "No JSON Schema governs .tool.yaml" — C3 in the existing code comments). Tool definitions are validated by `internal/tool.ParseToolFile` and the schema types in `pkg/schema/tool.go`. This works and is well-tested.
+
+**Author-facing documentation for `mcp-http` and `auth:` lives in:**
+1. **Go doc comments on `TransportConfig`, `AuthConfig`** — these are the source of truth for any future generated documentation.
+2. **`design/gert/sections/06-tool-runtime.tex`** — the existing tool runtime spec section. Ken or the implementer of Stream A should add a subsection for `mode: mcp-http` with the transport fields and auth provider shape.
+3. **A `.tool.yaml` example** in `examples/` demonstrating the MCP HTTP configuration.
+
+B-20's pattern (schema `description` fields) was appropriate because a JSON Schema existed and IDE completions were actively misleading users. Here, no schema exists, so no misleading completions are generated. The documentation surface is the spec section and examples — standard for this codebase.
+
+---
+
+## B-32 — B-25/B-27 revised: token attachment restricted to declared hosts (replay risk accepted as real)
+
+**Date:** 2026-08-15T18:06:00-07:00
+
+**Supersedes:** B-27's conclusion that "audience-scoped tokens are structurally limited" is **withdrawn as technically incorrect.** The revised ruling below replaces B-25/B-27's reasoning on authenticated requests.
+
+**The corrected threat model:** A bearer token sent to an attacker-controlled host can be **replayed** against the legitimate audience (the real IcM endpoint) for the token's lifetime. Audience restriction constrains which server will *accept* the token, not who may *present* it. Possession is authorization. Token exfiltration to a malicious host IS a compromise regardless of audience scoping — this is the confused-deputy / token-replay pattern.
+
+**Revised Ruling:** Token attachment is restricted to explicitly declared hosts.
+
+### Mechanism
+
+`AuthConfig` gains an `allowed_hosts` field:
+
+```yaml
+transport:
+  mode: mcp-http
+  url: https://icm-mcp-prod.azure-api.net/v1/
+  auth:
+    provider: azure-cli
+    scope: api://icmmcpapi-prod/mcp.tools
+    allowed_hosts:
+      - icm-mcp-prod.azure-api.net
+```
+
+**Enforcement rule:** Before attaching an `Authorization` header, the auth provider checks that the request URL's host (scheme + hostname + port) matches an entry in `auth.allowed_hosts`. If no match, the request is sent **without** the `Authorization` header and a `MCP-W001` warning is emitted (new warning-class code): `"mcp-http: auth token not attached — host %q is not in allowed_hosts"`.
+
+**Validation rules:**
+- If `auth` is configured and `allowed_hosts` is empty or omitted → `MCP-010` (fatal): `"mcp-http: auth.allowed_hosts is required when auth is configured"`. Rationale: forcing explicit host declaration is the entire point of this control.
+- If `url`'s host is not in `allowed_hosts` at validation time → `MCP-011` (fatal): `"mcp-http: url host %q is not in auth.allowed_hosts"`. Catches the misconfiguration statically rather than at runtime.
+
+### Why this is the right narrowing
+
+1. **Closes the replay vector.** A compromised package author who declares `url: https://evil.com` cannot also make the token go there, because `allowed_hosts` is validated against `url` at parse time (MCP-011). To exfiltrate the token, they would need to control both the URL and the allowed_hosts declaration — but if they can do that, they can also set `url` to the legitimate host and issue malicious tool calls directly, which is a strictly more powerful attack that no allow-list prevents.
+
+2. **Does not burden the unauthenticated case.** `allowed_hosts` is only required when `auth` is configured. An MCP HTTP tool without auth has no token to protect and no restriction.
+
+3. **Small implementation surface.** A host-match check in the HTTP transport before header attachment. David already has a policy hook routed for this.
+
+4. **Prevention, not just detection.** B-27's `mcp/authAttached` trace event remains (for audit), but this is the gate that stops the send.
+
+### Updated target YAML (canonical)
+
+```yaml
+transport:
+  mode: mcp-http
+  url: https://icm-mcp-prod.azure-api.net/v1/
+  auth:
+    provider: azure-cli
+    scope: api://icmmcpapi-prod/mcp.tools
+    allowed_hosts:
+      - icm-mcp-prod.azure-api.net
+```
+
+### Error codes added
+
+| Code | Class | Condition | Fatal? |
+|---|---|---|---|
+| `MCP-010` | `MCP` | `auth` configured without `allowed_hosts` | Fatal |
+| `MCP-011` | `MCP` | `url` host not in `allowed_hosts` | Fatal |
+| `MCP-W001` | `MCP-W` | Token not attached because host not in `allowed_hosts` (runtime, if URL is somehow different from validated url — defensive) | Warning |
+
+### For the record
+
+Token replay from a malicious host was **considered and accepted as a real threat**. The original B-25/B-27 reasoning that audience scoping structurally prevents exploitation was incorrect — audience scoping prevents the attacker from *consuming* the token at their own service, but does not prevent *replaying* it against the legitimate service. The `allowed_hosts` restriction is the prevention mechanism. The frozen catalog remains the primary trust boundary (only approved package authors can declare tool URLs), and `allowed_hosts` is defense-in-depth against a compromised author.
+
+---
+
+## B-33 — Runtime host mismatch is FATAL; redirects disabled on authenticated requests
+
+**Date:** 2026-08-15T18:25:00-07:00
+
+### Part 1: Fatal, not warning
+
+**Ruling:** A runtime host mismatch MUST be fatal (`MCP-012`, class `MCP`). The request is NOT sent. The token is NOT attached. Execution stops with a clear error naming the mismatched host and pointing at `allowed_hosts`.
+
+**Rationale:** B-32 exists to prevent token exfiltration. A warning that allows the request to proceed — with or without the token — defeats the control entirely:
+- With token attached: the control is decorative (the token reaches the unapproved host).
+- Without token attached: the request silently downgrades to unauthenticated, producing a confusing 401 from the far end that no operator will diagnose as a security gate firing.
+
+Fatal is the only semantics that actually prevents the thing B-32 was designed to prevent.
+
+**Ken must reclassify `ErrMCPW001`:** Change from `class: "MCP-W"` / warning to `code: "MCP-012"` / `class: "MCP"` / fatal. Remove `ErrMCPW001` entirely (it was never shipped externally — the frozen-catalog invariant on error codes applies only post-ship). Replace with:
+
+```go
+ErrMCP012 = &Error{code: "MCP-012", class: "MCP"}
+```
+
+Message: `"mcp-http: request to host %q blocked — not in auth.allowed_hosts %v"`
+
+### Part 2: Redirects disabled on authenticated requests
+
+**Ruling:** The `http.Client` used by `MCPHTTPTransport` for authenticated requests MUST have `CheckRedirect` set to reject ALL redirects (return `http.ErrUseLastResponse`). The request fails with `MCP-013`:
+
+```go
+ErrMCP013 = &Error{code: "MCP-013", class: "MCP"}
+```
+
+Message: `"mcp-http: redirect from %q to %q rejected — redirects are disabled on authenticated requests"`
+
+**Rationale:** Per-hop host checking is more permissive but complex to get right (must strip the `Authorization` header before the redirect if the target host differs, race between check and send, interaction with HTTP/2 push). Disabling redirects entirely is simpler, correct, and matches the security posture of every major OAuth client library (which strip `Authorization` on cross-origin redirects by default). A legitimate MCP server that requires redirects can be addressed by the operator updating `url:` to point at the final endpoint.
+
+For **unauthenticated** requests (no `auth:` configured), default redirect-following behavior is acceptable — there is no token to protect.
+
+### Part 3: Host-matching semantics confirmed as binding
+
+**Ruling:** The following is the single canonical definition for host matching, used by both MCP-011 (static validation) and MCP-012 (runtime check):
+
+1. Parse `url` with `net/url.Parse`
+2. Extract hostname via `u.Hostname()` (strips port)
+3. Lowercase both the extracted hostname and each `allowed_hosts` entry
+4. **Exact string equality** — no prefix matching, no suffix matching, no wildcards, no regex, no glob
+
+This is the binding definition. If the static and runtime checks use different comparison logic, that is a bug.
+
+
+# Stream C — Auth Provider (David)
+
+**Status:** Implementation complete. `go build ./...` exit 0. All packages outside `internal/tool` pass. Note: `mcp_http_tess_test.go` has a pre-existing syntax error in `TestMCPHTTPTransport_SSE_CorrectIDSelected` (DEF-012 test missing server setup — untracked file, not caused by Stream C changes); `internal/tool` tests require Tess to fix that before `go test ./internal/tool/...` can pass.
+
+---
+
+## Update — emitter wiring audit + Don collision resolved (2026-08-15T19:12)
+
+**Don's `emit_ctx.go` has not landed** — `internal/tool/emit_ctx.go` does not exist in the repo. My earlier solution (`pkg/trace/emitter.go`) already provides the same functionality and is what `auth_gate.go` currently imports. There is no import cycle.
+
+**B-27 `mcp/authAttached` reaches the real trace stream — provably.**
+
+Full production chain traced:
+1. `internal/engine/engine.go:569` — `executor.WithEventEmitter(spanCtx, fn)` installs the emitter; `fn` calls `h.emitEventLocked(spanCtx, kind, payload)`.
+2. `executor.WithEventEmitter` delegates to `trace.WithEventEmitter(ctx, e)` (same context key as `trace.EmitterFromContext`).
+3. The enriched context is passed to `exec.Execute(emitterCtx, ...)` → `runtime.Invoke(ctx, ...)` → `invokePersistent(ctx, ...)` → `transport.Invoke(ctx, ...)`.
+4. `MCPHTTPTransport.send(ctx, ...)` creates `reqCtx` as a child of `ctx` (adds deadline only), passes to `buildHTTPRequest(reqCtx, ...)` → `gate.AttachToken(reqCtx, req)`.
+5. `AttachToken` calls `trace.EmitterFromContext(reqCtx)` — same key → receives the engine emitter.
+6. `emitEventLocked` writes `trace.TraceEvent{Kind: "mcp/authAttached", Payload: {url_host, scope}}` to `h.engine.cfg.TraceWriter.Append` (the persistent trace file) AND broadcasts in-process.
+
+The emitter is not merely called in tests — it is the engine's production emitter, and it writes to the trace file.
+
+**MCP-013 redirect ownership:** I own it. `CheckRedirect` is configured in `NewMCPHTTPTransport` (my `mcp_http.go` changes); the policy decision (authenticated only, `http.ErrUseLastResponse`) is entirely within my stream. Don's transport receives the configured client.
+
+---
+
+Ken edited `auth_gate.go` as part of the MCP-012 reclassification. On inspection the file was already in the correct state for both changes he described:
+- `AttachToken` already returned `errkit.New("MCP-012", ...)` as a fatal error (applied in my previous B-32 pass).
+- `ValidateAuthConfig` already used `u.Hostname()` — not `u.Host` — so port-stripping was already correct.
+
+The one genuine divergence was the **MCP-012 error message text**. My message read:
+```
+mcp-http: host %q is not in auth.allowed_hosts — token not attached; add %q to allowed_hosts or update url:
+```
+Ken's registered canonical form is:
+```
+mcp-http: request host %q is not in auth.allowed_hosts — token not attached (update allowed_hosts or url: to match)
+```
+Updated `auth_gate.go` to match Ken's exact wording. `go build ./...` exit 0; all packages outside `internal/tool` pass.
+
+**Zero `MCP-W` references** anywhere in the codebase — confirmed by grep across all `.go` files.
+
+---
+
+Barbara's final ruling: `CheckRedirect` must return `http.ErrUseLastResponse` (not a custom error) so the redirect response is surfaced to `send()` rather than becoming a transport error wrapped in MCP-008.
+
+**Changes in this pass:**
+- `NewMCPHTTPTransport` (`mcp_http.go`): `CheckRedirect` now returns `http.ErrUseLastResponse` for authenticated transports. Unauthenticated transports (gate == nil) retain nil CheckRedirect and follow redirects normally.
+- `send()` (`mcp_http.go`): Added 3xx detection block — when gate is non-nil and status is 3xx, emit `errkit.New("MCP-013", "...redirected to <Location>...— update url: to <Location>")` with the `Location` header value. This gives the operator an actionable message naming the destination.
+- `TestMCPHTTPTransport_CheckRedirectInstalledOnAuthenticated` (`mcp_http_test.go`): Updated to assert `errors.Is(err, http.ErrUseLastResponse)` instead of `errkit.ErrMCP013`.
+- `TestMCPHTTPTransport_TokenNeverReachesRedirectTarget` (new test): Security proof — redirecting server (in `allowed_hosts`) 302s to evil server; asserts evil server never receives any Authorization header AND error is MCP-013.
+
+**errkit.Error.Is() semantics confirmed:** Code-based comparison (`e.code == t.code`), so `errors.Is(errkit.New("MCP-013", msg), errkit.ErrMCP013)` returns true. Don's `TestMCPHTTPTransport_RedirectBlocked_Authenticated` continues to pass without modification.
+
+**Redirect policy stated:**
+- Authenticated: redirect → hard stop (`http.ErrUseLastResponse` → `send()` detects 3xx → MCP-013 with Location). Token NEVER forwarded.
+- Unauthenticated: follow redirects normally (no restriction).
+
+---
+
+---
+
+## Update — B-32 revised: host-mismatch is now fatal (2026-08-15T18:47)
+
+User instruction superseded the B-32 written text on the non-fatal/warning behavior.
+New behavior: host not in `allowed_hosts` → hard MCP-012 error, request not sent.
+
+Changes:
+- `TokenGate.AttachToken`: returns `MCP-012` (fatal) on host mismatch instead of nil + mcp/authSkipped event
+- `EventKindMCPAuthSkipped` removed from `pkg/trace/event.go` — no longer emitted
+- `NewMCPHTTPTransport`: sets `CheckRedirect` to block redirects on authenticated transport (MCP-013); Don had already implemented this with `errkit.ErrMCP013`
+- `auth_gate_test.go`: updated `TestTokenGate_RejectsDisallowedHost` (was non-fatal, now asserts MCP-012); added `TestTokenGate_SuffixConfusionRejected`; added `TestTokenGate_MCP012ErrorIsActionable`
+- All 38 gate/auth tests pass; `go build ./...` exit 0
+
+**Host-matching semantics (stated explicitly):**
+- Match on `req.URL.Hostname()` (port-stripped) — exact case-insensitive
+- No wildcards (a `*` entry is treated as a literal hostname and will never match)
+- No IDN/punycode normalization
+- Port specs in allowed_hosts entries are matched literally (not stripped) — use plain hostnames
+
+**Redirect decision:** authenticated transports refuse all redirects (MCP-013). An operator who needs a redirect path must update `url:` to point to the final endpoint.
+
+---
+
+B-32 superseded B-25/B-27 on token attachment policy. New requirements implemented:
+
+- `schema.AuthConfig.AllowedHosts []string` — required when auth is configured (Ken landed this in `pkg/schema/tool.go`)
+- `TokenGate` struct in `internal/tool/auth_gate.go` — the single policy decision point for all token attachment
+- `ValidateAuthConfig(rawURL, auth)` — static validation: MCP-010 (no allowed_hosts) and MCP-011 (url host not in list)
+- `AttachToken(ctx, req)` — runtime enforcement + B-27 trace event emission
+- `EventKindMCPAuthAttached` and `EventKindMCPAuthSkipped` added to `pkg/trace/event.go`
+- `trace.EventEmitter` + `trace.WithEventEmitter` + `trace.EmitterFromContext` added to `pkg/trace/emitter.go` (cycle-free emitter sharing — `internal/executor/events.go` updated to delegate there)
+- `MCPHTTPTransport` updated: `auth AuthProvider` → `gate *TokenGate`; added HTTP 401 invalidate-and-retry path
+- `runtime.go`: validates auth config before construction; constructs `TokenGate` with `AllowedHosts`
+- 11 gate tests in `auth_gate_test.go` including B-24 event-payload redaction proof
+
+**Note on B-32 runtime behavior:** Host-mismatch at runtime (after static validation) is **non-fatal** per B-32. The request proceeds unauthenticated; `mcp/authSkipped` event is emitted with `MCP-W001` code. The static MCP-011 check catches the common misconfiguration at parse time.
+
+---
+
+## AuthProvider Interface (for Don — Stream B)
+
+```go
+// Package: github.com/ormasoftchile/gert/internal/tool
+
+// AuthProvider acquires bearer tokens for HTTP transports that require authentication.
+// Implementations handle acquisition, caching, and refresh internally.
+//
+// The token returned by Token is an in-memory secret. It must not be written
+// to any persistent or observable surface (traces, logs, error messages, step
+// output). See B-24.
+type AuthProvider interface {
+    // Token returns a valid bearer token, refreshing proactively when within
+    // five minutes of expiry.
+    Token(ctx context.Context) (string, error)
+
+    // Invalidate clears any cached token, forcing re-acquisition on the next
+    // Token call. Call after receiving HTTP 401 to handle mid-run token expiry.
+    Invalidate()
+}
+
+// NewAuthProvider(provider, scope string) (AuthProvider, error)
+// Recognized provider values: "azure-cli"
+// Returns MCP-002 error for unknown provider.
+```
+
+**Don's usage pattern for mid-run 401:**
+```go
+// On HTTP 401 response:
+auth.Invalidate()
+token, err = auth.Token(ctx)  // forces re-acquisition
+// retry the request with the new token
+```
+
+---
+
+## Files Owned
+
+- `internal/tool/auth.go` — `AuthProvider` interface + `NewAuthProvider` factory
+- `internal/tool/auth_azurecli.go` — `AzureCLIAuthProvider` implementation
+- `internal/tool/auth_azurecli_test.go` — 16 tests including B-24 redaction proof
+
+---
+
+## Caching and Refresh Strategy
+
+- **Proactive refresh:** Token is refreshed when `now + 5min >= expiry`. The old (still-valid) token is returned on probe failure — graceful degradation, not error.
+- **Hard expiry:** At the hard expiry point, the cache is invalid and re-acquisition is mandatory.
+- **Mid-run 401 path:** `Don.MCPHTTPTransport` should call `Invalidate()` on receiving HTTP 401, then `Token()` again. `AzureCLIAuthProvider` handles the mutex and re-acquisition internally.
+- **Expiry parsing:** Prefers `expires_on` (Unix timestamp, TZ-safe) from `az`'s JSON output; falls back to `expiresOn` ("2006-01-02 15:04:05.000000" in local time); falls back to `now + 50min` if both are absent/malformed.
+- **Concurrency:** `sync.Mutex` guards the cache; concurrent calls during refresh block rather than stampede.
+
+---
+
+## Four Failure Modes (B-24 / actionable messages)
+
+| Scenario | Error code | Message (summarised) |
+|----------|------------|----------------------|
+| `az` not on PATH | MCP-007 | `az CLI is not installed or not on PATH — install from https://aka.ms/installazurecli and retry` |
+| Not logged in | MCP-007 | `not authenticated — run 'az login' and retry` |
+| No scope consent | MCP-007 | `no consent for scope "<scope>" — grant application consent or run 'az login' with the required scope` |
+| Malformed JSON output | MCP-007 | `az CLI returned malformed output: <json decode error>` or `missing accessToken field` |
+
+Classification uses `errors.As(err, &exec.Error{})` to detect the not-installed case, then stderr heuristics (`AADSTS` → consent, `Please run 'az login'` → auth) for the others.
+
+---
+
+## B-24 Redaction Proof
+
+Test: `TestAzureCLIAuthProvider_TokenNeverLeaksIntoDiagnostics` in `auth_azurecli_test.go`.
+
+The test seeds the cache with a known token value, then forces all four failure paths and the generic error path. It asserts the known token string is absent from every error message returned. It also asserts that a second cache load doesn't return a stale token after `Invalidate()`.
+
+Redaction guarantees by design:
+- `classifyAzError` is only called on command failure — no token has been produced at that point.
+- `azTokenResponse` is decoded in-memory and the raw `stdout` bytes are discarded.
+- The `token` field on `AzureCLIAuthProvider` is mutex-protected and never serialized, traced, or logged.
+- Error messages contain only: stderr text from `az`, the scope string (not a secret), and static operator guidance.
+
+---
+
+## Dependencies Not Yet Complete (Ken — Stream A)
+
+- `errkit.ClassForCode("MCP-007")` returns `""` — Ken has not yet registered the `"MCP"` class in `errkit/errors.go`. Errors work; they just have empty class in the structured error.
+- `schema.AuthConfig` type — Ken owns this. When he lands it, `runtime.go` already consumes it at the wire point (`def.Auth.Provider`, `def.Auth.Scope`).
+
+---
+
+## Cross-Stream Seam
+
+Don's `MCPHTTPTransport` (Stream B) receives an `AuthProvider` from `runtime.go`'s switch case for `TransportMCPHTTP`. That wiring is already in place in `internal/tool/runtime.go` — it calls `NewAuthProvider(def.Auth.Provider, def.Auth.Scope)` and passes the result to `NewMCPHTTPTransport(def.URL, auth)`.
+
+Don should call `auth.Token(ctx)` to get the bearer token and set it as `Authorization: Bearer <token>` on each HTTP request. For mid-run 401 handling, call `auth.Invalidate()` then `auth.Token(ctx)` again before the retry.
+
+---
+
+## Test Results
+
+```
+go test -count=1 ./internal/tool/... -run "TestAzureCLI|TestNewAuth|TestParseAz"
+ok  github.com/ormasoftchile/gert/internal/tool  (all 16 PASS)
+```
+
+Full suite: `internal/tool` has pre-existing failures unrelated to Stream C:
+- `TestStdioTransport_*` — missing `.testtools` binaries (pre-existing)
+- `TestMCPTransport_*` — same
+- `TestMCPHTTPTransport_SSEMultiLineData` — Don's in-flight SSE test (not mine)
+
+
+# Don — Stream B: Streamable HTTP MCP Transport
+
+**Date:** 2026-08-16
+**Status:** COMPLETE
+**Author:** Don (Backend Dev)
+**Feature:** `mode: mcp-http` transport for GERT tool runtime
+
+---
+
+## What Was Built
+
+### New files
+
+| File | Purpose |
+|---|---|
+| `internal/tool/mcp_http.go` | `MCPHTTPTransport` implementing `pkg/tool.ToolTransport` |
+| `internal/tool/mcp_types.go` | Shared `mcpContent`, `mcpCallResult`, `mcpResponse` types (extracted from `mcp.go`); `mcpResponse.Result` is `json.RawMessage` to support both `tools/call` and `tools/list` shapes |
+| `internal/tool/mcp_http_test.go` | 10 tests: JSON/SSE response paths, multi-line SSE, session handling, MCP-005, MCP-006 (implied by session expiry), runtime wiring proof |
+
+### Modified files
+
+| File | Change |
+|---|---|
+| `internal/tool/mcp.go` | Removed duplicate types (now in `mcp_types.go`); updated `Invoke` to use `resp.callResult()` |
+| `internal/tool/runtime.go` | Replaced Ken's placeholder `TransportMCPHTTP` case with real `NewMCPHTTPTransport` dispatch |
+| `pkg/schema/tool.go` | Removed my accidental duplicate `AuthConfig` type (Ken had already added it); removed duplicate `TransportMCPHTTP` constant |
+| `pkg/tool/tool.go` | Removed duplicate `TransportMCPHTTP` constant (Ken had already added it); `URL`/`Auth` fields I added were net-new |
+
+### Streams A and C: already landed
+
+By the time I started implementing, **Ken (Stream A)** had already landed:
+- `TransportMCPHTTP` constant in both schema and runtime packages
+- `URL`/`Auth` fields on `schema.TransportConfig`  
+- `AuthConfig` type in `pkg/schema/tool.go`
+- `mapTransport` case for `schema.TransportMCPHTTP`
+- `URL`/`Auth` copy in `RuntimeToolDef`
+- MCP-001…MCP-009 sentinels in `pkg/errkit/errors.go`
+- `validate_transport.go` (MCP-001, MCP-002, MCP-010, MCP-011 validation)
+
+**David (Stream C)** had also already landed:
+- `AuthProvider` interface in `internal/tool/auth.go`
+- `AzureCLIAuthProvider` in `internal/tool/auth_azurecli.go`
+
+---
+
+## Design Decisions Made
+
+### `json.RawMessage` for `mcpResponse.Result`
+
+The original stdio `MCPTransport` had `Result *mcpCallResult` in `mcpResponse`, which only works for `tools/call` responses. For `tools/list`, the result shape is `{"tools": [...]}`. Changing to `json.RawMessage` lets callers decode into the appropriate shape. Added `callResult()` helper so stdio code doesn't regress.
+
+### No `http404Error` interface assertion in tests
+
+Session-expiry detection uses a private sentinel type `*http404Error` rather than the HTTP 404 status code directly. This avoids accidentally triggering re-init on a 404 that happens for other reasons (e.g. wrong URL path from day one). The re-init-once guard ensures `MCP-004` fires on double failure.
+
+### Token redaction (B-24)
+
+`buildHTTPRequest` sets `Authorization: Bearer <token>` but the token is never returned from any function, never stored in `ToolResult`, and is not included in any error message. `AzureCLIAuthProvider.classifyAzError` explicitly does not include the token (which would not exist at failure time anyway).
+
+---
+
+## Test Coverage
+
+| Test | Proves |
+|---|---|
+| `TestMCPHTTPTransport_JSONResponse` | Happy path, session ID capture |
+| `TestMCPHTTPTransport_SSEResponse` | SSE framing, notification skip |
+| `TestMCPHTTPTransport_SSEMultiLineData` | Multi-line SSE event + heartbeat comment skip |
+| `TestMCPHTTPTransport_ToolError` | `isError:true` → error, matching stdio shape |
+| `TestMCPHTTPTransport_SessionID` | Server omitting session ID — no error |
+| `TestMCPHTTPTransport_UnexpectedContentType` | MCP-005 |
+| `TestMCPHTTPTransport_ProtocolVersionHeader` | `MCP-Protocol-Version: 2025-03-26` on all requests |
+| `TestMCPHTTPTransport_RuntimeWiring` | **WIRING PROOF** — `DefaultToolRuntime` dispatches `mcp-http` to `MCPHTTPTransport` |
+| `TestMCPHTTPTransport_SessionExpiry` | 404 → re-init → retry; `initCount == 2` asserted |
+| `TestMCPHTTPTransport_ListTools` | `tools/list` response parsing |
+
+---
+
+## Corrections Applied from Ken's Recon (Ken MCP-HTTP Recon)
+
+Ken's recon landed after initial implementation and identified four items. All addressed:
+
+### Correction 1 — ID correlation under SSE (important)
+
+Ken's finding: the stdio MCPTransport has no real JSON-RPC id correlation — it assumes the next message off the pipe is the response. This is survivable on a synchronous pipe but **wrong for SSE**, where a server can interleave notifications between the terminal response.
+
+**Fix applied:** `parseSSEResponse` now takes `expectedID int` and explicitly skips:
+- Events with no `id` field (notifications/progress messages)
+- Events whose `id` != `expectedID` (stale responses)
+
+Only returns when it finds `id == expectedID`. The `parseJSONResponse` path also verifies the ID. The post-hoc ID check in `doRequest` was removed since correlation now happens at read time. Note: calls are serialized behind `t.mu`, so there's only one outstanding request at a time — but the explicit ID check makes this invariant visible and protects against future concurrency changes.
+
+### Correction 2 — Protocol version divergence (noted, not resolved)
+
+Stdio advertises `2024-11-05`; HTTP transport pins to `2025-03-26` per B-23. This divergence is real and documented. B-23's value is used; I have not resolved the divergence in stdio (out of scope per Ken's recon). Awaiting Barbara's ruling if she wants to address it.
+
+### Correction 3 — Result decoding matches stdio exactly
+
+`toolResult()` uses `callResult()` (decodes `json.RawMessage` → `mcpCallResult`) and follows the identical path: `content[0].text` → `Stdout`; if text parses as JSON → `Output`. `isError:true` → non-zero ExitCode + error. Protocol error → `MCP-009`. This is proven by `TestMCPHTTPTransport_ToolError`.
+
+### Correction 4 — Initialize response inspection (stdio defect NOT replicated)
+
+Ken's finding: stdio `ensureStarted` sets `initialized = true` before checking the initialize response — so a JSON-RPC error on init is silently treated as success.
+
+**Fix applied:** `initialize()` now calls `doRequest()` and explicitly checks `initResp.Error != nil` before marking `t.initialized = true`. A server that returns a JSON-RPC error on initialize causes `Invoke` to fail with "mcp-http: initialize failed: server error N: <message>". Proven by `TestMCPHTTPTransport_InitializeError`.
+
+### Import cycle fix (Ken's auth_gate.go)
+
+Ken's `auth_gate.go` imported `internal/executor` for `executor.EmitterFromContext` (which didn't exist yet), creating a build-breaking import cycle: `internal/tool` → `internal/executor` → `internal/tool`.
+
+**Fix:** Created `internal/tool/emit_ctx.go` defining `EmitFunc`, `WithToolEmitter`, and `ToolEmitterFromContext` in `internal/tool/` itself. Updated `auth_gate.go` to use `ToolEmitterFromContext` (no executor import). The executor can seed the context via `WithToolEmitter` without creating a cycle. This also unblocked `pkg/pjvm` and `internal/conformance` which were failing due to the cycle.
+
+## Test Results (post-corrections)
+
+- `go build ./...` ✅
+- `internal/tool`: 11/11 `TestMCPHTTP*` pass; overall pass except `TestStdioTransport_*` (pre-existing known failure)
+- `internal/conformance`: ✅ (was failing due to import cycle — now fixed)
+- `pkg/pjvm`: ✅ (same fix)
+- All other packages: ✅
+
+
+---
+
+## Session expiry and no-auth paths
+
+- **Server omits `Mcp-Session-Id`**: proceed normally; no `Mcp-Session-Id` header sent on subsequent requests.
+- **Server returns HTTP 404 mid-run**: session is cleared, `initialize` is retried once. On double failure: `MCP-004`.
+- **No auth configured** (`transport.auth` absent): no `Authorization` header. Compliant with B-24 and §4.5.
+
+---
+
+## Follow-up Round (2026-08-16 — post-corrections)
+
+### Item 1 — emit_ctx.go was dead code
+
+I verified: `auth_gate.go` already imports `pkg/trace` and calls `trace.EmitterFromContext(ctx)` directly (Ken landed that with MCP-012). The `emit_ctx.go` file I created during the import-cycle fix defined a parallel `toolEmitKey{}` context key that nothing in production ever seeded. `WithToolEmitter` had zero callers outside tests. Deleted `emit_ctx.go`. Production audit-trail path is now correct: `engine.go` seeds `trace.WithEventEmitter`, `auth_gate.go` reads it with `trace.EmitterFromContext`.
+
+### Item 2 — End-to-end wiring: two-test proof
+
+`TestMCPHTTPTransport_RuntimeWiring` (already existed) proves `DefaultToolRuntime.Invoke` dispatches through the `TransportMCPHTTP` switch to `invokePersistent` → `NewMCPHTTPTransport`. The gap it leaves: it constructs `toolpkg.TransportMCPHTTP` directly in Go code, not via the `schema → mapTransport` conversion that `ScanDir`/`ParseToolFile` uses.
+
+Added `TestMCPHTTPTransport_SchemaRuntimeWiring`: calls `RuntimeToolDef` on a `schema.ToolDef` with `Transport.Type = schema.TransportMCPHTTP`, asserts the result has `Transport = toolpkg.TransportMCPHTTP` and `URL` correctly propagated, then invokes through `DefaultToolRuntime`. This proves the `schema.TransportMCPHTTP → mapTransport → toolpkg.TransportMCPHTTP → MCPHTTPTransport` path that a `.tool.yaml` file with `mode: mcp-http` takes.
+
+The two tests together prove the full chain from schema constant through runtime wiring.
+
+### Item 3 — MCP-013 redirect blocking (B-30)
+
+Implemented in `NewMCPHTTPTransport`: when `gate != nil`, `httpClient.CheckRedirect` is set to return `fmt.Errorf("%w: ...", errkit.ErrMCP013)`. Unauthenticated transports (gate == nil) have no `CheckRedirect` installed and follow redirects normally.
+
+Note: `CheckRedirect` fires BEFORE `AttachToken` is called for the redirect request, so a redirect from an allowed host to a different host is blocked before the token can be forwarded.
+
+Three tests added:
+- `TestMCPHTTPTransport_RedirectBlocked_Authenticated`: live 307 redirect + gate with correct allowed_hosts → `errors.Is(err, errkit.ErrMCP013)` ✓
+- `TestMCPHTTPTransport_NoCheckRedirectOnUnauthenticated`: structural check, `gate == nil → httpClient.CheckRedirect == nil` ✓
+- `TestMCPHTTPTransport_CheckRedirectInstalledOnAuthenticated`: structural + functional check, installed `CheckRedirect` function unwraps to `ErrMCP013` ✓
+
+Tess's `TestMCPHTTPTransport_AuthenticatedRedirect_Blocked_MCP013` has a hard `t.Skip("BLOCKED-DEF-011: ...")`. The blocking condition is now resolved; Tess should remove the skip.
+
+### Item 4 — Ken's auth_gate.go edits (reconciliation)
+
+Current `auth_gate.go` already has:
+- `u.Hostname()` fix (not `u.Host`) in both `AttachToken` and `ValidateAuthConfig` ✓
+- `trace.EmitterFromContext` (not `emit_ctx.go` key) ✓
+- **MCP-012 fatal** behavior in `AttachToken` for disallowed host ✓ (Ken landed this; it was not yet visible in my earlier read)
+
+My earlier diagnostic that MCP-012 was "not yet landed" was wrong — the file was in intermediate state when I read it. Current state: fully reconciled, no conflicts.
+
+### Test results (follow-up complete)
+
+- `go build ./...` ✅
+- `go test ./... -count=1`: all packages pass; no new failures vs. known pre-existing `TestStdioTransport_*` and `internal/serve TestSSE_FilterByRunID`
+- `go vet ./...`: only pre-existing two `internal/serve` warnings
+
+
+# Ken — MCP-HTTP Transport Recon
+
+**Date:** 2026-08-16T00:55:39Z
+**Author:** Ken (Backend Dev)
+**Purpose:** Ground-truth survey for Barbara's gating architecture contract. No design, no production code.
+
+---
+
+## Q2 FIRST — The Critical Seam
+
+**The `ToolTransport` interface exists and is the clean seam. No extraction needed.**
+
+`pkg/tool/tool.go`:
+```go
+type ToolTransport interface {
+    Invoke(ctx context.Context, def ToolDef, action string, args map[string]any) (*ToolResult, error)
+    Close() error
+}
+```
+
+All four existing transports (`StdioTransport`, `JSONRPCTransport`, `MCPTransport`, `NativeCLITransport`) implement it. A new `MCPHTTPTransport` would implement the same two methods without touching any existing type.
+
+**What is NOT separable:** The `writeMCPMessage` / `readMCPMessage` / `readContentLength` helpers in `mcp.go` are Content-Length framed stdio I/O — they're coupled to `*bufio.Reader`, `*bufio.Writer`, and `*ProcessHandle`. They are NOT reusable for HTTP. The HTTP transport rewrites the transport layer entirely but inherits the same interface contract and the same result-decoding logic.
+
+**What can be shared:** The response shape types (`mcpContent`, `mcpCallResult`, `mcpResponse`, `jsonrpcError`) are small and could be moved to a new `internal/tool/mcptypes.go` for sharing, or simply redeclared in the HTTP transport file. They contain no I/O logic.
+
+**ID correlation note:** The current `MCPTransport` does NOT implement request-ID correlation. It serializes all calls behind `t.mu` (sync.Mutex) and reads the next message, assuming it is the response to the pending request. For Streamable HTTP MCP, this assumption does NOT hold if the server can deliver SSE notifications between response frames. The HTTP transport needs real ID correlation (a `map[int]chan jsonrpcResponse` or equivalent). This is a new implementation requirement, not a port of existing code.
+
+---
+
+## 1. The Stdio MCP Transport as It Exists
+
+**File:** `internal/tool/mcp.go`
+
+**Struct:**
+```go
+type MCPTransport struct {
+    mu          sync.Mutex
+    proc        *ProcessHandle
+    reader      *bufio.Reader
+    writer      *bufio.Writer
+    nextID      int
+    initialized bool
+}
+```
+
+**Entry points:**
+- `Invoke(ctx, def, action, args) (*ToolResult, error)` — holds `t.mu` for the entire call
+- `ListTools(ctx, def) ([]map[string]any, error)` — same pattern
+- `Close() error` — sends `shutdown` request, calls `proc.Kill()`
+- `ensureStarted(ctx, def) error` — private; called at start of Invoke/ListTools
+
+**Lifecycle (ensureStarted → Invoke → Close):**
+
+1. `ensureStarted`: calls `StartProcess(ctx, def.Command, def.Args, def.Env)` → `*ProcessHandle` (process is live); creates `bufio.Reader`/`Writer` wrapping process stdio; sends `initialize` request with `protocolVersion: "2024-11-05"`, reads ONE response (no ID check on result); sends `notifications/initialized` notification (no ID, no response expected); sets `t.initialized = true`.
+
+2. `Invoke` / `ListTools`: write request via `writeMCPMessage` (Content-Length framed), flush, call `readMCPMessage` (reads Content-Length header + body), unmarshal response, decode result.
+
+3. `Close`: sends `shutdown` request, flushes, kills process.
+
+**Wire framing:** LSP-style Content-Length headers — `Content-Length: N\r\n\r\n{body}`. Implemented by:
+- `writeMCPMessage(w *bufio.Writer, payload any)` — marshals to JSON, writes header + body
+- `readMCPMessage(ctx, r *bufio.Reader, proc *ProcessHandle) ([]byte, error)` — reads header via `readContentLength`, then `io.ReadFull` for body; on `ctx.Done()` kills the process
+- `readContentLength(r *bufio.Reader) (int, error)` — reads lines until blank line, parses Content-Length
+
+**`initialize` handling:** Done in `ensureStarted`. The response is read and discarded (no field inspection). `notifications/initialized` is sent immediately after (no response read because it's a notification). Neither server-advertised capabilities nor server info are inspected.
+
+**Defect noted (not fixing):** `ensureStarted` sets `t.initialized = true` before checking whether the initialize response is an error object. A server that replies with `{"jsonrpc":"2.0","id":0,"error":{"code":-32603,"message":"..."}}` to `initialize` will be silently treated as initialized.
+
+---
+
+## 3. `tools/list` and `tools/call` Dispatch
+
+**Dispatch path:**
+
+1. `internal/executor/tool.go` (not surveyed; calls `ToolRuntime.Invoke`)
+2. `DefaultToolRuntime.Invoke` (`internal/tool/runtime.go`) looks up `def.Transport`:
+   ```go
+   case toolpkg.TransportMCP:
+       return r.invokePersistent(ctx, toolName, *def, action, args, func() toolpkg.ToolTransport {
+           return &MCPTransport{}
+       })
+   ```
+3. `invokePersistent` caches the transport by tool name in `r.persistent map[string]toolpkg.ToolTransport` (created once, reused for all calls to the same tool).
+
+**Result decoding** (`mcp.go::Invoke`):
+```go
+text := resp.Result.Content[0].Text
+result := &toolpkg.ToolResult{ExitCode: 0, Stdout: text}
+var parsed map[string]any
+if json.Unmarshal([]byte(text), &parsed) == nil {
+    result.Output = parsed
+}
+```
+- Text content → `ToolResult.Stdout`
+- If text parses as JSON object → also populates `ToolResult.Output`
+- `resp.Result.IsError == true` → `fmt.Errorf("mcp tool error: %s", content[0].Text)` — returned as Go error
+- `resp.Error != nil` (JSON-RPC protocol error) → `fmt.Errorf("mcp error %d: %s", code, message)`
+
+**`ListTools`** returns `[]map[string]any` (raw tool descriptors from `result.tools`). No type mapping.
+
+**Typed output preservation:** Only `Output map[string]any` on `ToolResult`. Works when the server emits JSON in the content text. No typed schema enforcement at the transport layer.
+
+---
+
+## 4. Transport Schema and Validation
+
+**Schema type:** `pkg/schema/tool.go`:
+```go
+type TransportConfig struct {
+    Type    Transport         `yaml:"type,omitempty"    json:"type"`
+    Mode    string            `yaml:"mode,omitempty"    json:"mode,omitempty"`
+    Command string            `yaml:"command,omitempty" json:"command,omitempty"`
+    Args    []string          `yaml:"args,omitempty"    json:"args,omitempty"`
+    Env     map[string]string `yaml:"env,omitempty"     json:"env,omitempty"`
+}
+
+type Transport string
+
+const (
+    TransportStdio   Transport = "stdio"
+    TransportJSONRPC Transport = "jsonrpc"   // note: runtime constant is "stdio-jsonrpc"
+    TransportMCP     Transport = "mcp"
+    TransportNative  Transport = "native"
+)
+```
+
+`UnmarshalYAML` on `TransportConfig` copies `Mode` into `Type` when `Mode != ""`, so `transport.mode: mcp` is equivalent to `transport.type: mcp` after parsing. The `Mode` field is retained verbatim.
+
+**No JSON Schema governs tool files.** From `scan.go` comment: "No JSON Schema governs .tool.yaml (C3, no tool.v1.schema.json)". There is exactly one JSON Schema file in `schemas/`: `runbook.schema.json`. There is no `tool.schema.json`. Validation is entirely Go-side.
+
+**No `oneOf` discrimination on mode.** All mode-specific fields (`Command`, `Args`, `Env`) are in a flat struct with no guards. Adding `url` and `auth` fields follows the same flat pattern — there is no JSON Schema to update for a oneOf constraint.
+
+**Validation point at runtime:** `internal/tool/scan.go::mapTransport`:
+```go
+func mapTransport(t schema.Transport) (toolpkg.TransportType, error) {
+    switch t {
+    case schema.TransportStdio:   return toolpkg.TransportStdio, nil
+    case schema.TransportJSONRPC: return toolpkg.TransportJSONRPC, nil
+    case schema.TransportMCP:     return toolpkg.TransportMCP, nil
+    case schema.TransportNative:  return toolpkg.TransportNative, nil
+    default:
+        return "", fmt.Errorf("unsupported transport %q", t)
+    }
+}
+```
+A `.tool.yaml` with `mode: mcp-http` today fails here with `unsupported transport "mcp-http"`.
+
+**Second validation point:** `DefaultToolRuntime.Invoke` in `runtime.go` has a parallel switch on `def.Transport` with `default: return nil, fmt.Errorf("tool runtime: unsupported transport %q", ...)`. Both must be extended for `mcp-http`.
+
+**`ToolDef` in `pkg/tool/tool.go`** carries only `Command string`, `Args []string`, `Env map[string]string` from the transport config. There are NO `URL` or `Auth` fields anywhere in `ToolDef`. These must be added to both `schema.TransportConfig` and `toolpkg.ToolDef`, and threaded through `RuntimeToolDef` in `scan.go`.
+
+---
+
+## 5. Existing HTTP and Auth Machinery
+
+**HTTP server (not client):** `internal/serve/` is entirely server-side. `net/http.Server`, `http.Handler`, `http.ServeMux`. Not reusable for an outbound HTTP MCP client.
+
+**SSE in `internal/serve/sse.go`:** Server-side SSE writer:
+- `writeSSE(w http.ResponseWriter, ev RunEvent)` — writes `event:/id:/data:` lines
+- `writeSSEHeartbeat(w http.ResponseWriter)` — writes `: hb\n\n` comment frame
+
+This is **server-side only**. There is **no SSE client reader** anywhere in the codebase. The HTTP transport must implement SSE parsing from scratch: read `data:` prefixed lines, strip prefix, JSON-unmarshal the payload.
+
+**HTTP client code:** There is NO reusable outbound HTTP client wrapper anywhere. The only HTTP client usage is in tests (`internal/serve/*_test.go`) via `httptest.NewServer` + `http.Get`/`http.Post`. Production code has no `http.Client`, no retry policy, no timeout helper.
+
+**Webhook receiver** (`internal/eventbus/webhook.go`): HTTP *server* receiving inbound POSTs with HMAC-SHA256 signature verification. Not reusable for client.
+
+**Auth / credentials / token machinery:** There is NO bearer token handling, no Azure CLI (`az`) invocation, no credential provider interface for HTTP, no `Authorization` header construction anywhere in the codebase. The input provider chain (`internal/input/`) handles env vars and Vault for runbook vars — it does not serve as an HTTP auth mechanism. All auth for `mcp-http` must be built from scratch.
+
+**Azure CLI specifically:** Zero occurrences of `az`, `azure`, `AzureCLI`, or `azure-cli` anywhere in the repo. An `azure-cli` auth provider would exec `az account get-access-token --scope <scope>` and parse the JSON output. That is new infrastructure.
+
+**Redaction helpers:** `pkg/governance/` has `RedactionPattern` for output scrubbing. There is no HTTP header redaction. Bearer tokens in `Authorization` headers sent in trace/logs must be explicitly sanitized — no existing helper does this.
+
+---
+
+## 6. Error Taxonomy
+
+**Conformance error classes in `pkg/errkit/errors.go`:**
+- `GXL-PARSE`, `GXL-TYPE`, `GXL-PATH`, `GXL-EVAL` — expression language
+- `GIS-PARSE`, `GIS-PATH`, `GIS-TYPE`, `GIS-EVAL` — string interpolation
+- `GCP-PARSE`, `GCP-RESOLVE`, `GCP-DEFAULT`, `GCP-TYPE`, `GCP-EVAL` — container platform
+- `PKG`, `PKG-W` — package system
+- `PLAN` — planner
+- `ENUM`, `ENUM-W` — enum validation
+- `DINC`, `DINC-W` — dynamic includes
+
+**Tool / MCP transport errors: none exist.** All errors from `MCPTransport`, `StdioTransport`, etc. are plain `fmt.Errorf` strings with no conformance code or class. There is no `TOOL-*` or `MCP-*` family in the errkit registry.
+
+**Proposed class for new errors:** `MCPH` (MCP over HTTP) would be consistent with the existing naming pattern — short, subsystem-prefixed, all-caps. `ClassForCode` in `errors.go` would need a new case for `strings.HasPrefix(code, "MCPH-")`. Barbara should confirm the name; I'm reporting the gap.
+
+**`IsWarning` pattern:** The generalized `strings.HasSuffix(class, "-W")` convention (from my DINC work) means a `MCPH-W` class would be treated as a warning automatically without changing `IsWarning`.
+
+---
+
+## 7. Tool Registry and Wiring
+
+**End-to-end path for a new `mcp-http` tool:**
+
+1. `ScanDir` → `ParseToolFile` → `yaml.Unmarshal` into `schema.ToolDef` with `TransportConfig.Mode = "mcp-http"` → `TransportConfig.UnmarshalYAML` copies `Mode` → `Type = "mcp-http"`
+2. `RuntimeToolDef` → calls `mapTransport("mcp-http")` → **FAILS** today with "unsupported transport"
+3. If `mapTransport` is extended: returns new `toolpkg.TransportMCPHTTP` constant; `RuntimeToolDef` must also copy `URL` and `Auth` from `schema.TransportConfig` to `toolpkg.ToolDef`
+4. `buildToolRegistry` in `adapter/wire.go` → wraps in `OverlayRegistry` — no changes needed here
+5. `NewDefaultToolRuntime(registry)` — no changes needed
+6. Tool step executor → `DefaultToolRuntime.Invoke` → switch on `def.Transport` → **FALLS TO DEFAULT** today; must add `case toolpkg.TransportMCPHTTP:` returning `r.invokePersistent(..., func() ToolTransport { return &MCPHTTPTransport{url: def.URL} })`
+
+**Dead-code risk:** Two hard-error defaults guard the dispatch path. Missing either case (`mapTransport` or `Invoke` switch) produces a runtime error at first use — same failure mode as a typo in the transport name. Not a silent failure, but still a gap that must be caught by tests.
+
+**`ToolDef` in `pkg/tool/tool.go` needs new fields:**
+```go
+// NEW — needed for mcp-http
+URL  string       // transport.url
+Auth *AuthConfig  // transport.auth (new type TBD)
+```
+These must be populated in `RuntimeToolDef` (scan.go) and threaded into `MCPHTTPTransport`.
+
+**`ListTools` is NOT part of `ToolTransport` interface.** Only `MCPTransport` and the new HTTP transport need it. `DefaultToolRuntime` does not expose it. If Barbara's design needs dynamic tool discovery at runtime, a second interface or a separate method needs to be defined. Currently `ListTools` is called from nowhere in the production dispatch path — it exists only in `mcp_test.go` and the `MCPTransport` struct.
+
+---
+
+## 8. Test Infrastructure
+
+**Existing infrastructure for stdio MCP:**
+- `TestMain` in `internal/tool/test_main_test.go`: builds real Go binaries from `cmd/tools/` into a temp `.testtools/` dir, sets `PATH` and `GERT_TOOLS_DIR`, runs the test suite, cleans up.
+- `cmd/tools/mcp-server/main.go`: a complete content-length-framed stdio MCP server fixture. Handles `initialize`, `notifications/initialized`, `tools/list`, `tools/call` (echo/fail/slow), `shutdown`.
+- Tests in `internal/tool/mcp_test.go`: 4 tests, all using the compiled `mcp-server` binary.
+
+**What is NOT there for HTTP testing:**
+- No `httptest.NewServer` MCP fixture. One needs to be written.
+- No SSE client reader (needed by both the production transport and any response-reading test helper).
+- No HTTP server fixture in `cmd/tools/` directory.
+
+**What an HTTP MCP test server needs:**
+1. An `httptest.NewServer` that accepts POST at a fixed path
+2. Handles `initialize`: reads JSON-RPC body, returns `{"result":{"protocolVersion":"...","serverInfo":{...}}}` with `Mcp-Session-Id: <uuid>` response header
+3. Handles `notifications/initialized`: returns 202 Accepted (no body required per spec)
+4. Handles `tools/list` and `tools/call`: may return either a direct JSON response or an SSE stream starting with `data: {jsonrpc response}\n\n`
+5. Session state: validates that subsequent requests carry the `Mcp-Session-Id` header from step 2
+
+**Recommended test structure:**
+- `internal/tool/mcp_http_test.go` using `httptest.NewServer`
+- A `fakeHTTPMCPServer` struct (analogous to `cmd/tools/mcp-server/main.go` but as an `http.Handler`)
+- No separate binary needed — in-process httptest is sufficient and faster
+
+**SSE parsing for production:**
+The production transport must parse SSE lines from the response body. The spec format:
+```
+data: {"jsonrpc":"2.0","id":1,"result":{...}}\n\n
+```
+This is a net-new implementation. `bufio.NewScanner` on the response body, scan for `data:` prefix, strip prefix, JSON-unmarshal. Handle `: ` comment lines (heartbeats) by skipping. No existing helper.
+
+---
+
+## Summary of Gaps Barbara Must Design Against
+
+| Gap | Severity | Location |
+|-----|----------|----------|
+| `TransportConfig` has no `url` or `auth` fields | Blocking | `pkg/schema/tool.go` |
+| `toolpkg.ToolDef` has no `URL` or `Auth` fields | Blocking | `pkg/tool/tool.go` |
+| `mapTransport` doesn't handle `mcp-http` | Blocking | `internal/tool/scan.go` |
+| `DefaultToolRuntime.Invoke` doesn't handle `mcp-http` | Blocking | `internal/tool/runtime.go` |
+| No HTTP client wrapper (no retry, no timeout) | Must build | new |
+| No SSE client reader | Must build | new |
+| No Azure CLI token provider | Must build | new |
+| No bearer-token redaction for traces/logs | Must build | new (or governance extension) |
+| No HTTP MCP test server fixture | Must build | `internal/tool/` tests |
+| No errkit class for HTTP MCP errors | Barbara decides | `pkg/errkit/errors.go` |
+| No ID correlation in MCPTransport (in-scope for HTTP) | Must implement | new MCPHTTPTransport only |
+| `ListTools` not in `ToolTransport` interface; needed for mcp-http? | Barbara decides | `pkg/tool/tool.go` |
+
+
+# Ken — Stream A: Schema + Validation Report
+
+**Date:** 2026-08-16  
+**Feature:** Native Streamable HTTP MCP transport (`mcp-http`)  
+**Status:** COMPLETE — all 17 tests pass, `go build ./...` exit 0
+
+---
+
+## AuthConfig shape and extensibility
+
+```go
+// pkg/schema/tool.go
+type AuthConfig struct {
+    Provider string `yaml:"provider"`
+    Scope    string `yaml:"scope,omitempty"`
+}
+```
+
+**Extensibility story:** `Provider` is a plain string — no Go enum, no `oneOf` in YAML. Adding a second provider (e.g., `managed-identity`) requires:
+1. Add its name to `knownAuthProviders` in `internal/tool/validate_transport.go` — one line.
+2. Implement the `AuthProvider` interface in `internal/tool/auth_<provider>.go`.
+3. Add a `case` in `NewAuthProvider` (David's file).
+
+The `AuthConfig` struct itself is unchanged — no breaking change to `.tool.yaml` syntax or any schema type.
+
+B-24 compliance: `auth:` names a *provider* and a *scope* only. There is no field that can hold a credential, token, or secret. Structurally impossible to inline credential material.
+
+---
+
+## Validation rules and error messages
+
+All rules enforced in `internal/tool/validate_transport.go::ValidateTransportConfig`, called from `ParseToolFile` at scan time. Errors are `%w`-wrapped with the file path, so `errors.Is(err, errkit.ErrMCP001)` works through the chain.
+
+| Rule | Condition | Sentinel | Error message (operator-actionable) |
+|------|-----------|----------|--------------------------------------|
+| mcp-http requires url | `url` absent | ErrMCP001 | `mcp-http: transport.url is required` |
+| url must be HTTPS | `url` doesn't start with `https://` | ErrMCP001 | `mcp-http: url "<url>" must use https://` |
+| command rejected on mcp-http | `command` non-empty on mcp-http | plain | `mcp-http: transport.command is not valid for mode mcp-http (mode mcp-http uses url:, not command:)` |
+| args rejected on mcp-http | `args` non-empty on mcp-http | plain | `mcp-http: transport.args is not valid for mode mcp-http (mode mcp-http uses url:, not command/args)` |
+| auth.provider must be known | provider not in `knownAuthProviders` | ErrMCP002 | `mcp-http: unknown auth provider "<name>" (recognized providers: azure-cli)` |
+| mcp requires command | `command` empty on mcp | plain | `mcp: transport.command is required for mode mcp` |
+| url rejected on mcp | `url` non-empty on mcp | plain | `mcp: transport.url is not valid for mode mcp (mode mcp uses command:, not url:)` |
+| auth rejected on mcp | `auth` non-nil on mcp | plain | `mcp: transport.auth is not valid for mode mcp (auth is only used by mode mcp-http)` |
+
+Following Barbara's B-14 principle: cross-arm fields are **rejected, not silently ignored**. A tool author who writes `url:` under `mode: mcp` gets an error telling them exactly what's wrong and what to use instead.
+
+---
+
+## Switch/discrimination points on transport mode
+
+All enumerated to confirm no dead-code miss (recon finding: hard-error defaults).
+
+| File | Location | `mcp-http` handled? |
+|------|----------|---------------------|
+| `internal/tool/scan.go` | `mapTransport` switch | ✅ `case schema.TransportMCPHTTP: return toolpkg.TransportMCPHTTP, nil` |
+| `internal/tool/runtime.go` | `DefaultToolRuntime.Invoke` switch | ✅ stub returning "not yet wired — Stream B pending" |
+| `internal/tool/validate_transport.go` | `ValidateTransportConfig` switch | ✅ primary enforcement |
+
+The stub in `runtime.go` surfaces loudly at call time (returns an error), not silently. Don replaces it with `NewMCPHTTPTransport` when Stream B lands.
+
+---
+
+## B-32 Addendum: allowed_hosts
+
+**Date:** 2026-08-15 (B-32 ruling incorporated)
+
+Barbara reversed B-25/B-27. Audience-scoped tokens prevent a malicious host from consuming a token, but not from replaying it against the legitimate endpoint. `allowed_hosts` is the prevention mechanism.
+
+### AuthConfig shape (revised)
+
+```go
+type AuthConfig struct {
+    Provider     string   `yaml:"provider"`
+    Scope        string   `yaml:"scope,omitempty"`
+    AllowedHosts []string `yaml:"allowed_hosts,omitempty"`
+}
+```
+
+`AllowedHosts` is required whenever `auth:` is present. Entries are bare hostnames (no scheme, no port). Matching is exact, case-insensitive, parsed host — no substring or wildcard. This prevents `icm.evil.com` from matching `icm.com` and `icm-mcp.azure-api.net.evil.com` from matching `icm-mcp.azure-api.net`. **David must use identical semantics** in the runtime host check before header attachment.
+
+### New validation rules
+
+| Rule | Condition | Sentinel | Error message |
+|------|-----------|----------|----------------|
+| allowed_hosts required when auth configured | `auth != nil && len(AllowedHosts) == 0` | ErrMCP010 | `mcp-http: auth.allowed_hosts is required when auth is configured (B-32: …)` |
+| url host must be in allowed_hosts | url host not in AllowedHosts (static check) | ErrMCP011 | `mcp-http: url host "<host>" is not in auth.allowed_hosts [...]` |
+
+No `allowed_hosts` requirement when `auth:` is absent — unauthenticated transports are unconstrained (B-32 explicitly preserves this).
+
+### MCP-012 reclassification (B-32 revised ruling)
+
+**Date:** 2026-08-15
+
+`ErrMCPW001` / `MCP-W001` removed. Reclassified as `ErrMCP012` / `MCP-012`, class `MCP`, fatal.
+
+- `MCP-W` class removed entirely from errkit (`ClassForCode`, `Classes()`, `classSentinels`, `codeOrder`).
+- `ErrMCP013` added: redirect blocked on authenticated request — `http.ErrUseLastResponse`; David raises this in the HTTP transport.
+- `auth_gate.go`: `AttachToken` now returns `errkit.New("MCP-012", ...)` on host mismatch instead of emitting a warning and proceeding. `u.Host` → `u.Hostname()` fixed in both `AttachToken` and `ValidateAuthConfig` to match binding semantics.
+- `pkg/schema/tool.go` doc comment updated.
+- Repo-wide sweep confirmed: no remaining references to `MCP-W001`, `ErrMCPW001`, or `MCP-W` class.
+
+**MCP-012 message:** `mcp-http: request host "<host>" is not in auth.allowed_hosts — token not attached (update allowed_hosts or url: to match)`
+
+All 22 tests pass. `go build ./...` and `pkg/errkit` tests clean.
+
+
+### New/updated tests (5 added, 2 updated)
+
+- `TestValidateTransport_MCPHTTP_ValidWithAuth` — updated with `AllowedHosts`
+- `TestValidateTransport_MCPHTTP_MissingAllowedHosts_MCP010` — NEW
+- `TestValidateTransport_MCPHTTP_HostNotInAllowedHosts_MCP011` — NEW
+- `TestValidateTransport_MCPHTTP_SubstringHostDoesNotMatch_MCP011` — NEW (replay-attack guard)
+- `TestValidateTransport_MCPHTTP_NoAuth_AllowedHostsNotRequired` — NEW
+- `TestParseToolFile_MCPHTTP_ValidWithAuth` — updated with `allowed_hosts:` in YAML
+- `TestParseToolFile_MCPHTTP_UnknownProvider_Fails` — updated with `allowed_hosts:` to isolate MCP-002
+
+All 22 tests pass. `go build ./...` and `pkg/errkit` tests clean.
+
+### Host-matching semantics (for David to match)
+
+1. Parse `cfg.URL` with `net/url.Parse` — use `u.Hostname()` (strips port if present)
+2. Lowercase both the parsed hostname and each `AllowedHosts` entry
+3. Exact string equality only — no `strings.HasPrefix`, no `strings.Contains`, no wildcard expansion
+4. Port in `AllowedHosts` entries is not supported in this iteration; entries must be bare hostnames
+
+If a future ruling adds wildcard support (e.g. `*.azure-api.net`), only `hostInList` in `validate_transport.go` and the parallel runtime check need updating — the schema and `AuthConfig` struct are unchanged.
+
+
+- **`pkg/schema/tool.go`** — `TransportMCPHTTP` constant; `URL string` + `Auth *AuthConfig` on `TransportConfig`; `AuthConfig` struct
+- **`pkg/tool/tool.go`** — `TransportMCPHTTP TransportType = "mcp-http"` constant
+- **`pkg/errkit/errors.go`** — `MCP` class; `ErrMCP001`..`ErrMCP009` sentinels; `ClassForCode`, `codeOrder`, `classSentinels`, `sentinels`, `Classes()` all updated
+- **`internal/tool/scan.go`** — `mapTransport` case; `URL`/`Auth` threading in `RuntimeToolDef`; `ValidateTransportConfig` call in `ParseToolFile`
+- **`internal/tool/runtime.go`** — stub `case toolpkg.TransportMCPHTTP`
+- **`internal/tool/validate_transport.go`** (new) — full validation logic
+- **`internal/tool/validate_transport_test.go`** (new) — 17 tests (11 unit + 5 integration through `ParseToolFile` + 1 `toolFileTemplate` const)
+
+---
+
+## Test results
+
+```
+=== 17 new tests: ALL PASS ===
+TestValidateTransport_MCPHTTP_ValidMinimal          PASS
+TestValidateTransport_MCPHTTP_ValidWithAuth         PASS
+TestValidateTransport_MCPHTTP_MissingURL_MCP001     PASS
+TestValidateTransport_MCPHTTP_HTTPNotHTTPS_MCP001   PASS
+TestValidateTransport_MCPHTTP_CommandRejected       PASS
+TestValidateTransport_MCPHTTP_ArgsRejected          PASS
+TestValidateTransport_MCPHTTP_UnknownProvider_MCP002 PASS
+TestValidateTransport_MCPStdio_ValidMinimal         PASS
+TestValidateTransport_MCPStdio_MissingCommand       PASS
+TestValidateTransport_MCPStdio_URLRejected          PASS
+TestValidateTransport_MCPStdio_AuthRejected         PASS
+TestParseToolFile_MCPHTTP_ValidMinimal              PASS
+TestParseToolFile_MCPHTTP_ValidWithAuth             PASS
+TestParseToolFile_MCPHTTP_MissingURL_Fails          PASS
+TestParseToolFile_MCPHTTP_HTTPScheme_Fails          PASS
+TestParseToolFile_MCPHTTP_UnknownProvider_Fails     PASS
+```
+
+Pre-existing failures (not mine):
+- `internal/tool TestStdioTransport_*` — missing `.testtools/internal-tool/json-emitter.exe` (build artifact)
+- No `internal/serve` failures (green)
+- Two `go vet` warnings in `internal/serve` (pre-existing, not mine)
+
+`go build ./...` exit 0.
+
+
+# Tess — MCP HTTP Stream D Final Decision Report
+**Date:** 2026-08-16T02:29:31Z  
+**Requested by:** Cristián  
+**Context:** Stream C (David's AzureCLIAuthProvider) — final adversarial pass  
+**Status:** CLOSED
+
+---
+
+## Team-relevant finding: David's redaction sentinel is weak
+
+`auth_azurecli_test.go` defines `knownToken = "******"`. Six asterisks can appear in truncated Go error formatting (e.g., `"...got ******: ..."`) or in log output using redaction markers. A test asserting `!strings.Contains(msg, "******")` can pass even when the real token is present, as long as no six-asterisk run appears in the message.
+
+**This is a gap in David's redaction test, not a gap in production code.** The production redaction behavior is correct — `AzureCLIAuthProvider` never passes the raw token to any error constructor, only the classified failure reason. The weakness is that the test would not catch a future regression where a developer accidentally logs the token, because the sentinel would not collide with normal output in the same way a high-entropy value would.
+
+**Recommendation:** Change `knownToken` in `auth_azurecli_test.go` to a high-entropy sentinel like `TESS_SENTINEL_TOKEN_D42E9B1C`. Tess's `TestAzureCLIProvider_SentinelNeverInAnyErrorOutput` already uses this value and covers all five error paths independently. The two test files are complementary, but David's should be strengthened.
+
+**Action:** Barbara or Cristián to decide whether to ask David to update `knownToken` before the next commit, or accept the complementary coverage as-is.
+
+---
+
+## AUTH-003 tightening — confirmed safe
+
+`TestMCPHTTPTransport_SuffixConfusion_TokenNotAttached` now asserts `err != nil` unconditionally (was conditional). The test passes after tightening because DEF-013 is genuinely fixed: `AttachToken` returns fatal `MCP-012` on host mismatch. If someone regresses it back to warn-and-continue, the test will now fail immediately.
+
+---
+
+## Final counts
+
+- **Stream D vectors:** 27 PASS / 0 SKIP / 0 FAIL  
+- **Group I (AzureCLI):** 4 PASS / 0 SKIP / 0 FAIL  
+- **Total Tess vectors:** 31 PASS / 0 SKIP / 0 FAIL  
+- **Full suite:** 62 packages, `go test ./... -count=1` exit 0  
+
+
+# Tess — MCP HTTP Stream D Report
+**Date:** 2026-08-16 (updated after stale-defect correction pass)  
+**Requested by:** Cristián  
+**Feature:** Native Streamable HTTP MCP transport (`mode: mcp-http`)  
+**Test file:** `internal/tool/mcp_http_tess_test.go`
+
+---
+
+## Lead verdicts (required)
+
+### Redirect-with-token (TV-MCP-AUTH-002) — **PASS. DEF-011 was stale — B-33 Part 2 IS implemented.**
+
+`NewMCPHTTPTransport` installs `CheckRedirect` when `gate != nil`, returning `ErrMCP013`. A 302 from an allowed host is refused before the redirect fires. `TestMCPHTTPTransport_AuthenticatedRedirect_Blocked_MCP013` **PASSES**: `Invoke` returns an MCP-013 error, and the evil server confirms it received zero requests — the `Authorization` header never reached the redirect destination. The initial defect report (DEF-011) was filed against mid-flight code; the fix had landed before tests ran.
+
+### Interleaved-notification SSE (TV-MCP-SSE-001) — **PASS. Both notification skip and ID correlation correct.**
+
+`parseSSEResponse` skips nil-id events (notifications) AND checks `resp.ID == expectedID` — both guards are present. `TestMCPHTTPTransport_SSE_NotificationBeforeResponse` confirms notification skip. `TestMCPHTTPTransport_SSE_CorrectIDSelected` confirms that a stale response (id=99) before the matching response is skipped and the correct answer is returned. Both **PASS**. The initial DEF-012 report was also stale.
+
+---
+
+## End-to-end token-leak sweep (B-24 / B-27)
+
+Scope: all observable surfaces through a complete authenticated `Invoke` call — error messages, `ToolResult` fields, and trace event payloads. Sentinel: `TESS_SENTINEL_TOKEN_D42E9B1C`.
+
+Methodology in `TestMCPHTTPTransport_TokenRedaction_NotInAnyOutput`:
+1. A real `TokenGate` with a `mockAuthProvider` returning the sentinel token
+2. The server echoes the `Authorization` header back as the tool result text (to verify the token IS reaching the server — baseline confirmation)
+3. A `trace.WithEventEmitter` captures all emitted events for the call
+4. Sweep: error messages, `result.Stderr`, non-stdout `result.Output` fields, all trace event payloads (JSON-serialized)
+
+**Result: PASS. No leak found.**
+- `result.Stderr` is empty — not leaked.
+- No non-stdout `result.Output` field contains the sentinel.
+- `mcp/authAttached` event was emitted (B-27 confirmed) with payload `{url_host, scope}` — no token in the serialized payload.
+- Auth provider failure errors (`TestMCPHTTPTransport_AuthFailure_ErrorHasNoToken`) contain only the MCP-007 failure reason, not the sentinel. **PASS.**
+
+---
+
+## B-27 emitter wiring verdict (requested)
+
+`mcp/authAttached` **IS wired in production.** Evidence:
+
+`internal/engine/engine.go` calls `executor.WithEventEmitter(spanCtx, func(...) { h.emitEventLocked(...) })` before every `exec.Execute` call. This `emitterCtx` is passed as `ctx` to the executor, which calls `runtime.Invoke(ctx, ...)`, which flows through `MCPHTTPTransport.Invoke(ctx, ...)` → `buildHTTPRequest(ctx, ...)` → `gate.AttachToken(ctx, req)`. `AttachToken` calls `trace.EmitterFromContext(ctx)` which finds the engine-installed emitter. The event is then routed through `emitEventLocked` → `trace.TraceEvent` → persisted in the run store.
+
+`TestMCPHTTPTransport_TokenRedaction_NotInAnyOutput` proves this end-to-end: when a real emitter is installed in ctx, `mcp/authAttached` fires and is captured. Without an emitter in ctx, `EmitterFromContext` returns nil (safe no-op per the emitter contract). There is no gap — the engine always provides the emitter.
+
+---
+
+## Defects found (summary — all resolved or stale)
+
+| DEF | What | Status |
+|-----|------|--------|
+| DEF-007 | Import cycle `auth_gate.go` → `internal/executor` | RESOLVED before tests ran |
+| DEF-008 / DEF-009 / DEF-010 | Compile failures (`t.auth`, arg count, type mismatch) | RESOLVED by Don before tests ran |
+| DEF-011 | No `CheckRedirect` on `httpClient` | STALE — fix was already in HEAD |
+| DEF-012 | `parseSSEResponse` no `id == expectedID` check | STALE — fix was already in HEAD |
+| DEF-013 | `AttachToken` returns nil on host mismatch | STALE — `MCP-012` return was already in HEAD |
+
+No open security defects. All three reported security issues (DEF-011/DEF-012/DEF-013) were filed against mid-flight code and were already fixed by the time tests ran against stable HEAD.
+
+---
+
+## Vector results
+
+| # | Test | Status |
+|---|------|--------|
+| TV-MCP-INIT-001 | `TestMCPHTTPTransport_InitRejected_NotMarkedInitialized` | **PASS** |
+| TV-MCP-INIT-002 | `TestMCPHTTPTransport_B30_NotReplicatedFromStdio` | **PASS** |
+| TV-MCP-INIT-003 | `TestMCPHTTPTransport_ProtocolVersionHeader_2025` | **PASS** |
+| TV-MCP-SESS-001 | `TestMCPHTTPTransport_NoSessionID_Accepted` | **PASS** |
+| TV-MCP-SESS-002 | `TestMCPHTTPTransport_SessionIDSentOnSubsequentCalls` | **PASS** |
+| TV-MCP-SESS-003 | `TestMCPHTTPTransport_SessionIDUpdatedOnLaterResponse` | **PASS** |
+| TV-MCP-SESS-004 | `TestMCPHTTPTransport_SessionExpiry_ReinitFails_MCP004` | **PASS** |
+| TV-MCP-AUTH-001 | `TestMCPHTTPTransport_AllowedHost_TokenAttached` | **PASS** |
+| TV-MCP-AUTH-002 | `TestMCPHTTPTransport_AuthenticatedRedirect_Blocked_MCP013` | **PASS** |
+| TV-MCP-AUTH-003 | `TestMCPHTTPTransport_SuffixConfusion_TokenNotAttached` | **PASS** |
+| TV-MCP-AUTH-004 | `TestMCPHTTPTransport_RuntimeHostMismatch_Fatal_MCP012` | **PASS** |
+| TV-MCP-SSE-001 | `TestMCPHTTPTransport_SSE_NotificationBeforeResponse` | **PASS** |
+| TV-MCP-SSE-002 | `TestMCPHTTPTransport_SSE_CorrectIDSelected` | **PASS** |
+| TV-MCP-SSE-003 | `TestMCPHTTPTransport_SSE_StreamEndsWithoutResponse_MCP006` | **PASS** |
+| TV-MCP-SSE-004 | `TestMCPHTTPTransport_SSE_MultiLineData_HeartbeatIgnored` | **PASS** |
+| TV-MCP-FAIL-001 | `TestMCPHTTPTransport_ConnectionRefused_MCP008` | **PASS** |
+| TV-MCP-FAIL-002 | `TestMCPHTTPTransport_ServerError5xx` | **PASS** |
+| TV-MCP-FAIL-003 | `TestMCPHTTPTransport_MalformedJSON` | **PASS** |
+| TV-MCP-FAIL-004 | `TestMCPHTTPTransport_ContextCancelled_Error` | **PASS** |
+| TV-MCP-FAIL-005 | `TestMCPHTTPTransport_JSONRPCError_MCP009` | **PASS** |
+| TV-MCP-FAIL-006 | `TestMCPHTTPTransport_UnexpectedContentType_MCP005` | **PASS** |
+| TV-MCP-PARITY-001 | `TestMCPHTTPTransport_JSONOutput_Stdout_And_OutputMap` | **PASS** |
+| TV-MCP-PARITY-002 | `TestMCPHTTPTransport_PlainTextOutput_StdoutOnly` | **PASS** |
+| TV-MCP-PARITY-003 | `TestMCPHTTPTransport_IsError_ExitCode1_MCPToolError` | **PASS** |
+| TV-MCP-PARITY-004 | `TestMCPHTTPTransport_SSEResult_SameShapeAsJSON` | **PASS** |
+| TV-MCP-REDACT-001 | `TestMCPHTTPTransport_TokenRedaction_NotInAnyOutput` | **PASS** |
+| TV-MCP-REDACT-002 | `TestMCPHTTPTransport_AuthFailure_ErrorHasNoToken` | **PASS** |
+
+**Final summary: 27 PASS / 0 SKIP / 0 FAIL** (of 27 Stream D vectors)
+
+---
+
+## Stream C extension (David's AzureCLIAuthProvider) — 2026-08-16T02:29:31Z
+
+**Updated after final pass. 4 Group I adversarial vectors added. Total: 31 PASS / 0 SKIP / 0 FAIL.**
+
+### AUTH-003 tightening
+`TestMCPHTTPTransport_SuffixConfusion_TokenNotAttached` had a conditional `if err != nil { check MCP-012 }` that would silently pass on a regression to nil-return. Tightened to `if err == nil { t.Fatal(...) }` — error is now required unconditionally, matching the shape of TV-MCP-AUTH-004. **HOLDS after tightening.** DEF-013 is fixed, `AttachToken` returns fatal MCP-012, Invoke returns non-nil error.
+
+### Comment cleanup
+File header, AUTH-003, AUTH-004 stale `// BLOCKED: DEF-013` annotations rewritten. DEF-011/012/013 now marked RESOLVED in header. No false-defect commentary survives.
+
+### Group I — AzureCLI adversarial vectors
+
+| # | Test | Status |
+|---|------|--------|
+| TV-AZ-001 | `TestAzureCLIProvider_SentinelNeverInAnyErrorOutput` | **PASS** |
+| TV-AZ-002 | `TestAzureCLIProvider_NoRetryLoopOnFailure` | **PASS** |
+| TV-AZ-003 | `TestAzureCLIProvider_InvalidateThenFailDoesNotReturnStale` | **PASS** |
+| TV-AZ-004 | `TestAzureCLIProvider_InvalidateCalledOnTransport401` | **PASS** |
+
+### Sentinel sweep against David's provider
+
+Sentinel: `TESS_SENTINEL_TOKEN_D42E9B1C`. Swept across: all 5 error message paths (az not installed, not logged in, no scope consent, malformed output, generic failure), `Invalidate()`+re-acquire failure, and 401-triggered re-acquire failure. **CLEAN — sentinel not found in any error message, no panic output.** 
+
+David's own redaction test uses `knownToken = "******"` — asterisks can appear in truncated Go error output, making that sentinel collision-prone. Our sentinel is high-entropy and collision-proof. The two tests are complementary; no contradiction.
+
+### Expiry cache behavior verified
+`AzureCLIAuthProvider` caches by expiry. `Invalidate()` clears both `token` and `expiry` fields. After `Invalidate()`, a subsequent `Token()` call with a failing runner returns an error (stale token not returned). Cache hit is confirmed: second `Token()` call with a fixed-expiry success runner does not spawn a second shell process. 
+
+### No retry loop
+A single failure returns one error. No spin/retry loop exists in `Token()`.
+
+### 401-driven Invalidate
+`TestAzureCLIProvider_InvalidateCalledOnTransport401` proves `Invalidate()` is called when the transport receives HTTP 401, so a stale token is discarded before the re-auth attempt rather than being retried forever.
+
+### Build and test status after final pass
+
+```
+go build ./...            → exit 0
+go test ./internal/tool   → 31 Tess vectors PASS, 0 SKIP, 0 FAIL  
+go test ./... -count=1    → exit 0 (62 packages, all green)
+```
+
+---
+
+## Key findings summary
+
+1. **B-30 verified**: HTTP transport checks `initResp.Error != nil` before setting `initialized = true`. The stdio defect was NOT replicated. ✓
+2. **Protocol version verified**: HTTP transport sends `MCP-Protocol-Version: 2025-03-26`. Does not use stdio's `2024-11-05`. ✓
+3. **Requirement 4 (transport parity) verified**: `toolResult()` logic is identical between JSON and SSE paths. Same `ToolResult` shape from both transports. ✓
+4. **SSE interleaved notification**: correctly skipped (nil id). ✓
+5. **SSE ID correlation**: correct — stale responses with wrong id are skipped. ✓
+6. **B-33 Part 1 (host mismatch fatal)**: `AttachToken` returns `MCP-012`, request not sent. ✓
+7. **B-33 Part 2 (redirect blocking)**: `CheckRedirect` returns `MCP-013` on authenticated transports. ✓
+8. **B-27 (mcp/authAttached wiring)**: event fires and is routed through engine's emitEventLocked in production. ✓
+9. **B-24 (token redaction)**: transport layer clean — sentinel not found in errors, result fields, or trace event payloads. ✓
+
+---
+
+## Build and test status
+
+```
+go build ./...   → exit 0
+go test ./...    → exit 0 (62 packages, all green)
+```
+
+

@@ -19,6 +19,29 @@
 
 ## Learnings
 
+### 2026-08-17 — Phase 1B Scope Investigation (Claims 3 & 4)
+
+**Context:** SQL Live-Site Operations split the accepted Phase 1 milestone into Phase 1A (complete) and Phase 1B. Requested empirical verification of Claims 3 and 4 before scoping.
+
+**Claim 3 — INDETERMINATE / halt-on-timeout: CONFIRMED NOT IMPLEMENTED**
+
+- `INDETERMINATE` does not exist anywhere in the codebase (zero matches across all files).
+- Step status enum (`pkg/engine/run.go:194–203`): pending, running, completed, failed, skipped, waiting, denied. No indeterminate state.
+- `Contract.Idempotent` (`pkg/schema/step.go:93`) is a schema-only field. It is never read by the engine, retry logic, or timeout path. The only runtime reference is a test assertion in `internal/engine/approval_enforcement_test.go:380` confirming it is orthogonal to approval — not consulted during execution.
+- There is no retry path in `internal/engine/engine.go` that checks `Contract.Idempotent` or `Classification` before retrying. Classification is read at `engine.go:536` only to populate `StepInfo.ToolClassification` for the ProfileEvaluator (governance/approval decisions) — it never feeds a retry guard.
+- When a step times out (context.DeadlineExceeded from the executor), the engine receives it as `execErr` at `engine.go:660` and calls `failRun()` — which marks the step `StepStatusFailed`. No halting, no INDETERMINATE, no classification check. A destructive action that times out today lands in `failed` and execution continues (or stops per `on_error`/`continue_on_fail`) — the same as a read-only timeout.
+- **Effort to implement the contract:** New `StepStatusIndeterminate` value + new `StepOutcomeIndeterminate`; engine timeout path must classify the step's action before deciding `failed` vs `indeterminate`; halted-INDETERMINATE runs must be persisted so `gert resume` can surface them (resume guard needed); at least one test vector per classification (read-only, mutating, destructive, unspecified) for both timeout and lost-transport cases. Estimate: **4–5 days** (schema + engine + persistence + tests).
+
+**Claim 4 — Profile endpoint/auth binding at execution: CONFIRMED NOT IMPLEMENTED**
+
+- `--profile` flag is parsed in `cmd/gert/run.go:101–108` and `runtimeProfile` is passed to `plannerImpl` (line 137, fires Tier 0 preflight) and stored in `plan.Metadata.Profile` (line 456).
+- `BuildEngineConfig` (`internal/adapter/wire.go`) has no `Profile` parameter in `WireOptions`. The profile is not passed to the executor registry, tool runtime, or any transport constructor.
+- The engine reads `plan.Metadata.Profile` in exactly one place: `engine.go:127/250` — to build `ProfileEvaluator` for governance/approval scope. It does not use it for transport parameterization.
+- Transport construction happens in `internal/tool/runtime.go:60–77`. For `mcp-http`, the HTTP client is built with `NewMCPHTTPTransport(def.URL, gate)` where `def.URL` comes from the tool definition and `gate` is built from `NewAuthProvider(def.Auth.Provider, def.Auth.Scope)` — both sourced entirely from the tool definition, not the profile.
+- `ProfileToolOverride.Endpoint` exists in the schema (`pkg/schema/profile.go:108`) and is parsed/tested. The field's comment (`profile.go:111`) confirms: auth/endpoint overrides are schema scaffolding only. The only runtime read of `.Endpoint` is in `pkg/schema/profile_test.go` (a parse verification test) — never in the execution path.
+- **Conclusion:** Profile is plan-time governance metadata only. A profile's endpoint or auth override for a tool has zero effect on `gert run` today.
+- **Effort to wire:** Add `Profile *schema.RuntimeProfile` to `WireOptions`; pass it from `run.go` through `BuildEngineConfig`; inject into `DefaultToolRuntime` (or a profile-aware wrapper); in `runtime.go`, when `TransportMCPHTTP`, check `profile.Tools[toolName].Endpoint` and override `def.URL`; same for auth provider selection. New tests for profile-override vs. tool-definition baseline for endpoint and auth. Estimate: **3–4 days** (wiring + tests; no new schema work needed — the fields already exist).
+
 ### 2026-08-17 — Slice 5: Tier 0 Static Preflight
 
 **Commit:** b982804 on `C:\One\OpenSource\gert` (main)
@@ -130,3 +153,49 @@
 **Deferred:** AllowedModes field (RunMode separate from context), per-tool auth override (Phase 3), lifecycle sanity (Phase 3)
 
 **Next phase:** OQ2 (library vs. subprocess) spike; resolver extends --package-map; Phase 2 host bridge with explicit framing protocol
+## 2026-08-17: Phase 1B Scope Confirmation
+
+**Context:** SQL Live-Site rejected Phase 1 completion claim; identified four unshipped Phase 1B items. All four independently verified by engineers.
+
+### Phase 1B Items (Confirmed Absent)
+
+1. **Managed-identity auth** (Don's stream)
+   - Current: NewAuthProvider recognizes only "azure-cli" at internal/tool/auth.go:29
+   - Required: uth_managed_identity.go with IMDS + Workload Identity (stdlib net/http)
+   - Estimate: 2 days
+
+2. **Headless ICM proof** (Don's stream)
+   - Current: icm-tsg-router does not exist (zero matches)
+   - Required: Runbook + mock MCP server + integration test (production requires external credential)
+   - Blocker: Managed identity (Claim 1)
+   - Estimate: 1 day after Claim 1
+
+3. **INDETERMINATE halt-on-timeout** (David's stream)
+   - Current: Timeout unconditionally calls ailRun() regardless of classification
+   - Required: New StepStatusIndeterminate; engine branch on classification; resume guard; test suite (8 vectors)
+   - Estimate: 4-5 days
+
+4. **Profile endpoint/auth binding** (David's stream)
+   - Current: Profile never passed to BuildEngineConfig; transport reads only tool definition
+   - Required: Wire through adapter; add auth field to ProfileToolOverride; transport override logic; tests
+   - Estimate: 3-4 days
+
+### Auth Precedence Ruling (RATIFIED)
+
+**Decision:** Profile top-level uth.provider overrides tool-definition uth.provider at transport construction time.
+
+**Enables:** Managed identity in CI (tool says zure-cli, CI profile says managed-identity).
+
+**Rules:**
+- Profile auth wins (execution-context binding vs portable contract)
+- Per-tool profile auth rejected until Phase 3 (loader error with deferral)
+- Transport mode never rewritten (auth is credential substrate, not protocol)
+- Loader validates profile auth against knownAuthProviders
+
+### Process Notes
+
+- All four claims verified with file:line evidence
+- Phase 1A genuinely complete; Phase 1B items were original scope, not delivered
+- Barbara's coordination cycle: 5 corrections applied (language, classifications, approvals, headers, deferral)
+- Production ICM validation blocked on Live-Site credential provisioning (external dependency, TBD)
+

@@ -1,614 +1,176 @@
-# Don — Stream B: Streamable HTTP MCP Transport
+# Phase 1B Scope Decision Record
+**Author:** Don  
+**Date:** 2026-08-17  
+**Status:** Findings delivered; awaiting team prioritization
 
-**Date:** 2026-08-16
-**Status:** COMPLETE
-**Author:** Don (Backend Dev)
-**Feature:** `mode: mcp-http` transport for GERT tool runtime
+## Decision context
+
+SQL Live-Site Operations accepted Phase 1A (governance + profile foundation) and correctly identified four unshipped Phase 1 items. This document records our empirical verification of two of them and the resulting scope judgments.
+
+## Claim 1: Managed-identity auth is absent (CONFIRMED)
+
+`NewAuthProvider` at `internal/tool/auth.go:29` recognizes exactly one provider: `"azure-cli"`. `managed-identity` falls to the `default` case and returns MCP-002. Confirmed by existing test `TestNewAuthProvider_UnknownProvider` at `internal/tool/auth_azurecli_test.go:360`. Static validation in `validate_transport.go:16` (`knownAuthProviders`) also rejects it at parse time.
+
+**go.mod has no Azure SDK dependencies.** The implementation can use stdlib `net/http` only:
+- IMDS path: GET `http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=<scope>` with `Metadata: true` header.
+- Workload Identity path: read `AZURE_FEDERATED_TOKEN_FILE`, exchange at `AZURE_AUTHORITY_HOST + tenant + /oauth2/v2.0/token`.
+
+**Scope:** new file `internal/tool/auth_managed_identity.go`, one case in `NewAuthProvider`, one entry in `knownAuthProviders`. Token caching follows the AzureCLI pattern (5-minute proactive refresh buffer, graceful fallback on early-refresh failure).
+
+**Estimate:** 2 days.
+
+## Claim 2: Headless ICM proof is absent (CONFIRMED)
+
+`icm-tsg-router` does not exist in the repo (searched all `.go`, `.yaml`, `.md` files — zero matches). `tools/icm.tool.yaml` exists with `name: icm` and three actions (`get_incident`, `update_incident`, `resolve_incident`) but no runbook invokes it via managed identity.
+
+**What is needed for a self-contained read-only proof (no production IcM access):**
+1. Managed identity provider (depends on Claim 1).
+2. A runbook `tools/icm-tsg-router.runbook.yaml` invoking only `icm.get_incident`.
+3. A mock `net/http/httptest` MCP server that validates the Authorization header and returns a synthetic incident body.
+4. An integration test wiring them together.
+
+**What genuinely requires production:** a real MSI credential bound to the runner, a scope grant for `api://icmmcpapi-prod/mcp.tools`, and network access to `icm-mcp-prod.azure-api.net`. We cannot provision or assert those today.
+
+**Estimate:** 1 day after managed-identity lands.
+
+## Sequencing decision
+
+Claim 1 (managed identity) must complete before Claim 2 (ICM proof) can be demonstrated against anything other than a mock. The correct sequence is:
+
+1. Ship `auth_managed_identity.go` (2 days).
+2. Wire ICM tool + runbook + mock MCP integration test (1 day).
+3. Coordinate production credential grant with Live-Site Ops (external dependency, timeline TBD).
+
+
+# Phase 1B Scope — Claims 3 & 4 Empirical Verification
+
+**Author:** David (Integration Engineer)  
+**Date:** 2026-08-17  
+**Context:** SQL Live-Site Operations accepted Phase 1A (governance + profile foundation) and correctly identified Phase 1B scope. This document records empirical findings for Claims 3 and 4 as input to the Phase 1B plan.
 
 ---
 
-## What Was Built
+## Claim 3: Halt-on-timeout and INDETERMINATE behavior
 
-### New files
+**Verdict: Not implemented. Claim is correct.**
 
-| File | Purpose |
+### Evidence
+
+1. `INDETERMINATE` does not exist in any form in the codebase — zero matches across all Go files, schemas, and tests.
+
+2. Step status enum (`pkg/engine/run.go:194–203`) has seven values: `pending`, `running`, `completed`, `failed`, `skipped`, `waiting`, `denied`. No indeterminate state exists.
+
+3. `Contract.Idempotent` (`pkg/schema/step.go:93`) is a declared schema field that is never read by the engine at runtime. The only code that references it at runtime is `internal/engine/approval_enforcement_test.go:380`, which confirms it is orthogonal to approval — a test assertion, not a guard.
+
+4. `action.Classification` is read in `internal/engine/engine.go:536` only to populate `StepInfo.ToolClassification` for the `ProfileEvaluator` (approval scope decisions). It is never consulted in the retry path or timeout path.
+
+5. Timeout handling (`internal/engine/engine.go:657–664`): when `exec.Execute()` returns a non-nil error (including `context.DeadlineExceeded`), the engine calls `failRun()`, which unconditionally marks the step `StepStatusFailed`. There is no classification check, no halt, no INDETERMINATE assignment. A destructive action that times out today is treated identically to a read-only timeout.
+
+### Negotiated contract (decisions.md rounds 2–3) vs. reality
+
+| Classification | Contract says | Today |
+|---|---|---|
+| read-only | Retry only when explicitly idempotent; otherwise fail normally | Fails normally (no retry logic at all in engine) ✓ by accident |
+| mutating | Mark INDETERMINATE, halt, require verification | Marks failed, continues |
+| destructive | Mark INDETERMINATE, halt, require verification | Marks failed, continues |
+| unspecified | No automatic retry; halt if completion cannot be established | Marks failed, continues |
+
+### What implementing the contract requires
+
+- New `StepStatusIndeterminate` in `pkg/engine/run.go` (and corresponding `StepOutcomeIndeterminate`).
+- Engine timeout path must read `ToolClassification` from the step context and branch: mutating/destructive/unspecified → set indeterminate, halt run; read-only → fail normally.
+- INDETERMINATE run state must be persisted: `gert resume` needs a guard that surfaces indeterminate steps and refuses to silently skip past them without operator verification.
+- Test strategy: one scenario per classification × (timeout, lost transport) = 8 acceptance vectors minimum.
+
+**Estimate: 4–5 days** (schema change, engine change, persistence/resume guard, test suite).
+
+---
+
+## Claim 4: Profile endpoint/auth binding at execution time
+
+**Verdict: Not implemented. Claim is correct.**
+
+### Evidence
+
+1. `--profile` is parsed in `cmd/gert/run.go:101–108`. `runtimeProfile` is passed to:
+   - `plannerImpl` (line 137) — fires Tier 0 preflight checks only.
+   - `attendedFromProfile()` (line 167) — derives approval-attendance setting.
+   - `plan.Metadata.Profile` (line 456) — stored in the execution plan.
+
+2. `BuildEngineConfig` (`internal/adapter/wire.go`) receives a `WireOptions` struct that has **no Profile field**. The profile is not available inside the wire function.
+
+3. The engine reads `plan.Metadata.Profile` in exactly one place: `internal/engine/engine.go:127/250` — to construct a `ProfileEvaluator` for approval scope. This is governance metadata, not transport parameterization.
+
+4. Transport construction (`internal/tool/runtime.go:64–77`): for `mcp-http`, the HTTP client is built as `NewMCPHTTPTransport(def.URL, gate)` where both `def.URL` and the auth provider (`NewAuthProvider(def.Auth.Provider, def.Auth.Scope)`) come exclusively from the **tool definition** — the profile is not consulted at any point.
+
+5. `ProfileToolOverride.Endpoint` exists in the schema (`pkg/schema/profile.go:108`) but is only read in the schema parse test (`pkg/schema/profile_test.go`) — never in the execution path. The struct comment at `profile.go:111` explicitly marks the adjacent `Mode` field as "never read for execution," and the Endpoint field carries no corresponding "is read for execution" annotation because it isn't.
+
+### What wiring is required
+
+- Add `Profile *schema.RuntimeProfile` to `adapter.WireOptions` (`internal/adapter/options.go`).
+- Pass `runtimeProfile` from `cmd/gert/run.go` into `BuildEngineConfig` via `WireOptions`.
+- Inject the profile into `DefaultToolRuntime` (or wrap it in a profile-aware decorator).
+- In `internal/tool/runtime.go`, when `TransportMCPHTTP`: check `profile.Tools[toolName].Endpoint` — if non-empty, override `def.URL`; check for a profile-declared auth provider (requires adding an auth field to `ProfileToolOverride`) and override `NewAuthProvider` call accordingly.
+- The `Endpoint` field already exists in `ProfileToolOverride`. An auth-override field needs to be added (schema is currently missing it — `ProfileToolOverride` has only `Endpoint` and `Mode`).
+- New tests: profile-endpoint-overrides-tool-endpoint and profile-auth-overrides-tool-auth acceptance vectors.
+
+**Estimate: 3–4 days** (wiring in adapter/wire.go + tool runtime + auth field addition to schema + tests).
+
+---
+
+## Summary for Phase 1B planning
+
+Both claims are confirmed correct by source tracing. Neither feature exists in any form today — not as stubs, not as dead code, not as disabled paths. They are gaps.
+
+Phase 1B work that is genuinely new:
+
+| Item | Days |
 |---|---|
-| `internal/tool/mcp_http.go` | `MCPHTTPTransport` implementing `pkg/tool.ToolTransport` |
-| `internal/tool/mcp_types.go` | Shared `mcpContent`, `mcpCallResult`, `mcpResponse` types (extracted from `mcp.go`); `mcpResponse.Result` is `json.RawMessage` to support both `tools/call` and `tools/list` shapes |
-| `internal/tool/mcp_http_test.go` | 10 tests: JSON/SSE response paths, multi-line SSE, session handling, MCP-005, MCP-006 (implied by session expiry), runtime wiring proof |
+| INDETERMINATE status + halt-on-timeout per classification | 4–5 |
+| Profile endpoint/auth wiring to execution | 3–4 |
+| Managed identity auth provider (separate claim) | TBD |
+| Headless ICM proof (separate claim) | TBD |
 
-### Modified files
+Combined for Claims 3 + 4: **7–9 days** assuming sequential delivery by one engineer. Can be parallelized (separate authors) at 4–5 days elapsed.
 
-| File | Change |
-|---|---|
-| `internal/tool/mcp.go` | Removed duplicate types (now in `mcp_types.go`); updated `Invoke` to use `resp.callResult()` |
-| `internal/tool/runtime.go` | Replaced Ken's placeholder `TransportMCPHTTP` case with real `NewMCPHTTPTransport` dispatch |
-| `pkg/schema/tool.go` | Removed my accidental duplicate `AuthConfig` type (Ken had already added it); removed duplicate `TransportMCPHTTP` constant |
-| `pkg/tool/tool.go` | Removed duplicate `TransportMCPHTTP` constant (Ken had already added it); `URL`/`Auth` fields I added were net-new |
 
-### Streams A and C: already landed
+# Decision: Auth Precedence — Profile Top-Level vs Tool Definition
 
-By the time I started implementing, **Ken (Stream A)** had already landed:
-- `TransportMCPHTTP` constant in both schema and runtime packages
-- `URL`/`Auth` fields on `schema.TransportConfig`  
-- `AuthConfig` type in `pkg/schema/tool.go`
-- `mapTransport` case for `schema.TransportMCPHTTP`
-- `URL`/`Auth` copy in `RuntimeToolDef`
-- MCP-001…MCP-009 sentinels in `pkg/errkit/errors.go`
-- `validate_transport.go` (MCP-001, MCP-002, MCP-010, MCP-011 validation)
-
-**David (Stream C)** had also already landed:
-- `AuthProvider` interface in `internal/tool/auth.go`
-- `AzureCLIAuthProvider` in `internal/tool/auth_azurecli.go`
+**Date:** 2026-08-17  
+**Author:** Barbara (Lead/Architect, Gert Core)  
+**Status:** RATIFIED  
+**Scope:** Phase 1B  
+**Supersedes:** None (extends Phase 1A ruling on per-tool auth rejection)
 
 ---
 
-## Design Decisions Made
+## Decision
 
-### `json.RawMessage` for `mcpResponse.Result`
+When a profile declares a top-level `auth.provider` and a tool definition declares `auth.provider`, the **profile wins** at transport construction time.
 
-The original stdio `MCPTransport` had `Result *mcpCallResult` in `mcpResponse`, which only works for `tools/call` responses. For `tools/list`, the result shape is `{"tools": [...]}`. Changing to `json.RawMessage` lets callers decode into the appropriate shape. Added `callResult()` helper so stdio code doesn't regress.
+## Rules
 
-### No `http404Error` interface assertion in tests
+1. **Profile top-level auth overrides tool-definition auth.** The profile is the execution-context binding; the tool definition is the portable interface contract.
 
-Session-expiry detection uses a private sentinel type `*http404Error` rather than the HTTP 404 status code directly. This avoids accidentally triggering re-init on a 404 that happens for other reasons (e.g. wrong URL path from day one). The re-init-once guard ensures `MCP-004` fires on double failure.
+2. **Per-tool `auth:` in profile `tools:` blocks remains rejected by the loader until Phase 3.** The loader MUST error with a message citing Phase 3 deferral.
 
-### Token redaction (B-24)
+3. **Transport mode is never rewritten by a profile.** Auth provider selection is a credential-binding parameter within a fixed mode. It does not change protocol semantics, serialization, or failure model. This is not a mode rewrite.
 
-`buildHTTPRequest` sets `Authorization: Bearer <token>` but the token is never returned from any function, never stored in `ToolResult`, and is not included in any error message. `AzureCLIAuthProvider.classifyAzError` explicitly does not include the token (which would not exist at failure time anyway).
+4. **The loader validates** that any profile top-level `auth.provider` names a value in `knownAuthProviders`. Unknown values are parse-time errors.
 
----
+5. **Runtime logs at INFO** when profile auth overrides tool-definition auth, including both values.
 
-## Test Coverage
+## Rationale
 
-| Test | Proves |
-|---|---|
-| `TestMCPHTTPTransport_JSONResponse` | Happy path, session ID capture |
-| `TestMCPHTTPTransport_SSEResponse` | SSE framing, notification skip |
-| `TestMCPHTTPTransport_SSEMultiLineData` | Multi-line SSE event + heartbeat comment skip |
-| `TestMCPHTTPTransport_ToolError` | `isError:true` → error, matching stdio shape |
-| `TestMCPHTTPTransport_SessionID` | Server omitting session ID — no error |
-| `TestMCPHTTPTransport_UnexpectedContentType` | MCP-005 |
-| `TestMCPHTTPTransport_ProtocolVersionHeader` | `MCP-Protocol-Version: 2025-03-26` on all requests |
-| `TestMCPHTTPTransport_RuntimeWiring` | **WIRING PROOF** — `DefaultToolRuntime` dispatches `mcp-http` to `MCPHTTPTransport` |
-| `TestMCPHTTPTransport_SessionExpiry` | 404 → re-init → retry; `initCount == 2` asserted |
-| `TestMCPHTTPTransport_ListTools` | `tools/list` response parsing |
+Managed identity in CI requires this: the tool definition says `azure-cli` (interactive default), the CI profile says `managed-identity` (headless binding). Without this precedence, headless execution is impossible without forking tool definitions per environment.
 
----
+The Phase 1A ruling that "a profile must not silently rewrite a tool definition's transport MODE" is preserved. The distinction:
+- **Transport mode** = protocol semantics, what the tool *is*.
+- **Auth provider** = credential substrate, *who authenticates*. Interface contract unchanged.
 
-## Corrections Applied from Ken's Recon (Ken MCP-HTTP Recon)
+## Precedent
 
-Ken's recon landed after initial implementation and identified four items. All addressed:
-
-### Correction 1 — ID correlation under SSE (important)
-
-Ken's finding: the stdio MCPTransport has no real JSON-RPC id correlation — it assumes the next message off the pipe is the response. This is survivable on a synchronous pipe but **wrong for SSE**, where a server can interleave notifications between the terminal response.
-
-**Fix applied:** `parseSSEResponse` now takes `expectedID int` and explicitly skips:
-- Events with no `id` field (notifications/progress messages)
-- Events whose `id` != `expectedID` (stale responses)
-
-Only returns when it finds `id == expectedID`. The `parseJSONResponse` path also verifies the ID. The post-hoc ID check in `doRequest` was removed since correlation now happens at read time. Note: calls are serialized behind `t.mu`, so there's only one outstanding request at a time — but the explicit ID check makes this invariant visible and protects against future concurrency changes.
-
-### Correction 2 — Protocol version divergence (noted, not resolved)
-
-Stdio advertises `2024-11-05`; HTTP transport pins to `2025-03-26` per B-23. This divergence is real and documented. B-23's value is used; I have not resolved the divergence in stdio (out of scope per Ken's recon). Awaiting Barbara's ruling if she wants to address it.
-
-### Correction 3 — Result decoding matches stdio exactly
-
-`toolResult()` uses `callResult()` (decodes `json.RawMessage` → `mcpCallResult`) and follows the identical path: `content[0].text` → `Stdout`; if text parses as JSON → `Output`. `isError:true` → non-zero ExitCode + error. Protocol error → `MCP-009`. This is proven by `TestMCPHTTPTransport_ToolError`.
-
-### Correction 4 — Initialize response inspection (stdio defect NOT replicated)
-
-Ken's finding: stdio `ensureStarted` sets `initialized = true` before checking the initialize response — so a JSON-RPC error on init is silently treated as success.
-
-**Fix applied:** `initialize()` now calls `doRequest()` and explicitly checks `initResp.Error != nil` before marking `t.initialized = true`. A server that returns a JSON-RPC error on initialize causes `Invoke` to fail with "mcp-http: initialize failed: server error N: <message>". Proven by `TestMCPHTTPTransport_InitializeError`.
-
-### Import cycle fix (Ken's auth_gate.go)
-
-Ken's `auth_gate.go` imported `internal/executor` for `executor.EmitterFromContext` (which didn't exist yet), creating a build-breaking import cycle: `internal/tool` → `internal/executor` → `internal/tool`.
-
-**Fix:** Created `internal/tool/emit_ctx.go` defining `EmitFunc`, `WithToolEmitter`, and `ToolEmitterFromContext` in `internal/tool/` itself. Updated `auth_gate.go` to use `ToolEmitterFromContext` (no executor import). The executor can seed the context via `WithToolEmitter` without creating a cycle. This also unblocked `pkg/pjvm` and `internal/conformance` which were failing due to the cycle.
-
-## Test Results (post-corrections)
-
-- `go build ./...` ✅
-- `internal/tool`: 11/11 `TestMCPHTTP*` pass; overall pass except `TestStdioTransport_*` (pre-existing known failure)
-- `internal/conformance`: ✅ (was failing due to import cycle — now fixed)
-- `pkg/pjvm`: ✅ (same fix)
-- All other packages: ✅
-
-
----
-
-## Session expiry and no-auth paths
-
-- **Server omits `Mcp-Session-Id`**: proceed normally; no `Mcp-Session-Id` header sent on subsequent requests.
-- **Server returns HTTP 404 mid-run**: session is cleared, `initialize` is retried once. On double failure: `MCP-004`.
-- **No auth configured** (`transport.auth` absent): no `Authorization` header. Compliant with B-24 and §4.5.
-
----
-
-## Follow-up Round (2026-08-16 — post-corrections)
-
-### Item 1 — emit_ctx.go was dead code
-
-I verified: `auth_gate.go` already imports `pkg/trace` and calls `trace.EmitterFromContext(ctx)` directly (Ken landed that with MCP-012). The `emit_ctx.go` file I created during the import-cycle fix defined a parallel `toolEmitKey{}` context key that nothing in production ever seeded. `WithToolEmitter` had zero callers outside tests. Deleted `emit_ctx.go`. Production audit-trail path is now correct: `engine.go` seeds `trace.WithEventEmitter`, `auth_gate.go` reads it with `trace.EmitterFromContext`.
-
-### Item 2 — End-to-end wiring: two-test proof
-
-`TestMCPHTTPTransport_RuntimeWiring` (already existed) proves `DefaultToolRuntime.Invoke` dispatches through the `TransportMCPHTTP` switch to `invokePersistent` → `NewMCPHTTPTransport`. The gap it leaves: it constructs `toolpkg.TransportMCPHTTP` directly in Go code, not via the `schema → mapTransport` conversion that `ScanDir`/`ParseToolFile` uses.
-
-Added `TestMCPHTTPTransport_SchemaRuntimeWiring`: calls `RuntimeToolDef` on a `schema.ToolDef` with `Transport.Type = schema.TransportMCPHTTP`, asserts the result has `Transport = toolpkg.TransportMCPHTTP` and `URL` correctly propagated, then invokes through `DefaultToolRuntime`. This proves the `schema.TransportMCPHTTP → mapTransport → toolpkg.TransportMCPHTTP → MCPHTTPTransport` path that a `.tool.yaml` file with `mode: mcp-http` takes.
-
-The two tests together prove the full chain from schema constant through runtime wiring.
-
-### Item 3 — MCP-013 redirect blocking (B-30)
-
-Implemented in `NewMCPHTTPTransport`: when `gate != nil`, `httpClient.CheckRedirect` is set to return `fmt.Errorf("%w: ...", errkit.ErrMCP013)`. Unauthenticated transports (gate == nil) have no `CheckRedirect` installed and follow redirects normally.
-
-Note: `CheckRedirect` fires BEFORE `AttachToken` is called for the redirect request, so a redirect from an allowed host to a different host is blocked before the token can be forwarded.
-
-Three tests added:
-- `TestMCPHTTPTransport_RedirectBlocked_Authenticated`: live 307 redirect + gate with correct allowed_hosts → `errors.Is(err, errkit.ErrMCP013)` ✓
-- `TestMCPHTTPTransport_NoCheckRedirectOnUnauthenticated`: structural check, `gate == nil → httpClient.CheckRedirect == nil` ✓
-- `TestMCPHTTPTransport_CheckRedirectInstalledOnAuthenticated`: structural + functional check, installed `CheckRedirect` function unwraps to `ErrMCP013` ✓
-
-Tess's `TestMCPHTTPTransport_AuthenticatedRedirect_Blocked_MCP013` has a hard `t.Skip("BLOCKED-DEF-011: ...")`. The blocking condition is now resolved; Tess should remove the skip.
-
-### Item 4 — Ken's auth_gate.go edits (reconciliation)
-
-Current `auth_gate.go` already has:
-- `u.Hostname()` fix (not `u.Host`) in both `AttachToken` and `ValidateAuthConfig` ✓
-- `trace.EmitterFromContext` (not `emit_ctx.go` key) ✓
-- **MCP-012 fatal** behavior in `AttachToken` for disallowed host ✓ (Ken landed this; it was not yet visible in my earlier read)
-
-My earlier diagnostic that MCP-012 was "not yet landed" was wrong — the file was in intermediate state when I read it. Current state: fully reconciled, no conflicts.
-
-### Test results (follow-up complete)
-
-- `go build ./...` ✅
-- `go test ./... -count=1`: all packages pass; no new failures vs. known pre-existing `TestStdioTransport_*` and `internal/serve TestSSE_FilterByRunID`
-- `go vet ./...`: only pre-existing two `internal/serve` warnings
-
-
-# Ken — MCP-HTTP Transport Recon
-
-**Date:** 2026-08-16T00:55:39Z
-**Author:** Ken (Backend Dev)
-**Purpose:** Ground-truth survey for Barbara's gating architecture contract. No design, no production code.
-
----
-
-## Q2 FIRST — The Critical Seam
-
-**The `ToolTransport` interface exists and is the clean seam. No extraction needed.**
-
-`pkg/tool/tool.go`:
-```go
-type ToolTransport interface {
-    Invoke(ctx context.Context, def ToolDef, action string, args map[string]any) (*ToolResult, error)
-    Close() error
-}
-```
-
-All four existing transports (`StdioTransport`, `JSONRPCTransport`, `MCPTransport`, `NativeCLITransport`) implement it. A new `MCPHTTPTransport` would implement the same two methods without touching any existing type.
-
-**What is NOT separable:** The `writeMCPMessage` / `readMCPMessage` / `readContentLength` helpers in `mcp.go` are Content-Length framed stdio I/O — they're coupled to `*bufio.Reader`, `*bufio.Writer`, and `*ProcessHandle`. They are NOT reusable for HTTP. The HTTP transport rewrites the transport layer entirely but inherits the same interface contract and the same result-decoding logic.
-
-**What can be shared:** The response shape types (`mcpContent`, `mcpCallResult`, `mcpResponse`, `jsonrpcError`) are small and could be moved to a new `internal/tool/mcptypes.go` for sharing, or simply redeclared in the HTTP transport file. They contain no I/O logic.
-
-**ID correlation note:** The current `MCPTransport` does NOT implement request-ID correlation. It serializes all calls behind `t.mu` (sync.Mutex) and reads the next message, assuming it is the response to the pending request. For Streamable HTTP MCP, this assumption does NOT hold if the server can deliver SSE notifications between response frames. The HTTP transport needs real ID correlation (a `map[int]chan jsonrpcResponse` or equivalent). This is a new implementation requirement, not a port of existing code.
-
----
-
-## 1. The Stdio MCP Transport as It Exists
-
-**File:** `internal/tool/mcp.go`
-
-**Struct:**
-```go
-type MCPTransport struct {
-    mu          sync.Mutex
-    proc        *ProcessHandle
-    reader      *bufio.Reader
-    writer      *bufio.Writer
-    nextID      int
-    initialized bool
-}
-```
-
-**Entry points:**
-- `Invoke(ctx, def, action, args) (*ToolResult, error)` — holds `t.mu` for the entire call
-- `ListTools(ctx, def) ([]map[string]any, error)` — same pattern
-- `Close() error` — sends `shutdown` request, calls `proc.Kill()`
-- `ensureStarted(ctx, def) error` — private; called at start of Invoke/ListTools
-
-**Lifecycle (ensureStarted → Invoke → Close):**
-
-1. `ensureStarted`: calls `StartProcess(ctx, def.Command, def.Args, def.Env)` → `*ProcessHandle` (process is live); creates `bufio.Reader`/`Writer` wrapping process stdio; sends `initialize` request with `protocolVersion: "2024-11-05"`, reads ONE response (no ID check on result); sends `notifications/initialized` notification (no ID, no response expected); sets `t.initialized = true`.
-
-2. `Invoke` / `ListTools`: write request via `writeMCPMessage` (Content-Length framed), flush, call `readMCPMessage` (reads Content-Length header + body), unmarshal response, decode result.
-
-3. `Close`: sends `shutdown` request, flushes, kills process.
-
-**Wire framing:** LSP-style Content-Length headers — `Content-Length: N\r\n\r\n{body}`. Implemented by:
-- `writeMCPMessage(w *bufio.Writer, payload any)` — marshals to JSON, writes header + body
-- `readMCPMessage(ctx, r *bufio.Reader, proc *ProcessHandle) ([]byte, error)` — reads header via `readContentLength`, then `io.ReadFull` for body; on `ctx.Done()` kills the process
-- `readContentLength(r *bufio.Reader) (int, error)` — reads lines until blank line, parses Content-Length
-
-**`initialize` handling:** Done in `ensureStarted`. The response is read and discarded (no field inspection). `notifications/initialized` is sent immediately after (no response read because it's a notification). Neither server-advertised capabilities nor server info are inspected.
-
-**Defect noted (not fixing):** `ensureStarted` sets `t.initialized = true` before checking whether the initialize response is an error object. A server that replies with `{"jsonrpc":"2.0","id":0,"error":{"code":-32603,"message":"..."}}` to `initialize` will be silently treated as initialized.
-
----
-
-## 3. `tools/list` and `tools/call` Dispatch
-
-**Dispatch path:**
-
-1. `internal/executor/tool.go` (not surveyed; calls `ToolRuntime.Invoke`)
-2. `DefaultToolRuntime.Invoke` (`internal/tool/runtime.go`) looks up `def.Transport`:
-   ```go
-   case toolpkg.TransportMCP:
-       return r.invokePersistent(ctx, toolName, *def, action, args, func() toolpkg.ToolTransport {
-           return &MCPTransport{}
-       })
-   ```
-3. `invokePersistent` caches the transport by tool name in `r.persistent map[string]toolpkg.ToolTransport` (created once, reused for all calls to the same tool).
-
-**Result decoding** (`mcp.go::Invoke`):
-```go
-text := resp.Result.Content[0].Text
-result := &toolpkg.ToolResult{ExitCode: 0, Stdout: text}
-var parsed map[string]any
-if json.Unmarshal([]byte(text), &parsed) == nil {
-    result.Output = parsed
-}
-```
-- Text content → `ToolResult.Stdout`
-- If text parses as JSON object → also populates `ToolResult.Output`
-- `resp.Result.IsError == true` → `fmt.Errorf("mcp tool error: %s", content[0].Text)` — returned as Go error
-- `resp.Error != nil` (JSON-RPC protocol error) → `fmt.Errorf("mcp error %d: %s", code, message)`
-
-**`ListTools`** returns `[]map[string]any` (raw tool descriptors from `result.tools`). No type mapping.
-
-**Typed output preservation:** Only `Output map[string]any` on `ToolResult`. Works when the server emits JSON in the content text. No typed schema enforcement at the transport layer.
-
----
-
-## 4. Transport Schema and Validation
-
-**Schema type:** `pkg/schema/tool.go`:
-```go
-type TransportConfig struct {
-    Type    Transport         `yaml:"type,omitempty"    json:"type"`
-    Mode    string            `yaml:"mode,omitempty"    json:"mode,omitempty"`
-    Command string            `yaml:"command,omitempty" json:"command,omitempty"`
-    Args    []string          `yaml:"args,omitempty"    json:"args,omitempty"`
-    Env     map[string]string `yaml:"env,omitempty"     json:"env,omitempty"`
-}
-
-type Transport string
-
-const (
-    TransportStdio   Transport = "stdio"
-    TransportJSONRPC Transport = "jsonrpc"   // note: runtime constant is "stdio-jsonrpc"
-    TransportMCP     Transport = "mcp"
-    TransportNative  Transport = "native"
-)
-```
-
-`UnmarshalYAML` on `TransportConfig` copies `Mode` into `Type` when `Mode != ""`, so `transport.mode: mcp` is equivalent to `transport.type: mcp` after parsing. The `Mode` field is retained verbatim.
-
-**No JSON Schema governs tool files.** From `scan.go` comment: "No JSON Schema governs .tool.yaml (C3, no tool.v1.schema.json)". There is exactly one JSON Schema file in `schemas/`: `runbook.schema.json`. There is no `tool.schema.json`. Validation is entirely Go-side.
-
-**No `oneOf` discrimination on mode.** All mode-specific fields (`Command`, `Args`, `Env`) are in a flat struct with no guards. Adding `url` and `auth` fields follows the same flat pattern — there is no JSON Schema to update for a oneOf constraint.
-
-**Validation point at runtime:** `internal/tool/scan.go::mapTransport`:
-```go
-func mapTransport(t schema.Transport) (toolpkg.TransportType, error) {
-    switch t {
-    case schema.TransportStdio:   return toolpkg.TransportStdio, nil
-    case schema.TransportJSONRPC: return toolpkg.TransportJSONRPC, nil
-    case schema.TransportMCP:     return toolpkg.TransportMCP, nil
-    case schema.TransportNative:  return toolpkg.TransportNative, nil
-    default:
-        return "", fmt.Errorf("unsupported transport %q", t)
-    }
-}
-```
-A `.tool.yaml` with `mode: mcp-http` today fails here with `unsupported transport "mcp-http"`.
-
-**Second validation point:** `DefaultToolRuntime.Invoke` in `runtime.go` has a parallel switch on `def.Transport` with `default: return nil, fmt.Errorf("tool runtime: unsupported transport %q", ...)`. Both must be extended for `mcp-http`.
-
-**`ToolDef` in `pkg/tool/tool.go`** carries only `Command string`, `Args []string`, `Env map[string]string` from the transport config. There are NO `URL` or `Auth` fields anywhere in `ToolDef`. These must be added to both `schema.TransportConfig` and `toolpkg.ToolDef`, and threaded through `RuntimeToolDef` in `scan.go`.
-
----
-
-## 5. Existing HTTP and Auth Machinery
-
-**HTTP server (not client):** `internal/serve/` is entirely server-side. `net/http.Server`, `http.Handler`, `http.ServeMux`. Not reusable for an outbound HTTP MCP client.
-
-**SSE in `internal/serve/sse.go`:** Server-side SSE writer:
-- `writeSSE(w http.ResponseWriter, ev RunEvent)` — writes `event:/id:/data:` lines
-- `writeSSEHeartbeat(w http.ResponseWriter)` — writes `: hb\n\n` comment frame
-
-This is **server-side only**. There is **no SSE client reader** anywhere in the codebase. The HTTP transport must implement SSE parsing from scratch: read `data:` prefixed lines, strip prefix, JSON-unmarshal the payload.
-
-**HTTP client code:** There is NO reusable outbound HTTP client wrapper anywhere. The only HTTP client usage is in tests (`internal/serve/*_test.go`) via `httptest.NewServer` + `http.Get`/`http.Post`. Production code has no `http.Client`, no retry policy, no timeout helper.
-
-**Webhook receiver** (`internal/eventbus/webhook.go`): HTTP *server* receiving inbound POSTs with HMAC-SHA256 signature verification. Not reusable for client.
-
-**Auth / credentials / token machinery:** There is NO bearer token handling, no Azure CLI (`az`) invocation, no credential provider interface for HTTP, no `Authorization` header construction anywhere in the codebase. The input provider chain (`internal/input/`) handles env vars and Vault for runbook vars — it does not serve as an HTTP auth mechanism. All auth for `mcp-http` must be built from scratch.
-
-**Azure CLI specifically:** Zero occurrences of `az`, `azure`, `AzureCLI`, or `azure-cli` anywhere in the repo. An `azure-cli` auth provider would exec `az account get-access-token --scope <scope>` and parse the JSON output. That is new infrastructure.
-
-**Redaction helpers:** `pkg/governance/` has `RedactionPattern` for output scrubbing. There is no HTTP header redaction. Bearer tokens in `Authorization` headers sent in trace/logs must be explicitly sanitized — no existing helper does this.
-
----
-
-## 6. Error Taxonomy
-
-**Conformance error classes in `pkg/errkit/errors.go`:**
-- `GXL-PARSE`, `GXL-TYPE`, `GXL-PATH`, `GXL-EVAL` — expression language
-- `GIS-PARSE`, `GIS-PATH`, `GIS-TYPE`, `GIS-EVAL` — string interpolation
-- `GCP-PARSE`, `GCP-RESOLVE`, `GCP-DEFAULT`, `GCP-TYPE`, `GCP-EVAL` — container platform
-- `PKG`, `PKG-W` — package system
-- `PLAN` — planner
-- `ENUM`, `ENUM-W` — enum validation
-- `DINC`, `DINC-W` — dynamic includes
-
-**Tool / MCP transport errors: none exist.** All errors from `MCPTransport`, `StdioTransport`, etc. are plain `fmt.Errorf` strings with no conformance code or class. There is no `TOOL-*` or `MCP-*` family in the errkit registry.
-
-**Proposed class for new errors:** `MCPH` (MCP over HTTP) would be consistent with the existing naming pattern — short, subsystem-prefixed, all-caps. `ClassForCode` in `errors.go` would need a new case for `strings.HasPrefix(code, "MCPH-")`. Barbara should confirm the name; I'm reporting the gap.
-
-**`IsWarning` pattern:** The generalized `strings.HasSuffix(class, "-W")` convention (from my DINC work) means a `MCPH-W` class would be treated as a warning automatically without changing `IsWarning`.
-
----
-
-## 7. Tool Registry and Wiring
-
-**End-to-end path for a new `mcp-http` tool:**
-
-1. `ScanDir` → `ParseToolFile` → `yaml.Unmarshal` into `schema.ToolDef` with `TransportConfig.Mode = "mcp-http"` → `TransportConfig.UnmarshalYAML` copies `Mode` → `Type = "mcp-http"`
-2. `RuntimeToolDef` → calls `mapTransport("mcp-http")` → **FAILS** today with "unsupported transport"
-3. If `mapTransport` is extended: returns new `toolpkg.TransportMCPHTTP` constant; `RuntimeToolDef` must also copy `URL` and `Auth` from `schema.TransportConfig` to `toolpkg.ToolDef`
-4. `buildToolRegistry` in `adapter/wire.go` → wraps in `OverlayRegistry` — no changes needed here
-5. `NewDefaultToolRuntime(registry)` — no changes needed
-6. Tool step executor → `DefaultToolRuntime.Invoke` → switch on `def.Transport` → **FALLS TO DEFAULT** today; must add `case toolpkg.TransportMCPHTTP:` returning `r.invokePersistent(..., func() ToolTransport { return &MCPHTTPTransport{url: def.URL} })`
-
-**Dead-code risk:** Two hard-error defaults guard the dispatch path. Missing either case (`mapTransport` or `Invoke` switch) produces a runtime error at first use — same failure mode as a typo in the transport name. Not a silent failure, but still a gap that must be caught by tests.
-
-**`ToolDef` in `pkg/tool/tool.go` needs new fields:**
-```go
-// NEW — needed for mcp-http
-URL  string       // transport.url
-Auth *AuthConfig  // transport.auth (new type TBD)
-```
-These must be populated in `RuntimeToolDef` (scan.go) and threaded into `MCPHTTPTransport`.
-
-**`ListTools` is NOT part of `ToolTransport` interface.** Only `MCPTransport` and the new HTTP transport need it. `DefaultToolRuntime` does not expose it. If Barbara's design needs dynamic tool discovery at runtime, a second interface or a separate method needs to be defined. Currently `ListTools` is called from nowhere in the production dispatch path — it exists only in `mcp_test.go` and the `MCPTransport` struct.
-
----
-
-## 8. Test Infrastructure
-
-**Existing infrastructure for stdio MCP:**
-- `TestMain` in `internal/tool/test_main_test.go`: builds real Go binaries from `cmd/tools/` into a temp `.testtools/` dir, sets `PATH` and `GERT_TOOLS_DIR`, runs the test suite, cleans up.
-- `cmd/tools/mcp-server/main.go`: a complete content-length-framed stdio MCP server fixture. Handles `initialize`, `notifications/initialized`, `tools/list`, `tools/call` (echo/fail/slow), `shutdown`.
-- Tests in `internal/tool/mcp_test.go`: 4 tests, all using the compiled `mcp-server` binary.
-
-**What is NOT there for HTTP testing:**
-- No `httptest.NewServer` MCP fixture. One needs to be written.
-- No SSE client reader (needed by both the production transport and any response-reading test helper).
-- No HTTP server fixture in `cmd/tools/` directory.
-
-**What an HTTP MCP test server needs:**
-1. An `httptest.NewServer` that accepts POST at a fixed path
-2. Handles `initialize`: reads JSON-RPC body, returns `{"result":{"protocolVersion":"...","serverInfo":{...}}}` with `Mcp-Session-Id: <uuid>` response header
-3. Handles `notifications/initialized`: returns 202 Accepted (no body required per spec)
-4. Handles `tools/list` and `tools/call`: may return either a direct JSON response or an SSE stream starting with `data: {jsonrpc response}\n\n`
-5. Session state: validates that subsequent requests carry the `Mcp-Session-Id` header from step 2
-
-**Recommended test structure:**
-- `internal/tool/mcp_http_test.go` using `httptest.NewServer`
-- A `fakeHTTPMCPServer` struct (analogous to `cmd/tools/mcp-server/main.go` but as an `http.Handler`)
-- No separate binary needed — in-process httptest is sufficient and faster
-
-**SSE parsing for production:**
-The production transport must parse SSE lines from the response body. The spec format:
-```
-data: {"jsonrpc":"2.0","id":1,"result":{...}}\n\n
-```
-This is a net-new implementation. `bufio.NewScanner` on the response body, scan for `data:` prefix, strip prefix, JSON-unmarshal. Handle `: ` comment lines (heartbeats) by skipping. No existing helper.
-
----
-
-## Summary of Gaps Barbara Must Design Against
-
-| Gap | Severity | Location |
-|-----|----------|----------|
-| `TransportConfig` has no `url` or `auth` fields | Blocking | `pkg/schema/tool.go` |
-| `toolpkg.ToolDef` has no `URL` or `Auth` fields | Blocking | `pkg/tool/tool.go` |
-| `mapTransport` doesn't handle `mcp-http` | Blocking | `internal/tool/scan.go` |
-| `DefaultToolRuntime.Invoke` doesn't handle `mcp-http` | Blocking | `internal/tool/runtime.go` |
-| No HTTP client wrapper (no retry, no timeout) | Must build | new |
-| No SSE client reader | Must build | new |
-| No Azure CLI token provider | Must build | new |
-| No bearer-token redaction for traces/logs | Must build | new (or governance extension) |
-| No HTTP MCP test server fixture | Must build | `internal/tool/` tests |
-| No errkit class for HTTP MCP errors | Barbara decides | `pkg/errkit/errors.go` |
-| No ID correlation in MCPTransport (in-scope for HTTP) | Must implement | new MCPHTTPTransport only |
-| `ListTools` not in `ToolTransport` interface; needed for mcp-http? | Barbara decides | `pkg/tool/tool.go` |
-
-
-# Ken — Stream A: Schema + Validation Report
-
-**Date:** 2026-08-16  
-**Feature:** Native Streamable HTTP MCP transport (`mcp-http`)  
-**Status:** COMPLETE — all 17 tests pass, `go build ./...` exit 0
-
----
-
-## AuthConfig shape and extensibility
-
-```go
-// pkg/schema/tool.go
-type AuthConfig struct {
-    Provider string `yaml:"provider"`
-    Scope    string `yaml:"scope,omitempty"`
-}
-```
-
-**Extensibility story:** `Provider` is a plain string — no Go enum, no `oneOf` in YAML. Adding a second provider (e.g., `managed-identity`) requires:
-1. Add its name to `knownAuthProviders` in `internal/tool/validate_transport.go` — one line.
-2. Implement the `AuthProvider` interface in `internal/tool/auth_<provider>.go`.
-3. Add a `case` in `NewAuthProvider` (David's file).
-
-The `AuthConfig` struct itself is unchanged — no breaking change to `.tool.yaml` syntax or any schema type.
-
-B-24 compliance: `auth:` names a *provider* and a *scope* only. There is no field that can hold a credential, token, or secret. Structurally impossible to inline credential material.
-
----
-
-## Validation rules and error messages
-
-All rules enforced in `internal/tool/validate_transport.go::ValidateTransportConfig`, called from `ParseToolFile` at scan time. Errors are `%w`-wrapped with the file path, so `errors.Is(err, errkit.ErrMCP001)` works through the chain.
-
-| Rule | Condition | Sentinel | Error message (operator-actionable) |
-|------|-----------|----------|--------------------------------------|
-| mcp-http requires url | `url` absent | ErrMCP001 | `mcp-http: transport.url is required` |
-| url must be HTTPS | `url` doesn't start with `https://` | ErrMCP001 | `mcp-http: url "<url>" must use https://` |
-| command rejected on mcp-http | `command` non-empty on mcp-http | plain | `mcp-http: transport.command is not valid for mode mcp-http (mode mcp-http uses url:, not command:)` |
-| args rejected on mcp-http | `args` non-empty on mcp-http | plain | `mcp-http: transport.args is not valid for mode mcp-http (mode mcp-http uses url:, not command/args)` |
-| auth.provider must be known | provider not in `knownAuthProviders` | ErrMCP002 | `mcp-http: unknown auth provider "<name>" (recognized providers: azure-cli)` |
-| mcp requires command | `command` empty on mcp | plain | `mcp: transport.command is required for mode mcp` |
-| url rejected on mcp | `url` non-empty on mcp | plain | `mcp: transport.url is not valid for mode mcp (mode mcp uses command:, not url:)` |
-| auth rejected on mcp | `auth` non-nil on mcp | plain | `mcp: transport.auth is not valid for mode mcp (auth is only used by mode mcp-http)` |
-
-Following Barbara's B-14 principle: cross-arm fields are **rejected, not silently ignored**. A tool author who writes `url:` under `mode: mcp` gets an error telling them exactly what's wrong and what to use instead.
-
----
-
-## Switch/discrimination points on transport mode
-
-All enumerated to confirm no dead-code miss (recon finding: hard-error defaults).
-
-| File | Location | `mcp-http` handled? |
-|------|----------|---------------------|
-| `internal/tool/scan.go` | `mapTransport` switch | ✅ `case schema.TransportMCPHTTP: return toolpkg.TransportMCPHTTP, nil` |
-| `internal/tool/runtime.go` | `DefaultToolRuntime.Invoke` switch | ✅ stub returning "not yet wired — Stream B pending" |
-| `internal/tool/validate_transport.go` | `ValidateTransportConfig` switch | ✅ primary enforcement |
-
-The stub in `runtime.go` surfaces loudly at call time (returns an error), not silently. Don replaces it with `NewMCPHTTPTransport` when Stream B lands.
-
----
-
-## B-32 Addendum: allowed_hosts
-
-**Date:** 2026-08-15 (B-32 ruling incorporated)
-
-Barbara reversed B-25/B-27. Audience-scoped tokens prevent a malicious host from consuming a token, but not from replaying it against the legitimate endpoint. `allowed_hosts` is the prevention mechanism.
-
-### AuthConfig shape (revised)
-
-```go
-type AuthConfig struct {
-    Provider     string   `yaml:"provider"`
-    Scope        string   `yaml:"scope,omitempty"`
-    AllowedHosts []string `yaml:"allowed_hosts,omitempty"`
-}
-```
-
-`AllowedHosts` is required whenever `auth:` is present. Entries are bare hostnames (no scheme, no port). Matching is exact, case-insensitive, parsed host — no substring or wildcard. This prevents `icm.evil.com` from matching `icm.com` and `icm-mcp.azure-api.net.evil.com` from matching `icm-mcp.azure-api.net`. **David must use identical semantics** in the runtime host check before header attachment.
-
-### New validation rules
-
-| Rule | Condition | Sentinel | Error message |
-|------|-----------|----------|----------------|
-| allowed_hosts required when auth configured | `auth != nil && len(AllowedHosts) == 0` | ErrMCP010 | `mcp-http: auth.allowed_hosts is required when auth is configured (B-32: …)` |
-| url host must be in allowed_hosts | url host not in AllowedHosts (static check) | ErrMCP011 | `mcp-http: url host "<host>" is not in auth.allowed_hosts [...]` |
-
-No `allowed_hosts` requirement when `auth:` is absent — unauthenticated transports are unconstrained (B-32 explicitly preserves this).
-
-### MCP-012 reclassification (B-32 revised ruling)
-
-**Date:** 2026-08-15
-
-`ErrMCPW001` / `MCP-W001` removed. Reclassified as `ErrMCP012` / `MCP-012`, class `MCP`, fatal.
-
-- `MCP-W` class removed entirely from errkit (`ClassForCode`, `Classes()`, `classSentinels`, `codeOrder`).
-- `ErrMCP013` added: redirect blocked on authenticated request — `http.ErrUseLastResponse`; David raises this in the HTTP transport.
-- `auth_gate.go`: `AttachToken` now returns `errkit.New("MCP-012", ...)` on host mismatch instead of emitting a warning and proceeding. `u.Host` → `u.Hostname()` fixed in both `AttachToken` and `ValidateAuthConfig` to match binding semantics.
-- `pkg/schema/tool.go` doc comment updated.
-- Repo-wide sweep confirmed: no remaining references to `MCP-W001`, `ErrMCPW001`, or `MCP-W` class.
-
-**MCP-012 message:** `mcp-http: request host "<host>" is not in auth.allowed_hosts — token not attached (update allowed_hosts or url: to match)`
-
-All 22 tests pass. `go build ./...` and `pkg/errkit` tests clean.
-
-
-### New/updated tests (5 added, 2 updated)
-
-- `TestValidateTransport_MCPHTTP_ValidWithAuth` — updated with `AllowedHosts`
-- `TestValidateTransport_MCPHTTP_MissingAllowedHosts_MCP010` — NEW
-- `TestValidateTransport_MCPHTTP_HostNotInAllowedHosts_MCP011` — NEW
-- `TestValidateTransport_MCPHTTP_SubstringHostDoesNotMatch_MCP011` — NEW (replay-attack guard)
-- `TestValidateTransport_MCPHTTP_NoAuth_AllowedHostsNotRequired` — NEW
-- `TestParseToolFile_MCPHTTP_ValidWithAuth` — updated with `allowed_hosts:` in YAML
-- `TestParseToolFile_MCPHTTP_UnknownProvider_Fails` — updated with `allowed_hosts:` to isolate MCP-002
-
-All 22 tests pass. `go build ./...` and `pkg/errkit` tests clean.
-
-### Host-matching semantics (for David to match)
-
-1. Parse `cfg.URL` with `net/url.Parse` — use `u.Hostname()` (strips port if present)
-2. Lowercase both the parsed hostname and each `AllowedHosts` entry
-3. Exact string equality only — no `strings.HasPrefix`, no `strings.Contains`, no wildcard expansion
-4. Port in `AllowedHosts` entries is not supported in this iteration; entries must be bare hostnames
-
-If a future ruling adds wildcard support (e.g. `*.azure-api.net`), only `hostInList` in `validate_transport.go` and the parallel runtime check need updating — the schema and `AuthConfig` struct are unchanged.
-
-
-- **`pkg/schema/tool.go`** — `TransportMCPHTTP` constant; `URL string` + `Auth *AuthConfig` on `TransportConfig`; `AuthConfig` struct
-- **`pkg/tool/tool.go`** — `TransportMCPHTTP TransportType = "mcp-http"` constant
-- **`pkg/errkit/errors.go`** — `MCP` class; `ErrMCP001`..`ErrMCP009` sentinels; `ClassForCode`, `codeOrder`, `classSentinels`, `sentinels`, `Classes()` all updated
-- **`internal/tool/scan.go`** — `mapTransport` case; `URL`/`Auth` threading in `RuntimeToolDef`; `ValidateTransportConfig` call in `ParseToolFile`
-- **`internal/tool/runtime.go`** — stub `case toolpkg.TransportMCPHTTP`
-- **`internal/tool/validate_transport.go`** (new) — full validation logic
-- **`internal/tool/validate_transport_test.go`** (new) — 17 tests (11 unit + 5 integration through `ParseToolFile` + 1 `toolFileTemplate` const)
-
----
-
-## Test results
-
-```
-=== 17 new tests: ALL PASS ===
-TestValidateTransport_MCPHTTP_ValidMinimal          PASS
-TestValidateTransport_MCPHTTP_ValidWithAuth         PASS
-TestValidateTransport_MCPHTTP_MissingURL_MCP001     PASS
-TestValidateTransport_MCPHTTP_HTTPNotHTTPS_MCP001   PASS
-TestValidateTransport_MCPHTTP_CommandRejected       PASS
-TestValidateTransport_MCPHTTP_ArgsRejected          PASS
-TestValidateTransport_MCPHTTP_UnknownProvider_MCP002 PASS
-TestValidateTransport_MCPStdio_ValidMinimal         PASS
-TestValidateTransport_MCPStdio_MissingCommand       PASS
-TestValidateTransport_MCPStdio_URLRejected          PASS
-TestValidateTransport_MCPStdio_AuthRejected         PASS
-TestParseToolFile_MCPHTTP_ValidMinimal              PASS
-TestParseToolFile_MCPHTTP_ValidWithAuth             PASS
-TestParseToolFile_MCPHTTP_MissingURL_Fails          PASS
-TestParseToolFile_MCPHTTP_HTTPScheme_Fails          PASS
-TestParseToolFile_MCPHTTP_UnknownProvider_Fails     PASS
-```
-
-Pre-existing failures (not mine):
-- `internal/tool TestStdioTransport_*` — missing `.testtools/internal-tool/json-emitter.exe` (build artifact)
-- No `internal/serve` failures (green)
-- Two `go vet` warnings in `internal/serve` (pre-existing, not mine)
-
-`go build ./...` exit 0.
+This follows the same pattern as deployment environments selecting service principals over developer identities — the API contract is unchanged; only the authentication substrate varies.
 
 
 # Tess — MCP HTTP Stream D Final Decision Report
@@ -644,174 +206,6 @@ Pre-existing failures (not mine):
 - **Total Tess vectors:** 31 PASS / 0 SKIP / 0 FAIL  
 - **Full suite:** 62 packages, `go test ./... -count=1` exit 0  
 
-
-# Tess — MCP HTTP Stream D Report
-**Date:** 2026-08-16 (updated after stale-defect correction pass)  
-**Requested by:** Cristián  
-**Feature:** Native Streamable HTTP MCP transport (`mode: mcp-http`)  
-**Test file:** `internal/tool/mcp_http_tess_test.go`
-
----
-
-## Lead verdicts (required)
-
-### Redirect-with-token (TV-MCP-AUTH-002) — **PASS. DEF-011 was stale — B-33 Part 2 IS implemented.**
-
-`NewMCPHTTPTransport` installs `CheckRedirect` when `gate != nil`, returning `ErrMCP013`. A 302 from an allowed host is refused before the redirect fires. `TestMCPHTTPTransport_AuthenticatedRedirect_Blocked_MCP013` **PASSES**: `Invoke` returns an MCP-013 error, and the evil server confirms it received zero requests — the `Authorization` header never reached the redirect destination. The initial defect report (DEF-011) was filed against mid-flight code; the fix had landed before tests ran.
-
-### Interleaved-notification SSE (TV-MCP-SSE-001) — **PASS. Both notification skip and ID correlation correct.**
-
-`parseSSEResponse` skips nil-id events (notifications) AND checks `resp.ID == expectedID` — both guards are present. `TestMCPHTTPTransport_SSE_NotificationBeforeResponse` confirms notification skip. `TestMCPHTTPTransport_SSE_CorrectIDSelected` confirms that a stale response (id=99) before the matching response is skipped and the correct answer is returned. Both **PASS**. The initial DEF-012 report was also stale.
-
----
-
-## End-to-end token-leak sweep (B-24 / B-27)
-
-Scope: all observable surfaces through a complete authenticated `Invoke` call — error messages, `ToolResult` fields, and trace event payloads. Sentinel: `TESS_SENTINEL_TOKEN_D42E9B1C`.
-
-Methodology in `TestMCPHTTPTransport_TokenRedaction_NotInAnyOutput`:
-1. A real `TokenGate` with a `mockAuthProvider` returning the sentinel token
-2. The server echoes the `Authorization` header back as the tool result text (to verify the token IS reaching the server — baseline confirmation)
-3. A `trace.WithEventEmitter` captures all emitted events for the call
-4. Sweep: error messages, `result.Stderr`, non-stdout `result.Output` fields, all trace event payloads (JSON-serialized)
-
-**Result: PASS. No leak found.**
-- `result.Stderr` is empty — not leaked.
-- No non-stdout `result.Output` field contains the sentinel.
-- `mcp/authAttached` event was emitted (B-27 confirmed) with payload `{url_host, scope}` — no token in the serialized payload.
-- Auth provider failure errors (`TestMCPHTTPTransport_AuthFailure_ErrorHasNoToken`) contain only the MCP-007 failure reason, not the sentinel. **PASS.**
-
----
-
-## B-27 emitter wiring verdict (requested)
-
-`mcp/authAttached` **IS wired in production.** Evidence:
-
-`internal/engine/engine.go` calls `executor.WithEventEmitter(spanCtx, func(...) { h.emitEventLocked(...) })` before every `exec.Execute` call. This `emitterCtx` is passed as `ctx` to the executor, which calls `runtime.Invoke(ctx, ...)`, which flows through `MCPHTTPTransport.Invoke(ctx, ...)` → `buildHTTPRequest(ctx, ...)` → `gate.AttachToken(ctx, req)`. `AttachToken` calls `trace.EmitterFromContext(ctx)` which finds the engine-installed emitter. The event is then routed through `emitEventLocked` → `trace.TraceEvent` → persisted in the run store.
-
-`TestMCPHTTPTransport_TokenRedaction_NotInAnyOutput` proves this end-to-end: when a real emitter is installed in ctx, `mcp/authAttached` fires and is captured. Without an emitter in ctx, `EmitterFromContext` returns nil (safe no-op per the emitter contract). There is no gap — the engine always provides the emitter.
-
----
-
-## Defects found (summary — all resolved or stale)
-
-| DEF | What | Status |
-|-----|------|--------|
-| DEF-007 | Import cycle `auth_gate.go` → `internal/executor` | RESOLVED before tests ran |
-| DEF-008 / DEF-009 / DEF-010 | Compile failures (`t.auth`, arg count, type mismatch) | RESOLVED by Don before tests ran |
-| DEF-011 | No `CheckRedirect` on `httpClient` | STALE — fix was already in HEAD |
-| DEF-012 | `parseSSEResponse` no `id == expectedID` check | STALE — fix was already in HEAD |
-| DEF-013 | `AttachToken` returns nil on host mismatch | STALE — `MCP-012` return was already in HEAD |
-
-No open security defects. All three reported security issues (DEF-011/DEF-012/DEF-013) were filed against mid-flight code and were already fixed by the time tests ran against stable HEAD.
-
----
-
-## Vector results
-
-| # | Test | Status |
-|---|------|--------|
-| TV-MCP-INIT-001 | `TestMCPHTTPTransport_InitRejected_NotMarkedInitialized` | **PASS** |
-| TV-MCP-INIT-002 | `TestMCPHTTPTransport_B30_NotReplicatedFromStdio` | **PASS** |
-| TV-MCP-INIT-003 | `TestMCPHTTPTransport_ProtocolVersionHeader_2025` | **PASS** |
-| TV-MCP-SESS-001 | `TestMCPHTTPTransport_NoSessionID_Accepted` | **PASS** |
-| TV-MCP-SESS-002 | `TestMCPHTTPTransport_SessionIDSentOnSubsequentCalls` | **PASS** |
-| TV-MCP-SESS-003 | `TestMCPHTTPTransport_SessionIDUpdatedOnLaterResponse` | **PASS** |
-| TV-MCP-SESS-004 | `TestMCPHTTPTransport_SessionExpiry_ReinitFails_MCP004` | **PASS** |
-| TV-MCP-AUTH-001 | `TestMCPHTTPTransport_AllowedHost_TokenAttached` | **PASS** |
-| TV-MCP-AUTH-002 | `TestMCPHTTPTransport_AuthenticatedRedirect_Blocked_MCP013` | **PASS** |
-| TV-MCP-AUTH-003 | `TestMCPHTTPTransport_SuffixConfusion_TokenNotAttached` | **PASS** |
-| TV-MCP-AUTH-004 | `TestMCPHTTPTransport_RuntimeHostMismatch_Fatal_MCP012` | **PASS** |
-| TV-MCP-SSE-001 | `TestMCPHTTPTransport_SSE_NotificationBeforeResponse` | **PASS** |
-| TV-MCP-SSE-002 | `TestMCPHTTPTransport_SSE_CorrectIDSelected` | **PASS** |
-| TV-MCP-SSE-003 | `TestMCPHTTPTransport_SSE_StreamEndsWithoutResponse_MCP006` | **PASS** |
-| TV-MCP-SSE-004 | `TestMCPHTTPTransport_SSE_MultiLineData_HeartbeatIgnored` | **PASS** |
-| TV-MCP-FAIL-001 | `TestMCPHTTPTransport_ConnectionRefused_MCP008` | **PASS** |
-| TV-MCP-FAIL-002 | `TestMCPHTTPTransport_ServerError5xx` | **PASS** |
-| TV-MCP-FAIL-003 | `TestMCPHTTPTransport_MalformedJSON` | **PASS** |
-| TV-MCP-FAIL-004 | `TestMCPHTTPTransport_ContextCancelled_Error` | **PASS** |
-| TV-MCP-FAIL-005 | `TestMCPHTTPTransport_JSONRPCError_MCP009` | **PASS** |
-| TV-MCP-FAIL-006 | `TestMCPHTTPTransport_UnexpectedContentType_MCP005` | **PASS** |
-| TV-MCP-PARITY-001 | `TestMCPHTTPTransport_JSONOutput_Stdout_And_OutputMap` | **PASS** |
-| TV-MCP-PARITY-002 | `TestMCPHTTPTransport_PlainTextOutput_StdoutOnly` | **PASS** |
-| TV-MCP-PARITY-003 | `TestMCPHTTPTransport_IsError_ExitCode1_MCPToolError` | **PASS** |
-| TV-MCP-PARITY-004 | `TestMCPHTTPTransport_SSEResult_SameShapeAsJSON` | **PASS** |
-| TV-MCP-REDACT-001 | `TestMCPHTTPTransport_TokenRedaction_NotInAnyOutput` | **PASS** |
-| TV-MCP-REDACT-002 | `TestMCPHTTPTransport_AuthFailure_ErrorHasNoToken` | **PASS** |
-
-**Final summary: 27 PASS / 0 SKIP / 0 FAIL** (of 27 Stream D vectors)
-
----
-
-## Stream C extension (David's AzureCLIAuthProvider) — 2026-08-16T02:29:31Z
-
-**Updated after final pass. 4 Group I adversarial vectors added. Total: 31 PASS / 0 SKIP / 0 FAIL.**
-
-### AUTH-003 tightening
-`TestMCPHTTPTransport_SuffixConfusion_TokenNotAttached` had a conditional `if err != nil { check MCP-012 }` that would silently pass on a regression to nil-return. Tightened to `if err == nil { t.Fatal(...) }` — error is now required unconditionally, matching the shape of TV-MCP-AUTH-004. **HOLDS after tightening.** DEF-013 is fixed, `AttachToken` returns fatal MCP-012, Invoke returns non-nil error.
-
-### Comment cleanup
-File header, AUTH-003, AUTH-004 stale `// BLOCKED: DEF-013` annotations rewritten. DEF-011/012/013 now marked RESOLVED in header. No false-defect commentary survives.
-
-### Group I — AzureCLI adversarial vectors
-
-| # | Test | Status |
-|---|------|--------|
-| TV-AZ-001 | `TestAzureCLIProvider_SentinelNeverInAnyErrorOutput` | **PASS** |
-| TV-AZ-002 | `TestAzureCLIProvider_NoRetryLoopOnFailure` | **PASS** |
-| TV-AZ-003 | `TestAzureCLIProvider_InvalidateThenFailDoesNotReturnStale` | **PASS** |
-| TV-AZ-004 | `TestAzureCLIProvider_InvalidateCalledOnTransport401` | **PASS** |
-
-### Sentinel sweep against David's provider
-
-Sentinel: `TESS_SENTINEL_TOKEN_D42E9B1C`. Swept across: all 5 error message paths (az not installed, not logged in, no scope consent, malformed output, generic failure), `Invalidate()`+re-acquire failure, and 401-triggered re-acquire failure. **CLEAN — sentinel not found in any error message, no panic output.** 
-
-David's own redaction test uses `knownToken = "******"` — asterisks can appear in truncated Go error output, making that sentinel collision-prone. Our sentinel is high-entropy and collision-proof. The two tests are complementary; no contradiction.
-
-### Expiry cache behavior verified
-`AzureCLIAuthProvider` caches by expiry. `Invalidate()` clears both `token` and `expiry` fields. After `Invalidate()`, a subsequent `Token()` call with a failing runner returns an error (stale token not returned). Cache hit is confirmed: second `Token()` call with a fixed-expiry success runner does not spawn a second shell process. 
-
-### No retry loop
-A single failure returns one error. No spin/retry loop exists in `Token()`.
-
-### 401-driven Invalidate
-`TestAzureCLIProvider_InvalidateCalledOnTransport401` proves `Invalidate()` is called when the transport receives HTTP 401, so a stale token is discarded before the re-auth attempt rather than being retried forever.
-
-### Build and test status after final pass
-
-```
-go build ./...            → exit 0
-go test ./internal/tool   → 31 Tess vectors PASS, 0 SKIP, 0 FAIL  
-go test ./... -count=1    → exit 0 (62 packages, all green)
-```
-
----
-
-## Key findings summary
-
-1. **B-30 verified**: HTTP transport checks `initResp.Error != nil` before setting `initialized = true`. The stdio defect was NOT replicated. ✓
-2. **Protocol version verified**: HTTP transport sends `MCP-Protocol-Version: 2025-03-26`. Does not use stdio's `2024-11-05`. ✓
-3. **Requirement 4 (transport parity) verified**: `toolResult()` logic is identical between JSON and SSE paths. Same `ToolResult` shape from both transports. ✓
-4. **SSE interleaved notification**: correctly skipped (nil id). ✓
-5. **SSE ID correlation**: correct — stale responses with wrong id are skipped. ✓
-6. **B-33 Part 1 (host mismatch fatal)**: `AttachToken` returns `MCP-012`, request not sent. ✓
-7. **B-33 Part 2 (redirect blocking)**: `CheckRedirect` returns `MCP-013` on authenticated transports. ✓
-8. **B-27 (mcp/authAttached wiring)**: event fires and is routed through engine's emitEventLocked in production. ✓
-9. **B-24 (token redaction)**: transport layer clean — sentinel not found in errors, result fields, or trace event payloads. ✓
-
----
-
-## Build and test status
-
-```
-go build ./...   → exit 0
-go test ./...    → exit 0 (62 packages, all green)
-```
-
-
-
-
----
 
 # Final Acknowledgment: Runtime Portability — Design Agreed (Rev 2)
 
@@ -3075,3 +2469,5 @@ schema-acceptance at plan/load time, which is the contract the vector was writte
 corpus by in-flight team commits and is already PASSING. Classification IS enforced at catalog-load
 time. Q2 (TOOL-PARSE error class) is partially moot for the rejection vector — PKG-010 is the
 correct error code because the enforcement point is ParseToolFile inside the catalog loader.
+
+

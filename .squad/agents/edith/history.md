@@ -76,3 +76,49 @@ Edith continues in the role of Specification Editor for the GERT project.
 **Deferred:** AllowedModes field (RunMode separate from context), per-tool auth override (Phase 3), lifecycle sanity (Phase 3)
 
 **Next phase:** OQ2 (library vs. subprocess) spike; resolver extends --package-map; Phase 2 host bridge with explicit framing protocol
+## 2026-08-17: Phase 1B Scope Confirmation
+
+**Context:** SQL Live-Site rejected Phase 1 completion claim; identified four unshipped Phase 1B items. All four independently verified by engineers.
+
+### Phase 1B Items (Confirmed Absent)
+
+1. **Managed-identity auth** (Don's stream)
+   - Current: NewAuthProvider recognizes only "azure-cli" at internal/tool/auth.go:29
+   - Required: uth_managed_identity.go with IMDS + Workload Identity (stdlib net/http)
+   - Estimate: 2 days
+
+2. **Headless ICM proof** (Don's stream)
+   - Current: icm-tsg-router does not exist (zero matches)
+   - Required: Runbook + mock MCP server + integration test (production requires external credential)
+   - Blocker: Managed identity (Claim 1)
+   - Estimate: 1 day after Claim 1
+
+3. **INDETERMINATE halt-on-timeout** (David's stream)
+   - Current: Timeout unconditionally calls ailRun() regardless of classification
+   - Required: New StepStatusIndeterminate; engine branch on classification; resume guard; test suite (8 vectors)
+   - Estimate: 4-5 days
+
+4. **Profile endpoint/auth binding** (David's stream)
+   - Current: Profile never passed to BuildEngineConfig; transport reads only tool definition
+   - Required: Wire through adapter; add auth field to ProfileToolOverride; transport override logic; tests
+   - Estimate: 3-4 days
+
+### Auth Precedence Ruling (RATIFIED)
+
+**Decision:** Profile top-level uth.provider overrides tool-definition uth.provider at transport construction time.
+
+**Enables:** Managed identity in CI (tool says zure-cli, CI profile says managed-identity).
+
+**Rules:**
+- Profile auth wins (execution-context binding vs portable contract)
+- Per-tool profile auth rejected until Phase 3 (loader error with deferral)
+- Transport mode never rewritten (auth is credential substrate, not protocol)
+- Loader validates profile auth against knownAuthProviders
+
+### Process Notes
+
+- All four claims verified with file:line evidence
+- Phase 1A genuinely complete; Phase 1B items were original scope, not delivered
+- Barbara's coordination cycle: 5 corrections applied (language, classifications, approvals, headers, deferral)
+- Production ICM validation blocked on Live-Site credential provisioning (external dependency, TBD)
+

@@ -116,3 +116,19 @@ When Item 2 extends `RuntimeProfile` schema:
 - **Eight corrections, all correct:** SQL Live-Site Operations analyzed the Phase 1B plan independently and submitted eight corrections covering auth gaps, endpoint safety, timeout semantics, and evidence requirements. All eight verified against code and found accurate. No factual errors.
 - **Coordinator caught acceptance-criteria paraphrase:** Coordinator's turn 1 had paraphrased SQL Live-Site's acceptance criteria list (not quoted verbatim) and claimed full coverage, silently dropping criterion 8. Turn 2 corrected this with explicit gap acknowledgment and new Item 6.
 - **Artifacts list requirement:** Item 4 blocked on six specific artifacts from SQL Live-Site Operations. These must be requested explicitly before Item 4 work can proceed. `gert-sqllivesite` repository is not present locally.
+
+---
+
+## 2026-08-17 — Phase 1B Rev 3: Ownership Split (Correcting Rev 2 §8)
+
+**Status:** Plan revised to Rev 3. Withdrew artifact request; split contract proof ownership.
+
+**Key change:** Rev 2 §8 asked for eight artifacts and repo access to `gert-sqllivesite`. This was an architectural error — Gert core must not take a dependency on a consumer repo. The same boundary was established in round 1 when `run-gert.ps1` was corrected out of Gert scope. Item 4 is now a mechanism proof with a synthetic fixture we own; SQL Live-Site owns proving their exact contract in their repo.
+
+**Item 4 retitled:** "Dual-Binding Mechanism Proof + Contract Parity Harness." No external blocker; serial only after Item 2.
+
+**Ask reduced to two confirmations:** production transport mode for each tool, and confirmation they'll own the consumer-side proof.
+
+## Learnings
+
+- **When a consumer says "your proof does not validate my scenario," the fix may be an ownership split rather than importing their scenario.** The instinct to import their definitions and prove their contract inside our repo crosses a dependency boundary. The correct response: prove the mechanism generically in our repo, let them prove their scenario in theirs. Check whether a proposed dependency crosses a repo boundary that was already ruled on.

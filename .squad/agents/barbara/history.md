@@ -154,3 +154,16 @@ When Item 2 extends `RuntimeProfile` schema:
 ## Learnings
 
 - **When a consumer says "your proof does not validate my scenario," the fix may be an ownership split rather than importing their scenario.** The instinct to import their definitions and prove their contract inside our repo crosses a dependency boundary. The correct response: prove the mechanism generically in our repo, let them prove their scenario in theirs. Check whether a proposed dependency crosses a repo boundary that was already ruled on.
+
+---
+
+## 2026-08-17 — Phase 1B Completion Note Issued
+
+**Status:** Completion note delivered (`gert-core-phase1b-completion.md`). All 6 items + 3 deliverables shipped. Final commit `05fd13b`.
+
+**CI-evidence gap disclosed explicitly:** Item 5 of their reproducibility checklist marked "Not yet observed by us" with plain explanation. Not buried, not implied as passing. Same disclosure discipline as §6 in the prior status note.
+
+## Learnings
+
+- **Disclose what you cannot verify, even when the mechanism is sound.** CI runs on push against tracked files only — so it is clean-checkout evidence by construction. But "it should pass" and "we observed it pass" are different claims. Report the former as reasoning, not as evidence. The counterparty has corrected us nine times; each correction was factually correct. Understating earns more credit than overstating with this audience.
+- **Mutation resistance is stronger evidence than a passing test.** Demonstrating that removing a flag causes a specific, different failure mode proves the flag is load-bearing. A test that passes with and without the feature under test proves nothing. Always measure both directions.

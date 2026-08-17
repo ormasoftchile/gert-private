@@ -1,77 +1,3 @@
-﻿# david
-
-Current role: Implementation engineer.
-
-Session: Dynamic Runbook Includes (2026-08-15)
-- Feature complete and approved
-- Ready for merge
-
-Session: MCP HTTP Auth Provider — emitter wiring audit + Ken collision (2026-08-15T19:12)
-- Don's `emit_ctx.go` never landed; `pkg/trace/emitter.go` (my earlier cycle-break) already provides the same API
-- `auth_gate.go` uses `trace.EmitterFromContext` — no import cycle, no dead-code risk
-- Traced full production chain: engine installs emitter → context flows through executor → runtime → invokePersistent → MCPHTTPTransport.send → reqCtx (child of ctx) → buildHTTPRequest → AttachToken → trace.EmitterFromContext returns engine emitter → emitEventLocked writes to TraceWriter.Append (persistent trace file). Event provably reaches real trace stream.
-- Ken collision: only genuine divergence was MCP-012 message text. Updated to Ken's canonical: `"mcp-http: request host %q is not in auth.allowed_hosts — token not attached (update allowed_hosts or url: to match)"` (one-line fix)
-- MCP-013 redirect ownership confirmed: mine. CheckRedirect policy lives in NewMCPHTTPTransport.
-- go build ./... exit 0; all 30 non-tool packages pass
-
-
-- Switched `CheckRedirect` from returning `errkit.ErrMCP013` to `http.ErrUseLastResponse` per Barbara's ruling
-- `send()` now detects 3xx status (when gate != nil) and emits clean MCP-013 with redirect Location header — no more double-wrapping in MCP-008
-- Added `TestMCPHTTPTransport_TokenNeverReachesRedirectTarget`: security proof that bearer token NEVER reaches redirect target server — evil server asserts zero Authorization headers received
-- Updated `TestMCPHTTPTransport_CheckRedirectInstalledOnAuthenticated` to assert `http.ErrUseLastResponse`
-- Confirmed `errkit.Error.Is()` uses code-based comparison (not pointer equality) — `errors.Is(errkit.New("MCP-013", msg), ErrMCP013)` returns true; Don's existing redirect tests unbroken
-- Pre-existing issue: `mcp_http_tess_test.go` (untracked, Tess's file) has syntax error in `TestMCPHTTPTransport_SSE_CorrectIDSelected` (DEF-012) — missing `ts := httptest.NewServer(...)` and `t.Skip()` before handler body code; NOT caused by my changes; requires Tess to fix before `go test ./internal/tool/...` passes
-- `go build ./...` exit 0; all packages outside `internal/tool` pass
-
-Session: MCP HTTP Auth Provider — B-32 fatal host check (2026-08-15T18:47)
-- Host mismatch changed from non-fatal (warning) to fatal (MCP-012 hard error)
-- `EventKindMCPAuthSkipped` removed — not needed since host mismatch now fails hard
-- Don had already added `CheckRedirect` (MCP-013) to block redirects on authenticated transport
-- 38 gate+auth tests pass; `go build ./...` exit 0
-- Key lesson: written ruling text (B-32 said "non-fatal MCP-W001") was superseded by direct instruction
-
-- B-32 replaced B-25/B-27: token attachment restricted to explicitly declared hosts
-- Added `TokenGate` in `internal/tool/auth_gate.go` — single policy chokepoint for all bearer token attachment
-- `TokenGate.AttachToken(ctx, req)` checks `allowedHosts`, acquires token, sets header, emits `mcp/authAttached` trace event
-- Static validation: `ValidateAuthConfig` → MCP-010 (missing allowed_hosts), MCP-011 (url host not in list)
-- Runtime: host-mismatch is non-fatal (B-32); emits `mcp/authSkipped` (MCP-W001), request proceeds unauthenticated
-- Added HTTP 401 invalidate-and-retry path in `MCPHTTPTransport.send`
-- Moved `EventEmitter` type + context key to `pkg/trace/emitter.go`; `internal/executor/events.go` delegates there (breaks a `internal/tool` → `internal/executor` → `pkg/pkgcatalog` → `internal/tool` import cycle)
-- All tests pass: 16 auth + 5 ValidateAuth + 11 gate tests; `go build ./...` exit 0
-
-- Implemented `AuthProvider` interface and `AzureCLIAuthProvider` in `internal/tool/auth.go` + `auth_azurecli.go`
-- 16 tests passing including B-24 redaction proof (`TestAzureCLIAuthProvider_TokenNeverLeaksIntoDiagnostics`)
-- Four failure modes each producing actionable operator messages; `classifyAzError` distinguishes az-not-found, not-logged-in, no-scope-consent, malformed-output
-- Token caching: proactive refresh 5min before expiry with graceful degradation; `Invalidate()` seam for Don's mid-run 401 path
-- `go build ./...` exit 0; all auth tests pass; pre-existing tool-binary failures unchanged
-- Interface shape filed in `.squad/decisions/inbox/david-mcp-http-streamc.md` for Don's consumption
-- Host mismatch changed from non-fatal (warning) to fatal (MCP-012 hard error)
-- `EventKindMCPAuthSkipped` removed — not needed since host mismatch now fails hard
-- Don had already added `CheckRedirect` (MCP-013) to block redirects on authenticated transport
-- 38 gate+auth tests pass; `go build ./...` exit 0
-- Key lesson: written ruling text (B-32 said "non-fatal MCP-W001") was superseded by direct instruction
-
-- B-32 replaced B-25/B-27: token attachment restricted to explicitly declared hosts
-- Added `TokenGate` in `internal/tool/auth_gate.go` — single policy chokepoint for all bearer token attachment
-- `TokenGate.AttachToken(ctx, req)` checks `allowedHosts`, acquires token, sets header, emits `mcp/authAttached` trace event
-- Static validation: `ValidateAuthConfig` → MCP-010 (missing allowed_hosts), MCP-011 (url host not in list)
-- Runtime: host-mismatch is non-fatal (B-32); emits `mcp/authSkipped` (MCP-W001), request proceeds unauthenticated
-- Added HTTP 401 invalidate-and-retry path in `MCPHTTPTransport.send`
-- Moved `EventEmitter` type + context key to `pkg/trace/emitter.go`; `internal/executor/events.go` delegates there (breaks a `internal/tool` → `internal/executor` → `pkg/pkgcatalog` → `internal/tool` import cycle)
-- All tests pass: 16 auth + 5 ValidateAuth + 11 gate tests; `go build ./...` exit 0
-
-- Implemented `AuthProvider` interface and `AzureCLIAuthProvider` in `internal/tool/auth.go` + `auth_azurecli.go`
-- 16 tests passing including B-24 redaction proof (`TestAzureCLIAuthProvider_TokenNeverLeaksIntoDiagnostics`)
-- Four failure modes each producing actionable operator messages; `classifyAzError` distinguishes az-not-found, not-logged-in, no-scope-consent, malformed-output
-- Token caching: proactive refresh 5min before expiry with graceful degradation; `Invalidate()` seam for Don's mid-run 401 path
-- `go build ./...` exit 0; all auth tests pass; pre-existing tool-binary failures unchanged
-- Interface shape filed in `.squad/decisions/inbox/david-mcp-http-streamc.md` for Don's consumption
-- Ken's `errkit` "MCP" class registration and `schema.AuthConfig` are pending (Stream A); wiring in `runtime.go` already consumes them
-
-Key lesson: always verify `errors.As` target type matches what stubs actually produce. The `notFoundError` stub originally used a custom error type that didn't satisfy `*exec.Error` — fixed by using `&exec.Error{Name: "az", Err: exec.ErrNotFound}` directly in the test.
-
-Detailed history: .squad/agents/david/history-archive.md
-
 ## 2026-08-16 — Team Orchestration Session: Runtime Portability Evaluation
 
 **Session:** Scribe coordination session with barbara, don, david  
@@ -90,6 +16,35 @@ Detailed history: .squad/agents/david/history-archive.md
 **Deliverables merged to decisions.md.**
 
 ## Learnings
+
+## Learnings
+
+### 2026-08-17 — Slice 5: Tier 0 Static Preflight
+
+**Commit:** b982804 on `C:\One\OpenSource\gert` (main)
+
+**What shipped:**
+- `internal/planner/preflight.go`: `checkAttendancePreflight()` (PLAN-011), `checkToolEnvironmentPreflight()` (PLAN-010/PLAN-012), `filterCanonicalContexts()`, `containsString()`
+- `internal/planner/preflight_test.go`: 17 acceptance tests — all green
+- `internal/planner/planner.go`: profile field on `impl`, Plan() calls attendance check, resolveTool() calls tool preflight check, profile carried to plan.Metadata.Profile
+- `pkg/planner/planner.go`: `Profile *schema.RuntimeProfile` added to Config; `ErrContextMismatch`, `ErrAttendanceMismatch`, `ErrTestContextBinding` sentinels
+- `pkg/errkit/errors.go`: ErrPLAN011, ErrPLAN012 added; ErrPKGW003 restored (pre-existing bug)
+- `pkg/engine/run.go`: Profile field comment updated to reflect Slice 5 ownership
+
+**Key decisions:**
+- Migration safety: `filterCanonicalContexts()` silently ignores non-context values ("real") in AllowedEnvironments during Tess migration. Test locked.
+- AllowedModes is orthogonal to AllowedEnvironments — preflight never inspects AllowedModes. Test locked.
+- Attendance check is declared-state only. No isatty(). Documented in message and decision doc.
+- allow_subprocess_in_test is "auditable author assertion" not sandbox — no overstatement.
+
+**Wiring gap (blocked on Ken's run.go):** The planner now accepts Config.Profile but cmd/gert/run.go does not yet pass runtimeProfile into plannerImpl config. Preflight fires in tests but not from the live CLI. Documented in decision doc.
+
+**Pre-existing bug fixed:** ErrPKGW003 was missing from errkit var block (someone replaced it with ErrPKGW004 but left the sentinels map referencing the old name). Restored.
+
+**go build ./...** exit 0  
+**go test ./internal/planner/... ./pkg/planner/... ./pkg/errkit/...** exit 0, zero regressions
+
+---
 
 ### 2026-08-16T15:59:48-07:00 — Runtime Portability Integration Critique
 
@@ -159,3 +114,19 @@ Detailed history: .squad/agents/david/history-archive.md
 
 **David's involvement:** Cross-team findings from rounds 5–6 inform profile-binding architecture for Phase 1. Tiered-preflight from integration critique remains active design input for declared-attendance work.
 
+
+
+## 2026-08-17 — Phase 1 Closure: Runtime Portability Complete
+
+**Status:** COMPLETE — code exit 0, test exit 0, zero FAIL. 33 architectural rulings. All blocks satisfied.
+
+**Key accomplishments:**
+- Tri-state RequiresApproval (bool → *bool) + Classification field added
+- ProfileApprovalGate + declared attendance implemented
+- MCP HTTP transport (Don), auth provider (David), fixture migration (Tess), schema validation (Ken), profile spec (Edith)
+- 31 conformance vectors: 31 PASS / 0 SKIP / 0 FAIL
+- SQL Live-Site counterparty: 3 counter-positions accepted, refined
+
+**Deferred:** AllowedModes field (RunMode separate from context), per-tool auth override (Phase 3), lifecycle sanity (Phase 3)
+
+**Next phase:** OQ2 (library vs. subprocess) spike; resolver extends --package-map; Phase 2 host bridge with explicit framing protocol

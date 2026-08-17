@@ -22,3 +22,20 @@ Agent Scribe initialized and ready for work.
 - UTF-8 explicit encoding required for history files
 - Cross-agent notifications: Barbara (architecture), Tess (conformance), Edith (spec)
 - Phase 2 Go runtime begins with 223 discoverable conformance vectors
+
+
+## 2026-08-17 — Scribe: Phase 1 Manifest Closure
+
+**Responsibilities:** Archive old decisions (254KB → 138KB + 116KB archive), merge 8 inbox files, write 6 orchestration logs, session log, update 5 history files, commit .squad/ changes only.
+
+**Completed:**
+- Archived entries pre-2026-08-16 to decisions-archive.md (116KB)
+- Merged 8 inbox files into decisions.md (138KB final)
+- Wrote orchestration logs for don-2, tess, edith, ken, david, barbara
+- Session log: Phase 1 status (3.6KB) recorded with key decisions and metrics
+- History updates: added Phase 1 closure note to 5 agent histories
+- No history.md >= 15360 bytes requiring summarization
+
+**Manifest verified:** 6 agents, all shipped, 0 defects new (3 deferred), test vectors: 31 PASS / 0 SKIP / 0 FAIL
+
+**Coordinator findings logged:** vocabulary collision (allowed-environments "real" is RunMode, not context); pre-existing AllowedEnvironments field unenforced (early-win identified); Clara approval gate live CI hang hazard (TTYOutput hardcode, fixed by declared attendance).

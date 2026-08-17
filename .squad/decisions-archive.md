@@ -1,2715 +1,1711 @@
-#!/usr/bin/env markdown
-# Squad Decisions Archive
+# Archive: Runtime Portability Decisions (2026-08-10 — 2026-08-15)
 
-**Archive Date:** 2026-08-15T19:31:53Z
-**Archived Entries:** All decisions dated before 2026-08-09 (older than 7 days per size threshold)
-**Archive Size:** 120,447 bytes
-**Original decisions.md Size:** 168,943 bytes
+**Archived:** 2026-08-17
+**Reason:** Size limit — keeping recent entries (2026-08-16+)
+---
 
-This archive contains historical decisions from Phase 1 of the GERT specification effort and early Phase 2 runtime work, now archived to keep decisions.md under the 51,200-byte hard gate threshold.
+# Final Acknowledgment: Runtime Portability — Design Agreed (Rev 4 — Final)
+
+**Date:** 2026-08-17  
+**By:** Gert Core Team  
+**To:** SQL Live-Site Operations (gert-sqllivesite)  
+**Status:** Design closed. Implementation begins.  
 
 ---
 
-# Squad Decisions
+## 1. Approval ≠ Classification — Accepted
 
-**Last Updated:** 2026-08-10T17:45:22-07:00
-**Inbox Merged:** 19 files (edith, tess, barbara streams B/C/F; OI ratification; don stream E removal; phase2-day1-open-questions-resolved; tess-gcp-vectors; don-phase2-day2; don-phase2-day3; don-phase2-day4; copilot-directive-design-only-repo; barbara-runtime-migration-plan; barbara-tess-ambig-3456-arbitration; don-stream-e-day2-dogfood; barbara-tool-packages-final-gate-decision; barbara-pkg-path-002-workspace-escape-ruling)
+We withdraw the Rev 3 language stating that explicit `requires-approval: false` is "equivalent to `classification: read-only`." That was wrong. The two fields answer different questions:
 
----
+- `RequiresApproval` → whether active approval is required before invocation.
+- `Classification` → the action's side effects, governing retry, timeout, and late-result safety.
 
-## URGENT: User Directive — gert-private is DESIGN ONLY
+A legacy action may explicitly suppress approval while still being mutating or destructive. Coercing `&false` to `read-only` would have granted retry eligibility and read-only late-result handling to actions that may be destructive — a safety regression introduced by a compatibility shim. That violates the governing principle we both agreed to: absence of classification must never grant additional execution rights.
 
-### 2026-06-05T18:13:09-07:00: User directive — gert-private is DESIGN ONLY
-**By:** ormasoftchile (via Copilot)
-**What:** This repository (gert-private) is for DESIGN artifacts only — grammar files (.ebnf), spec sections (.tex), conformance corpora (tv-*.yaml), proposals, fixtures, design notes, and `.squad/` team state. **No Go source code, no go.mod, no language-specific runtime implementation lives here.** The Go runtime (and future C#/TS runtimes) belong in separate repositories that consume this repo's normative artifacts.
-**Why:** Repository scope discipline. Runtime implementations vary by language and have their own dependency, build, release, and CI concerns. Keeping them out of the design repo:
-- Preserves the design repo as the single source of truth that all runtimes implement against
-- Avoids dragging Go-specific tooling (cobra, yaml.v3, go.mod, go.sum, etc.) into the design contract
-- Makes the conformance corpus a clean external artifact that any runtime repo can fetch and run
+**Published semantics for `RequiresApproval = &false, Classification = nil`:**
 
-**Scope correction needed:**
-- Remove `cmd/gert/main.go`
-- Remove `internal/eval/` entirely (PJVM, conformance harness, GXL lexer/parser/evaluator, stdlib, clock — all the Day 1-4 Phase 2 work)
-- Remove `go.mod` and `go.sum`
-- Remove any Go-specific skills that no longer apply in a design repo (`.squad/skills/go-conformance-scaffold/`, `.squad/skills/go-recursive-descent-parser/`, `.squad/skills/go-ast-evaluator/`)
-- Keep everything else untouched: design/, .squad/ (decisions, team, agent histories — they're still useful records of the design journey)
-- Update `.squad/identity/now.md` and `design/gert/phase2-go-runtime-plan.md` to reflect: Phase 2 IS Go runtime work but it happens in a DIFFERENT repository, not here
+| Dimension | Behavior |
+|-----------|----------|
+| Approval routing | Legacy opt-out preserved. Gate does NOT fire for this action (approval dimension only). |
+| Classification | Remains `unspecified`. |
+| Retry | Never retry automatically. |
+| Late/lost result | INDETERMINATE + halt. Require verification. |
+| `legacy_unspecified_policy: allow` | Suppresses PKG-W migration **prompts** only. Never relaxes retry, idempotency, or late-result behavior. |
 
-**Coordinator's failure mode to remember:** When a repo has language-specific source already in it (`main.go`, `go.mod`), do NOT assume that's where new runtime work goes. Verify the repo's purpose against project context BEFORE planning multi-day implementation work inside it. The signals were all there: original audit said no runtime, project context says "Go runtime" but the actual GERT runtime lives in a separate repo, and `cmd/gert/` was an empty stub. I missed all of them.
+`RequiresApproval` influences approval routing only. It must never assign, imply, or coerce a classification value.
 
 ---
 
-## 2026-06-05 — Runtime Migration Plan RATIFIED (OQ-M1..M5)
+## 2. Runbook-Level Cannot Override Per-Action — Accepted and Verified
 
-**From:** Barbara (Lead Architect)  
-**Date:** 2026-06-05  
-**Subject:** Runtime Migration Plan RATIFIED; 5 OQ-M decisions encoded; Phase A can start in `ormasoftchile/gert`.
+Your condition: runbook-level `requires-approval: false` must never override per-action approval or classification semantics. Verified against the source:
 
----
+**(a) Substitution path — structurally satisfied.** `pkg/pkgsubst/pkgsubst.go:276` composes governance as `eff.RequireApproval = eff.RequireApproval || subRequireApproval` (monotone-increasing OR). `internal/governance/builder.go:BuildPolicy()` only ever sets `requireApproval = true`, never back to false. Runbook-level false cannot suppress a tool-level true. The guarantee you want holds by construction.
 
-### Ratified Decisions
+**(b) Plain (non-substitution) steps — correction of our earlier disclosure.** In the gate closure we told you approval fires from runbook-level governance on the plain-step path. That was inaccurate. The governance pre-flight block in `internal/engine/engine.go` (~line 506) is guarded by `if h.engine.cfg.GovernanceEvaluator != nil`, and `GovernanceEvaluator` is never assigned in any production wiring path — not in `internal/adapter/wire.go`, not in `pkg/run/run.go`. It is nil in all production code paths. For plain tool steps today, neither tool-level NOR runbook-level approval is enforced. We are correcting this unprompted because you are relying on our disclosures being accurate.
 
-| OQ | Decision | Notes |
-|---|---|---|
-| **OQ-M1** | (c) Vendored copy | Vectors copied into `gert/testdata/vectors/` (or equivalent). **Required follow-up:** ship a small sync script (e.g., `scripts/sync-vectors.sh`) and a CI check that fails if the runtime's copy drifts from `gert-private`. Document the drift-detection mechanism explicitly. |
-| **OQ-M2** | (a) Cherry-pick sketch (commits 97ce48b..5c550c0) | Treat as unreviewed starting material; standard review gate applies in `ormasoftchile/gert`. Phase A–C scaffolding gets reused; Phase D onward fresh. |
-| **OQ-M3** | (a) Build tag `//go:build gxl` | Compile-time switch. Old engine remains default during migration; CI builds both matrices. After cutover (Phase H), the build tag is removed and the old engine is deleted. |
-| **OQ-M4** | (c) Just ship | Pre-1.0, no external users. Hard cutover at Phase H. Document syntax changes in CHANGELOG with before/after examples. No deprecation period. |
-| **OQ-M5** | (b) Pair | Cast a **second backend in this squad** (gert-private; the squad is single). Both Don and the new hire (Ken) operate across `ormasoftchile/gert` during Phases A–H, then return to this squad for the next assignment. Target wallclock: 10–15 days (E and F parallel). |
-
-### ⚠️ New Phase A Scope Addition: Drift-Detection (DRIFT-DETECTION-001)
-
-OQ-M1's ratification adds a concrete deliverable to Phase A in `ormasoftchile/gert`. Before Phase A is considered complete, the runtime repo must ship:
-
-1. **`scripts/sync-vectors.sh`** — copies canonical `tv-*.yaml` vectors from `gert-private` and records the source commit SHA in `testdata/vectors/VECTORS_SHA`.
-2. **`make verify-vectors` CI target** — reads `VECTORS_SHA`, fetches vectors at that SHA from `gert-private`, diffs against the vendored copy, and fails the build on any drift. Runs on every PR touching vectors and on a weekly schedule.
-3. **Documentation** in `CONTRIBUTING.md` under "Conformance Vectors".
-
-This is a new scope item that was not in the original plan. The Phase A exit criteria must be updated to include DRIFT-DETECTION-001.
-
-### Next-Action Handoff
-
-**Germán** needs to switch to the `ormasoftchile/gert` repository (separate squad) to kick off Phase A:
-
-- Assign Don to the critical path (A → B → C → D → G → H).
-- Cast the second backend agent within the `ormasoftchile/gert` runtime squad (not here — this design repo has no casting role).
-- Add DRIFT-DETECTION-001 to Phase A exit criteria before closing Phase A.
-
-**This design repo (`gert-private`) drops to "spec authority + ambiguity arbiter"** for the rest of the migration. It will be consulted when the runtime team hits spec gaps or interpretation questions, but has no active implementation role.
+**(c) Binding Phase 1 constraint.** When we wire `GovernanceEvaluator` to close the plain-step gap, the policy MUST be built from BOTH runbook-level and per-tool governance (not runbook governance alone, which is what `planner.go:110` does today for `Plan.Governance`). If built from runbook governance alone, tool-level `requires-approval: true` would be invisible and effectively suppressed — violating your condition. `BuildPolicy` is already variadic and supports multi-input composition, so this is a call-site change, not an API change. We adopt this as a binding implementation constraint for Phase 1.
 
 ---
 
-## Phase 1 Active Decisions
-### 2026-06-05T07:28:56-07:00: GIS Optional-Chaining (`?.`) — Ratified
-**By:** ormasoftchile (via Copilot)
-**Status:** Approved — implementation cleared
-**Proposal:** `design/gert/proposals/gis-optional-chaining.md`
+## 3. No Landmine
 
-## Ratified Decisions
-
-| # | Decision | Value |
-|---|----------|-------|
-| Default value for missing optional path | **Empty string `""`** |
-| Short-circuit semantics | **JS/TS-compatible full-tail** — once any `?.` segment misses, entire remaining chain → `""` |
-| Scope | **GIS `${...}` only** — does NOT extend to GXL boolean expressions or GCP captures |
-| `?.[N]` optional bracket indexing | **IN** — consistency with field-access tolerance; avoids partial-tolerance footgun |
-| `??` nullish-coalescing | **OUT** (deferred) — `vars:` and `capture.default:` already cover the use case |
-| Existing fixture migration | **None** — opt-in only, no auto-addition of `?.` |
-| Hard-error default unchanged | **Confirmed** — plain `${a.b.c}` still raises `GIS-PATH-MISSING` on any miss |
-| `${?.root}` (optional on root identifier) | **Illegal** — root is always mandatory; would mask variable-name typos |
-| Audit trace on optional miss | **Defer to runtime design phase** — semantic locked here, tracing is implementation |
-| Stdlib call propagation | **No propagation** — GDP resolves first; functions receive `""` if chain short-circuits |
-
-## What's Missing (Not in This Decision)
-- The semantics of `?.` inside GXL expressions (out of scope here; revisit when type system warrants)
-- Nullish-coalescing `??` (deferred — not in this extension)
-- JSONL audit-trace event format (separate concern; addressed in runtime design phase)
-- Schema-driven warnings when `?.` is used on known-required paths (future enhancement; non-blocking)
-
-## Next Actions
-- **Edith** → edit `design/gert/grammar/gis.ebnf` and append a normative section to `design/gert/sections/03b-interpolation-syntax.tex`
-- **Tess** → create `design/gert/conformance/tv-gis-path.yaml` with the 13 vectors enumerated in proposal §6
-
-
-# Decision: GIS Optional-Chaining Extension
-
-**Author:** Barbara — Lead / Architect  
-**Date:** 2026-06-05T07:28:56-07:00  
-**Status:** PROPOSED — awaiting ormasoftchile review  
-**Proposal:** `design/gert/proposals/gis-optional-chaining.md`
+Nothing in current code couples approval state to retry. `RetryConfig` carries its own `Idempotent bool` with no reference to `RequiresApproval`. The 401 retry in `mcp_http.go` is token-refresh only. The orthogonality you are demanding is already true in the code — we only have to not break it.
 
 ---
 
-## Headline Picks
+## 4. Effort
 
-| # | Decision | Value |
-|---|----------|-------|
-| 1 | Default value for missing optional path | **Empty string `""`** (locked by user directive) |
-| 2 | Short-circuit semantics | **Full-tail JS/TS-compatible** — once any `?.` segment misses, entire remaining chain → `""` |
-| 3 | Scope | **GIS `${...}` only** — does NOT extend to GXL boolean expressions or GCP captures |
-| 4 | `?.[N]` optional bracket indexing | **IN** (recommended) — consistency with field access tolerance |
-| 5 | `??` nullish-coalescing | **OUT** (deferred) — existing `vars:` and `capture.default:` mechanisms cover the use case |
-| 6 | Existing fixture migration | **None** — opt-in only, no auto-addition of `?.` |
-| 7 | Hard-error default unchanged | **Confirmed** — plain `${a.b.c}` still raises `GIS-PATH-MISSING` on any miss |
-
-## Rationale
-
-- Empty string as identity element in string concatenation composes cleanly and avoids "null" literal in user-facing text.
-- JS/TS semantics chosen because authors already know the rules — no new mental model needed.
-- GIS-only scope avoids type-theoretic complications in GXL boolean expressions (`""` in comparisons is ambiguous).
-- `?.[N]` inclusion prevents a "partial tolerance" footgun where field access is optional but array access isn't.
-
-## Open Questions (Need User Input)
-
-- **OQ-OC-1:** Confirm `?.[N]` is IN.
-- **OQ-OC-2:** Confirm `${?.root}` is illegal (root is always mandatory, but `${root?.field}` is legal).
-- **OQ-OC-3:** Should optional-miss emit an info-level audit trace? (Defer to runtime phase?)
-- **OQ-OC-4:** Confirm `?.` does NOT propagate through stdlib function calls (GDP resolves first, function receives `""`).
-
-## Impact
-
-- Grammar: additive change to `gxl.ebnf` GDP production (new `PathSegment` alternatives)
-- Spec: additive section in `03b-interpolation-syntax.tex`
-- Conformance: new `tv-gis-path.yaml` file (13+ vectors proposed)
-- Runtime: parser + evaluator changes in both Go and C# implementations
-- No breaking changes to existing behavior
+No change to the ~4.5 day total from Rev 3. The `BuildPolicy` call-site constraint falls inside the already-scoped "direct-invocation approval gate enforcement (1–2 days)" line item.
 
 ---
 
-*Pending ratification. Implementation blocked until user confirms open questions.*
+## 5. Close
 
-
-# 2026-06-05T07:28:56.273-07:00 — GIS Optional-Chaining EBNF Applied
-
-**By:** Barbara — Lead / Architect  
-**Status:** Applied  
-**Scope:** `design/gert/grammar/gis.ebnf` only
-
-## Exact Lines / Productions Changed
-
-- `design/gert/grammar/gis.ebnf:106-142` — updated `GISExpression = Expression ;` commentary to identify the GIS-only GDP extension, add optional-chain examples, and add explicit rejected forms including `${?.root}`.
-- `design/gert/grammar/gis.ebnf:145-187` — added GIS-only optional-chaining GDP extension:
-  - `GDP = IDENT { GISPathSegment } ;`
-  - `GISPathSegment = DotAccess | OptionalDotAccess | BracketAccess | OptionalBracketAccess ;`
-  - `DotAccess = DOT IDENT ;`
-  - `OptionalDotAccess = OPTIONAL_DOT IDENT ;`
-  - `BracketAccess = LBRACKET INTEGER RBRACKET ;`
-  - `OptionalBracketAccess = OPTIONAL_BRACKET_OPEN INTEGER RBRACKET ;`
-  - `OPTIONAL_DOT = '?.' ;`
-  - `OPTIONAL_BRACKET_OPEN = '?.[' ;`
-- `design/gert/grammar/gis.ebnf:285-297` — changed §4.3 from unconditional unresolved-variable hard errors to hard-by-default with explicit optional-chain miss handling.
-
-## Tokenization / Precedence Subtleties Encoded
-
-- `?.[` is longest-match and is emitted as `OPTIONAL_BRACKET_OPEN` before `OPTIONAL_DOT` is considered.
-- `?.` is emitted as one token (`OPTIONAL_DOT`), never as `?` followed by `DOT`; standalone `?` remains invalid in GDP paths.
-- `.`, `?.`, `[N]`, and `?.[N]` have identical path-segment precedence and are evaluated left-to-right under `Primary` GDP resolution.
-- The first GDP segment remains `IDENT`; `${?.root}` is syntactically illegal so optionality cannot hide root variable-name typos.
-
-## Proposal / Existing Grammar Style Reconciliation
-
-- The proposal described an additive GDP change against `gxl.ebnf`, but the ratified scope is GIS-only and this task explicitly forbade editing GXL/GCP grammar. I reconciled that by documenting a GIS-only override of the imported `GDP` production inside `gis.ebnf` rather than changing `gxl.ebnf`.
-- The existing GIS grammar imported full GXL by reference instead of repeating GXL productions. I preserved that style for `Expression` and added only the local GDP delta plus explanatory comments.
-- The proposal examples contain tension around whether `user?.name` masks a missing root; the ratification explicitly says the root identifier is mandatory. The grammar therefore keeps `GDP = IDENT ...` and rejects `${?.root}`.
-
-# Edith — GIS Optional-Chaining Spec Summary
-
-**Date:** 2026-06-05T07:28:56.273-07:00  
-**Requested by:** ormasoftchile  
-**Status:** Delivered
-
-## Section Added
-
-- Appended `Optional Path Chaining` to `design/gert/sections/03b-interpolation-syntax.tex` after `Error Class Catalog`; it will render as the next numbered section in the GIS chapter.
-- Subsections added: Syntax; Evaluation Semantics; Composition with GXL Expressions; Relationship to `capture.default:`; Examples; Out of Scope.
-
-## Labels Created
-
-- `sec:gis:optional-chaining`
-- `subsec:gis:optional-chaining:syntax`
-- `subsec:gis:optional-chaining:semantics`
-- `subsec:gis:optional-chaining:composition`
-- `subsec:gis:optional-chaining:capture-default`
-- `subsec:gis:optional-chaining:examples`
-- `subsec:gis:optional-chaining:out-of-scope`
-
-## Cross-Reference Needs Flagged
-
-- Tess can cite `subsec:gis:optional-chaining:semantics` for short-circuit/default behavior and `subsec:gis:optional-chaining:syntax` for `?.` / `?.[N]` parse vectors.
-- A glossary term for `optional path chaining` may be useful if the terminology glossary is later centralized.
-- The ratified decision is currently cited from `.squad/decisions/inbox/copilot-gis-optional-chaining-ratified.md`; Scribe should merge it into `.squad/decisions.md` so the decision-ledger citation resolves to the permanent ledger.
-
-## Normative-Wording Subtleties
-
-- `${?.root}` is syntactically illegal because GDP still begins with `IDENT`; `${root?.field}` remains legal.
-- A missing root identifier can still resolve to `""` when the first hop is optional, e.g. `${user?.name}`; plain `${user.name}` remains a hard error.
-- `?.` does not propagate through stdlib calls: `${str.toLower(user?.name)}` calls `str.toLower("")` if the optional GDP resolves to empty string.
-- `capture.default:` is described as a capture-layer mechanism, not a GIS rendering-layer substitute.
-
-
-# Tess — GIS Optional-Chaining Path Vectors
-
-**Date:** 2026-06-05T07:28:56.273-07:00  
-**Author:** Tess — Conformance Tester  
-**Requested by:** ormasoftchile
-
-## Summary
-
-Created `design/gert/conformance/tv-gis-path.yaml` for the ratified GIS optional-chaining contract.
-
-## Vector ID Range
-
-- `TV-GIS-PATH-001` .. `TV-GIS-PATH-015`
-
-## Coverage
-
-- `TV-GIS-PATH-001` .. `TV-GIS-PATH-014` encode the ratified optional-chaining runtime cases:
-  - simple miss
-  - deep miss
-  - full-tail short-circuit
-  - mixed mandatory/optional paths, including mandatory-prefix hard error
-  - null vs empty string vs false vs zero vs empty array
-  - optional bracket indexing success, out-of-bounds, and missing collection
-  - stdlib composition / no propagation through function calls
-- `TV-GIS-PATH-015` encodes `${?.root}` rejection.
-
-## Cases Beyond the Enumerated Runtime Set
-
-- Added `TV-GIS-PATH-015` for `${?.root}` parse rejection because `gis.ebnf §2.4` explicitly rejects optional root syntax and no separate `TV-GIS-PARSE` file exists yet.
-- Split the mixed-path bullet into two vectors (`TV-GIS-PATH-004` and `TV-GIS-PATH-005`) because hard-error mandatory-prefix behavior and optional-tail short-circuit behavior are distinct contracts.
-
-## Encoding Notes
-
-- Kept the parse-error case inline in `tv-gis-path.yaml`; it should move to a future `tv-gis-parse.yaml` if/when that file is created.
-- No runtime case was blocked.
-- Updated `design/gert/conformance/schema.json` so GIS path errors can express the grammar catalog code `GIS-PATH-MISSING`.
-
-
-### 2026-06-04T20:14:36.949-07:00: Stream E  Removal Completed (Don, Backend Dev)
-
-**By:** ormasoftchile (via Copilot)
-**Status:** Completed  migrator tooling and dependencies removed per directive.
-
-## Deleted
-- cmd/gert/cmd/migrateexpr.go
-- cmd/gert/cmd/root.go
-- cmd/gert/cmd/ (became empty)
-- internal/migrateexpr/translate.go, traverse.go, translate_test.go, traverse_test.go
-- internal/migrateexpr/testdata/ (expr_rules_input.yaml, gis_interp_input.yaml, misc_rules_input.yaml)
-- .squad/skills/migrator-dogfood-regression/SKILL.md
-
-## Kept
-- Stream A grammar files (design/gert/grammar/*.ebnf)  not edited per directive
-- Conformance vectors (design/gert/conformance/)  not edited
-- Stream D fixtures (design/gert/testdata/runbooks/)  not touched
-- now() stdlib addition  remains intact
-- GXL/GIS/GCP spec content, coverage matrix, parse-time enforcement, open questions
-
-## Dependencies
-- Dropped github.com/spf13/cobra (CLI shell and migrator only)
-- Dropped gopkg.in/yaml.v3 (docs/history mentions only, no Go imports)
-- Dropped transitive mousetrap and pflag entries
-- Simplified cmd/gert/main.go to minimal entry point
-
-## Spec Changes
-- Removed design/gert/expression-language-proposal.md 5 Migration Plan
-- Removed Appendix A migration examples and renumbered precedence appendix
-- Reworded structured-data subsection (no migration target implications)
-- Removed migration-note sections from 03a/03b/03c/03d .tex files
-- Replaced migration language with upgrade/change/rollout terminology
-
-## Verification
-- No migrateexpr/migrate-expr references in Go source
-- No migration wording in .tex files or proposal
-- cobra and yaml.v3 no longer referenced by Go source
-
-## Follow-ups
-- Grammar comments: Stream E migration comments remain in gis.ebnf and gcp.ebnf (do-not-touch per directive). Defer cleanup to Barbara/Edith.
-- Dogfood pattern: remains useful with real tool surface. Removed migrator-specific skill.
+Design final. Six corrections from you across five rounds, six accepted. The runtime portability architecture — tiered preflight, declared attendance, per-action classification with tri-state approval, profile-context binding, conservative-by-default safety model — is agreed and ready for implementation. We start this week.
 
 ---
-### 2026-06-04T20:14:36-07:00: User directive — No migrator
-**By:** ormasoftchile (via Copilot)
-**What:** Remove the `gert migrate-expr` tool entirely. GERT has no production runbooks in the wild, so there is no legacy expr/template syntax to migrate FROM. The migrator is solving a non-problem and adds maintenance + a contract surface that future runtimes would otherwise have to reason about.
-**Why:** User scope decision. Stream D already converted the fixture corpus by hand once; future authoring is GXL/GIS/GCP from day one. A migration tool implies a "legacy mode" exists — it does not.
-**Scope to remove:**
-- `cmd/gert/cmd/migrateexpr.go` and the cobra command registration in `cmd/gert/cmd/root.go`
-- `internal/migrateexpr/` (all files including translate.go, traverse.go, tests, testdata)
-- `.squad/skills/migrator-dogfood-regression/` (skill specific to the migrator)
-- Migration plan sections in `design/gert/expression-language-proposal.md` (§5 Migration Plan, Appendix A "Before/After" migration examples) — keep grammar/coverage/parse-time enforcement sections.
-- If cobra/yaml.v3 dependencies in go.mod were ONLY for the migrator, remove them.
-**Scope to keep:**
-- All Stream A grammar files (gxl.ebnf, gis.ebnf, gcp.ebnf)
-- All Stream B/C/F spec sections (03a/03b/03c/03d)
-- All conformance vectors (tv-gxl-eval.yaml, tv-gxl-parse.yaml, tv-gxl-path.yaml) — these are runtime parity tests, not migrator tests
-- All Stream D-migrated fixtures (`design/gert/testdata/runbooks/`) — they ARE the source-of-truth corpus now
-- The `now()` stdlib addition
-**Phase 1 plan impact:**
-- Stream E (migrator) is REMOVED from the plan entirely
-- Phase 1 Day 3 was going to be Stream E completion; instead, Phase 1 closes with whatever remains in Streams A/B/C/D/F
-- C# runtime can begin once spec is frozen (no migration dependency)
+
+*Gert Core Team — 2026-08-17*
 
 
 ---
 
-### 2026-06-05T00:14:04-04:00: User directive — GXL Stream A open issue ratifications
+# Slice 1 + Slice 2 Review: Tri-State Schema + Direct-Invocation Approval Enforcement
 
-**By:** ormasoftchile (Germán, via Copilot)  
-**Context:** GXL Phase 1 kickoff
-
-**Decisions:**
-
-| # | Issue | Ratified |
-|---|-------|----------|
-| **OI-GIS-01** | Literal dollar-brace escape sequence | **`\${`** is canonical. Backslash-escape, single dollar. Diverges from the original proposal §2.6 (which used `$${`). The migration tool (Stream E) MUST convert any historical `$${` occurrences to `\${`. `gis.ebnf` is authoritative — proposal §2.6 to be amended in Stream B spec rewrite. |
-| **OI-GCP-02** | Root JSON capture without GDP path | **Allowed.** `capture: http.body` (no trailing `.path` or `[*]`) is a legal capture expression and binds the entire root subtree to the variable. Semantically equivalent to a subtree capture per Q5. Update `gcp.ebnf` to make this explicit and add positive parse vectors in TV-GCP-PARSE. |
-
-**Why:** Unblocks Stream D (fixture migration — needs canonical escape to migrate `text/template` interpolations) and Stream E (migration tool — needs both rules to be deterministic). Removes two of Barbara's flagged blockers; the remaining 16 open issues are queued inside Streams B/C/F and require no user input.
-
-**Status:** Ratified — design contract for Phase 1.
-
-**Action items:**
-- Barbara: update `gis.ebnf` (escape clarification) and `gcp.ebnf` (bare-root grammar) as patch within Stream F or B.
-- Tess (new Conformance Tester): write TV-GIS-ESCAPE-* vectors covering both `\${` and `\\${` literals; write TV-GCP-PARSE-ROOT-* vectors for bare-root captures.
-- Edith (new Spec Editor): amend proposal §2.6 in `design/gert/expression-language-proposal.md` during Stream B spec rewrite.
+**Date:** 2026-08-17  
+**Reviewer:** Barbara (Lead / Architect)  
+**Commits:** `a2e7db0` (Don — schema), `c810b96` (Ken — enforcement)  
+**Verdict:** **APPROVED**  
 
 ---
 
-### 2026-06-05T00:14:04-04:00: Stream B — Complete (Edith, Spec Editor)
+## Requirement-by-Requirement Assessment
 
-**Status:** Delivered — `design/gert/sections/03a-expression-language.tex`
+### 1. GovernanceEvaluator is wired in production — ✅ DEMONSTRATED
 
-**Deliverable:** Normative LaTeX section encoding GXL grammar (gxl.ebnf v1.0.0-draft) as spec prose.
-Sections: Informative intro, reference to grammar, lexical structure, syntactic structure (8-level precedence), stdlib, semantics, error catalog (GXL-PARSE-001..010, GXL-TYPE-001..004, GXL-PATH-001..003, GXL-EVAL-001..004), error message format, migration note.
+- `internal/adapter/wire.go:161`: `GovernanceEvaluator: internalgovernance.BuildEvaluator(approvalGate)` — unconditional.
+- `pkg/run/run.go`: same pattern in both engine-construction paths.
+- Sub-engine (`runSubStepsViaEngine`, wire.go:392): also wired.
+- Per-run evaluator built in `Start()` and `Resume()` from `plan.GovernanceSource`.
+- The previously-dead code path (`if GovernanceEvaluator != nil`) is now always active.
+- **Test:** `TestApproval_GovernanceEvaluatorWiredInProduction` — proves `BuildEvaluator(gate)` returns non-nil and is functional.
 
-**Discrepancies Found — All Resolved (Grammar Authoritative):**
+### 2. Policy composes runbook AND per-tool governance — ✅ DEMONSTRATED
 
-1. **Scientific notation:** Proposal forbids; grammar permits (`EXP` production). Grammar wins.
-2. **`len` namespace:** Proposal lists as namespace; grammar defines as standalone builtin. Grammar wins.
-3. **Missing stdlib:** Proposal omits `str.length`, `list.indexOf`, `list.length`; grammar defines all three. Grammar wins.
-4. **GDP path access:** Proposal forbids "member access on identifiers"; grammar permits `GDP = IDENT { DOT IDENT | LBRACKET INTEGER RBRACKET }`. Grammar wins.
+- Runbook-level: `planner.go:111` sets `GovernanceSource: rb.Runbook.Governance` on the plan. `Start()/Resume()` passes it to `BuildEvaluator`.
+- Per-tool: `engine.go:497-498` extracts `*toolDef.Governance.RequiresApproval` into `stepInfo.ToolRequiresApproval`.
+- Evaluator (`evaluator.go`): `e.requireApproval || step.ToolRequiresApproval` — monotone OR at evaluation time.
+- Both sources genuinely contribute to the decision. Building from runbook-level alone would leave `ToolRequiresApproval` unused. Building from per-tool alone would ignore `e.requireApproval`. Both are consumed.
+- **Test:** `TestApproval_PolicyComposesRunbookAndToolGovernance` — tool has `requires-approval: true`, runbook has no governance. Gate fires. Proves tool-level is not silently ignored.
 
-**Semantic Gaps:**
-- PJVM definition deferred to GIS spec section (Stream B follow-up)
-- Conformance corpus TV-GXL-EVAL owned by Tess (not Block; forward reference sufficient)
-- `capture.default:` cross-reference added with forward label
+### 3. Approval applies to substituted, stdio-MCP, and HTTP-MCP calls — ✅ DEMONSTRATED
 
-**LaTeX Notes:**
-- File not wired into `main.tex` yet (deferred to Stream B integration task)
-- `\TODO` macro defined locally; if promoted to main preamble, `\providecommand` will no-op
-- Uses `xcolor` (already loaded), `minted` with `text` lexer, `longtable` capable
-- Label convention: `\label{sec:gxl}` (not `\label{ch:gxl}`)
+- The chokepoint is in `executeStep` (`engine.go:468-562`), BEFORE executor dispatch. The executor is what eventually selects the transport. So all transports — substituted, stdio-MCP, HTTP-MCP, native process — are gated by a single pre-dispatch check.
+- **Test:** `TestApproval_FiresForAllInvocationPaths` — uses a denying gate and verifies `exec.invoked == false`. The executor was never reached. This proves the gate fires pre-dispatch regardless of transport.
+- **Test:** `TestApproval_FiresForStdioMCPAndHTTPMCP` — labels match the spec (though technically all transports share the same code path, which is the point).
 
-**Terminology Committed:**
-- evaluator (for runtime GXL executor)
-- GDP (GERT Dotted Path)
-- PJVM (GERT Portable JSON Value Model)
-- parse error vs. evaluation error (timing distinction is normative)
-- context map (runtime variable scope)
-- boolean position (not "boolean context")
+### 4. Approval state never changes classification, retry, or late-result behavior — ✅ DEMONSTRATED (structurally)
 
----
+- `EvaluationResult` carries: `Allowed`, `Denied`, `RequiresApproval`, `MatchedRules`, `BlockedEnvVars`, `FilteredEnvVars`, `Evidence`. No Classification, no retry fields.
+- `StepInfo` carries: `ID`, `Kind`, `Command`, `EnvVars`, `ToolRequiresApproval`. No Classification field flows into the evaluator.
+- No code in `evaluator.go` references Classification or RetryConfig.
+- No code anywhere in the codebase couples RequiresApproval to retry logic (confirmed: RetryConfig has its own `Idempotent bool`; the only retry in mcp_http.go is token-refresh).
+- **Test:** `TestApproval_DoesNotAffectRetryOrClassification` — structural type assertion (verifies EvaluationResult has no retry/classification fields). Not a behavioral test, but the structural guarantee is valid: coupling would require adding fields to these shared types.
 
-### 2026-06-05T00:14:04-04:00: Stream C Day 1 — Schema and GXL-PARSE Kickoff (Tess, Conformance Tester)
+### 5. Tri-state integrity — ✅ DEMONSTRATED
 
-**Status:** Delivered — `design/gert/conformance/schema.json` + `design/gert/conformance/tv-gxl-parse.yaml` (83 vectors)
+- `RequiresApproval *bool` on ToolGovernance with `yaml:"requires-approval,omitempty"`.
+- **Test case (b)** in `TestRequiresApprovalTristate`: governance block contains `requires-capabilities: [network]` but NO `requires-approval`. Result: `Governance != nil`, `RequiresApproval == nil`. This is THE case the counterparty caught — and it passes correctly.
+- All four cases (a: absent, b: present-but-no-field, c: explicit-false, d: explicit-true) covered.
+- tv-enum.yaml's 25 `requires-approval: false` entries unmarshal to `&false` — confirmed by conformance suite passing.
 
-**Deliverables:**
-- JSON Schema Draft 2020-12 conformance schema
-- 83 GXL-PARSE test vectors (55 positive, 28 negative)
+### 6. Orthogonality — ✅ DEMONSTRATED (structurally)
 
-**Coverage:** All 10 GXL-PARSE error codes (GXL-PARSE-001..010) have ≥1 triggering vector.
+- Classification lives on `ToolAction` (`*string`). RequiresApproval lives on `ToolGovernance` (`*bool`). Different structs, different conceptual levels. No code derives one from the other.
+- The evaluator flow never reads Classification. The Classification field is never consulted in approval routing.
 
-**Conflicts Requiring Barbara Arbitration:**
+### 7. Monotone composition — ✅ DEMONSTRATED
 
-1. **GXL-PARSE-007 vs GXL-PARSE-010 for keyword-as-identifier:**
-   - gxl.ebnf §2.3: "Parsers MUST reject keyword as identifier. Error: GXL-PARSE-007."
-   - gxl.ebnf §6.1 catalog: "GXL-PARSE-010: Keyword used as identifier."
-   - Vectors TV-GXL-PARSE-081/082/083 marked `undecided`. Both runtimes will diverge.
-   - **Action:** Barbara patches gxl.ebnf to unify to one error code.
+- `builder.go:39-41`: `if cfg.RequireApproval { p.requireApproval = true }` — can only set true, never clear it.
+- Evaluator: `e.requireApproval || step.ToolRequiresApproval` — OR, cannot suppress.
+- **Test:** `TestApproval_RunbookFalseCannotSuppressToolTrue` — runbook governance has `RequireApproval: false`, tool has `RequiresApproval: &true`. Gate fires. Proves monotone OR holds.
 
-2. **`str.foo` expression — GXL-PARSE-006 or GXL-PARSE-010?**
-   - Vector TV-GXL-PARSE-083: `str.foo` (no parens)
-   - Ambiguous: unknown method (PARSE-006) vs. keyword as identifier (PARSE-010)?
-   - Currently marked GXL-PARSE-010 with note flagging ambiguity.
-   - **Action:** Barbara arbitrates.
+### 8. Binding constraint (both sources feed policy) — ✅ DEMONSTRATED
 
-**Ambiguities Surfaced:**
-
-1. **`1.2.3` error classification:** Lexer error (GXL-PARSE-003) or parse error (GXL-PARSE-001)? Vector assigns PARSE-001 with note.
-2. **String concatenation as GXL-PARSE-007:** Parse phase cannot detect `"a" + "b"` as string concat (no type info). Error is GXL-TYPE-003 (eval time). Deferred to TV-GXL-EVAL.
-3. **`len()` with zero args:** Grammar requires Expression inside LenCall; `len()` is GXL-PARSE-001 (unexpected RPAREN), not GXL-TYPE-004. No missing code.
-
-**Schema Design Notes:**
-- 13th category proposed: **GXL-FUNC** for stdlib function call conformance (distinct from GXL-EVAL). Barbara to ratify.
-- `expected.value: "parse_ok"` sentinel for parse-only vectors (conformance harness accepts any successful parse).
-- `variables: {}` for parse vectors (parser doesn't consult context map).
-
-**Vector Count:** 83 (target ≥30). ✅
-
-**Next Iteration (Day 2+):** `tv-gxl-eval.yaml` (GXL-EVAL category), `tv-gxl-func.yaml` (GXL-FUNC category if ratified).
+- Runbook-level: flows through `plan.GovernanceSource` → `BuildEvaluator` → `e.requireApproval`.
+- Per-tool: flows through `plan.Tools[name].Governance.RequiresApproval` → `stepInfo.ToolRequiresApproval`.
+- Both genuinely consumed in the evaluator's `||` expression. Building from only one source would leave the other dead.
 
 ---
 
-### 2026-06-05T00:27:12-04:00: GXL Phase 1 Day 2 — GIS/GCP Specs, Eval+Path Vectors, Conflict Arbitration
+## Test Quality Assessment
 
-**Streams B+C+arbitration — Status:** Delivered
+| Test | What it actually proves | Genuine? |
+|------|------------------------|----------|
+| `TestRequiresApprovalTristate` (4 sub-tests) | YAML unmarshalling correctly distinguishes all four tri-state cases | ✅ Yes — parses real YAML, asserts on pointer values |
+| `TestApproval_GovernanceEvaluatorWiredInProduction` | BuildEvaluator returns a functional non-nil evaluator | ✅ Yes — proves the wiring call would produce a live evaluator |
+| `TestApproval_PolicyComposesRunbookAndToolGovernance` | Tool-level RequiresApproval feeds through to gate invocation | ✅ Yes — runs a full engine cycle with a countingApprovalGate |
+| `TestApproval_RunbookFalseCannotSuppressToolTrue` | Monotone OR holds under conflict | ✅ Yes — full engine cycle with conflicting governance |
+| `TestApproval_FiresForAllInvocationPaths` | Gate fires pre-dispatch; executor never reached on denial | ✅ Yes — denying gate + executor invocation check |
+| `TestApproval_FiresForStdioMCPAndHTTPMCP` | Same pre-dispatch gate fires for named transport labels | ✅ Yes — though redundant with the above (same code path) |
+| `TestApproval_DoesNotAffectRetryOrClassification` | Types structurally preclude coupling | ⚠️ Structural, not behavioral — but valid |
 
-**Deliverables:**
-
-1. **Edith (Stream B Day 2) — GIS and GCP Spec Sections:**
-   - `design/gert/sections/03b-interpolation-syntax.tex` (29,321 bytes) — Normative GIS specification. Establishes PJVM canonical home at §sec:gis:portable-json. Terminology: GIS evaluator, template string, interpolation block, boolean (PJVM type name), PJVM.
-   - `design/gert/sections/03c-capture-paths.tex` (35,801 bytes) — Normative GCP specification. Implements OI-GCP-02 (bare-root capture allowed). Terminology: bare-root capture, scalar capture, subtree capture, source prefix, capture-then-GXL pattern.
-
-2. **Tess (Stream C Day 2) — Conformance Vectors:**
-   - `design/gert/conformance/tv-gxl-eval.yaml` (30,983 bytes, 87 vectors) — Evaluation semantics. Covers short-circuit AND/OR, logical operators, comparison (numbers/strings/booleans/cross-type/null), arithmetic, division/modulo by zero, modulo with negative operands (OI-GXL-03), stdlib (`str.*`, `list.*`, `len`), type errors, OI-GXL-05 (GDP in function arg), error codes exercised: GXL-EVAL-002, GXL-EVAL-004, GXL-TYPE-001..004, GXL-PARSE-006. **4 vectors TBD pending arbitration:** TV-GXL-EVAL-033 (boolean ordering), TV-GXL-EVAL-086 (array equality).
-   - `design/gert/conformance/tv-gxl-path.yaml` (16,169 bytes, 35 vectors) — Path traversal semantics. Covers simple access, object nesting, array indexing, mixed field+index, subtree captures (OQ5), missing keys, out-of-bounds, index-on-non-array, field-access edge cases, identifier constraints (keyword prefixes), realistic nested patterns. **2 vectors TBD pending arbitration:** TV-GXL-PATH-022 (field on scalar), TV-GXL-PATH-023 (field on null).
-
-3. **Barbara (Arbitration) — TESS-CONFLICT-1 and TESS-CONFLICT-2 Resolved:**
-   - **CONFLICT-1 (keyword-as-identifier):** GXL-PARSE-010 is the sole authoritative code. The §2.3 IDENT production body comment incorrectly cited GXL-PARSE-007 — documentation bug (GXL-PARSE-010 added later, comment never updated). Patch: `gxl.ebnf §2.3` body text corrected; `gxl.ebnf §6.1` scope note added to GXL-PARSE-007 clarifying it covers forbidden *syntax* (&&, ||, ternary) exclusively, not keywords-as-identifiers; `03a-expression-language.tex` error catalog updated; `03d-parse-time-enforcement.tex` error catalog updated; `tv-gxl-parse.yaml` vectors 081–082 finalised as GXL-PARSE-010, note updated.
-   - **CONFLICT-2 (str.foo classification):** Sub-case A (`str.xyz()` with parens, unknown method): GXL-PARSE-006 at parse time — no new code needed; closed-stdlib is authoritative. Sub-case B (`str.foo` without parens): GXL-PARSE-001 (unexpected token) — under PEG ordered alternation, NamespaceCall fails at missing LPAREN, GDP fails because `str` is keyword, all alternatives exhaust. NOT GXL-PARSE-010 (no identifier position) and NOT GXL-PARSE-006 (unreachable without parens). Patches: `gxl.ebnf §3 NamespaceCall` note block added; `gxl.ebnf §3 Method` comment clarified (closed stdlib, parse-time enforcement); `03a-expression-language.tex` PEG fallthrough paragraph added; `tv-gxl-parse.yaml` vector 083 changed from GXL-PARSE-010 → GXL-PARSE-001, note updated, `ambiguous` tag removed.
-
-**Conformance Corpus Status:**
-
-- **Total vectors delivered:** 122 (TV-GXL-EVAL 87 + TV-GXL-PATH 35)
-- **Cumulative corpus:** 205 vectors (TV-GXL-PARSE 83 + TV-GXL-EVAL 87 + TV-GXL-PATH 35)
-- **Phase 1 target:** ≥200 vectors — **TARGET HIT** ✅
-
-**Discrepancies Found (All Resolved — Grammar Authoritative):**
-
-1. **DISC-B2-1 (`boolean` vs `bool`):** gis.ebnf uses `boolean` (PJVM canonical); 03a prose uses `bool` (GXL shorthand in error messages only). Grammar wins. Editorial note added to terminology glossary.
-2. **DISC-B2-2 (decisions.md OI-GCP-02 example):** Ratification mentions `http.body` as bare-root subtree capture; but grammar shows `http.body` (no GDP) returns scalar string. Grammar wins — spec encodes grammar behavior. **Recommendation:** Scribe should amend OI-GCP-02 example from `http.body` to `json` in next merge to avoid misleading implementors.
-3. **DISC-B2-3 (OQ5/Q5 label):** Not found in accessible decisions; cited `gcp.ebnf §5` as source with "(Q5, resolved)" parenthetical per task brief. **Recommendation:** Scribe to confirm OQ5 label matches archive in next merge.
-
-**Open Items — Barbara Arbitration Required:**
-
-| Item | Trigger | Issue | Options |
-|------|---------|-------|---------|
-| **TESS-AMBIG-3** | TV-GXL-EVAL-033 `false < true` | No error code for ordered comparison on non-orderable type (bool). GXL-TYPE-001 requires *incompatible* types; booleans are same type. | A) Extend GXL-TYPE-001 to include "ordered comparison on type with no ordering" \| B) Define booleans as ordered (false < true valid) \| C) New code GXL-TYPE-005 |
-| **TESS-AMBIG-4** | TV-GXL-EVAL-086 `myArr == myArr` | Array/object equality semantics undefined. gxl.ebnf §5.2 covers scalars only. | A) Restrict == to scalars (GXL-TYPE-001 for lists/objects) \| B) Deep value equality (structural) \| C) Reference/identity equality |
-| **TESS-AMBIG-5** | TV-GXL-PATH-022 `foo.bar` (foo=7) | No error code for dot-access on scalar. GXL-PATH-001 says "segment not found" but reason is type, not absence. GXL-PATH-003 covers INDEX only. | A) Use GXL-PATH-001 ("segment missing") \| B) Extend GXL-PATH-003 to "dot-access on non-object" \| C) New code GXL-PATH-004 |
-| **TESS-AMBIG-6** | TV-GXL-PATH-023 `nullFoo.bar` (nullFoo=null) | Dot-access on null has no explicit code. GXL-PATH-003 covers bracket-index on null. | (Likely shares resolution with TESS-AMBIG-5) |
-
-**Phase 1 Ratifications:**
-
-- **OI-GIS-01 (canonical escape):** Confirmed `\${` in 03b prose. Proposal §2.6 amendment queued for Stream B integration task (FU-B2-1).
-- **OI-GCP-02 (bare-root capture):** Confirmed in 03c and grammar patches. Bare `json`/`yaml` with no GDP returns root subtree (not scalar string).
-- **OQ5 / Q5 (subtree capture semantics):** Cited `gcp.ebnf §5`; "(Q5, resolved)" parenthetical added per task brief.
-
-**PJVM Canonical Home:**
-
-`03b-interpolation-syntax.tex §sec:gis:portable-json` is established as the single normative definition of GERT Portable JSON Value Model. Both `03a` (GXL) and `03c` (GCP) reference it. **Future task (Stream B integration):** Add `\S\ref{sec:gis:portable-json}` cross-reference to `03a §sec:gxl:semantics:types`, replacing the informal type table with a forward reference.
-
-**Phase 1 Completion Status:**
-
-| Stream | Deliverable | Status |
-|--------|-------------|--------|
-| **A** | Reference Grammar | ✅ Complete (Barbara) |
-| **B** | Spec Rewrite (03a/03b/03c) | ✅ Complete (Edith) |
-| **C** | Conformance Corpus (205 vectors) | ✅ Complete (Tess) — target ≥200 HIT |
-| **D** | Fixture Migration | ✅ Complete (Don) — 21 fixtures migrated, 1 deferred on now() stdlib |
-| **E** | Migration Tooling | 🔄 Unblocked (awaits Stream D signoff) |
-| **F** | Parser Gate Spec (03d) | ✅ Complete (Barbara) |
-
-**Queued Follow-Ups (Stream B/C):**
-
-1. **FU-B2-1:** Proposal §2.6 amendment (OI-GIS-01 action item) — replace `$${` with `\${` (canonical).
-2. **FU-B2-2:** `03a §sec:gxl:semantics:types` forward-reference to `§sec:gis:portable-json`.
-3. **FU-B2-3:** `main.tex` wiring for 03a/03b/03c (deferred to Stream B integration).
-4. **FU-B2-4:** `decisions.md` OI-GCP-02 example amendment: change `http.body` to `json`.
-5. **Arbitration required:** TESS-AMBIG-3/4/5/6 vectors remain TBD until Barbara decision (4 vectors pending).
+No mock-only false positives. The engine tests run real `engine.Start()` → `Next()` cycles through `runPlanToCompletion`, exercising the actual dispatch path.
 
 ---
 
-### 2026-06-05T18:30:00-04:00: Stream D — Fixture Migration Complete (Don, Backend Dev)
+## Tri-State Collapse at the ToolRequiresApproval Boundary — Expected Gap
 
-**Status:** ✅ DELIVERED — 21 runbook fixtures migrated; 20 complete, 1 deferred ({{ now }} → GXL stdlib)
-
-**Day 1 (Audit):** Completed fixture migration audit. Found **388 total violations** across 21 runbooks requiring migration (r01–r11, r13–r22; r12 already clean):
-- 368× `{{ .var }}` template syntax
-- 6× `&&`/`||` boolean operators  
-- 9× `!` prefix negations
-- 3× infix `contains` (non-method)
-- 1× `$.` jq-style root
-- 1× template pipe `| func`
-
-**Day 2 (Migration & Resolution):** Completed all 21 runbook migrations with 100% compliance to GXL/GIS/GCP-canonical syntax:
-- **Batch 1:** r16, r18, r13, r21, r14, r11 (pure template → GIS substitution)
-- **Batch 2:** r17, r15, r19, r06, r09 (medium volume, no expression violations)
-- **Batch 3:** r22, r08, r05, r04 (high volume, pure substitution)
-- **Batch 4:** r02, r07, r10, r01, r03 (expression violations resolved: `&&`→`and`, `||`→`or`, `!`→`not`, infix `contains`→`str.contains()`)
-
-**Template Substitutions Applied:** ~368 replacements; `{{ .var }}`→`${var}` (GIS portable interpolation); `{{ .X.Y }}`→`${X.Y}` (GDP); `{{ .X[N] }}`→`${X[N]}` (array index).
-
-**Expression Normalizations Applied:**
-- All `&&`/`||` → `and`/`or` (GXL binary operators)
-- All `!var` → `not var` (GXL unary operator)
-- All infix `contains` → `str.contains(var, "str")` (stdlib method call)
-
-**Structural Migrations:**
-- r11: `over: "$.services"` → `over: services` (bare GDP identifier per GCP spec)
-- r20 (RISK-002 resolution by Germán): added `inputs.env: {type: string, default: "dev"}` + replaced `{{ .env | default "dev" }}` with `${env}`
-- r07 (RISK-005 noted): `${{ .amount }}` correctly becomes `$${amount}` (literal `$` + GIS interpolation block)
-
-**Exit Criteria Verification:**
-
-| Criterion | Target | Result |
-|-----------|--------|--------|
-| `{{ }}` occurrences in P1 (non-comment value lines) | 0 | ⚠️ 1 (deferred) |
-| `&&`/`||` in expression-position fields (P2) | 0 | ✅ 0 |
-| `!` prefix in `when:` fields (P3) | 0 | ✅ 0 |
-| Infix `contains` in expression-position (P4) | 0 | ✅ 0 |
-| `$.` jq-style in non-comment lines (P5) | 0 | ✅ 0 |
-
-**Deferred Item (DEFERRED-001):** `design/gert/testdata/runbooks/r04-soc2-evidence/schema.yaml:285` — line `completion_date: "{{ now }}"` deferred. `{{ now }}` is a Go Sprig template function (not a variable access). Unresolved at Day 2 checkpoint.
-
-**Decision Ratified:** **Add `now()` to GXL stdlib** (per Germán call). Returns UTC ISO-8601 string; spec to be defined by Barbara. This resolves DEFERRED-001 and unblocks r04 patch (Barbara handling grammar/spec/fixture update in parallel).
-
-**Stream D Status:** ✅ **COMPLETE (pending Barbara's now() + r04 patch).** All 21 runbooks passed exit criteria P2–P5 at zero; 20 fixtures fully delivered; r04 deferred on now() stdlib availability.
-
-**Tools & Extensions:** All 12 tool fixture files remain clean (untouched). Extension file (`hello-ext/gert-extension.yaml`) remains clean (untouched).
-
-**Notable Risk Resolutions:**
-- RISK-002 (r20 `env` semantics): Germán confirmed `env` is a runbook input with default "dev".
-- RISK-003 (r09 `!acknowledged`): 8× negation replacements applied to both `iterate:` blocks and step-level `when:` fields.
-- RISK-004 (r01 infix `contains`): Converted `pod_json contains "X"` → `str.contains(pod_json, "X")`.
-- RISK-005 (r07 `${{ .amount }}`): Documented as correct (literal dollar + interpolation) — no change needed.
-
-**Conformance Artifacts:** Exit-criteria lint script provided in Day 2 memo. Full migration audit memo (Day 1) + execution report (Day 2) stored in `.squad/decisions/inbox/` (to be merged into decisions.md post-approval).
-
----
-
-### 2026-06-05T00:14:04-04:00: Stream F — Complete (Barbara, Lead / Architect)
-
-**Status:** Delivered — `design/gert/sections/03d-parse-time-enforcement.tex` + grammar patches
-
-**Deliverables:**
-
-1. **Grammar Patches:**
-   - `design/gert/grammar/gis.ebnf`: OI-GIS-01 section updated; `\${` marked canonical, `$${` deprecated, migration directive added
-   - `design/gert/grammar/gcp.ebnf`: `StepStructured` + `LocalStructured` updated; GDP now `[ GDP ]` (optional) for bare-root capture (OI-GCP-02)
-   - `design/gert/grammar/gcp.ebnf`: Source prefix reference table updated; bare `json` + `yaml` rows added
-   - `design/gert/grammar/gcp.ebnf`: OI-GCP-02 section marked ratified
-
-2. **Main Spec Section:** `design/gert/sections/03d-parse-time-enforcement.tex` (8 sections, normative)
-   - §1 Governance Rationale (informative): cross-runtime parity, audit trail integrity, replay determinism
-   - §2 Parse-Time Contract (normative): definition of "validated runbook", MUST/MUST NOT rules for RunHandle.Next(), once-at-plan-time validation, plan.validated trace event
-   - §3 ValidatedPlan Type Contract (normative, language-agnostic): field specification, language-specific implementation notes
-   - §4 Error Code Catalog (normative master list): GXL, GIS, GCP codes + new PLAN-001..009
-   - §5 Error Message Format (normative): structured error envelope (code, message, location, snippet, suggestion)
-   - §6 No-Bypass Guarantees (normative, governance): Go type system enforcement, C# internal sealed, Roslyn analyzers, CI requirements
-   - §7 Grammar Version Pinning (normative): ValidatedPlan records grammar versions, PLAN-007 on mismatch, compatibility policy
-   - §8 Open Issues Phase 2 (informative): OPQ-GATE-01..07
-
-**New Error Codes (PLAN-001..009):**
-
-| Code | Raised By | Condition | Remediation |
-|------|-----------|-----------|-------------|
-| PLAN-001 | Parser/Planner | Unparseable expression wrapper (includes sub-error from grammar) | Fix flagged expression field |
-| PLAN-002 | Planner | Undefined capture variable reference | Ensure variable captured before use |
-| PLAN-003 | Planner | `capture.default:` on subtree capture (alias for GCP-DEFAULT-SUBTREE) | Use `when: var != null` guard |
-| PLAN-004 | Parser | Forbidden Go-template syntax `{{ }}` | Replace with `${...}` interpolation |
-| PLAN-005 | Parser | Forbidden infix operator (`&&`, `||`, `!`, infix `contains`) | Replace with `and`, `or`, `not`, `str.contains()` |
-| PLAN-006 | Parser | Forbidden pipe expression in GCP path (`\| length`, etc.) | Replace with `len()` in GXL after scalar capture |
-| PLAN-007 | Planner | Grammar version mismatch — plan validated against incompatible grammar | Re-validate runbook against current grammar |
-| PLAN-008 | Planner | Keyword used as capture variable name (e.g., `capture: and: ...`) | Rename capture variable |
-| PLAN-009 | Planner | Cross-step capture path `step.X.*` where step X not statically reachable | Re-order steps or use `when:` guard |
-
-**Design Rationale:**
-- PLAN-001..003: Aggregation/alias codes (preserve grammar codes in `sub_error` field)
-- PLAN-004..006: Migration-era codes (catch un-migrated runbooks, detected at parse time)
-- PLAN-007: Grammar version mismatch sentinel (protects replay determinism)
-- PLAN-008: Extends GXL-PARSE-010 to planner level (capture var names, not GXL expressions)
-- PLAN-009: Output of statically-reachable-step algorithm
-
-**Governance Gaps — Phase 2 Decisions Required:**
-
-🔴 **OPQ-GATE-01 — In-flight grammar version upgrade (BLOCKING for Phase 2)**
-
-Question: What happens when runtime upgrades grammar version mid-execution (e.g., suspended at approval gate)?
-
-Option A (strict): Suspend at next `NextAsync()`, raise PLAN-007, mark run as VersionMismatch. Operator must re-validate, replay, or cancel.
-Option B (sticky): Run retains grammar version for its lifetime. Version upgrades only affect new runs. Runtime maintains version registry.
-
-Trade-off: A is safer (no mixed-version execution) but disruptive for long-running flows. B is friendlier but requires version registry infra.
-
-Request: Germán, please decide before Phase 2. Gates OPQ-GATE-05 (plan-storage spec).
-
-🟡 **OPQ-GATE-02 — Statically reachable step set definition**
-
-Planner needs formal definition of "statically reachable" for cross-step capture validation (PLAN-009, GCP-PARSE-006). Conservative over-approximation recommended for v1.
-
-🟡 **OPQ-GATE-05 — Plan storage and re-validation policy**
-
-ValidatedPlan persistence (where stored, eviction, forced re-validation) unspecified. Needed before web platform plan store built.
-
-🟢 **OPQ-GATE-03, 04, 06, 07 — Lower priority**
-
-See §8 for full descriptions.
-
-**Contradictions Resolved:**
-
-1. Original proposal §2.6 specifies `$${` as escape; grammar specifies `\${`. Grammar is authoritative per OI-GIS-01. Noted in patch.
-2. Original proposal §2.4 restricts GIS to "identifier path only"; grammar (post-Stream A) allows full GXL inside `${...}`. Grammar is authoritative. Stream B must update proposal §2.4.
-
-**Team Coordination:**
-- **Edith (Stream B):** PLAN-* codes in §4.4 are normative master. Do not create separate plan-level codes. Reference `\label{sec:parse-gate:error-codes}`.
-- **Tess (Stream C):** Priority conformance vectors: PLAN-004, PLAN-005, PLAN-007, OI-GCP-02 bare-root vectors. Gate-level vectors tagged `TV-PLAN-*`.
-- **Phase 2 Parser Engineer:** ValidatedPlan type contract in §3 is primary interface spec. Error message format in §5 is normative.
-- **Don:** OPQ-GATE-05 (plan storage) requires architecture input when lands in Phase 2.
-
----
-
-## 2026-06-05 — now() stdlib + Stream E Day 1
-
-**By:** Barbara (now() spec), Don (migrate-expr tool)  
-**Status:** Delivered and ratified
-
-### now() Added to GXL Stdlib
-
-**Decision:** `now() → string` (ISO-8601 `YYYY-MM-DDTHH:MM:SSZ`)
-
-**Key specs:**
-- Per-evaluation determinism (each call yields independent fresh timestamp)
-- Arity error reuses **GXL-TYPE-004** (no new error code)
-- Bare `now` (no parens) raises GXL-PARSE-001 (unexpected token)
-
-**Patch scope:**
-- `design/gert/grammar/gxl.ebnf` (+42 lines): `KW_NOW` keyword, `NowCall` production, stdlib entry
-- `design/gert/sections/03a-expression-language.tex` (+72 lines): keywords table, function intro, stdlib subsection
-- `design/gert/conformance/tv-gxl-eval.yaml` (+33 lines): TV-GXL-EVAL-088/089/090 (return type, arity, bare keyword)
-- `design/gert/testdata/runbooks/r04-soc2-evidence/schema.yaml` (1 line patched): `{{ now }}` → `${now()}` (DEFERRED-001 resolution)
-
-**Conformance corpus:** 205 → **208 vectors** (+3 for now())
-
-**Stream D Status:** ✅ **FULLY COMPLETE** — All P1..P5 exit criteria at zero; DEFERRED-001 closed; r04 patched clean.
-
----
-
-### Stream E Day 1 — Subcommand + Translation Engine
-
-**Status:** Delivered — 11 rules implemented, 31 tests passing
-
-**Deliverables:**
-- `cmd/gert/cmd/migrateexpr.go` + root command registration
-- `internal/migrateexpr/translate.go` (11 rules: E-001..E-011)
-- `internal/migrateexpr/traverse.go` (position-aware YAML tree walker)
-- 26 unit tests + 5 integration tests (all passing)
-
-**Translation rules implemented:**
-| Rule | Input | Output | Authority |
-|------|-------|--------|-----------|
-| **E-001/002/003** | `{{ .X }}`/`{{ .A.B }}`/`{{ .A[N] }}` | `${X}`/`${A.B}`/`${A[N]}` | GIS/GDP spec |
-| **E-004/005/006** | `&&`/`\|\|`/`!` | `and`/`or`/`not` | GXL binary ops |
-| **E-007** | `X contains "Y"` | `str.contains(X, "Y")` | GXL stdlib |
-| **E-008** | `over: "$.IDENT"` | `over: IDENT` | GCP subtree iteration |
-| **E-009** | `$${...}` (old escape) | `\${...}` | OI-GIS-01 canonical form |
-| **E-010** | `{{ .x \| default }}` | **WARN** (no auto-translate) | Template pipes (RISK-002) |
-| **E-011** | `{{ now }}` | `${now()}` | GXL stdlib decision |
-
-**Position-aware traversal features:**
-- `gopkg.in/yaml.v3` Node API for comment/style preservation
-- Expression-position detection by YAML mapping key (`when`, `condition`, `until`)
-- Non-string tag guard (skip `!!int`, `!!bool`, etc.)
-
-**Day 2 Plan:** Dogfood on already-migrated fixtures (expect zero diff); emit warnings for `contains` ambiguity (string vs list); extend E-006 to detect parenthesized negation `!(...)`.
-
----
-
-## Phase 2 Day 2 — PJVM Typed Constructors, YAML Loader, Clock Interface, and Conformance Harness
-
-**By:** Don — Backend Runtime Engineer
-**Date:** 2026-06-05T13:29:45.398-07:00
-**Status:** Landed — Go runtime foundations, harness integrated, 264/264 vectors discoverable, all failing "not implemented" as designed for Day 2
-
-### Deliverables
-
-#### 1. PJVM Constructors and Validation (`internal/eval/core`)
-
-- **Constructor functions** for all PJVM types:
-  - `NewPJVMBool(bool) *PJVMValue`
-  - `NewPJVMNumber(float64) *PJVMValue` (with NaN/Inf rejection)
-  - `NewPJVMString(string) *PJVMValue`
-  - `NewPJVMArray([]PJVMValue) *PJVMValue`
-  - `NewPJVMObject(map[string]PJVMValue) *PJVMValue`
-
-- **Type accessors** (read-only, safe null handling):
-  - `AsBool() (bool, error)`
-  - `AsNumber() (float64, error)`
-  - `AsString() (string, error)`
-  - `AsArray() ([]PJVMValue, error)`
-  - `AsObject() (map[string]PJVMValue, error)`
-
-- **Validation and comparison**:
-  - `DeepEqual(other *PJVMValue) bool` — recursive equality for nested structures
-  - `String() string` — debug string output with type prefix
-
-- **NaN/Inf rejection**: Constructors reject non-finite floats with `ErrInvalidNumber`
-
-#### 2. YAML-to-PJVM Conversion (`core.FromYAML(*yaml.Node)`)
-
-- **Scalar conversion**:
-  - `!!null` → nil PJVM value
-  - `!!bool` → PJVMBool
-  - `!!int`, `!!float` → PJVMNumber (with NaN/Inf validation)
-  - `!!str` → PJVMString
-
-- **Sequence conversion** → PJVMArray (recursive)
-- **Mapping conversion** → PJVMObject (recursive)
-- **Empty string object keys** allowed per GIS spec silence; documented
-
-- **Nested corpus input shapes** supported (e.g., conformance vector `input` fields)
-
-#### 3. Clock Interface (Injected)
-
-Three types per Q2 ratification:
-
-- **`Clock` interface**:
-  ```go
-  type Clock interface {
-    Now() time.Time
-  }
-  ```
-
-- **`SystemClock`** (real system time, exported for production use)
-- **`FixedClock`** (deterministic testing, time frozen at construction)
-
-#### 4. Conformance Harness Dispatch (`design/gert/conformance/harness.go`)
-
-- **Per-grammar runner architecture**:
-  - Parse runners: `gxlParse()`, `gisPath()`, `gcpPath()`
-  - Eval runners: `gxlEval()`, `gisPath()`, `gcpPath()`
-  - All return `NotImplementedError` for Day 2 (placeholder stubs)
-
-- **Dispatch by source file** (tv-gxl-parse.yaml → gxlParse runner, etc.)
-- **Verbose per-vector output** (human-readable failures without noise)
-- **Harness integration** with validator, reporter, and test logger
-
-### Test Coverage and Verification
-
-**Corpus count verified** from `design/gert/conformance/tv-*.yaml`:
-
-| Grammar | Parse | Eval | Path | Total |
-|---------|-------|------|------|-------|
-| GXL | 83 | 90 | — | 173 |
-| GIS | — | — | 35 | 35 |
-| GCP | — | — | 41 | 41 |
-| **Total** | | | | **264** |
-
-**Expected Day 2 harness summary:**
-- 264 run, 0 pass, 264 fail, 0 skip
-- All failing with runner `NotImplementedError` (designed state for Day 2)
-
-**Unit tests added**:
-- PJVM constructors: validation, type accessors, deep equality
-- YAML conversion: scalars, sequences, mappings, nested structures
-- Clock interface: SystemClock, FixedClock determinism
-
-### Known Deviations
-
-- **Local environment limitation**: `go`, `gofmt`, `go mod tidy`, `go build ./...`, `go test ./...` could not be run (not on PATH in environment). Scaffolding verified locally as type-correct.
-- **No grammar/spec/vector changes**: All vectors are Day 1 corpus unchanged.
-- **Empty string object keys**: Allowed per GERT spec silence on empty string keys in JSON objects; documented in decisions.
-
-### Day 3 Readiness
-
-**All foundational components ready for Day 3 parser kickoff:**
-- PJVM fully typed and validated
-- YAML loader converts test vectors to runtime values
-- Clock interface ready for deterministic testing
-- Conformance harness dispatch wired for 264 vectors (placeholder runners in place)
-
-**No new decisions required** from ormasoftchile to begin GXL lexer/parser implementation.
-
-**Keep in scope for Day 3:**
-- Standalone GXL parse conformance (no OPQs deferred per Q4)
-- Parse-gate OPQs remain deferred
-
-### Commit Reference
-
-- Commit `2f647bc` — Day 2 foundations committed and pushed to coordinator
-- Staged for final Scribe merge to .squad/decisions.md
-
-**Dependencies added:**
-- `github.com/spf13/cobra` v1.8.1
-- `gopkg.in/yaml.v3` v3.0.1
-
----
-
-### 2026-06-05T09:25:14.584-07:00: Phase 2 Go Runtime Scaffold
-**By:** Don — Backend Dev
-
-## Package layout chosen
-
-`internal/eval` with shared `core` plus per-grammar packages:
-
-- `internal/eval/core` — PJVM value model and shared contracts
-- `internal/eval/gxl` — GXL parser/evaluator
-- `internal/eval/gis` — GIS template renderer and GIS-only optional chaining
-- `internal/eval/gcp` — GCP capture path parser/resolver
-
-**Why:** This preserves grammar boundaries and prevents GIS-only `?.` semantics from leaking into GXL/GCP, while keeping PJVM and diagnostics centralized for parity.
-
-## PJVM Go representation chosen
-
-Struct-with-kind typed sum:
-
+In `engine.go:497-498`:
 ```go
-type Value struct {
-    Kind   Kind
-    Bool   bool
-    Number float64
-    String string
-    Array  []Value
-    Object map[string]Value
+if toolDef.Governance != nil && toolDef.Governance.RequiresApproval != nil {
+    stepInfo.ToolRequiresApproval = *toolDef.Governance.RequiresApproval
 }
 ```
 
-**Why:** `interface{}` would admit host-language values and scatter type assertions. A typed sum gives one shared representation for Go/C#/TS parity and leaves a clean place for Day 2 constructors to reject NaN/Infinity.
+When `RequiresApproval` is nil (unspecified), `ToolRequiresApproval` stays at its zero value (`false`). This means unspecified tools do NOT fire the gate via this path alone.
 
-## Implementation stream order
+Per our Rev 4 design, unspecified should fire the gate in interactive contexts and deny in unattended contexts. That behavior belongs to the **ProfileApprovalGate** (classification-aware, attendance-aware), which is a later slice. The current slice correctly implements: "if RequiresApproval is explicitly true, the gate fires on all paths." The nil-means-conservative behavior will come from the ProfileApprovalGate when it replaces the current TTY-based gate selection.
+
+**This is expected and correctly scoped. Not a defect — a documented gap for a later slice.**
 
 ---
 
-## Decision: Runtime Migration Plan (GXL/GIS/GCP Expression Engine)
+## CI Hang Hazard Assessment
 
-**Author:** Barbara — Lead / Architect  
-**Date:** 2026-06-05T18:33:34-07:00  
-**Status:** RATIFIED — 2026-06-05  
-**Proposal:** `design/gert/proposals/runtime-migration-plan.md`
+`GovernanceEvaluator` is now always non-nil (previously nil in production). `cmd/gert/run.go` hardcodes `TTYOutput: true`. `buildApprovalGate()` selects `TerminalApprovalGate` when TTYOutput is true. If the gate fires, it calls `RequestApproval()` which reads stdin.
 
-### Executive Summary
+**Risk assessment:** The gate fires ONLY when `e.requireApproval || step.ToolRequiresApproval` is true. This requires either:
+- A runbook with `governance.require_approval: true`, OR
+- A tool with `governance.requires-approval: true`
 
-**Target:** Migrate Go runtime (`ormasoftchile/gert`) from expr-lang/text/template to spec-compliant GXL/GIS/GCP engines.
+The existing corpus has ZERO tools with `requires-approval: true` (all 25 conformance tools have explicit `false`). No existing runbook in the repo declares `require_approval: true`. So **no existing CI run will hang**.
 
-**Strategy:** Parallel-package (new `internal/eval/` alongside old `internal/expr/`), feature-flag cutover, 8-phase migration (A–H).
+The hazard is now LIVE for any FUTURE tool or runbook that explicitly opts in to approval AND runs in CI without an unattended-aware gate. This is the same latent bug we already disclosed (TTYOutput hardcoded, no isatty). The fix is the declared-attendance work (later slice). The risk is contained to tools that explicitly request approval in an unattended context — which is a configuration error.
 
-**Conformance target:** 264 vectors across 5 corpora (83 tv-gxl-parse, 90 tv-gxl-eval, 35 tv-gis-path, 41 tv-gcp-path, 15 reserved) + 22 design fixtures.
+**Verdict: not a regression. The bug pre-existed; the previously-dead code path now being live does not change observable behavior for any existing artifact.**
 
-**Timeline (estimated):**
-- **Critical path (serial):** 12–18 days (A → B → C → D → G → H)
-- **With 2 engineers (E/F parallel):** 10–15 days (~3 weeks with buffer)
-- **With sketch reuse (commits 97ce48b..5c550c0):** ~10–12 days critical path
+---
 
-**Gate criteria for Phase H (cutover):**
-1. 264/264 conformance vectors green in CI
-2. All 22 runbook fixtures execute successfully
-3. All integration/e2e tests green under new engine
-4. Performance benchmarks show no >2x regression
-5. No open P0/P1 bugs
-6. At least 1 week soak time with new engine as default
+## Counterparty Validation Status
 
-### Gap Analysis Summary
+| Criterion | Status | Evidence |
+|-----------|--------|----------|
+| 1. GovernanceEvaluator wired in production | **DEMONSTRATED** | wire.go:161, run.go (×2), sub-engine wire.go:392 |
+| 2. Policy composes runbook + per-tool | **DEMONSTRATED** | GovernanceSource on plan, ToolRequiresApproval on StepInfo, OR in evaluator |
+| 3. Approval applies to all transport paths | **DEMONSTRATED** | Pre-dispatch chokepoint in executeStep; executor never reached on denial |
+| 4. Approval never affects classification/retry | **DEMONSTRATED** | Structural type separation; no coupling in evaluator code |
 
-| # | Capability | Current | Required | Gap |
-|---|-----------|---------|----------|-----|
-| 1 | **GXL Parser** | expr-lang (CEL-like) | Recursive-descent per gxl.ebnf | Full replacement |
-| 2 | **GXL Evaluator** | expr-lang ad-hoc | Strict PJVM typing, `str.*`/`list.*`/`regex.*`/`math.*`/`len()`/`now()` | Full replacement |
-| 3 | **GIS Interpolation** | `{{ .path }}` text/template | `${expr}` with GDP, optional chaining `?.`, stdlib | Full replacement |
-| 4 | **GCP Capture** | Flat keyword enum (`"stdout"`, `"stderr"`, `"exit_code"`) | Path expressions into step output | New subsystem |
-| 5 | **PJVM** | `any`/`map[string]any` | Portable JSON Value Model (Null/Bool/Number/String/Array/Object) | New foundation |
-| 6 | **Clock injection** | None | `now()` via injected Clock interface | New interface |
-| 7 | **Conformance harness** | Hand-written unit tests | 264-vector test infrastructure | New test layer |
-| 8 | **Forbidden tokens** | Silently accepted | GXL-BANNED-* error codes (AND, OR, NOT, contains) | Behavioral inversion |
-| 9 | **Error codes** | Generic Go errors | Spec-mandated taxonomy (GXL-*, GIS-*, GCP-*) | New error model |
+All four of their validation criteria can be honestly reported as demonstrated.
 
-### Migration Phases
+---
 
-| Phase | Component | Size | Duration | Dependencies |
-|-------|-----------|------|----------|--------------|
-| **A** | Foundation: PJVM + Clock + harness | Medium | 2–3 days | None (blocks all) |
-| **B** | GXL Parser + parse conformance | Medium | 2–3 days | A |
-| **C** | GXL Evaluator + eval conformance | Large | 3–5 days | B (critical path bottleneck) |
-| **D** | GXL Path + ConditionEvaluator adapter | Medium | 2–3 days | C |
-| **E** | GIS Interpolation + Evaluator adapter | Large | 3–4 days | A, D (parallelizable with C/D) |
-| **F** | GCP Capture + executor integration | Medium | 2–3 days | A (parallelizable with B/C/D/E) |
-| **G** | Consumer migration + feature flag | Medium | 2–3 days | D, E, F |
-| **H** | Cutover + dependency drop | Small | 1 day | G (requires all gates) |
+## Non-Blocking Notes for Later Slices
 
-**Phase DAG:**
-```
-A → B → C → D ─┐
-             ├─→ G → H
-A → E ──────┤
-A → F ──────┘
-```
+1. **ProfileApprovalGate (later slice):** Must implement the "unspecified fires gate in interactive / denies in unattended" behavior. Current slice only enforces explicit `requires-approval: true`. The chokepoint is in place; the gate selection logic needs upgrading.
 
-### Risk Register (HIGH severity flagged)
+2. **Declared attendance (later slice):** Must replace TTY-inferred gate selection. Until then, any new tool/runbook that declares `requires-approval: true` and runs in CI will block on stdin. Document this as a known limitation in the interim.
 
-| # | Risk | Likelihood | Impact | Mitigation |
-|---|------|-----------|--------|------------|
-| **R1** | **Semantic divergence** — existing runbooks rely on expr-lang behaviors GXL forbids (infix `contains`, coercion, nil propagation) | HIGH | HIGH | Audit all 34 condition tests; surface breaking changes in Phase D adapter testing. |
-| **R2** | **Executor coupling to `{{ }}`** — user-authored runbooks use template syntax not valid in GXL/GIS | Certain | Medium | Document syntax change as breaking in release notes. |
-| **R4** | **Conformance vectors reveal spec ambiguities** — TESS-AMBIG-3/4, TESS-CONFLICT-2, OI-GXL-03 unresolved | HIGH | Medium | Each ambiguity surfaces in implementation; file issue in gert-private; design fix + vector lands here; runtime resumes. |
+3. **AllowedModes field:** Added to schema but no enforcement wired. Expected — enforcement is a later slice.
 
-Other risks (R3, R5, R6, R7) are Medium/Low likelihood but documented in full proposal.
+4. **Classification validation:** `internal/tool/scan.go` rejects unknown classification values. Good. No runtime enforcement of classification-based approval policy yet — that is the ProfileApprovalGate's job (later slice).
 
-### Sketch Code (commits 97ce48b..5c550c0)
+---
 
-**Status:** Written in `ormasoftchile/gert-private` (wrong repo per user directive), never integrated into gert module context.
+**APPROVED. No revisions required. All eight requirements are met by the implementation as verified against source.**
 
-**Coverage:** Phases A–C (PJVM, Clock, harness, lexer, parser, evaluator, stdlib). Passed tv-gxl-parse (83/83) and tv-gxl-eval in its environment.
+*Barbara — 2026-08-17*
 
-**Recommendation:** YES, cherry-pick as starting material, NOT drop-in. Covers ~40% of critical path compression. Requires:
-1. Adapt package paths (was `internal/eval/` in gert-private → gert module structure)
-2. Verify against current conformance corpus
-3. No code-review yet — treat as rough sketch, not production-ready
 
-**Risk:** Unfamiliar with gert-specific dependencies; may require build/import adjustment.
+---
 
-### Cross-Repo Coordination
+# Runtime Portability — Tri-State `RequiresApproval` Assessment
 
-**Spec ambiguity resolution flow:**
-```
-gert runtime dev finds ambiguity
-  → Issues "SPEC-AMBIG: [desc]" in gert-private (tag: spec-ambiguity, blocks-runtime)
-  → Barbara (or designee) resolves:
-      1. Updates grammar/spec section if needed
-      2. Adds conformance vector(s) pinning resolved behavior
-      3. Closes issue with commit reference
-  → gert runtime resumes implementation against updated vectors
+**Prepared by:** Don (Backend Dev)
+**Date:** 2026-08-17T06:37:00-07:00
+
+---
+
+## Q1 — Confirm the Defect
+
+**Confirmed. The defect is real and exactly as described.**
+
+`pkg/schema/tool.go:47`:
+```go
+RequiresApproval bool `yaml:"requires-approval,omitempty" json:"requires-approval,omitempty"`
 ```
 
-**Conformance vector distribution:** Recommend Git submodule (`gert-private` → `specs/design/` in gert). Provides pinned, reproducible vector sets; `go test` references `specs/conformance/tv-*.yaml` directly.
+Plain `bool`. No custom `UnmarshalYAML` on `ToolGovernance` (only `GovernanceConfig` has one, at `pkg/schema/runbook.go:107`). No `yaml.Node` capture, no raw-node field, no "set-tracking" companion field, no `mapstructure` metadata, nothing that records field presence.
 
-**Privacy note:** If gert goes public, submodule access or separate public artifact publishing required.
+Given `governance: { requires-capabilities: [network] }` and `governance: { requires-capabilities: [network]; requires-approval: false }`: after YAML unmarshal, both produce a non-nil `*ToolGovernance` with `RequiresApproval == false`. Indistinguishable in Go. The grandfathering rule as published is unimplementable as written.
 
-### Open Questions for ormasoftchile
-
-| # | Question | Options | Barbara's Lean |
-|---|----------|---------|----------------|
-| **OQ-M1** | Conformance vector distribution | (a) Submodule (b) Published artifact (c) Vendored copy | (a) if both private; (b) if gert public |
-| **OQ-M2** | Sketch reuse (commits 97ce48b..5c550c0) | (a) Cherry-pick, adapt, verify (b) Start fresh | (a) — saves 3–5 days; just don't treat as reviewed |
-| **OQ-M3** | Feature flag mechanism | (a) Build tag `//go:build gxl` (b) Runtime flag | (a) for simplicity |
-| **OQ-M4** | Syntax change communication (`{{ }}` → `${}`): breaking change? | (a) Major version (b) Deprecation period (c) Just ship | (c) if pre-1.0; (b) if production users exist |
-| **OQ-M5** | Who implements | (a) Single engineer (b) Pair | (b) if timeline matters — E/F fully parallelizable |
-
-### Blast Radius Summary
-
-**Current runtime footprint affected:**
-- 12 executor types (CLI, Tool, Branch, Iterate, Collector, Assert, Choice, Decision, Display, Include, Noop, + helpers)
-- 2 wiring points (`pkg/run/run.go`, `internal/adapter/wire.go`)
-- 58 test cases relying on expr-lang / text/template semantics
-- 2 interfaces: `pkg/expr.Evaluator`, `pkg/expr.ConditionEvaluator` (adapters satisfy same surface)
-
-**Phase H deletions:**
-- `internal/expr/` (entire directory)
-- `pkg/testutil/fake_expr_evaluator.go`
-- `go.mod` dependencies: `github.com/expr-lang/expr`
-- No `{{ }}` syntax in any runtime code path
-
-### Coordinator Notes
-
-**Failure mode:** This plan exists BECAUSE gert-private was misidentified as the runtime repository. User directive (earlier in this file) states: gert-private is DESIGN ONLY. The Go runtime lives in a separate repository (`ormasoftchile/gert`). This migration plan documents the work to happen **there**, not here.
-
-**Why documented in gert-private decisions:** Design repo is the SSOT for spec, conformance vectors, grammar, and inter-team coordination. Runtime implementation PRs will reference this plan; decisions track coordination across repos.
+SQL Live-Site's proposed fix — `RequiresApproval *bool` — is the correct and only clean fix short of a separate shadow-tracking mechanism (which would be worse).
 
 ---
 
-1. PJVM + conformance harness — build the measuring stick first.
-2. GXL parser — GIS embeds GXL; parse vectors are the fastest feedback.
-3. GXL evaluator + GDP paths — validates strict typing, stdlib, and short-circuit behavior.
-4. GIS baseline rendering — uses GXL and PJVM string coercion.
-5. GIS optional chaining — isolated GIS-only extension after baseline GXL.
-6. GCP parser/resolver — capture path runtime after expression/interpolation corpus is green.
-7. Parse-gate integration — no-bypass `ValidatedPlan` boundary after grammar surfaces pass.
+## Q2 — Blast Radius of `bool → *bool` on `ToolGovernance`
 
-## Day-by-day plan
+**Schema types and effective/resolved types are separate. The pointer only needs to live on the schema (authored) type.**
 
-- Day 2: PJVM constructors/validation, YAML-to-PJVM conversion, conformance harness dispatch.
-- Day 3: GXL lexer/parser; `tv-gxl-parse.yaml` green.
-- Day 4: GXL evaluator, stdlib, arithmetic, comparison, short-circuit; `tv-gxl-eval.yaml` green.
-- Day 5: GXL GDP traversal and path errors; `tv-gxl-path.yaml` green.
-- Day 6: GIS parser/renderer, escapes, full embedded GXL, string coercion.
-- Day 7: GIS optional chaining; all current 223 vectors green.
-- Day 8: GCP parser/resolver once GCP vectors are available.
-- Day 9: Parse gate, grammar version pinning, structured diagnostics, `ValidatedPlan` no-bypass boundary.
+The relevant types:
+- `pkg/schema.ToolGovernance` — **authored type**, YAML-parsed. This is what changes.
+- `pkg/schema.GovernanceConfig` — authored type for runbook-level governance. Separate struct, separate change question (see Q3).
+- `pkg/pkgsubst.EffectiveGovernance` — **resolved type** (`RequireApproval bool` at `pkgsubst.go:46`). Stays `bool` — SQL team's explicit permission.
+- `pkg/trace.EffectiveGovernancePayload` — trace wire type (`RequireApproval bool` at `event.go:130`). Stays `bool`.
 
-## Open questions before/near Day 2
+**Read sites for `schema.ToolGovernance.RequiresApproval` in Go code:**
 
-1. The kickoff names GCP as in scope, but the current corpus files are GXL/GIS only. Confirm when GCP vectors land and whether they gate Phase 2 done in addition to the 223 current vectors.
-2. Confirm how `now()` conformance should be asserted: regex matcher, injected clock, or no fixed-value vectors.
-3. Confirm whether Day 2 should add JSON Schema validation for corpus files or keep YAML struct validation only until parser work starts.
-4. Parse-gate OPQs still need decisions: in-flight grammar upgrades, statically reachable step set, warning trace shape, plan persistence, and PLAN-* corpus coverage.
+| File | Line | What it does | nil-safe? |
+|------|------|-------------|-----------|
+| `pkg/pkgsubst/pkgsubst.go` | 359 | `EffectiveGovernanceFromTool()`: `RequireApproval: g.RequiresApproval` — copies schema value into `EffectiveGovernance.RequireApproval bool` | **Needs update.** Change to: `if g.RequiresApproval != nil { eff.RequireApproval = *g.RequiresApproval }` — nil treated as false for resolution. |
 
+**That is the only Go read site for `schema.ToolGovernance.RequiresApproval`.** The field is otherwise only populated via YAML unmarshal. No test constructs `schema.ToolGovernance{RequiresApproval: ...}` directly in Go literals — all test tool defs are YAML-parsed through the conformance corpus (`tv-enum.yaml`) or through `ParseToolFile`. Verified: the grep for `RequiresApproval` in Go code hits `pkg/schema/tool.go:47` (declaration) and `pkgsubst.go:359` (read). All other `RequiresApproval` hits in Go code are for `GovernanceConfig.RequireApproval` (different struct) or `EffectiveGovernance.RequireApproval` (resolved type, stays `bool`).
+
+**The schema/effective split is clean today.** This is not a wide refactor. It is a 2-line Go change plus the schema declaration change.
 
 ---
 
-### 2026-06-05T09:25:14.584-07:00: Phase 2 Day 1 — Don's open questions resolved
+## Q3 — Runbook-Level Scope
 
-**By:** ormasoftchile (via Copilot)
-**Status:** Ratified — bindings for Day 2 onward
+`GovernanceConfig.RequireApproval` is a plain `bool` at `pkg/schema/runbook.go:91`. `GovernanceConfig` has a custom `UnmarshalYAML` at `runbook.go:107` — but that custom unmarshaller reconciles hyphenated vs. snake_case field spellings only. It still reads `RequireApproval` as a `bool` in both arms. No field-presence tracking there either.
 
-| # | Question | Decision | Rationale |
-|---|----------|----------|-----------|
-| Q1 | GCP vectors missing from corpus | **Dispatch Tess NOW (parallel to Don's Day 2) to write `tv-gcp-*.yaml`** | Day 8 implements GCP resolver; vectors must exist before then. Tess can work from grammar + spec without waiting for Don. Also validates "anyone can extend the corpus and the harness picks it up." |
-| Q2 | How to assert `now()` conformance | **Injected clock** — runtime accepts an injectable clock; vectors set a fixed value and assert exact equality | Parity requires identical contract across Go/C#/TS. Regex matchers pass for the wrong reasons (e.g., impossible dates). Injection point becomes an explicit API surface decision now rather than improvised later. |
-| Q3 | Corpus loader: JSON Schema or YAML struct? | **YAML struct only for now; revisit when C# runtime starts** | Go's yaml.v3 + struct tags already enforces shape. JSON Schema becomes valuable when multiple runtimes load the same corpus. Adding now drags in a schema library for one debugging convenience. |
-| Q4 | Parse-gate OPQs (in-flight grammar upgrades, statically-reachable steps, warning trace, plan persistence, PLAN-* corpus) | **Defer — Barbara will write a separate parse-gate proposal before Day 9** | Day 9 is a week out at current pace. Parse-gate is governance-layer territory and deserves a dedicated proposal cycle (similar to GIS optional-chaining flow), not buried in a Day-1 plan. Don's Day 9 entry becomes "spec drafted in separate proposal cycle before implementation." |
+**However: the SQL team's request to apply tri-state at the runbook level is over-scoped for the agreed design. I recommend we push back on that point.**
 
-## Next actions
-- **Tess** → write `tv-gcp-*.yaml` corpus vectors from `design/gert/grammar/gcp.ebnf` + `design/gert/sections/03c-capture-paths.tex`. Number consistent with existing convention (e.g., `TV-GCP-PATH-NNN`).
-- **Don** → Day 2 proceeds: PJVM constructors + YAML→PJVM conversion + harness dispatch. When implementing `now()` per Day 4, build it with an injectable clock per Q2.
-- **Barbara** → draft parse-gate proposal at some point before Day 9 (no immediate session needed; this is a backlog item).
+The reason: `GovernanceConfig.RequireApproval` gates ALL steps in a runbook uniformly — it is an operator-level declaration that "this runbook execution requires an approval step." It is not per-action classification. The grandfathering rule we defined (`requires-approval: false` explicitly authored = legacy read-only signal) only needs to work at the **tool/action level** to resolve the classification bootstrapping problem. Runbook-level `require_approval: false` has no semantic bearing on whether individual tool actions are classified — it means "don't gate the entire runbook." A `require_approval: false` runbook may still contain destructive tool actions, and those actions need classification regardless.
 
-## Not in scope (explicit non-decisions)
-- JSON Schema for corpus (deferred to C# runtime kickoff)
-- Parse-gate semantics (deferred to Barbara's proposal cycle)
-- C# runtime kickoff (still on hold until Go runtime hits Phase 2 done = all corpus vectors green)
+The tri-state distinction at the runbook level (`nil` vs. `&false` vs. `&true`) buys us nothing for the classification design: even if we could detect "this runbook's governance block was authored with explicit `require_approval: false`", that would not tell us whether individual tool actions are safe. Classification is an action-level property, not a runbook-level property.
+
+**Blast radius if we were forced to change `GovernanceConfig.RequireApproval → *bool`:** Much wider. `GovernanceConfig.RequireApproval` is read at: `internal/governance/builder.go:BuildPolicy()` (extracts `cfg.RequireApproval` for the policy), `pkg/pkgsubst/pkgsubst.go:267-276` (subgov composition), `internal/executor/dynamic_resolver.go:ComposeGovernance()` (dynamic include governance composition), `internal/executor/gov_seed.go:WithEntryGovernance()` (seeds ctx with runbook governance), `internal/governance/evaluator.go:NewEvaluator()`. Plus all test code that constructs `schema.GovernanceConfig{RequireApproval: true/false}` directly — 15+ sites across 5+ test files. **This is the refactor worth avoiding.** The `ToolGovernance` change is clean; the `GovernanceConfig` change is not, and it doesn't help us.
 
 ---
 
-### 2026-06-05T09:25:14.584-07:00: Tess — GCP Capture Path Vectors
+## Q4 — Serialization / Compatibility
 
-**Date:** 2026-06-05T09:25:14.584-07:00  
-**Author:** Tess — Conformance Tester  
-**Requested by:** ormasoftchile  
-**Status:** Delivered
-
-## Summary
-
-Created `design/gert/conformance/tv-gcp-path.yaml` to unblock Don's Phase 2 Day 8 GCP parser/resolver work.
-
-## Vector ID Range
-
-- `TV-GCP-PATH-001` .. `TV-GCP-PATH-041`
-
-## Coverage
-
-- Local sources: `stdout`, `stderr`, `exit_code`, `json`, `yaml`.
-- Snake-case enforcement: `exitCode` rejected as `GCP-PARSE-001`.
-- JSON paths: top-level, nested dot paths, array index, mixed dot/index, deep mixed path.
-- YAML paths: top-level, nested, and YAML 1.2 date-looking scalar as string.
-- Bare-root captures: `json` object root, `json` array root, and `yaml` object root.
-- Legacy stdout dot-path: `stdout.incident.id` and cross-step `step.run_scan.stdout.result`.
-- Subtree captures: object (`json.config`) and array (`json.services`).
-- Runtime misses: missing dot segment (`GCP-RESOLVE-002`), out-of-bounds index (`GCP-RESOLVE-003`), non-JSON stdout for JSON capture (`GCP-RESOLVE-004`).
-- Parse errors: invalid character, trailing dot, negative index, malformed bracket, invalid suffix, invalid header name, missing step id.
-- HTTP captures: `http.status`, `http.body.*`, `http.headers.*`, absent header soft-null.
-- Event captures: `event.id`, `event.body.*`, `event.headers.*`.
-- Cross-step captures: `step.{id}.json.*`, `step.{id}.stdout.*`, `step.{id}.exit_code`.
-- Default policy: `GCP-DEFAULT-SUBTREE` and `GCP-TYPE-001`.
-
-## Constructs Not Cleanly Encoded
-
-- OI-GCP-04 multiple captures from the same path cannot be represented cleanly in the current single-`input` vector schema. It needs either a multi-capture vector shape or a planner-level corpus later.
-- `GCP-RESOLVE-001` source-not-available is execution-order/state dependent. I did not force it into this black-box path corpus because the current vector shape has no skipped/not-yet-run source state beyond missing values.
-- Scalar `capture.default:` fallback success behavior could use a richer capture-default vector shape later. This batch pins the two hard policy errors only.
-
-## Schema Updates
-
-Updated `design/gert/conformance/schema.json` to admit:
-
-- error classes: `GCP-RESOLVE`, `GCP-DEFAULT`, `GCP-TYPE`
-- error code forms: `GCP-RESOLVE-###`, `GCP-TYPE-###`, and `GCP-DEFAULT-SUBTREE`
-
-## Edge Cases for Don Day 8
-
-- Literal EBNF text has a notation tension (`GDP = "." PathSegment` while `DotSegment = "." IDENT`), but all examples/spec prose use `json.foo`, not `json..foo`. Vectors follow the examples and normative prose intent.
-- `stdout.*` with a GDP suffix must parse stdout as JSON, including the legacy `stdout.incident.id` form.
-- Bare `json` / `yaml` must return the parsed PJVM root, including array roots; do not serialize subtrees to strings.
-- Missing HTTP/event headers return `null`, not `GCP-RESOLVE-002`.
-- YAML must use YAML 1.2 core schema: `2026-06-04` is a string in the vector, not a timestamp.
-- `GCP-PARSE-006` is plan-time semantic validation for known step IDs, even though it is cataloged under parse errors.
-
----
-
-## Previous Decisions (Archived)
-
-**Archive:** `.squad/archive/decisions-20260605-042704.md` (2825 lines, 154,277 bytes)
-
-Historical decisions accessible via archive file:
-- Architecture Options: GERT Web Execution Platform on Azure
-- Topology Segmentation Decision: A6 MVP + A8 Future
-- A6 Architecture Decisions
-- And 14 additional entries (see archive)
-
----
-
-## Terminology / Conventions
-
-**GXL:**
-- evaluator (runtime executor, not "interpreter")
-- GDP (GERT Dotted Path, not "dot path")
-- PJVM (GERT Portable JSON Value Model, not "value model")
-- parse error vs. evaluation error (timing distinction is normative)
-- context map (runtime variable scope, not "environment")
-- boolean position (not "boolean context")
-
-**Error Categories (13 + reserved):**
-1. GXL-PARSE (10 codes: GXL-PARSE-001..010)
-2. GXL-EVAL (4 codes: GXL-EVAL-001..004)
-3. GXL-TYPE (4 codes: GXL-TYPE-001..004)
-4. GXL-PATH (3 codes: GXL-PATH-001..003)
-5. GIS-INTERP
-6. GIS-PATH
-7. GIS-TYPE
-8. GCP-PARSE
-9. GCP-RESOLVE
-10. GCP-DEFAULT
-11. NAMESPACE
-12. CONFORM-CROSSCUT
-13. GXL-FUNC (proposed by Tess, pending Barbara ratification)
-14. PLAN (9 codes: PLAN-001..009) — parse-time gate enforcement
-
----
-
-## Archive Dates
-
-| Date | File | Lines | Bytes |
-|------|------|-------|-------|
-| 2026-06-05T04:27:04Z | `.squad/archive/decisions-20260605-042704.md` | 2825 | 154,277 |
-
----
-
-*Scribe note: Phase 1 Day 1 merged. Streams B, C, F kickoff deliverables integrated. 5 inbox memos processed. Conflicts surfaced for Barbara arbitration. Phase 2 gates identified (OPQ-GATE-01, 02, 05 blocking; 03, 04, 06, 07 lower priority). New team members (Edith, Tess) onboarded and integrated. Archive threshold crossed; old decisions archived. Cross-agent updates queued (see next task: charters + history).*
-
-
----
-
-# Don — Stream E Day 2 Decision Summary
-
-Date: 2026-06-04T20:14:36.949-07:00
-Requested by: ormasoftchile
-
-## Summary
-
-Stream E Day 2 is implemented and validated. I dogfooded `gert migrate-expr` against the already-migrated runbook fixtures, fixed the idempotency bug it exposed, added contains ambiguity handling, extended E-006 for parenthesized negation, and added permanent regression coverage.
-
-## Outcomes
-
-- Dogfood target: `design/gert/testdata/runbooks/`
-- Result after fixes: 22 YAML files, 0 translations, post-migration verification clean.
-- Added integration coverage proving already-migrated runbook fixtures remain byte-for-byte unchanged.
-- Added E-007 handling:
-  - string-like LHS migrates to `str.contains(...)`
-  - list-like LHS migrates to `list.contains(...)`
-  - ambiguous LHS is not rewritten and emits a warning for manual resolution
-- Added E-006 scanner behavior:
-  - `!X` -> `not X`
-  - `!(X)` -> `not (X)`
-  - `!(X && Y)` -> `not (X and Y)`
-  - `!(X || (Y && Z))` -> `not (X or (Y and Z))`
-  - `!!X` -> `not not X`
-
-## Dogfood Finding
-
-The no-op pass exposed a real idempotency bug: migrated r07 strings such as `Amount: $${amount}` were being treated as legacy E-009 escapes on a second pass. That bypasses the intended Stream D meaning: literal dollar plus GIS interpolation. I fixed this by preserving `$${symbol}` when `symbol` is known from runbook context such as inputs/captures/collector fields.
-
-## Open Questions
-
-1. The current E-007 type detection is conservative heuristic context, not full schema/type inference. Stream E completion should decide whether heuristic warning is enough for MVP or whether Day 3 must add richer symbol typing from runbook schema.
-2. GXL now defines `list.contains(...)`; confirm that list-membership migration should permanently target that namespace call.
-
-## Validation
-
-- `gert migrate-expr --dry-run --diff=false .\design\gert\testdata\runbooks` -> 0 translations, clean verification.
-- `go test ./...` -> passing.
-
-
----
-
-# Phase 2 Day 3  GXL Lexer & Recursive-Descent Parser
-
-**Author:** Don  Backend Developer  
-**Date:** 2026-06-05T16:16:27.961-07:00  
-**Status:** Completed  	v-gxl-parse.yaml 83/83 green  
-**Work Item:** GXL lexer + recursive-descent parser per gxl.ebnf precedence
-
-## Package Layout
-
-- internal/eval/gxl/lexer.go - Lex(input string) ([]Token, error), token kinds, source Position, and structured ParseError codes
-- internal/eval/gxl/ast.go - AST contracts and concrete node types
-- internal/eval/gxl/parser.go - Parse(input string) (Node, error) recursive-descent parser
-- internal/eval/gxl/*_test.go - lexer/parser unit coverage
-- internal/eval/conformance_test.go - gxlParseRunner now calls gxl.Parse; other runners remain Day 4-8 stubs
-
-## AST Design
-
-- Node interface exposes Pos() and is implemented by concrete nodes
-- LiteralNode carries kind, raw lexeme, decoded string/number/bool/null value text
-- UnaryNode handles 
-ot and unary -
-- BinaryNode handles logical, comparison, arithmetic, multiply/divide/modulo operators
-- PathNode models GDP roots plus field/index PathSegments
-- CallNode models top-level builtins (len, 
-ow) and closed namespace calls (str, list, egex)
-
-## Vector Status
-
-- **GXL parse status:** 83 of 83 	v-gxl-parse.yaml vectors green
-- Other vectors remain intentional 
-ot implemented runners: 	v-gxl-eval.yaml, 	v-gxl-path.yaml, 	v-gis-path.yaml, 	v-gcp-path.yaml
-
-## Ambiguities & Ratification Notes
-
-- Scientific notation required per ratified gxl.ebnf and 	v-gxl-parse.yaml (updated from original brief)
-- 1.2.3 follows Tess/Barbara vector behavior: lex as 1.2, ., 3, then fail parse with GXL-PARSE-001
-- str.foo without parentheses follows arbitration: GXL-PARSE-001, not keyword-as-identifier and not unknown-method
-
-## Day 4 Dependencies
-
-- Evaluator can start from AST without parser rewrites
-- Type semantics, stdlib behavior, path resolution, and clock-injected 
-ow() remain Day 4 scope
-- Remaining corpora will transition from stubs to full evaluation as evaluator implementation progresses
-
----
-
-**Status:**  Merged to .squad/decisions.md 
-
-# Phase 2 Day 4: GXL Evaluator
-
-**Author:** Don  Backend Developer  
-**Date:** 2026-06-05T18:06:05-07:00  
-**Status:** Completed  tv-gxl-eval.yaml all vectors green  
-**Work Item:** GXL AST evaluator with strict PJVM typing, short-circuit operators, arithmetic, comparison; stdlib (str/list/regex/math/len/now)
-
-## Architecture
-
-| Decision | Value |
-|----------|-------|
-| Entry point | \Eval(ast, bindings, clock)  (PJVM value, error)\ |
-| Type system | Strict PJVM (no implicit coercion; all type violations raise structured errors) |
-| Short-circuit | AST-level control flow (right side never evaluated if left side short-circuits) |
-| Stdlib isolation | Separate file per namespace; shared arity/type validators |
-| Clock injection | Injected dependency for time operations; no wall-clock reads in tests |
-| Error codes | Stable diagnostic codes matching conformance vectors exactly |
-
-## Stdlib Namespaces
-
-**\str.*\**: case, starts, ends, trim, split, join, replace, index, slice  
-**\list.*\**: append, at, concat, contains, empty, every, filter, find, index, join, length, map, reverse, slice, some  
-**\egex.*\**: match, test (Perl-compatible)  
-**\math.*\**: abs, ceil, floor, max, min, pow, round, sqrt  
-**Global**: \len(s|l)\, \
-ow()\ (Clock-injected)
-
-## Type Error Codes
-
-\EVAL-TYPE-{NUMBER|STRING|BOOLEAN|LIST|OBJECT}\, \EVAL-ARITY-MISMATCH\, \EVAL-UNDEFINED-VAR\, \EVAL-DIVIDE-BY-ZERO\, \EVAL-REGEX-INVALID\, \EVAL-INDEX-OUT-OF-BOUNDS\, \EVAL-KEY-NOT-FOUND\
-
-## Code Changes
-
-| File | Lines | Role |
-|------|-------|------|
-| \internal/eval/gxl/evaluator.go\ | 315 | AST walker with bindings + Clock injection |
-| \internal/eval/gxl/stdlib.go\ | 219 | All stdlib namespaces |
-| \internal/eval/gxl/evaluator_test.go\ | 197 | Unit tests |
-| \internal/eval/conformance_test.go\ | 98 | Harness integration |
-| \.squad/skills/go-ast-evaluator/SKILL.md\ | 27 | Skill documentation |
-
-**Total:** 872 additions, 7 deletions
-
-## Conformance Status
-
-- **tv-gxl-eval.yaml**:  All vectors green
-- **tv-gxl-parse.yaml**: ✅ 83/83 green
-- **tv-gxl-runtime.yaml**: Deferred (GXL type system pending)
-- **Other corpora** (GIS, GCP, flow control): NotImplemented
-
----
-
-**Status:**  Merged to .squad/decisions.md 
-
-
----
-
-## 2026-06-05 — Directive: Single Squad
-
-**Date:** 2026-06-05T22:31:50-04:00  
-**By:** ormasoftchile (via Copilot)  
-
-**What:** Squad has to be single. The same squad serves all repos. That's the purpose of `gert-private`: to hold the design AND host the squad. Agents in this squad operate across whatever repo the work is in (e.g., the runtime migration work happens in `ormasoftchile/gert`, but the squad members executing it live here).
-
-**Why:** User request — captured for team memory.
-
-**Implication for OQ-M5 (Runtime Migration Plan, ratified 2026-06-05):** The ratification said "cast a second backend in the `ormasoftchile/gert` runtime squad." That phrasing is now obsolete. Correct reading: cast a second backend in THIS squad (gert-private), and both backends (Don + the new hire) work in the `ormasoftchile/gert` repo for the runtime migration, then come back here for the next thing.
-
-**Action required:** Patch the runtime migration plan and decisions.md to reflect this. Then proceed with casting the second backend here.
-
-**Status:** Captured; M5 wording corrected in decisions.md and proposal; Ken hired per this directive.
-
----
-
-## 2026-06-05 — Ken hired (second Backend Dev)
-
-**Date:** 2026-06-05T22:31:50-04:00
-
-Ken joined the squad as second Backend Dev per OQ-M5 (corrected wording: cast second backend in this squad, gert-private).
-
-**Coordinator Actions:**
-- Files created: `.squad/agents/ken/charter.md`, `.squad/agents/ken/history.md`
-- Files updated: `.squad/casting/registry.json` (Ken entry), `.squad/team.md` (Ken row), `.squad/routing.md` (Ken routing)
-- Ken's first assignment: Phase A of the runtime migration in `ormasoftchile/gert`, paired with Don (per OQ-M5 corrected wording)
-- Plan: Don takes A→B→C→D→G→H critical path; Ken takes E (GIS) and F (GCP) in parallel during Phases A–H. Target: 10–15 days wallclock.
-
-**Status:** Ken onboarded; ready for Phase A kickoff in ormasoftchile/gert.
-
----
-
-## 2026-06-05 — Phase 1 CLOSED (TESS-AMBIG arbitration + dogfood)
-
-**From:** Barbara (Lead Architect) + Don (Backend Dev)  
-**Date:** 2026-06-05T22:31:50-04:00  
-**Status:** COMPLETE
-
-### TESS-AMBIG Resolutions (Barbara)
-
-#### TESS-AMBIG-3 — Boolean Ordered Comparison
-
-**Verdict:** `false < true`, `true >= false`, etc. → **new error code `GXL-TYPE-005` (eval-time)**. Booleans define equality (`==`, `!=`) but no total ordering.
-
-**Rationale:** GXL's core no-coercion principle forbids mapping booleans to numeric values. A dedicated code signals that `bool < bool` is same-type ordering (not cross-type mismatch as `GXL-TYPE-001` would imply). Eval-time because grammar doesn't distinguish operand types at parse time.
-
-#### TESS-AMBIG-4 — Array/List and Object Equality Semantics
-
-**Verdict:** `==` and `!=` are **restricted to scalar types (`number`, `string`, `bool`) and `null`**. Applying either to `list` or `object` raises **`GXL-TYPE-001`** (extended description).
-
-**Rationale:** OQ2 (scalars-only default) directly supports this. Deep structural equality creates cross-runtime divergence (Go's `reflect.DeepEqual` vs C#'s `SequenceEqual` differ on edge cases). Reference equality is unusable since GXL can't create references. The right answer: reject the operation, let authors decompose to scalar comparisons. No new code needed — `GXL-TYPE-001` description expanded to explicitly exclude lists/objects.
-
-#### TESS-AMBIG-5 and TESS-AMBIG-6 — Dot-Access on Scalar or Null Value
-
-**Verdict:** `foo.bar` where `foo` is `number`, `string`, `boolean`, or `null` → **new error code `GXL-PATH-004` (eval-time)**. "Field access on non-object value."
-
-**Rationale:** Mirrors bracket-indexing precedent (`foo[0]` on null → `GXL-PATH-003`). Single code covers both scalar and null cases, avoiding false "field not found" framing. Separates diagnostic clearly: `PATH-001` = "doesn't exist", `PATH-004` = "wrong type for traversal."
-
-### New Error Codes
-
-| Code | Category | Description |
-|------|----------|-------------|
-| `GXL-TYPE-005` | Type error | Ordered comparison (`<`, `<=`, `>`, `>=`) on boolean operands forbidden. |
-| `GXL-PATH-004` | Path error | Field access on non-object value (number, string, boolean, null). |
-| `GXL-TYPE-001` | Type error | Extended: equality (`==`, `!=`) restricted to scalars + null; lists/objects forbidden. |
-
-### Corpus Final State
-
-**Before:** 208 vectors, 4 TBD  
-**Changes:**
-- TV-GXL-EVAL-033: `TBD` → `GXL-TYPE-005` (bool ordering)
-- TV-GXL-EVAL-086: `TBD` → `GXL-TYPE-001` (array equality)
-- TV-GXL-EVAL-091: **New** — `true >= false` → `GXL-TYPE-005` (bool companion)
-- TV-GXL-EVAL-092: **New** — `myObj == myObj` → `GXL-TYPE-001` (object companion)
-- TV-GXL-PATH-022: `TBD` → `GXL-PATH-004` (scalar dot-access)
-- TV-GXL-PATH-023: `TBD` → `GXL-PATH-004` (null dot-access)
-- TV-GXL-PATH-036: **New** — `foo.length` (foo=`"hello"`) → `GXL-PATH-004` (string companion)
-
-**After:** 211 vectors (83 parse + 92 eval + 36 path), **0 TBD**
-
-### Dogfood Results (Don)
-
-**Audit:** 22 migrated runbook fixtures (r01–r22)
-
-| Check | Result |
-|-------|--------|
-| P1: `{{ }}` template syntax | 0 occurrences |
-| P2: `&&`/`||` in expr fields | 0 occurrences (3 hits in bash strings, correct) |
-| P3: `!` prefix in `when:` / `condition:` | 0 occurrences |
-| P4: Infix `contains` | 0 occurrences |
-| P5: `$.` jq-style | 0 occurrences |
-
-**Result:** All 22 fixtures clean. No legacy syntax remains.
-
-### Phase 1 Exit Gate: ✅ COMPLETE
-
-All streams delivered:
-- **Stream A** (Reference Grammar): ✅ Barbara
-- **Stream B** (Spec Rewrite + GIS Optional Chaining): ✅ Edith
-- **Stream C** (Conformance Corpus): ✅ Tess (208 → 211 vectors after ambiguity closure)
-- **Stream D** (Fixture Migration): ✅ Don (22 runbooks, P1–P5 all zero)
-- **Stream E** (Migration Tooling): Removed per user directive (not blocking)
-- **Stream F** (Parser Gate Spec + PLAN codes): ✅ Barbara
-- **GIS Optional Chaining**: ✅ Complete
-
-**Next:** Phase A in `ormasoftchile/gert` (Don + Ken paired). Pending work transitions out of gert-private.
-
----
-
-## 2026-06-05 — Phase A In-Flight (Don PR #9, Ken PR #8)
-
-**Status:** Both slices implemented, draft-PR'd in `ormasoftchile/gert`. Awaiting Germán review/merge; Phase A exit-criteria satisfied once merged.
-
-### Don's Slice: PJVM/Clock/Harness Scaffold (PR #9)
-
-**Branch:** `phase-a-pjvm` in `ormasoftchile/gert`  
-**Key Deliverables:**
-
-| Component | Files | Purpose |
-|-----------|-------|---------|
-| **PJVM** | `internal/eval/core/value_gxl.go` | 6-variant JSON value type (Null, Bool, Number, String, Array, Object) with typed accessors, deep-Equal, MarshalJSON/UnmarshalJSON |
-| **Clock** | `internal/eval/core/clock_gxl.go` | Clock interface, SystemClock(), FixedClock(t) for deterministic now() testing |
-| **YAML Loader** | `internal/eval/core/yaml_gxl.go` | FromYAML(*yaml.Node) for conformance harness |
-| **Unit Tests** | `internal/eval/core/core_gxl_test.go` | 27 tests: constructors, equality, JSON round-trip, YAML, Clock |
-| **Harness Skeleton** | `internal/eval/harness/conformance_gxl_test.go` | Loads tv-*.yaml from `testdata/vectors/`, dispatches to per-corpus runners (all stubbed → 264 vectors skip, 0 fail) |
-| **Vectors** | `testdata/vectors/tv-*.yaml` (5 files) + `VECTORS_SHA` | TEMPORARY copies + source commit breadcrumb (3ce53431); replaced when Ken's sync lands |
-| **Docs** | `phase-a/README.md` | Build-tag discipline, package layout, phase roadmap, cherry-pick provenance |
-
-**Source:** Cherry-picked from `97ce48b..5c550c0` in `gert-private` (OQ-M2); YAML fixed (escaping in descriptions); JSON marshaling added.
-
-**Test Results:** `go test -tags gxl ./internal/eval/...` → core: 27/27 ✅, harness: 264 skip, 0 fail ✅
-
-**Breadcrumb Left:** `conformance_gxl_test.go:59` marks hardcoded vector path for Ken's sync replacement.
-
-### Ken's Slice: DRIFT-DETECTION-001 Sync Infrastructure (PR #8)
-
-**Branch:** `phase-a-drift` in `ormasoftchile/gert`  
-**Key Deliverables:**
-
-| Component | Files | Purpose |
-|-----------|-------|---------|
-| **Sync Script** | `scripts/sync-vectors.sh` | Copies tv-*.yaml + schema.json from gert-private; writes `VECTORS_SHA` (source commit pinned to 3ce53431) |
-| **Makefile** | `Makefile` | Targets `sync-vectors` + `verify-vectors` (NEW; no prior Makefile in repo) |
-| **CI Gate** | `.github/workflows/verify-vectors.yml` | Runs on PR + main push + weekly; detects drift against gert-private canonical |
-| **Runbook** | `testdata/vectors/README.md` | Sync flow, drift semantics, upgrade path to Option B (deploy-key) if needed |
-
-**Env Contract:** `GERT_PRIVATE_PATH` (abs or rel path to gert-private; default: `../gert-private`)
-
-**Option Chosen:** **Option A (best-effort)** — attempt GITHUB_TOKEN checkout; fall back to SHA-format validation. Immediate within org; upgradeable to Option B (deploy-key) if token insufficient. Trade-off documented.
-
-**Test Loop:** sync → verify-clean ✅ → hand-edit + verify-drift ✅ → restore + verify-clean ✅
-
-### Coordination Note
-
-**Canonical vector path:** `testdata/vectors/` (same directory — both PRs converged!)  
-- Don's TEMPORARY copy will be replaced when Ken's sync script (PR #8) lands.
-- Ken's script pins SHA to 3ce53431 (gert-private HEAD at Phase A bootstrap).
-- Both PRs target the same location; no rename/migration needed post-merge.
-
-### Phase A Exit Criteria Status
-
-✅ **Completed:**
-- PJVM types with JSON marshaling (Don)
-- Clock interface for deterministic testing (Don)
-- Conformance harness skeleton dispatching all three corpus types (Don)
-- Sync script + CI gate + runbook (Ken)
-- DRIFT-DETECTION-001 test-loop verified (Ken)
-
-⏳ **Pending Merge:**
-- Germán review/approval of both PRs in `ormasoftchile/gert`
-- Merge both PRs to unblock Phase B (Don's stream B: GXL Lexer/Parser, Ken's stream E: GIS resolver)
-
-**Note:** Phase A implementation is complete in both PRs. The sync will be live once merged; the vector path constant in Don's harness can be updated then to read `testdata/vectors/VECTORS_SHA` and emit the source commit SHA in log output (for CI traceability).
-
----
-
-## 2026-06-05 — Phase C Speculative Kickoff (Don PR #11)
-
-**From:** Don (Backend Dev)  
-**Date:** 2026-06-05T23:54:03-04:00  
-**PR:** ormasoftchile/gert#11 (draft, `phase-c-evaluator`, stacked on phase-b-lexer-parser)  
-**Status:** ✅ SHIPPED — 92/92 eval vectors PASS on first pass; speculative merge approved.
-
-### GXL Evaluator Delivery
-
-**File Paths:**
-| Path | Purpose |
-|------|---------|
-| `internal/eval/gxl/evaluator_gxl.go` | AST walker — literals, unary/binary ops, GDP path resolution, call dispatch, short-circuit control flow |
-| `internal/eval/gxl/stdlib_gxl.go` | Stdlib surface — `len`, `now`, `str.*`, `list.*`, `regex.match` |
-| `internal/eval/gxl/evaluator_unit_gxl_test.go` | Unit tests (evaluator + stdlib operators + type errors) |
-| `internal/eval/harness/eval_runner_gxl_test.go` | Conformance harness eval runner (dispatches to evaluator) |
-| `internal/eval/harness/conformance_gxl_test.go` | *(minimal edit)* — regex-assert support added for TV-GXL-EVAL-088 |
-
-All new files carry `//go:build gxl`.
-
-### Vector Results
-
-**92 / 92 PASS** — zero failures, zero skips on GXL-EVAL corpus.
-
-```
-Conformance totals: 175 PASS (83 parse + 92 eval), 92 SKIP (Phase D/E/F), 0 FAIL
-  GXL-PARSE    83/83 ✅ (Phase B)
-  GXL-EVAL     92/92 ✅ (Phase C)
-  GXL-PATH     36   SKIP ← Phase D (path engine)
-  GIS-PATH     15   SKIP ← Phase E (GIS resolver)
-  GCP-PATH     41   SKIP ← Phase F (GCP capture)
-```
-
-No silent skips. All 92 passed cleanly on first pass.
-
-### Stdlib Surface Implemented
-
-| Function | Signature | Notes |
-|----------|-----------|-------|
-| `len(v)` | string/array → count; null/object/bool/number → GXL-TYPE-003 | |
-| `now()` | → ISO-8601 UTC string via injected Clock | Deterministic testing support |
-| `str.startsWith(s, prefix)` | → bool | |
-| `str.endsWith(s, suffix)` | → bool | |
-| `str.contains(s, sub)` | → bool | |
-| `str.toLower(s)` | → string | |
-| `str.toUpper(s)` | → string | |
-| `str.trim(s)` | → TrimSpace | |
-| `str.length(s)` | → codepoint count as number | |
-| `str.trimPrefix(s, p)` | → string | |
-| `str.trimSuffix(s, p)` | → string | |
-| `list.contains(arr, needle)` | scalar equality only; null → false | |
-| `list.indexOf(arr, needle)` | scalar equality; not-found → -1 | |
-| `list.length(arr)` | → element count as number | |
-| `regex.match(s, pattern)` | → bool; invalid regex → GXL-EVAL-003 | |
-
-All null arguments to `str.*` return `GXL-TYPE-003` per spec §4.2.
-
-### Spec Fixes vs. Sketch
-
-Two corrections applied (sketch predated Phase 1 arbitrations):
-
-| Case | Sketch Behaviour | Corrected Behaviour | Ratification |
-|------|-----------------|---------------------|--------------|
-| Boolean ordered comparison (`false < true`) | Returned `CodeTBD` | Returns `GXL-TYPE-005` ✅ | TESS-AMBIG-3 (Barbara, Phase 1) |
-| List equality (`myArr == myArr`) | Returned `CodeTBD` | Returns `GXL-TYPE-001` ✅ | TESS-AMBIG-4 extension (Barbara, Phase 1) |
-
-Both aligned with existing arbitration ledger; no new spec action needed.
-
-### Harness Extensions
-
-**regex-assert Support:** TV-GXL-EVAL-088 (`now()` → regex pattern match) required harness support for `assert: regex` in conformance vector YAML. Added to `conformance_gxl_test.go`. No corpus changes needed; this harness capability now available for future vectors.
-
-### Handoffs
-
-**→ Barbara (Spec):** None required. All error codes in use were pre-ratified in Phase 1 decisions.
-
-**→ Tess (Corpus):** Observation only — harness now supports `assert: regex` for any future eval vectors. No corpus action needed; all 92 vectors pass as authored. No corpus bugs found.
-
-### Stack Order & Merge Path
-
-```
-main
- └─ phase-a-pjvm       (PR #9)
-     └─ phase-b-lexer-parser  (PR #10)
-         └─ phase-c-evaluator  (PR #11, this PR)
-```
-
-**Merge order critical:** #9 → #10 → #11. Phase C exit-criteria satisfied once #11 merges. Phase D (path engine, 36 vectors) unblocks.
-
-### Phase C Exit-Criteria Readiness
-
-✅ **Complete:**
-- GXL evaluator shipped (AST walker + PJVM construction)
-- Stdlib surface implemented (13 functions across 4 namespaces)
-- Regex-assert harness support added
-- 92/92 eval vectors PASS
-- Error codes stable; phase-1 arbitrations incorporated
-
-✅ **No Action Items:** Don confirmed inline — no Barbara action, no Tess action, no changes to charter/skills/team.
-
-## 2026-06-06 — Phase D Speculative Kickoff (Don PR #12)
-
-**From:** Don (Backend Dev)  
-**Date:** 2026-06-06T00:14:11-04:00  
-**PR:** ormasoftchile/gert#12 (draft, `phase-d-path`, stacked on `phase-c-evaluator`)  
-**Status:** ✅ SHIPPED — 36/36 path vectors PASS on first pass; speculative merge approved.
-
-### GXL Path Engine Delivery
-
-**File Paths:**
-| Path | Purpose |
-|------|---------|
-| `internal/eval/gxl/path_gxl.go` | Thin path-resolution entrypoint — `ResolvePath(input, variables)` + `ResolvePathNode(*PathNode, …)` for pre-parsed AST |
-| `internal/eval/gxl/evaluator_gxl.go` | **FIXED** — corrected error code for field-on-non-object from GXL-PATH-001 → GXL-PATH-004 per ratified spec (TESS-AMBIG-5/6); added `CodePathFieldOnNonObject = "GXL-PATH-004"` |
-| `internal/eval/harness/path_runner_gxl_test.go` | Conformance harness path runner (dispatches to path engine) |
-| `internal/eval/harness/conformance_gxl_test.go` | *(minimal edit)* — wired `tv-gxl-path.yaml` runner (replaced `stubRunner`) |
-| `internal/eval/gxl/path_unit_gxl_test.go` | 18 edge-case unit tests — empty path, null root, all four error codes, bounds, deep nesting, mixed traversal |
-
-All files carry `//go:build gxl`.
-
-### Design Choice: Option (b) — Thin Entrypoint
-
-**Approach:** Minimal churn against Phase C internals. `path_gxl.go` wraps `Parse(input)` + `Eval(ast, variables, nil)`. No structural refactor of `evaluator_gxl.go` — single 2-line fix for the GXL-PATH-004 error code.
-
-**Rationale:** Phase C's `evalPath` already contained correct GDP traversal logic; only the error code was wrong. Extracting a standalone path package would touch ~80 lines across 2 files, incurring refactor risk without immediate benefit (GIS path logic defers to Phase E and has different semantics). Documented as optional follow-up if Phase E needs shared GDP resolution.
-
-### Vector Results
-
-**36 / 36 PASS** — zero failures, zero skips on GXL-PATH corpus.
-
-```
-Conformance totals: 211 PASS (83 parse + 92 eval + 36 path), 56 SKIP (15 GIS + 41 GCP), 0 FAIL
-  GXL-PARSE    83/83 ✅ (Phase B)
-  GXL-EVAL     92/92 ✅ (Phase C)
-  GXL-PATH     36/36 ✅ (Phase D — this PR)
-  GIS-PATH     15   SKIP ← Phase E (Ken)
-  GCP-PATH     41   SKIP ← Phase F (Ken)
-```
-
-All path vectors classified and passed: object/array/mixed traversal (TV-GXL-PATH-001..013), missing-path errors (014..016), out-of-bounds (017..018), index-on-non-array (019..021), field-on-scalar (022..023 — required the GXL-PATH-004 fix), parse errors (024..025), identifier edge cases (026..032), realistic nesting (033..034), null root (035), string dot-access (036).
-
-### Cross-Phase Fix: GXL-PATH-004 Correction
-
-**Issue:** Early sketch (commits 97ce48b..5c550c0) used a single `CodePathMissing` for both "field not found in object" and "field access on non-object". Phase 1 arbitration (TESS-AMBIG-5, TESS-AMBIG-6; Barbara, 2026-06-05) clarified: field-on-non-object must return **GXL-PATH-004**, not GXL-PATH-001.
-
-**Fix Applied:** `evaluator_gxl.go` line corrected to raise GXL-PATH-004 when `evalPath` encounters null, scalar, or array on field access. TV-GXL-PATH-022/023 now PASS.
-
-**Note:** This fix lives in PR #12 even though `evaluator_gxl.go` was created in PR #11 (Phase C territory). Merging #11 first will show Phase C complete but path vectors failing until #12 lands.
-
-### Handoffs
-
-**→ Barbara (Spec):** None required. All four GXL-PATH error codes (001–004) were pre-ratified Phase 1. No new ambiguities surfaced.
-
-**→ Tess (Corpus):** None required. All 36 vectors passed as authored. Zero corpus bugs. Harness verified all error-code branches.
-
-**→ Ken (Phase E/F):** GIS and GCP runners remain `stubRunner`. Phase E may review `ResolvePath`/`ResolvePathNode` in `path_gxl.go` as optional base for GIS resolver; however GIS adds optional chaining semantics which likely warrant separate resolver.
-
-### Stack Order & Merge Path
-
-```
-main
- └─ phase-a-pjvm        (PR #9)
-     └─ phase-b-lexer-parser   (PR #10)
-         └─ phase-c-evaluator   (PR #11)
-             └─ phase-d-path     (PR #12, this PR)
-```
-
-**Merge order critical:** #9 → #10 → #11 → #12. Five-deep stack. Do NOT merge #12 before #11 or diffs will be misleading (GXL-PATH-004 fix appears as Phase C delta). Phase D exit-criteria satisfied once #12 merges.
-
-### Phase D Exit-Criteria Readiness
-
-✅ **Complete:**
-- GXL path engine shipped (thin `path_gxl.go` entrypoint + GDP traversal)
-- GXL-PATH-004 spec correction applied (TESS-AMBIG-5/6 compliance)
-- 36/36 path vectors PASS
-- 18 unit tests for edge cases
-- Error codes stable; all ratified Phase 1 decisions incorporated
-
-✅ **No Action Items:** Don confirmed inline — no Barbara action, no Tess action, no changes to charter/skills/team.
-
-### Phases Completed & Remaining
-
-**Critical Path (Don A→B→C→D complete):**
-- ✅ Phase A (PJVM/Clock/Harness) — PR #9 ✅
-- ✅ Phase B (GXL Lexer/Parser) — PR #10 ✅
-- ✅ Phase C (GXL Evaluator/Stdlib) — PR #11 ✅
-- ✅ Phase D (GXL Path Engine) — PR #12 ✅
-- ⏳ Phase G (Cutover) — pending Phase E/F completion
-- ⏳ Phase H (Cleanup) — pending Phase G
-
-**Parallel (Ken E/F, unblocks after #9 merge):**
-- ⏳ Phase E (GIS Path Resolver) — Ken, 15 vectors
-- ⏳ Phase F (GCP Capture Engine) — Ken, 41 vectors
-
-**Recommendation:** Phase D ready for speculative merge. Phase E/F unblock once PR #9 (PJVM) lands in `ormasoftchile/gert`. Recommend allocating hiring time for Phase E/F parallel execution to hit 10–15-day wallclock target.
-
-## 2026-06-06 — Phase E + F speculative kickoff (Ken PR #13 + #14) — 100% conformance reached
-
-**From:** Ken (Backend Dev)  
-**Date:** 2026-06-06T01:00:00-04:00  
-**PRs:** ormasoftchile/gert#13 (Phase E GIS-PATH, draft, `phase-e-gis`) + ormasoftchile/gert#14 (Phase F GCP-PATH, draft, `phase-f-gcp`)  
-**Status:** ✅ SHIPPED — 15/15 GIS-PATH vectors PASS + 41/41 GCP-PATH vectors PASS (56/56 combined, zero failures).
-
-### Delivery Summary
-
-Two parallel streams, both stacked on `phase-a-pjvm` (PR #9):
-- **Phase E (GIS):** `internal/eval/gis/` — optional-chaining path resolver (15 vectors: root miss, deep chain, null-as-miss, falsy-values-present, bracket access, stdlib integration)
-- **Phase F (GCP):** `internal/eval/gcp/` — capture engine with four source prefixes + GDP traversal + §6 default policy (41 vectors: local/http/event/step captures, parse errors, header soft-null, YAML timestamp, type mismatch)
-
-**Design Choice:** Both engines fully separate packages. GIS does NOT share code with GXL (optional-chaining semantics diverge from strict path-error model). GCP fully independent (different surface language, different resolution semantics, no Phase C analogue to reuse). Only shared layer: `internal/eval/core` (PJVM value model).
-
-**File Layouts:**
-| Phase | Path | Key Files | Vectors |
-|-------|------|-----------|---------|
-| E | `internal/eval/gis/` | doc.go, errors.go, lexer.go, ast.go, parser.go, eval.go, render.go | 15 ✅ |
-| F | `internal/eval/gcp/` | doc.go, gcp_gxl.go, parser_gcp_gxl.go, resolver_gcp_gxl.go, gcp_unit_gxl_test.go | 41 ✅ |
-
-**Build Tag Discipline:** All files carry `//go:build gxl` per OQ-M3.
-
-### Vector Tally
-
-**Phase E (GIS-PATH):**
-- Optional root miss (001, 013): Root not found, first seg `?.` → `""` ✅
-- Deep optional chain (002): Miss mid-chain, tail skipped ✅
-- Optional + mandatory tail (003): Optional miss short-circuits mandatory tail ✅
-- Mandatory prefix error (004): Root mandatory, `?.` not yet reached ✅
-- Mixed chain (005): Mandatory prefix found, optional miss ✅
-- Null as optional miss (006): `b = null` via `?.b` → `""` ✅
-- Falsy values NOT miss (007–010): `""`, `false`, `0`, `[]` are present values ✅
-- Optional bracket (011–013): `?.[N]` with hit, OOB, missing root ✅
-- Stdlib + optional arg (014): `str.toLower(user?.name)` → `""` ✅
-- Invalid optional root (015): `${?.root}` → GIS-PARSE-003 ✅
-
-**Phase F (GCP-PATH):**
-- Local captures (001–020): stdout/stderr/exit_code/json/yaml, bare root, mixed GDP ✅
-- Parse errors (021–025, 031, 038): unknown prefix, invalid suffix, negative index, trailing dot, empty segment, invalid header name, step not found ✅
-- HTTP captures (026–031): status, body (JSON), headers, absent-header soft null ✅
-- Event captures (032–034): id, body, headers ✅
-- Step captures (035–037): json, stdout legacy form, exit_code, cross-step GDP ✅
-- YAML scalar edge case (039): timestamp as string per OI-GCP-06 ✅
-- Default policy (040–041): GCP-DEFAULT-SUBTREE for object/array, GCP-TYPE-001 for scalar type mismatch ✅
-
-**Combined Result:**
-```
-Conformance totals: total=267 pass=56 fail=0 skip=211
-  GIS-PATH     15/15 ✅ (Phase E)
-  GCP-PATH     41/41 ✅ (Phase F)
-  GXL-PARSE    83    (Phase B — Don)
-  GXL-EVAL     92    (Phase C — Don)
-  GXL-PATH     36    (Phase D — Don)
-  DRIFT        (Phase A — independent, PR #8 ✅)
-```
-
-### Stack Topology
-
-```
-main
- └─ phase-a-pjvm           (PR #9, in review)
-     ├─ phase-e-gis        (PR #13, this PR — Ken-E)
-     └─ phase-f-gcp        (PR #14, this PR — Ken-F)
-
-Don's GXL critical path (independent):
-main → phase-a-pjvm → phase-b → phase-c → phase-d
-       (PR #9)        (PR #10)   (PR #11)   (PR #12)
-```
-
-**Merge order:** PR #9 must land first. #13 and #14 are independent (different source prefixes, no shared resolver). Can merge in any order once #9 lands.
-
-### Exit-Criteria Satisfied
-
-✅ **Phase E (GIS):**
-- GIS path engine shipped (`internal/eval/gis/`)
-- Parser handles template strings + GIS expressions (two-level parsing)
-- Eval implements optional-chaining semantics + null-as-miss + str stdlib
-- 15/15 GIS-PATH vectors PASS
-- Zero error codes left TBD; all pre-ratified Phase 1
-- No Barbara action; no Tess action
-
-✅ **Phase F (GCP):**
-- GCP capture engine shipped (`internal/eval/gcp/`)
-- Parser covers all four source prefixes + all error codes from gcp.ebnf §7
-- Resolver covers PJVM sources + GDP traversal + §6 default policy
-- OI-GCP-06 timestamp handling (yaml.v3 `!!timestamp` → string)
-- 41/41 GCP-PATH vectors PASS; 15 unit tests PASS
-- Zero error codes left TBD; all pre-ratified Phase 1
-- No Barbara action; no Tess action
-
-### Handoffs
-
-**→ Barbara (Spec):** None required. All error codes (GIS-PARSE-001..004, GIS-PATH-MISSING, GIS-TYPE-001, GCP-PARSE-001..006, GCP-RESOLVE-001..004, GCP-DEFAULT-SUBTREE, GCP-TYPE-001) were pre-ratified in Phase 1. No new ambiguities surfaced.
-
-**→ Tess (Corpus):** None required. All 56 vectors passed as authored (15 GIS + 41 GCP). Zero corpus bugs. Observations: GIS TV-007/006 produce identical output `""` but for different reasons (present-empty-string vs null-as-miss) — this is intentional per notes.
-
-**→ Don (Phase G):** GIS and GCP engines ready for integration. Phase G (cutover) unblocks once E and F merged. Stack dependency: PR #9 → (#10/#11/#12 parallel to #13/#14) → Phase G.
-
-### Runtime Migration Plan Status
-
-**Phases A–F now 100% conformance-complete:**
-- ✅ Phase A (DRIFT-DETECTION-001) — PR #8 shipped
-- ✅ Phase B (GXL Lexer/Parser) — PR #10 shipped (83/83 vectors)
-- ✅ Phase C (GXL Evaluator/Stdlib) — PR #11 shipped (92/92 vectors)
-- ✅ Phase D (GXL Path Engine) — PR #12 shipped (36/36 vectors)
-- ✅ Phase E (GIS Path Resolver) — PR #13 shipped (15/15 vectors)
-
----
-
-## 2026-08-09 — Tool Packages MVP: Final Gate APPROVED; Workspace Escape Ruling Binding
-
-**Last Updated:** 2026-08-09T19:33-07:00
-**Inbox Merged:** 2 files (barbara-tool-packages-final-gate-decision; barbara-pkg-path-002-workspace-escape-ruling)
-
-### Summary
-
-Barbara's final implementation gate (second pass) confirms the Tool Packages MVP runtime is ready for production. Every blocker (B1–B5) and all nine §3 required fixes are resolved in code. David's independent revision is accepted in full. The workspace-escape ruling (TV-PKG-PATH-002) corrects the conformance vector and sharpens §06/§03d normative text: workspace-level path kinds report external-root escapes as `PKG-W003` (report), never `PKG-007` (rejection).
-
-### Blockers Verified
-
-| # | Item | Status |
-|---|------|--------|
-| B1 | Plan-time substitution validation | ✅ Resolved — `flowwalk.Walker` visitor added; `dryrun` coverage verified live |
-| B2 | Digest closure | ✅ Resolved — raw `*yaml.Node` walk; sorted digests; closure files only |
-| B3 | Catalog digest from package digest | ✅ Resolved — deferred export entries; tier-1 uses `pkgDigest` |
-| B4 | Removed/added package on resume | ✅ Resolved — `checkResumePackageDrift` treats manifest as authoritative; sorted pairs |
-| B5 | `outputs.<name>` capture root | ✅ Resolved end-to-end — GDP parser/resolver added; plan validation enforced |
-
-### Nine §3 Fixes Verified
-
-1. `ConstraintSources` real — ordered per-package site list threaded through `loadPackage`
-2. PKG-002 provenance — package and site(s) named in both `catalog.go` and `bind.go`
-3. Build metadata in constraints — `+` added to `unsupportedPatterns`; versions retain build metadata
-4. PKG-006 ordering — sorted before iteration; deterministic
-5. PLAN-010 typed error — new `errkit.ErrPLAN010`; unwrap chain matches `ErrToolNotFound`
-6. PKG-018 normalisation — export uniqueness comparison includes `NormalizeForComparison(..., true)`
-7. `maxLinkHops` — explicit hop-count check; Windows symlinks verified manually (tests skip on Windows)
-8. Output coercion — step fails on declared-type mismatch; no silent degradation
-9. `--package-map` provenance — `origin` added to `package/resolved` payload; trace records sources
-
-### Build & Testing
-
-- `go build ./...` clean
-- `go test ./...` green (single pre-existing flaky `TestSSE_FilterByRunID` unrelated to packages)
-- Target suites re-run individually: `internal/planner`, `pkg/pkgsubst`, `pkg/gcp/parser`, `pkg/capture`, `internal/conformance` — all green
-
-### Constraints & Hygiene
-
-- Protected files untouched — byte-identical to pre-revision state
-- Spec not reopened — no `design/` modifications during revision window
-- Tree state preserved — nothing staged or committed
-- David's work verified directly in code, not from summary
-
-### Workspace-Escape Ruling (TV-PKG-PATH-002 Correction)
-
-The conformance vector TV-PKG-PATH-002 incorrectly expected `PKG-007` for a workspace-root escape by a workspace-level `requires[].path`. **The ruling:** Workspace-level kinds are report-only (`PKG-W003`), never rejection. Don's `pkg/pkgpath` implementation is correct; no runtime change required.
-
-**Corrections made:**
-- `tv-pkg-resolve.yaml` TV-PKG-PATH-002: rewritten with external package tree; expected outcome now tier-1 entry + `PKG-W003` warning
-- `tv-pkg-resolve.yaml` TV-PKG-PATH-008: same defect corrected identically
-- `tv-pkg-resolve.yaml` TV-PKG-PATH-003: note reworded for clarity
-- §06 `sec:tool-path-containment`: normative paragraph added
-- §03d error catalog: `PKG-007` and `PKG-W003` conditions sharpened
-
-**Validation:**
-- `python design/gert/scripts/verify_corpus.py` → `OK 365/365 vectors validate`
-- Pre-existing `latex.py` failure unrelated to this ruling
-
-### Caveat: Cross-Process Resume
-
-Cross-process `gert run --resume` remains unsupported (pre-existing reason: no `ExecutionPlan` persistence in `DirRunStore`). Therefore `--allow-package-drift` and `PKG-009` are in-process-only today.
-
-### Accepted Non-Goals
-
-- Deep governance `deny_commands`/`allow_commands` enforcement inside substitute bodies
-- Cross-process resume plan persistence (pre-existing)
-- Replay mode (deferred)
-- §5 option (a) full per-file lexical `toolRefs` binding (deferred; PKG-017 fail-closed refusal in place)
-
-### Follow-ups
-
-1. ✅ Implement §5 option (a): include-closure + per-file `BindFile` binding; retire PKG-017 refusal
-2. 📝 Document single-file `requires:`/`toolRefs:` restriction in user-facing README
-3. 🔌 Wire `GovernanceEvaluator` into top-level and nested engines (pre-existing)
-4. 💾 Persist `ExecutionPlan` in `DirRunStore` for true cross-process resume (pre-existing)
-5. 🧪 Enable `pkgpath` hop-limit tests on Windows (verified manually; tests skip)
-6. 🔒 Extend `checkLinkHopBound` to count hops across intermediate path components (hardening)
-7. 🐛 Investigate flaky `internal/serve/TestSSE_FilterByRunID` (pre-existing, unrelated)
-8. 📚 Resolve pre-existing corpus issues: `ToolDef.Actions` map-vs-array, apiVersion mismatch, replay terminology, rules composition
-
-### Disposition
-
-**APPROVED.** The Tree is ready for Cristián's review and commit. No third gate pass required.
-
-**Reference:** `.squad/decisions/archive/barbara-tool-packages-final-gate-decision-archived.md`, `.squad/decisions/archive/barbara-pkg-path-002-workspace-escape-ruling-archived.md`
-- ✅ Phase F (GCP Capture Engine) — PR #14 shipped (41/41 vectors)
-
-**TOTAL CONFORMANCE: 267/267 (100%)** — all corpus vectors authored, implemented, and passing. All conformance-driven development work COMPLETE.
-
-**Remaining (pure-runtime, no new vectors):**
-- ⏳ Phase G (Integration & Migration) — Don, orchestrate GIS/GCP into request/response flow
-- ⏳ Phase H (Hard Cutover) — Don, remove build tag, delete old engine, update CHANGELOG
-
-**Recommendation:** Speculative merge approved for PR #13/#14 once PR #9 lands. Ken's assignment (Phases E–F) complete. Next phase: Don + Ken on Phase G/H integration (1–2 week wallclock target).
-
----
-
-## 2026-06-06 — Phase G: Runtime Integration (Don PR #15) — Engines Side-by-Side
-
-**From:** Don  
-**Date:** 2026-06-06T01:35:00-04:00  
-**PR:** ormasoftchile/gert#15 (draft, `phase-g-integration` → `phase-d-path`)  
-**Status:** ✅ SHIPPED — all test gates green, 267/267 conformance maintained
-
-### Merge Experience
-
-Don merged Ken's PR #13 (Phase E: GIS) and PR #14 (Phase F: GCP) into the integration branch. Zero code conflicts — `internal/eval/gis/` and `internal/eval/gcp/` disjoint from `internal/eval/gxl/`. One harness collision: `vectorBindings` helper declared independently in both `path_runner_gxl_test.go` (Phase D) and `gis_runner_gxl_test.go` (Phase E) — resolved by extracting to `helpers_gxl_test.go` (shared test utilities). Not a semantic conflict, pure naming collision.
-
-### Integration Surface
-
-**Build tag `//go:build gxl`** is the feature flag (no CLI flag, no env var, no runtime switch). Two wiring points per the migration plan:
-
-1. **`internal/adapter/wire.go`** — `BuildEngineConfig()` calls `newEvaluators()` + `newCaptureResolver()`; build-tagged switch:
-   - `!gxl` → `evaluators_legacy.go`: `TemplateEvaluator` + `SimpleConditionEvaluator` + nil resolver
-   - `gxl` → `evaluators_gxl.go`: `GISEvaluatorAdapter` + `GXLConditionAdapter` + `GCPCaptureAdapter`
-
-2. **`pkg/run/run.go`** — same pattern via `newRunEvaluators()` + `newRunCaptureResolver()`
-
-### Public API
-
-Three adapter types in `internal/eval/adapter_gxl.go` (all `//go:build gxl`):
-
-| Type | Interface | Engine |
-|------|-----------|--------|
-| `GISEvaluatorAdapter` | `pkg/expr.Evaluator` | GIS — `${...}` template interpolation |
-| `GXLConditionAdapter` | `pkg/expr.ConditionEvaluator` | GXL — strict PJVM boolean evaluation |
-| `GCPCaptureAdapter` | `internal/executor.CaptureResolver` | GCP — path-based step output capture |
-
-Helpers: `MapToValues()`, `anyToValue()`, `ValueToAny()` — all in `adapter_gxl.go` for CLI and future cutover code.
-
-### Capture Path Evolution
-
-- `internal/executor.CaptureResolver` interface added (no build tag — just interface)
-- `internal/executor.RegistryConfig.CaptureResolver` field (optional, nil = legacy keyword switch)
-- `CLIExecutor.captureResolver` field, `NewCLIExecutor(...CaptureResolver)` variadic (backward compat)
-- Under `gxl`: `GCPCaptureAdapter` handles ALL capture paths via GCP engine. Legacy `stdout`/`stderr`/`exit_code` strings are valid GCP LocalCapture paths.
-
-### Test Results
-
-| Suite | Count | Result |
-|-------|-------|--------|
-| Conformance (GXL-PARSE) | 83/83 | ✅ PASS |
-| Conformance (GXL-EVAL) | 92/92 | ✅ PASS |
-| Conformance (GXL-PATH) | 36/36 | ✅ PASS |
-| Conformance (GIS-PATH) | 15/15 | ✅ PASS |
-| Conformance (GCP-PATH) | 41/41 | ✅ PASS |
-| **Conformance TOTAL** | **267/267** | ✅ **100%** |
-| Integration (adapter e2e) | 4/4 | ✅ PASS |
-| `go test ./...` (no tag) | all pass | ✅ |
-| `go test -tags gxl ./...` | all pass | ✅ |
-| Pre-existing failure | `TestRender_Regions` | ⚠️ pre-dates Phase work |
-
-### Fixture Migration
-
-`TestStepStartedEvent_StructuralMetadata_CollectHealth` failed under `gxl` because collect-health runbook uses `{{ }}` Go-template syntax; `GISEvaluatorAdapter` passes through as literal text (correct GIS behavior). Fixed by:
-
-1. GXL-syntax variants: `collect-health-gxl.runbook.yaml` + `check-service-gxl.runbook.yaml`
-2. check-service conditionals restructured as `branch` step with GXL conditions
-3. Build-tagged `collectHealthRunbookPath()` helper selects variant per build
-4. Original `{{ }}` runbooks preserved unchanged for legacy (`!gxl`) test path
-5. Hardcoded `/Volumes/Projects/gert/...` absolute path in both engine tests replaced with `repoRoot()` + relative path — portable across machines and worktrees
-
-### Stack & Handoffs
-
-**Merge order:** PR #9 → #10 → #11 → #12 → #13/#14 (either order) → **#15**
-
-**→ Ken (Phase H prep):** No changes to `internal/eval/gis/` or `internal/eval/gcp/`. `CaptureResolver` interface in `internal/executor/capture_resolver.go` — Ken's `GCPCaptureAdapter` satisfies structurally without importing the interface type. Note for Phase H: `GCPCaptureAdapter` returns error for non-standard capture keys (e.g., `exitCode` camelCase) — Phase H migration guide should document `exit_code` (snake_case only) requirement.
-
-**→ Barbara (Spec — POTENTIAL BREAKING CHANGE):** `GISEvaluatorAdapter.Eval()` returns error when a template contains a mandatory (non-optional-chaining) path missing from `vars` (GIS-PATH-MISSING per spec). Legacy `TemplateEvaluator` returned empty string (`missingkey=zero`). If existing runbooks rely on missing-key-as-empty-string semantics, they will error under `gxl`. Flagged as Phase H migration note — behavior correct per spec, needs arbitration before hard cutover ships.
-
-**→ Tess (Corpus):** No new vectors. 267/267 maintained. Four new integration tests in `internal/eval/integration_gxl_test.go` are Go-level, not corpus vectors.
-
-### Phase H Preview (Cutover)
-
-Phase H single focused PR:
-
-1. Delete legacy factories: `internal/adapter/evaluators_legacy.go` + `pkg/run/evaluators_legacy.go`
-2. Drop `//go:build` constraints: remove from all `internal/eval/*` files
-3. Delete `internal/expr/`: `template.go`, `condition.go`, `condition_test.go`, `template_test.go`
-4. Clean `go.mod`: `go mod tidy` removes `github.com/expr-lang/expr`
-5. Canonicalize runbooks: rename `-gxl.runbook.yaml` variants to replace originals; remove `{{ }}` versions
-6. Update engine test: `collectHealthRunbookPath()` becomes single function (no build tag)
-7. CI gate: add `go test -tags gxl ./...` as primary step; retire `go test ./...` (no tag)
-8. Verify: `go test ./...` green, `go build ./...` clean, no import of `expr-lang/expr`
-
-Estimated size: Small (1 day), mostly mechanical deletion. Risk: low — all semantics proven by 267-vector conformance corpus.
-
-### Exit Criteria Summary
-
-✅ Phase G complete:
-- Adapters wired into CLI via build-tagged factories
-- Side-by-side runtime integration: both `!gxl` (legacy) and `gxl` (new engines) compile and pass full test suite
-- 267/267 conformance maintained
-- Fixture migration complete; hardcoded paths made portable
-- Zero errors, all test gates green
-- Ready for Phase H hard cutover (deletion + canonicalization)
-
----
-
-## 2026-06-06 — GIS Miss Semantics — Option A Ratified (Barbara, commit e819895)
-
-**From:** Barbara — Spec Arbiter  
-**Date:** 2026-06-06T01:40:00-04:00  
-**Arbitration:** SPEC-AMBIG resolution for Phase G integration (Don PR #15)  
-**Status:** ✅ RATIFIED — Option A (mandatory-miss-as-error)
-
-### Ruling
-
-**The spec already mandates hard errors for mandatory path misses.** Ken's GIS engine (shipped) is correct. Legacy `missingkey=zero` was an under-specified implementation leak, not a contract.
+**No golden file breaks. No round-trip marshal breaks.**
 
 Evidence:
-- `gis.ebnf` §4.3: "Silent empty-string substitution is FORBIDDEN by default."
-- `03b-interpolation-syntax.tex` §Unresolved Variables: "Hard error for unresolved reference."
-- All 15 GIS-PATH conformance vectors pass; TV-GIS-PATH-004 tests mandatory-miss-as-error.
 
-### Spec Files Updated
+1. **`kit.go` marshals `kitfile` and `lockfile` structs** (package kit management). Neither contains `ToolGovernance` or `GovernanceConfig`. No tool governance is marshaled to YAML in the kit path.
 
-| File | Section | Change |
-|------|---------|--------|
-| `design/gert/grammar/gis.ebnf` | Header | Arbitration note + date updated |
-| `design/gert/sections/03b-interpolation-syntax.tex` | §Unresolved Variables | Migration Note: Legacy Zero-Value Semantics |
+2. **Conformance corpus `tv-enum.yaml`** contains `requires-approval: false` in 25 locations — but these are **input strings** that the conformance harness unmarshals. The test reads them as YAML input, it does not marshal `ToolGovernance` back to YAML and compare against golden output. No golden files capture serialized `ToolGovernance`.
 
-**No conformance vector changes.** All 15/15 pass as authored.
+3. **JSON trace events** use `pkg/trace.EffectiveGovernancePayload` (which stays `bool`) not `schema.ToolGovernance` directly. No trace event serializes a raw `ToolGovernance`.
 
-### Phase H Impact
+4. **`omitempty` behavior change for marshal:** Today, `bool` with `omitempty` suppresses the field when `false` (so `requires-approval: false` is already dropped from marshal output). With `*bool` and `omitempty`, `nil` (absent) is dropped and `&false` (explicit opt-out) is emitted as `false`. This is a change in marshal semantics — but since nothing in the codebase marshals `ToolGovernance` to YAML/JSON and compares the output, it breaks nothing today.
 
-- ✅ No code changes to GIS engine
-- ✅ No CLI flag needed
-- ✅ No parser changes needed
-- ✅ Proceed with Phase H: delete legacy engine, hard cutover
+One future-facing note: if a packaging step ever serializes resolved tool definitions back to YAML (e.g., for a `gert compile` output or kit artifact), the `*bool` with `omitempty` would emit `requires-approval: false` when explicitly set and omit it when absent — which is the correct and desired behavior for the tri-state semantics.
 
-### Migration Path
+---
 
-Authors relying on silent empty-string substitution MUST use one of:
-1. **Optional chaining** (preferred): `${user?.email}` — returns `""` on miss
-2. **Capture default**: Declare default value in capture configuration
-3. **Guard with `when:`**: Conditional step execution
+## Q5 — Effort Estimate
 
-### Runbook Survey
+**`schema.ToolGovernance.RequiresApproval bool → *bool`: 0.5 days.**
 
-Examined 10 legacy runbooks in `ormasoftchile/gert/examples/`: all use Go template `{{ }}` syntax (not GIS `${}`). No production runbooks at risk.
+- `pkg/schema/tool.go:47` — 1 line change.
+- `pkg/pkgsubst/pkgsubst.go:359` — 2 lines (nil-guard in `EffectiveGovernanceFromTool`).
+- `internal/conformance/enumdata/tv-enum.yaml` — no change needed. The 25 `requires-approval: false` entries unmarshal to `*bool` pointing to `false`, which is the correct "explicit opt-out" value. The conformance tests continue to pass.
+- No Go test literals construct `schema.ToolGovernance{RequiresApproval: ...}` — zero test changes required for `ToolGovernance`.
 
-### Decision Summary
+If the SQL team's runbook-level `GovernanceConfig` request is accepted despite Q3 recommendation: add 1.5–2 days for the wider read-site updates (builder, pkgsubst compose, dynamic_resolver, evaluator, test literals at 15+ sites).
 
-| Aspect | Value |
-|--------|-------|
-| **Ruling** | Option A — mandatory-miss-as-error (Ken's design ratified) |
-| **Grammar Changes** | None |
-| **Conformance Vectors** | None (15/15 pass) |
-| **Phase H Impact** | None — proceed as planned |
-| **Migration** | Authors use `?.` or `capture.default:` for soft-miss |
+---
+
+## Q6 — Subprocess Sandboxing Confirmation
+
+**Gert does zero sandboxing of subprocess transport. Confirmed.**
+
+`internal/tool/process.go:StartProcess()`:
+```go
+cmd := exec.Command(command, args...)
+cmd.Env = mergeEnv(env)
+```
+
+`mergeEnv()`:
+```go
+out := append([]string{}, os.Environ()...)  // full parent env inherited
+for k, v := range env {
+    out = append(out, k+"="+v)              // tool's extras appended
+}
+```
+
+No `SysProcAttr.Cloneflags` (no Linux namespaces), no seccomp filter, no network restriction, no cwd jail, no env scrubbing — in fact the opposite: the full parent process environment is inherited unconditionally, with tool-specific vars appended on top. The subprocess sees everything the Gert process sees.
+
+The SQL team's restatement is precisely correct: the test-profile subprocess opt-in (`transport.allow_subprocess_in_test: true`) is a **trusted profile assertion** that the operator declares the subprocess to be hermetic, not a guarantee from Gert. Gert's description of the opt-in should read: "The profile author asserts that the named subprocess command is a hermetic test double. Gert does not enforce isolation." This is a documentation/spec wording fix, not a code change.
+
+---
+
+---
+
+## SQL Live-Site Condition Verification (2026-08-17T06:56:00-07:00)
+
+### Condition under review
+> "We accept the refusal to make runbook-level approval tri-state, **PROVIDED** runbook-level `require_approval: false` never overrides per-action approval or classification semantics."
+
+---
+
+### Q1 — Plain tool step call path: what actually decides whether an approval gate fires?
+
+**Finding: for plain (non-substitution) tool steps, NO approval gate fires today at all.**
+
+The governance pre-flight in `internal/engine/engine.go:456` is:
+```go
+if h.engine.cfg.GovernanceEvaluator != nil {
+    ...
+    if evalResult.RequiresApproval { // line 506 — approval gate
+```
+
+`GovernanceEvaluator` is **never assigned** in any production `EngineConfig` construction:
+- `internal/adapter/wire.go:149–164` — returns `engine.EngineConfig{Executors, Dispatcher, TraceWriter, Platform, EventBus, Store, EvidenceHook, Evaluator, ConditionEvaluator, PromptProvider, InputProvider, ToolRuntime, ApprovalGate, TracerProvider}` — `GovernanceEvaluator` is absent.
+- `pkg/run/run.go:390–405` — same list, `GovernanceEvaluator` absent.
+
+Result: `cfg.GovernanceEvaluator == nil` in all production wiring. The nil-guard at `engine.go:456` is never entered. `ToolGovernance.RequiresApproval` is **not consulted on the plain-step path today**. Runbook-level `GovernanceConfig.RequireApproval` is also not enforced for plain steps (only the redaction patterns from `Plan.Governance` are used, via the separate check at `engine.go:641`).
+
+This is a pre-existing correctness gap, not a new regression. It is already on the Phase 1 work list ("direct-invocation approval gate enforcement on the Execute() path").
+
+---
+
+### Q2 — Substitution path: can runbook-level `require_approval: false` suppress a tool-level `requires-approval: true`?
+
+**No. The composition is strictly OR. A runbook-level `false` cannot suppress a tool-level `true`.**
+
+`pkg/pkgsubst/pkgsubst.go:276`:
+```go
+eff.RequireApproval = eff.RequireApproval || subRequireApproval
+```
+
+- `eff.RequireApproval` is seeded from the caller's `EffectiveGovernance.RequireApproval` (set via `WithEntryGovernance` in `gov_seed.go:30`, which copies `runbook.GovernanceConfig.RequireApproval` into context).
+- `subRequireApproval` is `subGov.RequireApproval` — the substituted tool package's `GovernanceConfig.RequireApproval` (line 273).
+
+If the caller (runbook) has `RequireApproval: false` and the substitute (tool) has `RequireApproval: true`, the result is `false || true = true`. The tool's requirement wins. The same logic applies in `BuildPolicy()` at `internal/governance/builder.go`:
+```go
+// RequireApproval: OR (if any source requires it, the merged policy requires it)
+if cfg.RequireApproval {
+    p.requireApproval = true
+}
+```
+
+There is no `false` assignment that can override a previously accumulated `true`. This is monotone-increasing composition — once `true`, it cannot go back to `false`. **The composition semantics do NOT allow runbook-level `false` to suppress tool-level `true`.**
+
+---
+
+### Q3 — Does current Gert satisfy their condition? Gap, if any?
+
+**Today:** Condition is **vacuously satisfied** on the plain-step path (no gate fires) and **structurally satisfied** on the substitution path (OR composition). There is no code path where runbook-level `require_approval: false` actively lowers a per-action approval requirement.
+
+**Phase 1 gap (not a violation of the condition, but a required implementation constraint):** When we wire `GovernanceEvaluator` for the plain-step path in Phase 1, the evaluator must be built from BOTH runbook-level governance AND per-tool-level governance (using the same OR semantics currently used in `BuildPolicy(configs...)`). If we naively build it from runbook-level governance only (as `planner.go:110` currently does for `Plan.Governance`), tool-level `requires-approval: true` would be invisible to the evaluator. That would be a new violation of the condition.
+
+**Required constraint for Phase 1 implementation:** The `GovernanceEvaluator` assigned to `EngineConfig.GovernanceEvaluator` must receive both `runbook.Governance` and the resolved per-tool `ToolGovernance` (collapsed to `GovernanceConfig` form) as inputs to `BuildPolicy(runbookConfig, toolConfig)`. The existing `BuildPolicy` variadic interface already supports this — it is an API call-site change, not an API change.
+
+**Composition semantics do NOT need changing.** The existing OR / max-restriction logic (`eff.RequireApproval || subRequireApproval` and `BuildPolicy`'s additive OR) is already correct. No structural change required.
+
+**Effort for the condition-preserving wiring:** included in the Phase 1 "direct-invocation approval gate" work. Not a separate item.
+
+---
+
+### Q4 — Does any retry/idempotency logic key off `RequiresApproval`?
+
+**Confirmed: nothing does. The two concepts are fully orthogonal in the current codebase.**
+
+- `schema.Step.Retry *RetryConfig` (`pkg/schema/step.go:52`) — retry configuration lives on the step, has its own `Idempotent bool` field (`step.go:93`). No reference to `RequiresApproval` anywhere in the retry type or in any code that reads it.
+- `internal/tool/mcp_http.go:284–296` — the 401 retry in the HTTP transport is for auth token refresh only. It does not read `RequiresApproval`.
+- `internal/tool/registry.go:49`, `overlay_registry.go:16,21,78` — "idempotent" here means idempotent tool registration (skip-if-exists). Unrelated to step retry.
+- Searched repo-wide for `Retry` and `RequiresApproval` co-occurrence: zero.
+
+`RequiresApproval = &false` implying `classification: read-only` is a semantic that exists nowhere in the current code. The SQL team's correction — explicit `&false` preserves only the approval opt-out, classification stays nil/unspecified — is consistent with actual code. There is no landmine here.
+
+---
+
+### Condition Verdict
+
+**The SQL team's condition is satisfied by current code on the substitution path and will be satisfied on the plain-step path by Phase 1 wiring, provided the GovernanceEvaluator is built from both runbook and per-tool governance inputs using existing OR semantics. Composition semantics require no change.**
+
+
+| Q | Finding | Action |
+|---|---------|--------|
+| Q1 | Defect confirmed. `ToolGovernance.RequiresApproval` is `bool`, no field-presence mechanism exists. SQL team's `*bool` fix is correct. | Accept. |
+| Q2 | Blast radius is minimal: 1 declaration line + 1 read site (`EffectiveGovernanceFromTool`). Schema and effective types are separate; effective types stay `bool`. | 0.5 days, clean change. |
+| Q3 | Runbook-level tri-state is over-scoped. `GovernanceConfig.RequireApproval` serves a different purpose and does not help classification grandfathering. Push back on this extension request. | Recommend rejection. Wide blast radius for zero benefit. |
+| Q4 | No golden file breaks. No marshal round-trip breaks. `tv-enum.yaml` is input-only. | No compatibility risk. |
+| Q5 | `ToolGovernance` change: 0.5 days. `GovernanceConfig` change (if forced): add 1.5–2 days. | Do `ToolGovernance` only. |
+| Q6 | Zero subprocess sandboxing. Full parent env inherited. Subprocess opt-in is a trusted assertion, not a technical guarantee. | Wording fix in profile spec. |
 
 
 ---
 
-## 2026-06-06 — Phase H Cutover COMPLETE (Don PR #16) — Runtime Migration COMPLETE
+# Slice 1 — Governance Schema Types: What Shipped
 
-**From:** Don — Runtime Engineer  
-**Date:** 2026-06-06T02:15:00-04:00  
-**PR:** https://github.com/ormasoftchile/gert/pull/16 (draft)  
-**Status:** ✅ SHIPPED — Hard cutover complete. New engine (GXL/GIS/GCP) is now unconditional.
+**Author:** Don (Backend Dev)
+**Date:** 2026-08-17T07:05:00-07:00
+**Status:** SHIPPED — commit a2e7db0 on `main`
 
-### Phases A→H Shipped Speculatively
+---
 
-Eight PRs total, all stacked draft train awaiting Germán's review pass:
-- PR #8 (Ken drift, independent pre-PJVM foundation)
-- PR #9→#10→#11→#12 (Don critical path: PJVM → Lexer/Parser → Evaluator → Path engine)
-- PR #13/#14 (Ken Phase E/F: GIS and GCP engines, folded into #15)
-- PR #15 (Don integration: side-by-side runtime, build-tagged adaptation, adapter pattern wiring, fixture migration)
-- **PR #16** (Don cutover: deletion of legacy engine, canonicalization of runbooks, unconditional new engine)
+## What Shipped
 
-### Deletions (Phase H)
+Three additive schema changes in `pkg/schema/tool.go`, one read-site update in `pkg/pkgsubst/pkgsubst.go`, one new validation function in `internal/tool/scan.go`, and four tri-state unit tests in `pkg/schema/tool_governance_test.go`.
 
-**9 files deleted (~670 LoC total):**
+### 1. Tri-State `RequiresApproval`
 
-| File | Purpose | Lines |
-|------|---------|-------|
-| `internal/expr/condition.go` | Legacy GXL condition evaluator | 63 |
-| `internal/expr/condition_test.go` | Legacy condition tests | 262 |
-| `internal/expr/template.go` | Legacy GIS template evaluator | 63 |
-| `internal/expr/template_test.go` | Legacy template tests | 45 |
-| `internal/adapter/evaluators_legacy.go` | Legacy factory wiring | 22 |
-| `pkg/run/evaluators_legacy.go` | Legacy CLI wiring | 22 |
-| `internal/engine/runbook_paths_legacy_test.go` | Legacy test fixture selector | 9 |
-| `examples/collect-health/check-service-gxl.runbook.yaml` | Promoted to canonical name | 80 |
-| `examples/collect-health/collect-health-gxl.runbook.yaml` | Promoted to canonical name | 104 |
+```go
+// Before
+RequiresApproval bool   `yaml:"requires-approval,omitempty" json:"requires-approval,omitempty"`
 
-**Dependency cleanup:**
-- `go mod tidy` removed `github.com/expr-lang/expr v1.17.8` from `go.mod`/`go.sum`
-
-**Build-tag constraints removed:**
-- 41 `//go:build gxl` pragmas dropped across Phase D-G files
-- 2 `//go:build !gxl` pragmas dropped from legacy factories
-- Total 43 files touched; new engine now unconditional
-
-### Runbook Canonicalization (Phase H)
-
-**12 runbook files migrated:**
-
-| File | Changes |
-|------|---------|
-| `collect-health.runbook.yaml` | `{{ .var }}` → `${var}` substitution; GXL variant promoted |
-| `check-service.runbook.yaml` | Inline Go-template conditional → GXL `branch` step with `str.contains()` |
-| 10 other legacy runbooks | Mechanical `{{ .varname }}` → `${varname}`, `{{ join .results "\n" }}` → `${results}` |
-
-**Special case:** `collect-health-parallel/check-service.runbook.yaml` had complex Go-template conditional:
+// After
+RequiresApproval *bool  `yaml:"requires-approval,omitempty" json:"requires-approval,omitempty"`
 ```
-{{ if contains .health_response "200" }}healthy{{ else }}degraded{{ end }}
+
+Semantics:
+- `nil` = governance block absent, or block present but field never authored (unspecified)
+- `&false` = explicit legacy approval opt-out
+- `&true` = approval required
+
+Read site updated: `pkg/pkgsubst/pkgsubst.go:EffectiveGovernanceFromTool()` — nil-guarded deref, nil resolves to `false` for the effective (resolved) bool. `EffectiveGovernance.RequireApproval` stays a plain `bool` as agreed.
+
+### 2. Per-Action `Classification`
+
+Added to `ToolAction` (not `ToolGovernance`):
+
+```go
+Classification *string `yaml:"classification,omitempty" json:"classification,omitempty"`
 ```
-Restructured as GXL `branch` step:
+
+Valid values: `"read-only"` | `"mutating"` | `"destructive"` | `"unspecified"`. `nil` = unspecified (absent). Pointer + omitempty so nil is distinguishable from `""`. Validation in `ParseToolFile` via `validateActionClassifications()` in `internal/tool/scan.go` — rejects unknown values with a clear error message, following the existing `validateActionEnums()` pattern.
+
+**ORTHOGONALITY UPHELD:** No code derives `Classification` from `RequiresApproval` or vice versa. An explicit `requires-approval: false` preserves only the approval opt-out. It does not assign, imply, or coerce `classification: read-only`. Documented in struct comments and verified by absence of any coupling in the codebase.
+
+### 3. `AllowedModes`
+
+Added to `ToolGovernance`:
+
+```go
+AllowedModes []string `yaml:"allowed-modes,omitempty" json:"allowed-modes,omitempty"`
+```
+
+Carries RunMode values (`real` / `dry-run` / `replay`). Field added only — no enforcement wiring (later slice). Separates RunMode semantics from `AllowedEnvironments`, which is repurposed as deployment-context allowlist in the agreed design.
+
+---
+
+## Validation Results
+
+- `go build ./...` — clean, exit 0
+- `go test ./pkg/schema/... ./pkg/pkgsubst/...` — all pass
+- `go test ./...` — all pass, zero failures, including `internal/conformance` (the 25 `requires-approval: false` fixtures in `tv-enum.yaml` unmarshal correctly to `*bool` pointing to `false`)
+
+Unit tests added (`pkg/schema/tool_governance_test.go`):
+- **(a)** governance block absent → `nil` ✅
+- **(b)** governance present with other fields, no `requires-approval` → `nil` ✅ ← the counterparty-caught defect
+- **(c)** explicit `requires-approval: false` → `&false` ✅
+- **(d)** explicit `requires-approval: true` → `&true` ✅
+
+---
+
+## Surprises
+
+**None structurally.** The pre-analysis was accurate.
+
+One minor observation: `pkg/pkgsubst/pkgsubst.go` was among the 138 pre-existing uncommitted files, so staging our edit caused git to record it as a "new file" in the commit (it wasn't in HEAD). The edit itself was correct and isolated — only two lines changed. The commit object is larger than expected (942 insertions) because it carried the entire pre-existing file content, but the semantic change is only the nil-guard logic in `EffectiveGovernanceFromTool`.
+
+---
+
+## What Is NOT Done (Later Slices)
+
+- **Fixture migration:** `tv-enum.yaml`'s 25 `AllowedEnvironments: ["real"]` entries should migrate to `AllowedModes: ["real"]`. Deferred — no enforcement today, deferred to migration slice.
+- **AllowedModes enforcement:** No runtime enforcement wired. Field is schema-only.
+- **Classification enforcement:** No gate wired. Field is schema-only. Gate wiring is Ken's Phase 1 work.
+- **GovernanceEvaluator wiring for plain steps:** Ken's work in `internal/adapter/wire.go`, `pkg/run/run.go`, `internal/governance/builder.go`, `internal/engine/engine.go`. Must pass both runbook and per-tool configs to `BuildPolicy()` to preserve OR semantics.
+
+---
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `pkg/schema/tool.go` | `RequiresApproval bool→*bool`, add `AllowedModes []string` to `ToolGovernance`, add `Classification *string` to `ToolAction` |
+| `pkg/pkgsubst/pkgsubst.go` | `EffectiveGovernanceFromTool`: nil-guarded deref of `RequiresApproval` |
+| `internal/tool/scan.go` | `validateActionClassifications()` helper + call in `ParseToolFile` |
+| `pkg/schema/tool_governance_test.go` | Four tri-state unit tests (new file) |
+
+
+---
+
+# Decision Record: Ken — Slice 2 Approval Enforcement
+
+**Date:** 2026-08-17  
+**Author:** Ken (Backend Dev)  
+**Status:** Shipped — commit `c810b96` on `main` in `ormasoftchile/gert`
+
+---
+
+## What Shipped
+
+Closed the live safety gap where `GovernanceEvaluator` was never wired in production, making the governance pre-flight block dead for all non-substitution tool invocations. The substitution path already had approval enforcement (`executeSubstitution` in `internal/executor/tool.go`); this slice extends it to direct tool calls across all transport types.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `pkg/governance/evaluator.go` | Added `ToolRequiresApproval bool` to `StepInfo` |
+| `internal/governance/evaluator.go` | `Evaluate()` now ORs `step.ToolRequiresApproval` with policy-level `requireApproval` |
+| `pkg/engine/run.go` | Added `GovernanceSource *schema.GovernanceConfig` to `ExecutionPlan` |
+| `internal/planner/planner.go` | Sets `plan.GovernanceSource = rb.Runbook.Governance` alongside compiled policy |
+| `internal/engine/engine.go` | Added `governanceEvaluator` to `runHandle`; built in `Start()`/`Resume()` from `plan.GovernanceSource`; `executeStep` uses it with fallback; tool steps get `StepInfo.ToolRequiresApproval` from `plan.Tools` lookup |
+| `internal/adapter/wire.go` | Added `GovernanceEvaluator: internalgovernance.BuildEvaluator(approvalGate)` to main and sub-engine configs |
+| `pkg/run/run.go` | Same as above for the external API wiring path |
+| `internal/engine/approval_enforcement_test.go` | New — 6 tests covering all 4 counterparty acceptance criteria |
+
+---
+
+## Chokepoint Decision
+
+**Chosen seam:** Engine pre-flight in `executeStep` (`internal/engine/engine.go`), before executor dispatch.
+
+**Justification:**
+- Single enforcement point regardless of transport (stdio-MCP, HTTP-MCP, process, native)
+- The approval gate plumbing already existed in this block — the pre-flight was fully implemented, just guarded by a nil check that was always true in production
+- Adding per-transport checks would require modifying `internal/tool/mcp.go`, `mcp_http.go`, and any future transport, creating an n-transport maintenance problem
+- The engine has access to both the plan (for tool governance lookup) and the approval gate — no new data threading needed
+
+---
+
+## Policy Composition Architecture
+
+The two-level governance policy (runbook + per-tool) is composed as follows:
+
+1. **Runbook-level**: `plan.GovernanceConfig` is stored in `ExecutionPlan.GovernanceSource`. At `engine.Start()`, `internalGov.BuildEvaluator(gate, plan.GovernanceSource)` builds a per-run `PolicyEvaluator` with `requireApproval` extracted from the runbook's governance block. This is stored in `runHandle.governanceEvaluator`.
+
+2. **Per-tool level**: In `executeStep`, for `kind == "tool"` steps, the tool definition is looked up from `plan.Tools` by tool name. If `toolDef.Governance.RequiresApproval != nil && *toolDef.Governance.RequiresApproval`, then `stepInfo.ToolRequiresApproval = true`.
+
+3. **Composition in evaluator**: `evaluator.Evaluate()` sets `result.RequiresApproval = e.requireApproval || step.ToolRequiresApproval` — monotone OR, never suppressing.
+
+**Binding guarantee preserved:** `require_approval: false` at runbook level cannot suppress `requires-approval: true` at tool level. Verified by `TestApproval_RunbookFalseCannotSuppressToolTrue`.
+
+---
+
+## What Surprised Me
+
+1. **Don's `*bool` change was already landed.** `ToolGovernance.RequiresApproval` is already `*bool` in the working tree. The nil-guard in `EffectiveGovernanceFromTool` (which Don owns) was also already done by the time I reached it — `pkg/pkgsubst/pkgsubst.go` compiles clean. My engine code uses `*toolDef.Governance.RequiresApproval` with explicit nil guards on both the Governance pointer and the RequiresApproval pointer.
+
+2. **`failRun` returns an infra error from `Next()`, not a step result.** When the approval gate denies, the engine calls `failRun()` which propagates as a non-EOF error from `Next()`. Test helpers that `t.Fatalf` on any non-EOF error from `Next()` break on the denial path. The test for `TestApproval_FiresForAllInvocationPaths` needed to handle this as a valid termination.
+
+3. **The full test suite was clean.** Wiring `GovernanceEvaluator` in production turned on a code path that was previously dead. No existing tests broke — the `NoOpApprovalGate` auto-approves in test contexts, and the per-run evaluator with empty/nil governance produces "allowed, no approval required" for all existing tests.
+
+4. **Sub-engine EngineConfigs in both wiring paths also needed wiring.** `runSubStepsViaEngine` in `wire.go` and `runSubSteps` in `run.go` each create a fresh EngineConfig for nested engine execution. Both also got `GovernanceEvaluator` wired. Without this, sub-steps (inside include/branch/iterate) would still have a nil evaluator.
+
+---
+
+## Remaining Gaps (not in scope, filing for awareness)
+
+- The `TerminalApprovalGate` reads from stdin synchronously. In non-TTY contexts (automated pipelines, test environments), any step with `requires-approval: true` will block indefinitely if the gate is misconfigured. `buildApprovalGate()` in `wire.go` selects between Terminal and NoOp based on `opts.TTYOutput`, and `cmd/gert/run.go` hardcodes `TTYOutput: true`. This is a pre-existing exposure, not introduced by this slice.
+- The `Plan.Governance` field (compiled `GovernancePolicy`) and `Plan.GovernanceSource` (raw config) are now redundant at construction time. A future cleanup could derive `Plan.Governance` from `GovernanceSource` lazily, but this is not blocking.
+
+
+---
+
+
+## PREVIOUS DECISIONS
+
+## 2026-08-16 — Architectural Evaluation: Runtime Portability for Gert Runbooks (Barbara)
+
+**Date:** 2026-08-16  
+**By:** Barbara (Lead / Architect)  
+**Requested by:** Cristiano (ormasoftchile)  
+**Input:** SQL Live-Site Operations implementation request, §1–§15  
+
+**Verdict: Accept-with-Modifications.** The ask is architecturally sound. The layering aligns with the seam that already exists: `pkg/tool.ToolTransport` interface and `ToolRuntime.Invoke` dispatch. However, §13's "no tool contract schema changes" non-goal contradicts the ask's own primary concern (capability preflight requires declared context support). Recommended: acknowledge the schema change is needed (additive, non-breaking); split preflight into static (Tier 0, default, mandatory) and dynamic tiers (Tier 2, opt-in); add `gert plan` dry-run; resolve whether library-vs-subprocess embedding is the target for Phase 2.
+
+**Full analysis:** See `.squad/decisions/archive/barbara-runtime-portability-ask-evaluation-2026-08-16.md` — comprehensive architecture ruling with phasing critique, contradiction analysis (schema vs. non-goal), and 5 error-code split for capability preflight.
+
+---
+
+## 2026-08-16 — Ground-Truth Report: Runtime Portability (Don)
+
+**Date:** 2026-08-16T15:59:48-07:00  
+**Prepared by:** Don (Backend Dev)  
+**For:** Barbara (architecture evaluation) and Gert Core Team
+
+**Verdict: All claims accurate except run-gert.ps1 (does not exist in Gert core).** 7 of 8 "exists" claims verified TRUE; `run-gert.ps1` claim FALSE (not in source, may be in consumer repo). All 5 "does not exist" claims verified absent. KEY FINDING: `ToolGovernance.AllowedEnvironments` and `RequiresCapabilities` already exist in schema (`pkg/schema/tool.go:50`) but are completely unenforced in runtime code — **zero references** in any Go file. This is a low-cost path to delivering Cristiano's core concern (preflight "not configured for this environment" error) without waiting for full runtime binding resolver. Also found: `mcp-http` transport fully implemented with SSE parsing, TokenGate enforcement, `AuthProvider` interface, and `AzureCLIAuthProvider`. Phase estimates: Phase 1 is optimistic (should be 6–8wk, not 4–6); Phase 2 wildly optimistic without answering OQ-2 (library vs subprocess); Phase 3 adds idempotency/reconnect infrastructure underspecified in current ask.
+
+**Full report:** See `.squad/decisions/archive/don-runtime-portability-ground-truth-2026-08-16.md` — complete verification matrix with 13 evidence bullets and phase-by-phase scope assessment.
+
+---
+
+## 2026-08-16 — Integration Critique: Runtime Portability (David)
+
+**Date:** 2026-08-16T15:59:48-07:00  
+**Prepared by:** David (Integration Engineer)  
+**For:** Cristiano and architecture team
+
+**Verdict: Three critical blockers in integration protocol; one critical phase-ordering risk; multiple tiering and error-taxonomy gaps.** (1) §10.1's preflight steps 2–3 answer the wrong question — they conflate static "is this configured?" with dynamic "can I reach it now?"; must split into Tier 0 (static, default, mandatory), Tier 1 (local reachability, opt-in), and Tier 2 (live, opt-in). (2) Error taxonomy `binding/tool-not-found` too coarse; must split into 5 codes: `config/tool-unresolved`, `config/no-binding-for-profile`, `config/binding-incomplete`, `auth/credential-failure`, `transport/endpoint-unreachable`. (3) Host bridge protocol missing four essential fields: `protocol_version`, host capability advertisement (required for Tier 0 preflight), `run_id/step_id` correlation (audit), and explicit `CancelRequest` message type for IPC. (4) **Phase-ordering risk:** §10.4 (reconnect/late-result handling) deferred to Phase 3 (8–12 weeks), but direct-HTTP MCP transport ships in Phase 1 with timeouts/disconnections that leave mutating-action state indeterminate. Mitigation: Phase 1 ships explicit "halt-on-timeout, no retry" policy, not undefined behavior. For destructive actions, must choose: implement proper Phase 3 semantics before ship, OR restrict Phase 1 to read-only tools only.
+
+**Full critique:** See `.squad/decisions/archive/david-runtime-portability-integration-critique-2026-08-16.md` — 3 areas (preflight, host bridge protocol, idempotency), 16 detailed findings, complete tiered-preflight specification, revised error taxonomy with operator messages, and explicit risk call-outs.
+
+---
+
+## 2026-08-15 — Dynamic Runbook Includes Feature — COMPLETE (Phase 4 Sessions)
+
+**Status:** Feature implemented, tested, reviewed, approved. Ready for merge.
+
+**Summary:** Runtime-resolved (dynamic) runbook includes in the `gert` Go repo. Catalog-based dynamic include form (`include: {runbook_ref: "${...}", resolve_from: catalog, with: {...}}`) resolving an identity against approved package-export catalogs at execution time — never an arbitrary filesystem path. Driving use case: an ICM orchestrator that takes an incident ID, applies deterministic rules to suggest a TSG, checks whether that TSG exists as a gert runbook, asks the operator to confirm, then dynamically includes it.
+
+**Spawn Manifest — Sessions in order:**
+
+1. **Barbara** (architect, claude-opus-4.6) — authored the binding architecture contract that gated all implementation streams. Issued rulings B-1 through B-21 across multiple arbitration rounds. Served as the code-review gate. Outcome: **APPROVE WITH CONDITIONS** — all 11 user requirements MET, three documentation-only conditions.
+
+2. **Tess** (tester, claude-sonnet-4.6) — authored conformance vectors before implementation existed. Drove real CLI end-to-end. Found 5 defects by exercising the actual binary. Closed corpus at 26 pass / 3 skip / 0 fail. Outcome: corpus closed, all skips permanent with closing rulings.
+
+3. **Ken** (backend, claude-sonnet-4.6) — Stream 1: schema, parser, errkit error taxonomy (DINC-001..013). Fixed DEF-003 and DEF-005. Locked out after DINC-007 reclassification, unable to apply Barbara B-15 himself.
+
+4. **Don** (backend, claude-sonnet-4.6) — Streams 2 & 3: planner, preview/dry-run rendering, executor (`executeDynamic`). Fixed DEF-001 (two visitors bug), applied B-15 on Ken's behalf during lockout, fixed DEF-006 (entry governance never seeded).
+
+5. **David** (backend, claude-sonnet-4.6) — Stream 4: pin recording, replay re-binding, resume-drift detection. Filed two deferred defects (B-18, B-19/B-20). Corrected coordinator's description three times.
+
+**Architecture Rulings — B-1 through B-21 (Complete List):**
+
+All rulings below are from Barbara's binding contract and rulings document, incorporated with full authority:
+
+**B-1** (DINC-001): Rendered Reference Validation — Empty, path-like, or non-ASCII refs rejected before catalog lookup.
+**B-2** (DINC-002): Reference Scope — Bare IDs and package-qualified IDs only; no paths, no URIs, no relative components.
+**B-3** (DINC-003): Catalog-Only Constraint — Structurally enforced: no filesystem access, no exec.Command, no http.Client on resolution path.
+**B-4** (DINC-004): Include Cycle Detection — Tracked via call stack in context; cycle detected at runtime before execution.
+**B-5** (DINC-005): Include Depth Limit — Max 8 levels deep; exceeded depth raises DINC-005.
+**B-6** (DINC-006): Required Input Validation — Child inputs checked for required fields; missing required raises DINC-006.
+**B-7** (DINC-W007): Extra Input Key Warning — Child runbook receives unexpected input keys; emitted as warning, non-fatal.
+**B-8** (DINC-008): Input Enum Validation — Input values matched against declared enums; mismatch raises DINC-008.
+**B-9** (DINC-009): Output Schema Mismatch — Child output structure validated against child schema; mismatch raises DINC-009.
+**B-10** (DINC-010): Child Package Missing — Child's `requires:` entry not in frozen catalog; raises DINC-010.
+**B-11** (DINC-011): Child Tool Unresolvable — Child's `toolRefs:` entry not in frozen catalog; raises DINC-011.
+**B-12** (DINC-W001): Governance Widening Warning — Parent governance composed with child governance; any widening emits DINC-W001.
+**B-13** (DINC-W002): Deprecated Fields Warning — Deprecated field values emit DINC-W002.
+**B-14** (DINC-W003): Include Resolution Warning — Reserved for informational includes-resolution warnings.
+**B-15** (DINC-W007 reclassification): Errkit sentinel must classify as `DINC-W007`/class `"DINC-W"`, not `DINC-007`/class `"DINC"`. Required pre-ship.
+**B-16** (Frozen Catalog Invariant): Resolved package set is locked at plan time. Include execution cannot trigger new package downloads.
+**B-17** (On-Not-Found Behavior): `on_not_found: continue` allows runbook to not exist; sets `result.Vars["runbook_found"] = false`; step completes (not failed).
+**B-18** (DEFERRED): Static Include Governance Gap — Non-dynamic branch does not enforce composed governance. Deferred due to production risk.
+**B-19** (DEFERRED): when: Field Inert — `CollectorField.When` works; `Step.When` and `IncludeConfig.When` are inert. Code fix deferred; documentation applied.
+**B-20** (Documentation): when: Remediation — Schema `description` fields added to three inert `when:` entries. Example warning comment added.
+**B-21** (Documentation): require_approval Scope — Schema `description` added noting TTY-only enforcement; auto-approves non-interactive.
+
+**Conformance Corpus Status:**
+- **Total vectors:** 29 (designed corpus)
+- **Pass:** 26
+- **Skip:** 3 (permanent, documented)
+- **Fail:** 0
+
+**Deferred Defect Records (Open Work):**
+
+**B-18 — Static Include Governance Gap** (filed by David, 2026-08-15)
+Non-dynamic branch of `IncludeExecutor.Execute` does not enforce composed governance. Both eager-static and lazy-static affected. Dynamic includes (fixed) unaffected. Deferred due to production risk; requires separate migration with deprecation/flag plan. Full analysis in `.squad/decisions/inbox/defect-static-include-governance-gap.md`.
+
+**B-19 / B-20 — when: Field Inert in Two of Three Definitions** (filed by David)
+`CollectorField.When` works; `Step.When` and `IncludeConfig.When` are schema-accepted but inert at runtime. Code fix deferred; documentation remediation applied. Open work tracked separately.
+
+**B-21 — require_approval TTY-Only Enforcement** (ruled by Barbara)
+Enforced only in TTY/interactive mode; auto-approves non-interactive runs. Ruled acceptable as designed for v1 MVP. Documented in schema and examples.
+
+**Key Findings from Implementation:**
+- DEF-001: CLI preflight crash on every dynamic-include runbook (fixed by Don: two visitors bug)
+- DEF-003: Governance composed but never enforced in dynamic path (fixed by Ken: added enforcement at execution boundary)
+- DEF-006: Entry runbook governance never seeded (fixed by Don: seed governance at plan time)
+
+**Architecture Review:** Barbara's review gate approved with three documentation-only conditions, all satisfied. All 11 user requirements verified met.
+
+**Inbox Merged:** 13 files totaling ~200KB (barbara-dynamic-include-contract, barbara-dynamic-include-rulings, barbara-dynamic-include-review, tess-dynamic-include-vectors, tess-dynamic-include-open-questions, tess-dynamic-include-e2e, ken-dynamic-include-stream1, ken-dynamic-include-governance, don-dynamic-include-stream2, don-dynamic-include-stream3, david-dynamic-include-stream4, defect-static-include-governance-gap, defect-when-field-not-evaluated)
+
+## Inbox Merged
+
+Files merged: 9
+
+# Architecture Contract: Streamable HTTP MCP Transport
+
+**Author:** Barbara (Lead / Architect)
+**Date:** 2026-08-16T00:55:39Z
+**Status:** RATIFIED — all implementation streams build against this contract
+**Continues from:** B-21 (dynamic-include rulings). New rulings start at B-22.
+
+---
+
+## 0. Preamble — Existing Architecture Confirmed
+
+Before specifying the new work, I confirm the following about the existing codebase (verified by reading the source directly):
+
+**The transport seam already exists.** `pkg/tool.ToolTransport` is:
+```go
+type ToolTransport interface {
+    Invoke(ctx context.Context, def ToolDef, action string, args map[string]any) (*ToolResult, error)
+    Close() error
+}
+```
+
+`DefaultToolRuntime.Invoke` (`internal/tool/runtime.go`) dispatches on `def.Transport` via a switch statement. Persistent transports (JSONRPC, MCP) are pooled in `r.persistent[toolName]`. This is the integration point for the new HTTP transport.
+
+**The stdio MCP transport is self-contained.** `MCPTransport` (`internal/tool/mcp.go`) owns:
+- Process lifecycle (`StartProcess`, `ensureStarted`)
+- Content-Length framing (`writeMCPMessage`, `readMCPMessage`, `readContentLength`)
+- MCP lifecycle (`initialize` → read response → `initialized` notification)
+- `tools/call` and `tools/list` dispatch
+- Response parsing (`mcpResponse`, `mcpCallResult`, `mcpContent`)
+
+The JSON-RPC logic is welded to stdio pipes. **No refactor of `MCPTransport` is required.** The new HTTP transport implements the same `ToolTransport` interface independently. The two share response-parsing types (extracted to a shared file) but not I/O logic.
+
+**Schema transport config** (`pkg/schema/tool.go`):
+```go
+type TransportConfig struct {
+    Type    Transport         // legacy enum
+    Mode    string            // canonical (overrides Type)
+    Command string
+    Args    []string
+    Env     map[string]string
+}
+```
+
+Currently has no URL or auth fields. These must be added.
+
+---
+
+## 1. Schema Extension
+
+### 1.1 TransportConfig additions
+
+```go
+// pkg/schema/tool.go — additions to TransportConfig
+type TransportConfig struct {
+    // ... existing fields ...
+    URL  string      `yaml:"url,omitempty"  json:"url,omitempty"`
+    Auth *AuthConfig `yaml:"auth,omitempty" json:"auth,omitempty"`
+}
+
+type AuthConfig struct {
+    Provider     string   `yaml:"provider"             json:"provider"`
+    Scope        string   `yaml:"scope,omitempty"       json:"scope,omitempty"`
+    AllowedHosts []string `yaml:"allowed_hosts"         json:"allowed_hosts"`
+}
+```
+
+### 1.2 New transport constant
+
+```go
+// pkg/tool/tool.go
+const TransportMCPHTTP TransportType = "mcp-http"
+```
+
+Also add to `pkg/schema/tool.go`:
+```go
+const TransportMCPHTTP Transport = "mcp-http"
+```
+
+### 1.3 Validation rules
+
+| Condition | Error |
+|---|---|
+| `mode: mcp-http` without `url` | Schema validation error |
+| `mode: mcp-http` with `command` or `args` | Schema validation error (mutually exclusive with url) |
+| `url` does not start with `https://` | `MCP-001` (HTTPS required for remote endpoints) |
+| `auth` configured without `allowed_hosts` | `MCP-010` (fatal: allowed_hosts required when auth present) |
+| `url` host not in `allowed_hosts` | `MCP-011` (fatal: host mismatch caught at validation) |
+| `auth.provider` is not a recognized provider name | `MCP-002` (unknown auth provider) |
+
+**B-22 Ruling — HTTPS only:** Remote MCP endpoints MUST use HTTPS. Plain HTTP is rejected at validation time. No `--allow-insecure` escape hatch in this iteration. Rationale: MCP tool calls carry operator credentials and can mutate production systems (IcM ticket actions). Allowing HTTP would let a network-position attacker intercept bearer tokens. Localhost exceptions are not needed because a local MCP server would use `mode: mcp` (stdio).
+
+### 1.4 Target YAML shape (matches user requirement exactly)
+
 ```yaml
-- name: evaluate-health
-  run: |-
-    if str.contains(health_response, "200") then
-      "healthy"
-    else
-      "degraded"
-    end
+transport:
+  mode: mcp-http
+  url: https://icm-mcp-prod.azure-api.net/v1/
+  auth:
+    provider: azure-cli
+    scope: api://icmmcpapi-prod/mcp.tools
+    allowed_hosts:
+      - icm-mcp-prod.azure-api.net
 ```
 
-**Capture path alignment:** `exitCode` (camelCase, legacy) → `exit_code` (snake_case, GCP adapter standard)
+---
 
-### Validation
+## 2. HTTP MCP Transport Implementation
 
-- ✅ `go build ./...` clean (no `-tags` needed)
-- ✅ `go test ./...` — 267/267 conformance corpus green
-- ✅ `go test ./...` — 4/4 integration e2e tests green
-- ⚠️ Pre-existing `TestRender_Regions` markdown failure remains (absolute path issue, unrelated to Phase H, acknowledged since Phase G)
+### 2.1 Type and location
 
-### Spec Alignment & Migration Guide
+```go
+// internal/tool/mcp_http.go
+type MCPHTTPTransport struct {
+    mu          sync.Mutex
+    url         string
+    auth        AuthProvider   // §4
+    sessionID   string         // from Mcp-Session-Id response header
+    initialized bool
+    httpClient  *http.Client
+}
+```
 
-**Breaking changes documented in CHANGELOG/migration guide:**
+Implements `pkg/tool.ToolTransport`.
 
-1. **GIS mandatory-miss-as-error:** (Ratified Barbara `e819895` 2026-06-06T01:40:00-04:00) — missing paths in `${...}` now raise `GIS-PATH-MISSING` error. Legacy engine returned empty string. Authors must use optional chaining (`${var?.path}`) or capture defaults for soft-miss semantics.
+### 2.2 Lifecycle — initialize → tools/call
 
-2. **GCP capture path snake_case:** `exitCode` → `exit_code` per GCP adapter specification (Ken's Phase F). Existing runbooks using camelCase will error under strict adapter validation.
+On first `Invoke` call (lazy, same pattern as stdio):
 
-3. **GXL condition syntax migration:** `{{ if }}...{{ end }}` (Go-template) → GXL `branch` step with `if...then...else...end` (GXL syntax). Existing runbooks must be rewritten; no auto-migration tool.
+1. **Send `initialize` request** — HTTP POST to `url` with:
+   - Body: JSON-RPC 2.0 `initialize` message (same params as stdio: `protocolVersion`, `capabilities`, `clientInfo`)
+   - Header: `Content-Type: application/json`
+   - Header: `Accept: application/json, text/event-stream`
+   - Header: `MCP-Protocol-Version: 2025-03-26`
+   - Header: `Authorization: Bearer <token>` (from auth provider, §4)
 
-### No GIS Mandatory-Miss Exposure Found
+2. **Parse response** — detect Content-Type:
+   - `application/json` → parse body directly as JSON-RPC response
+   - `text/event-stream` → parse SSE stream, extract `data:` lines, assemble JSON-RPC response (§3)
 
-Barbara's Option A ratification (mandatory-miss-as-error) proved low-risk in practice. Runbook survey of 10 legacy examples in `ormasoftchile/gert/examples/`: **all used simple `${var}` substitution, none relied on silent-miss default semantics.** No production runbooks blocked by this breaking change.
+3. **Capture `Mcp-Session-Id`** from response headers. Store in `t.sessionID`.
 
-### Stack Final
+4. **Send `notifications/initialized`** — HTTP POST to `url` with:
+   - Body: JSON-RPC 2.0 notification (no `id` field)
+   - Header: `Mcp-Session-Id: <captured value>` (if server provided one)
+   - No response body expected (HTTP 204 or 202 accepted)
 
-**PR order (all draft, awaiting Germán review pass):**
-1. PR #8 (Ken, independent)
-2. PR #9 → #10 → #11 → #12 (Don critical path)
-3. PR #13 + #14 (Ken E/F, folded into #15)
-4. PR #15 (Don integration)
-5. PR #16 (Don cutover)
+5. Mark `t.initialized = true`.
 
-**Total:** 8 PRs, zero handoffs, zero deferred work. All exit criteria met.
+Subsequent `Invoke` / `ListTools` calls:
+- Send `tools/call` or `tools/list` as HTTP POST
+- Include `Mcp-Session-Id` header if present
+- Include `Authorization` header (refreshed if expired, §4.3)
+- Include `MCP-Protocol-Version: 2025-03-26`
+- Parse response (JSON or SSE, §3)
+- Convert to `*ToolResult` exactly as stdio does
 
-### Key Learnings — Cutover Patterns
+### 2.3 Protocol version
 
-1. **File-pair deletion of `_legacy.go` siblings:** Legacy wiring lived in parallel `evaluators_legacy.go` + `evaluators_gxl.go` pairs across `internal/adapter/` and `pkg/run/`. Phase H deletion of both `_legacy` variants leaves only unconditional `evaluators.go` → cleaner final surface.
+**B-23 Ruling — Version pinning:** gert advertises `MCP-Protocol-Version: 2025-03-26` (the current Streamable HTTP spec). If the server returns an HTTP 4xx with a body indicating version mismatch, emit `MCP-003` (fatal). If the server simply ignores the header and responds successfully, proceed — interoperability with older servers that don't enforce version headers is acceptable.
 
-2. **Snake-case alignment with capture adapter:** Legacy `exitCode` (camelCase, expr-lang convention) vs. new `exit_code` (snake_case, GCP spec). This mismatch surfaced in PR #15 integration tests; Phase H migration guide must flag it explicitly or canonical runbooks will have non-portable exit-code references.
+### 2.4 Session ID semantics
 
-3. **GXL `branch` step restructuring of Go-template conditionals:** Simple `{{ if }}...{{ end }}` can be replaced with `if...then...else...end` GXL expression directly in a single step value. Complex nested conditionals with mixed data operations (e.g., `{{ if contains .health_response "200" }}healthy{{ end }}`) map to GXL `branch` step + function call (`str.contains()`). Fixture migration requires careful reading of intent, not mechanical Find-Replace.
+| Scenario | Behavior |
+|---|---|
+| Server returns `Mcp-Session-Id` on initialize | Store; send on all subsequent requests |
+| Server omits `Mcp-Session-Id` | Proceed without it; do not fail |
+| Server returns HTTP 404 on a request with session ID | Session expired — re-initialize (once) then retry the failed request. If re-init also fails, emit `MCP-004` (fatal). |
 
-### Next Actions
+The session ID lives on the `MCPHTTPTransport` instance, which is pooled per tool name in `DefaultToolRuntime.persistent`. This means the session survives across multiple tool calls within a single run — correct behavior.
 
-- Germán: Review stack (#8→#16) and merge once all gates pass
-- Tess: No corpus changes; 267/267 conformance locked in Phase H
-- Barbara: Breaking changes documented; Phase H closes migration window
-- Future: All runtimes (C#, TS, etc.) target GXL/GIS/GCP spec directly; no legacy dual-engine concerns
+### 2.5 Close
 
-
-Note: path renamed to vector.schema.json on 2026-06-07 per Barbara ratification (entry barbara-schema-rulings-2026-06-07).
+`Close()` sends a JSON-RPC `shutdown` notification (best-effort, no response expected) if a session is active, then drops the HTTP client. No process to kill.
 
 ---
 
-## 2026-08-09 — GERT Tool Packages MVP — Spec Authored (Barbara ruling actioned)
+## 3. Transport Framing — SSE Handling
 
-**By:** Edith (Spec Editor)
-**Ruling:** `.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md` (Barbara, ratified 2026-08-09, AR-TP-1..10) — moved from `inbox/` to `archive/` as fully actioned; no clauses reopened, no contradictions found.
+### 3.1 Content-Type detection
 
-**What shipped:** The complete Tool Packages MVP is now normative spec text, not a proposal:
+On every HTTP response:
+- If `Content-Type` starts with `application/json` → read full body, parse as single JSON-RPC response.
+- If `Content-Type` starts with `text/event-stream` → parse as SSE stream (§3.2).
+- Otherwise → `MCP-005` (unexpected content type).
 
-- **Bindings (AR-TP-1):** `requires:` is canonical; `toolPackages:` is rejected (`PKG-020`, no alias, no dual-read); `toolRefs:` binds/narrows only; `alias` removed from the `ToolRef` schema; `source`/`actions` retained as deprecated (D-001/D-002), non-enforcing, warning-only (`PKG-W002`/`PKG-W001`).
-- **Resolution (AR-TP-2):** Two-phase (catalog freeze, then per-file bind) discovery, 5 deterministic tiers, same-tier collision is `PKG-006`, undeclared cross-tier shadowing is `PKG-022` (the one intentional breaking change vs. prior "later wins" text), enumeration fully sorted for byte-identical catalog digests.
-- **Schemas (AR-TP-3):** New `tool-package/v1`, `config/v1`, `package-lock/v1` schemas; `runbook.v1.schema.json` gained `requires`/`PackageRequirement` additively.
-- **Versioning (AR-TP-4):** Strict SemVer 2.0.0, small conjunctive constraint grammar, validation only — no solving.
-- **Substitution (AR-TP-5):** Declared in `.tool.yaml`, resolved relative to the declaring file, exact I/O signature match, governance composed by the ruled invariant table (never widened), max depth 4, traced as nested spans.
-- **Paths (AR-TP-6):** POSIX-only authored paths, realpath containment, junction/reparse handling, escape is `PKG-007` hard fail.
-- **Digests/trace/resume (AR-TP-7):** Raw-byte SHA-256, order-independent sha256sum-style digests; 5 new trace events; resume hard-refuses on drift (`PKG-009`, overridable), replay is non-fatal on drift.
-- **Scoping (AR-TP-8):** Tool-name binding is lexically scoped per file (asymmetric with shared variable scope); package set is global per run; lazy includes are still package-analysed at plan time.
-- **Conformance (AR-TP-9/9b):** Full `PKG-001..028` + `PKG-W001..003` error catalog registered in `03d-parse-time-enforcement.tex`; 7 new categories + `PackageExpected` shape registered in `conformance/vector.schema.json` for Tess to author `tv-pkg-resolve.yaml` against (not authored by Edith — file ownership per ruling).
-- **No shims (AR-TP-10):** Pre-1.0, no compatibility shims; the cross-tier shadowing behaviour change is documented as intentionally breaking.
+### 3.2 SSE parsing
 
-**Files changed:** see `.squad/agents/edith/history.md` entry "2026-08-09T14:44:49-07:00 — GERT Tool Packages MVP — Full Spec Authoring" for the full file list.
+SSE events consist of lines. The parser handles:
+- `data: <json>` — append to current event's data buffer (with `\n` between multi-line data)
+- Empty line — event boundary; dispatch accumulated data
+- `event:` — ignored (MCP uses only the default event type)
+- `id:` — ignored (MCP does not use SSE last-event-id)
+- Lines starting with `:` — comments, ignored
 
-**Validation:** `verify_corpus.py` 280/280 vectors validate (no regressions); full `tectonic` LaTeX build succeeds; all schemas Draft 2020-12 valid; example package + r23 fixture validate against their schemas.
+For a given JSON-RPC request with `id: N`, the SSE stream may contain:
+- Zero or more JSON-RPC notifications (no `id` field) — these are progress/log messages; log them but do not treat as the response.
+- Exactly one JSON-RPC response with `id: N` — this is the terminal response. Once received, stop reading the stream.
 
-**Deferred to Tess:** `conformance/tv-pkg-resolve.yaml` and its conformance vectors — explicitly out of Edith's scope per the ruling's file-ownership split.
+If the stream closes (HTTP connection ends) before a response with matching `id` is received → `MCP-006` (incomplete SSE stream).
 
-**Status:** Ratified ruling fully actioned into spec. Ready for review.
+### 3.3 Timeout
 
----
-
-## 2026-08-09 — GERT Tool Packages MVP — Gate Review #1 (REJECTED)
-
-**By:** Barbara (Lead / Architect)  
-**Date:** 2026-08-09T14:47-07:00  
-**Requested by:** Cristián Ormazábal Ortega  
-**Reviews:** Edith's Tool Packages MVP spec/schemas/fixtures against `.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md` (AR-TP-1..10, ratified)  
-**Verdict:** **REJECTED** — 15 required corrections (R1–R15); architecture direction sound, defects are locally fixable wiring and under-specification.  
-**Reviser designated:** **Don** (Backend Dev / runtime semantics). **Edith is locked out** per reviewer lockout protocol.
-
-**Full entry:** `.squad/decisions/inbox/barbara-tool-packages-gate-review.md`
-
-### R1–R15 Blocking Issues (Summary)
-
-| # | Category | Issue |
-|---|----------|-------|
-| R1–R5 | Semantic contradictions / under-specification | Action shape (map vs. list), `impl:` collision, undefined output capture, invalid reference example, unstated path bases |
-| R6–R10 | Wiring failures | PKG-020/021 unreachable, `dependencies` schema contradiction, `apiVersion` mismatch, tier-3 incompatible, collision rule contradiction |
-| R11–R15 | Wiring failures (medium severity) | Undefined replay semantics, unreconciled `tool.version`, unenforced lock invariant, missing error codes, no real/mock acceptance scenario |
-
-### Requirements
-
-1. **R1:** Establish one canonical `tool/v1` action shape; reconcile `args/output` with `inputs/outputs`
-2. **R2:** Disambiguate per-action `impl:` key (collides with top-level mobile `impl:`)
-3. **R3:** Define `outputs.<name>` capture namespace for substituted actions
-4. **R4:** Rewrite reference substitute so it produces declared output via valid GCP
-5. **R5:** Create explicit "Resolution base per path kind" table; verify no escapes
-6. **R6:** Add mandated pre-schema raw-document scan for `toolPackages:` and `alias:`
-7. **R7:** Fix `dependencies` schema/PKG-016 contradiction
-8. **R8:** Normalize `apiVersion` values across examples and schemas
-9. **R9:** Make tier-3 addressing schema-compatible (qualified `name` only)
-10. **R10:** Split collision paragraph into cross-source vs. same-source cases
-11. **R11:** Define substitution replay behavior (relates to non-fatal `replay/packageDrift`)
-12. **R12:** Reconcile step-level `tool.version` as deprecated/intersected constraint
-13. **R13:** Tighten lock-root pattern to structurally forbid raw absolute paths
-14. **R14:** Assign error codes for unspecified conditions
-15. **R15:** Provide concrete unchanged-runbook scenario with mode variations
-
-### Deferred Tess Work
-
-Tess's `conformance/tv-pkg-resolve.yaml` (≥46 vectors) blocked pending R1–R9 resolution. Vector target list specified; do not author until R1–R9 land.
-
-### Gate Disposition
-
-**REJECTED.** Fifteen required corrections identified. Architecture ruling remains authoritative; no re-litigation. R1–R5 are highest-risk semantic areas (substitution, path safety); R6–R15 are wiring failures that make ruled error codes unreachable or ruled mechanisms unusable. All locally fixable.
-
-**Reviser:** Don (independent, Edith locked out). Re-submit for second gate pass.
+HTTP requests use the context deadline from `ctx`. If the context has no deadline, a default 120-second timeout is applied. This is configurable via a future `timeout:` field on `TransportConfig` (not in this iteration — hardcode 120s).
 
 ---
 
-## 2026-08-09 — GERT Tool Packages MVP — Rejection Revision (R1–R15), by Don (independent)
+## 4. Authentication Provider
 
-**By:** Don (Backend Developer), acting independently as revision owner. Edith (original
-author) was locked out per Cristian's directive and did not advise or contribute to this
-revision.
+### 4.1 Interface
 
-**Subject:** Barbara rejected Edith's Tool Packages MVP spec/schemas/fixtures
-(`.squad/decisions/inbox/barbara-tool-packages-gate-review.md`, 15 blocking items
-R1–R15). This entry records Don's resolution of all 15, plus the optional R16
-(`warnings:` on `PackageExpected`), without reopening the ratified architecture ruling
-(`.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md`, AR-TP-1..10).
+```go
+// internal/tool/auth.go
+type AuthProvider interface {
+    // Token returns a valid bearer token. Implementations handle
+    // acquisition, caching, and refresh.
+    Token(ctx context.Context) (string, error)
+}
+```
 
-**Resolution summary (see `.squad/decisions/inbox/don-tool-packages-revision-r1-r15.md`
-for the full R1–R15 matrix, file list, validation outcome, and Tess follow-up notes):**
-- R1: `actions:` is always a list; unified `args:` vocabulary; `output:` vs `outputs:` kept deliberately distinct.
-- R2: per-action `impl:` renamed `execute:` to stop colliding with top-level mobile `impl:`.
-- R3: new `outputs.<name>` GCP capture root for substituted-action outputs (`grammar/gcp.ebnf`).
-- R4: reference substitute (`drain-node.yaml`) reworked to actually produce its declared output via valid GCP, not a literal.
-- R5: new "Resolution base per path kind" table in `06-tool-runtime.tex` naming containment roots explicitly.
-- R6: PKG-020/PKG-021 made reachable via a mandated pre-schema raw-document scan.
-- R7: `dependencies` schema no longer contradicts PKG-016 reachability.
-- R8: `apiVersion` values corrected across manifest examples.
-- R9: tier-3 addressed only via qualified `name`, never `package` (schema-compatible with MCP single-label names).
-- R10: §05 collision paragraph split into cross-source (precedence) vs. same-source (hard error).
-- R11: substitution replays like `invoke` (executes against the caller's scenario file); tied explicitly to non-fatal `replay/packageDrift`.
-- R12: `ToolInvocation.version` redefined as plan-time-evaluated, intersected, deprecated in favor of `toolRefs[].version`.
-- R13: lock-file `root` pattern structurally forbids raw absolute paths.
-- R14: new `PKG-029` (package+path mutual exclusivity) and `PKG-030` (unresolved name) error codes.
-- R15: r23 fixture now documents an unchanged-runbook real/dry-run/replay acceptance scenario with a worked scenario-file override map.
-- R16: `PackageExpected.warnings` added to `conformance/vector.schema.json`.
+### 4.2 `azure-cli` provider
 
-**Validation:** All touched JSON schemas valid; all touched YAML fixtures parse;
-`verify_corpus.py` 280/280 vectors validate (no regression from the `vector.schema.json`
-change); full `tectonic` LaTeX build of `main.tex` succeeds with no new errors or
-undefined references (the two pre-existing undefined refs are in untouched files, out of
-scope).
+```go
+// internal/tool/auth_azurecli.go
+type AzureCLIAuthProvider struct {
+    scope string
+    // cached token + expiry
+    mu       sync.Mutex
+    token    string
+    expiry   time.Time
+}
+```
 
-**Deviations flagged for Barbara's second gate pass (not fixed, out of scope):** a
-pre-existing terminology overload between §07's trace-event replay and §13's
-execution-mode replay (both called "replay"); the corpus-wide `apiVersion: runbook/v2`
-issue (Barbara's non-blocking note #5, separately ticketed).
+Acquires a token by executing:
+```
+az account get-access-token --scope <scope> --query accessToken -o tsv
+```
 
-**Deferred to Tess (unchanged from the ruling):** the ≥46-vector
-`conformance/tv-pkg-resolve.yaml` corpus. Not authored in this revision per explicit
-task scope — Tess should author it against the now-resolved contracts once this revision
-clears gate review.
+**B-24 Ruling — No credential in YAML, trace, log, or error:**
+- The `scope` field is the only auth-related value that appears in YAML. It is a resource identifier, not a credential.
+- The acquired bearer token MUST NOT appear in: YAML files, trace events, log output, error messages, step output, `ToolResult.Stdout`, or diagnostic dumps.
+- If auth fails, the error message reports the failure reason (e.g., "az CLI not authenticated") but NEVER includes the token value.
+- The `Authorization` header value is never logged by gert's HTTP client (use a non-logging transport or strip auth headers before any debug logging).
 
-**Status:** Revision complete; returned to Barbara for second gate pass.
+### 4.3 Token caching and refresh
 
----
+- On first `Token()` call, run `az account get-access-token`.
+- Cache the token and parse its expiry from the JWT `exp` claim (or from `az`'s `expiresOn` field).
+- On subsequent calls, return cached token if `now + 5min < expiry`.
+- If within 5min of expiry, re-acquire proactively.
+- If `az` command fails, emit `MCP-007` (auth failure).
 
-## 2026-08-09 — GERT Tool Packages MVP — Gate Review #2 (REJECTED, narrow scope)
+### 4.4 Future providers
 
-**By:** Barbara (Lead / Architect)  
-**Date:** 2026-08-09T15:40-07:00  
-**Requested by:** Cristián Ormazábal Ortega  
-**Reviews:** Don's R1–R15 revision against `.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md` (AR-TP-1..10) and `.squad/decisions/inbox/barbara-tool-packages-gate-review.md`  
-**Revision under review:** `.squad/decisions/inbox/don-tool-packages-revision-r1-r15.md` (Don, independent)  
-**Verdict:** **REJECTED** — narrow scope: S1 (documentation) and S2 (documentation) sweep required. R1–R15 verified resolved; architecture locked.  
-**Reviser designated:** **Ken** (Backend Dev). **Edith and Don are both locked out** — they authored the original and the revision now under review.
+The `AuthConfig.Provider` field is a string, not an enum. Recognized values in this iteration:
+- `"azure-cli"` — described above
 
-**Full entry:** `.squad/decisions/inbox/barbara-tool-packages-gate-review-2.md`
+Future values (NOT in scope, listed for schema stability):
+- `"env"` — read token from an env var named in a `variable:` field
+- `"managed-identity"` — Azure managed identity (no CLI dependency)
+- `"device-code"` — interactive device-code flow
 
-### R1–R15: Verified Resolved (by manual re-derivation)
+The schema shape (`provider` + `scope` + future fields like `variable`) is designed to accommodate these without breaking changes.
 
-All 15 items re-derived from actual artifacts (not taken on trust) and verified resolved:
-- R1–R5: Semantic contradictions fixed (action shape, `impl:` collision, output capture, reference example, path bases)
-- R6–R15: Wiring failures fixed (PKG-020/021 reachable, schema contradictions, apiVersion, tier-3, collision, replay, version, lock invariant, error codes, scenarios)
-- R16 (optional): `warnings:` added to `PackageExpected`
+### 4.5 No auth configured
 
-**Validation re-run:** `verify_corpus.py` 280/280, `jsonschema` 0 errors on all fixtures, `\label`/`\ref` closure 0 unresolved.
-
-### S1 — Documentation Issue: §03 `\subsection{toolRefs}` teaches deleted rules
-
-**Location:** `03-schema-vnext.tex` lines ~170–188
-
-**Problem:** Schema chapter (first place readers look for document shape) still instructs authors to use `alias:` (now `PKG-021` hard error) and default discovery path `tools/<name>.tool.yaml` (deleted by AR-TP-2 ratified tier model).
-
-**Fix Required:** Rewrite subsection to drop `alias`, drop default-discovery sentence, cross-reference §06 ratified tier model instead of restating it locally.
-
-### S2 — Documentation Issue: Three `.tool.yaml` listings use forbidden mapping-shaped `actions:`
-
-**Locations:** 
-1. `03-schema-vnext.tex:3175` (`actions: {get-pods: ...}`)
-2. `03-schema-vnext.tex:3296` (`actions: {check: ...}`)
-3. `08-security-and-trust.tex:320` (`actions: {deploy: ... sensitive_inputs ...}`)
-
-**Problem:** §06 now mandates `actions:` is always a list, never a mapping. Three listings contradict this. §08 case contains the only normative statement of `sensitive_inputs` placement.
-
-**Fix Required:** Convert all three to list form (`- name: ...`), preserving all fields including `sensitive_inputs`.
-
-### Optional Cleanups Approved
-
-Four mechanical, non-blocking cleanups authorized:
-1. Stale `inbox/` ruling citations → `archive/` (15 occurrences)
-2. Package name drift `com.acme.` → `acme.incident-tools` (30 occurrences)
-3. `LocalStructured` → `LocalOutputs` §3.4a mis-citation
-4. r23 dry-run narrative accuracy
-
-### Gate Disposition
-
-**REJECTED**, narrowly. All R1–R15 verified genuine resolved and locked. Two new blockers (S1, S2) identified — pure documentation sweep with no design decisions needed. The correct answers are already written in §06 and §08; §03 and §08 just need to be brought into alignment. Spec goes to user next; reader opening schema chapter first must not be told to author keys that parse gate rejects.
-
-**Reviser:** Ken (independent, Edith and Don locked out). Scope strictly limited to S1/S2. Re-submit for third gate pass; will be diff-only check + validation re-run.
+If `transport.auth` is nil/omitted, no `Authorization` header is sent. This supports MCP servers that use other auth mechanisms (API keys in custom headers via `env`, network-level auth, etc.) — but those mechanisms are NOT part of this feature. Omitting auth simply means no bearer token.
 
 ---
 
-## 2026-08-09 — GERT Tool Packages MVP — S1/S2 Documentation Sweep (Ken, independent)
+## 5. Error Taxonomy
 
-**By:** Ken (Backend Developer), acting independently as revision owner. Edith (original author) and Don (first revision author) were locked out per Cristián's directive.
+New error class: `"MCP"` (fatal).
 
-**Subject:** Barbara's second gate identified two documentation-only issues (S1, S2) requiring mechanical sweep. Scope explicitly limited to §03 and §08; AR-TP-1..10 and R1–R15 remain closed and were not reopened.
+| Code | Condition | Fatal? | Message template |
+|---|---|---|---|
+| `MCP-001` | URL is not HTTPS | Fatal | `mcp-http: url %q must use https://` |
+| `MCP-002` | Unknown auth provider | Fatal | `mcp-http: unknown auth provider %q` |
+| `MCP-003` | Protocol version mismatch / rejected | Fatal | `mcp-http: server rejected protocol version (HTTP %d)` |
+| `MCP-004` | Session expired and re-initialize failed | Fatal | `mcp-http: session expired; re-initialization failed: %v` |
+| `MCP-005` | Unexpected response content-type | Fatal | `mcp-http: unexpected content-type %q (expected application/json or text/event-stream)` |
+| `MCP-006` | SSE stream closed before response received | Fatal | `mcp-http: SSE stream closed without response for request id %d` |
+| `MCP-007` | Auth token acquisition failed | Fatal | `mcp-http: failed to acquire auth token: %v` |
+| `MCP-008` | HTTP transport error (connection refused, TLS failure, timeout) | Fatal | `mcp-http: transport error: %v` |
+| `MCP-009` | JSON-RPC error response from server | Fatal | `mcp-http: server error %d: %s` |
+| `MCP-010` | `auth` configured without `allowed_hosts` | Fatal | `mcp-http: auth.allowed_hosts is required when auth is configured` |
+| `MCP-011` | `url` host not in `auth.allowed_hosts` | Fatal | `mcp-http: url host %q is not in auth.allowed_hosts` |
+| `MCP-W001` | Token not attached (host not in allowed_hosts — runtime defensive) | Warning | `mcp-http: auth token not attached — host %q is not in allowed_hosts` |
 
-**Resolution summary (see `.squad/decisions/inbox/ken-tool-packages-revision-s1-s2.md` for full matrix and validation):**
-
-- **S1 resolved:** `03-schema-vnext.tex` §03 `\subsection{toolRefs}` rewritten: removed `alias:` example (replaced with one-line `PKG-021` note), removed default-discovery-path sentence, added cross-references to §06 ratified tier model. All cross-references verified.
-- **S2 resolved:** All three mapping-shaped `actions:` listings converted to canonical list form (`- name: ...`); `sensitive_inputs` preserved under §08's converted entry. Corpus-wide scan: zero mapping-shaped `actions:` blocks remain.
-- **Optional cleanups completed:** Stale `inbox/` ruling citations swept to `archive/` (0 remaining); `com.acme.` → `acme.incident-tools` normalized (30 occurrences consistent); `LocalStructured` → `LocalOutputs` §3.4a mis-citation corrected; r23 dry-run narrative made accurate; one clarifying sentence on `StepCapture` form scope.
-
-**Validation:** `verify_corpus.py` 280/280, all 5 schemas valid JSON, `jsonschema` 0 errors, `tectonic` build 0 new errors, `\label`/`\ref` closure 0 unresolved, full diff review confirms only S1/S2 changes + optional cleanups (no collateral edits).
-
-**No semantic changes:** No schema modifications, no error codes changed, no grammar productions altered, no runtime semantics modified. AR-TP-1..10 and R1–R15 remain byte-compatible with Gate 2 acceptance.
-
-**Status:** Revision complete; returned to Barbara for third (final) gate pass.
-
----
-
-## 2026-08-09 — GERT Tool Packages MVP — Gate Review #3 (final): APPROVED
-
-**By:** Barbara (Lead / Architect), at Cristian Ormazabal Ortega's request.
-**Reviews:** Ken's S1/S2 sweep (`.squad/decisions/inbox/ken-tool-packages-revision-s1-s2.md`),
-authored independently with Edith and Don locked out.
-**Full entry:** `.squad/decisions/inbox/barbara-tool-packages-gate-review-3.md`
-
-**Verdict: APPROVED. The specification is ready for Cristian's review.**
-
-- **S1 resolved.** `03-schema-vnext.tex` `\subsection{toolRefs}` no longer teaches `alias:` (now
-  `PKG-021`, hard parse-gate error) and no longer teaches the deleted `tools/<name>.tool.yaml`
-  default-discovery rule; it now states the negation and cross-references the ratified
-  frozen-catalog/tier model in §06 instead of restating it. All three cross-references resolve.
-- **S2 resolved.** All three mapping-shaped `actions:` listings converted to the canonical list
-  form; `sensitive_inputs` preserved under §08's converted `deploy` entry. Corpus-wide scan of
-  every `actions:` block (`.tex`/`.yaml`/`.md`): zero mapping-shaped occurrences remain.
-- **No stale alias / default-discovery guidance survives in any normative example.** Remaining
-  `alias` hits are prohibitions, the unrelated `imports:` alias map, or GXL/GCP function aliases.
-- **Ken's optional cleanups altered no accepted semantics.** Stale `inbox/` ruling citations swept
-  to `archive/` (0 remaining); `com.acme.` -> `acme.incident-tools` normalized consistently and
-  still schema-valid; `LocalStructured` -> `LocalOutputs` §3.4a mis-citation corrected; r23's
-  dry-run narrative made accurate; one clarifying sentence added that `StepCapture` gains no
-  `step.{id}.outputs.{name}` form (MVP scope choice). No schema, error code, grammar production,
-  or runtime semantic changed. AR-TP-1..10 and R1-R15 remain closed.
-- **Validation re-run independently:** `verify_corpus.py` 280/280; all 5 JSON Schemas valid;
-  `gert-package.yaml` and `drain-node.yaml` validate with 0 errors; `\label`/`\ref` closure 293
-  labels / 0 unresolved. r23's single `apiVersion: runbook/v2` error is the known corpus-wide
-  pre-existing issue.
-
-**Deferred, Tess-owned (unblocked, not blocking):** `conformance/tv-pkg-resolve.yaml`, >=46
-vectors, against the now-stable surfaces (`PKG-*` enum, `TV-PKG-*` ids, `PackageExpected` incl.
-`warnings:`, `outputs.<name>`, `execute:`, `PKG-029`/`PKG-030`, `tab:tool-path-bases`,
-replay-as-`invoke`). Gate-2 §3 target list stands.
-
-**Non-blocking pre-existing issues (own tickets):** corpus-wide `apiVersion: runbook/v2`; the
-§07/§13 `replay` terminology overload; the spec-wide under-specification of downstream behaviour
-after an upstream mode-skip; the optional r23 `assessment.md` companion. One editorial nit: a
-`\S\ref` macro leaks verbatim inside a `minted` comment at `03-schema-vnext.tex:184` — typographic
-only, fold into the next §03 touch.
-
-**No reviser designated. No further gate pass required.**
+**Requirement 4 guarantee:** `MCP-009` (JSON-RPC error from server) wraps the server's error code and message. A tool-level error (i.e., `result.isError == true` in the MCP response) is returned as a failed `ToolResult` with non-zero exit code — **exactly as stdio MCP does today** (see `mcp.go` line 89: `"mcp tool error: %s"`). The `ToolResult` shape is identical regardless of transport. The runbook author cannot distinguish stdio from HTTP tool errors.
 
 ---
 
-## 2026-08-09T15:59:36-07:00 — Tool Packages MVP: Runtime Implementation (Don)
+## 6. Security Posture
 
-**By:** Don (Backend Developer), at Cristián Ormazábal Ortega's request.
-**Repo:** `C:\One\OpenSource\gert` (runtime repo). **Status: not committed** (working-tree only,
-per task instructions) — this is a status/decision entry, not a merge record.
-**Full entry:** `.squad/agents/don/history.md` (2026-08-09 section) has the complete file/scope
-inventory.
+### 6.1 URL allow-listing
 
-**Decision: ship a realistic, fully-tested core subset now rather than a shallow full-surface
-attempt.** Implemented and unit-tested: PKG-001..030/PKG-W001..003 error codes; strict SemVer +
-MVP constraint grammar; secure path resolution with symlink containment; `tool-package/v1`,
-`config/v1`, `package-lock/v1` schema types; the PKG-020/021 pre-schema forbidden-key scan; the
-full two-phase (`Build`/`BindFile`) five-tier catalog freeze and resolution engine with all
-ratified collision rules (PKG-006/011/022/029/030) and digest algorithm; a new
-`internal/adapter.BuildPackageCatalog`/`ResolveToolRefsViaCatalog` API pair for Ken's future CLI
-wiring, added alongside (not replacing) the existing path-only `ResolveToolRefs`.
+**B-25 Ruling — No URL allow-list required.** Unlike dynamic includes (where the catalog is the trust boundary), tool definitions are authored by the same team that authors the runbook. A `.tool.yaml` declaring `url: https://evil.com` is the same trust level as one declaring `command: /usr/bin/evil`. Both are authored artifacts subject to code review and package governance. There is no runtime-resolved URL — the URL is static in the YAML. Adding an allow-list would be security theater without a trust boundary to enforce.
 
-**Explicitly deferred, reported not hidden:** substitution (`execute.kind: runbook`) end-to-end;
-evidence/trace event emission and resume/replay drift behavior (`PKG-009`,
-`--allow-package-drift`, `replay/packageDrift`); real MCP/extension tier-3 discovery (only an
-extension point exists); `.gert/config.yaml` loading into `pkg/run/run.go`; a fully faithful
-two-resolution-base implementation for `requires[].path` (project-scope vs runbook-scope) —
-currently a workspace-then-runbook-dir fallback heuristic. Also flagged, not fixed: the existing
-runtime's `ToolDef.Actions` is a `map[string]*ToolAction`, diverging from the ratified spec's
-"actions MUST be an array" rule — converting it was judged out of scope (large, unrelated,
-sweeping breaking change) for this task.
+**Contrast with dynamic includes:** Dynamic includes resolve an *identity* at runtime against a frozen catalog — the catalog IS the allow-list. Tool definitions are statically declared — the .tool.yaml IS the authored source. Different trust models, different controls.
 
-**Bug fixed during implementation:** `toolRefs[].version` was originally a resolution no-op
-(the runtime `ToolDef` type carries no version field); fixed by threading
-`schema.ToolDef.Version` through to a new `pkgcatalog.Entry.Version` field and enforcing
-`semver.Constraint.Satisfies` in the package-pin and tier-4 path binding, per the ratified
-"checked against the resolved tool definition's meta.version" rule. One pre-existing test fixture
-had been silently passing under the old no-op and was corrected.
+### 6.2 TLS verification
 
-**Validation:** `go build ./...` and full `go test ./...` are green across the entire repo with
-zero regressions (including all 22 pre-existing runbook parser fixtures). The mandated dirty-tree
-constraint files (`native.go`/`native_test.go`/the example runbook/the untracked `.code-workspace`)
-were inspected once, never modified, and verified unchanged at session end.
+Standard Go `http.DefaultTransport` TLS verification applies. No `InsecureSkipVerify`. No custom CA configuration in this iteration (can be added later via `tls:` config on `TransportConfig`).
 
-**Deferred, still-owned-by-others work is unaffected:** Tess's `conformance/tv-pkg-resolve.yaml`
-remains unblocked and untouched; the `PKG-*`/tier surfaces it will test against are now
-implemented and unit-tested (not conformance-vector-tested) in `pkg/pkgcatalog`.
+### 6.3 Token redaction
 
-**No reviser designated for this entry. Next owner (Ken for CLI wiring, or whoever picks up
-substitution/evidence/resume) should treat `pkg/pkgcatalog`/`pkg/semver`/`pkg/pkgpath` as stable,
-tested building blocks, not scaffolding to be redesigned.**
+Per B-24: bearer tokens are never written to any persistent or observable surface. The HTTP client used by `MCPHTTPTransport` must NOT be wrapped in a logging/tracing transport that captures request headers. If gert adds HTTP debug logging in the future, the `Authorization` header must be redacted.
 
 ---
 
-## 2026-08-09T17:58-07:00 — Tool Packages MVP: Implementation Gate Review (Barbara) — REJECTED
+## 7. Governance
 
-**By:** Barbara (Lead/Architect), at Cristian Ormazabal Ortega's request.
-**Under review:** the complete uncommitted working tree of `C:\One\OpenSource\gert`
-(Don: runtime core + final integration pass; Ken: CLI wiring), against AR-TP-1..10, the
-TV-PKG-PATH-002 binding ruling, the gate-3-approved spec, `gcp.ebnf` 3.4a, and Tess's
-85-vector corpus. Production wiring read directly; agent summaries used only to locate code.
-**Full entry:** `.squad/decisions/inbox/barbara-tool-packages-implementation-gate-review.md`.
+**B-26 Ruling — Remote tool calls ARE subject to governance.** The governance evaluator receives the tool definition and step context regardless of transport. `deny_commands` does not apply (there is no "command" for HTTP — `deny_commands` gates CLI shell invocations). However:
 
-**Verdict: REJECTED. Revision owner: David (Integration Engineer)** — Don and Ken are locked
-out as authors of the code under review; the residual work is integration/wiring, which is
-David's competence. Edith and Tess remain locked out of runtime code by role.
+- `require_approval` applies normally (the approval gate fires before any tool invocation, per `internal/executor/tool.go`).
+- `ToolGovernance.RequiresCapabilities` and `AllowedEnvironments` apply normally (checked by the governance evaluator before the executor dispatches).
+- Future `deny_tools` or tool-level allow-list governance would apply here. Not in scope for this feature.
 
-**Verified correct (not re-litigable):** SemVer + constraint grammar; secure path resolution
-and exact conformance to my TV-PKG-PATH-002 workspace-escape ruling; two-phase Build/BindFile
-with no post-freeze mutation; five tiers with tier-3 bare-name stripping; PKG-006 hard
-collision and genuine PKG-022 enforcement; the full binding contract incl. the Phase-0
-raw-YAML PKG-020/PKG-021 scan; non-fatal warning discipline; `.gert/config.yaml` genuinely
-loaded on the production path; `--package-map` partial override proven with a byte-identical
-runbook through the real CLI; substitution declaration/scope isolation/signature exactness;
-exact governance composition arithmetic incl. a true `allow_commands` intersection; the three
-trace events emitted at the real Phase-C boundary with a shared run_id; dry-run side-effect
-avoidance; resume PKG-009 refusal and `governance/packageDriftAccepted` with both digests and
-operator. Protected user edits byte-identical; dirty tree preserved; zero regressions.
-
-**Blockers:** (B1) `pkgsubst.Plan` has one call site — inside the executor — so PKG-013/014/
-015/026/027/028 fire only when a step executes; unreachable steps and all of dry-run are
-unvalidated, contradicting 5.4/5.5/5.6 verbatim. (B2) package digest closure omits
-`execute.path` substitutes and package-internal includes, so a substitute runbook can be
-rewritten without changing any digest — defeating 7.5 resume integrity. (B3) catalog digest
-uses the export file digest where 7.3 requires the package digest for tier-1. (B4) resume
-drift iterates only currently-present packages, so a removed package is never detected and
-PKG-001 is unreachable. (B5) the ratified `outputs.<name>` capture root (`gcp.ebnf` 3.4a,
-`LocalOutputs`) is absent from the runtime GCP parser. Plus a sixth, found in review: the
-include closure is never traversed — child `requires:`/`toolRefs:` are ignored, so resolution
-is dynamically scoped, the exact model 8.1 rejected; implement it or fail closed. Nine
-lower-severity required fixes are listed in section 3 of the full entry.
-
-**Don's reported gaps, classified:** deep governance deny/allow enforcement — ACCEPTABLE
-NON-GOAL (the evaluator is orphaned repo-wide, so substitution grants no relative escalation;
-conditional on B1 landing, ticketed). Capture of substitution outputs — BLOCKER (B5): the
-grammar was ratified and simply not implemented. In-memory resume plan — ACCEPTABLE NON-GOAL,
-genuinely pre-existing; Don's refusal to fake a passing CLI test was the right call; ticket
-plan persistence and document drift-checking as in-process-only. Empty `ConstraintSources` —
-REQUIRED FIX, not a non-goal: the provenance already exists in `mergeRequirements`, and a
-permanently-empty field in an evidence record is worse than an absent one. Absent replay mode
-— ACCEPTABLE NON-GOAL, confirmed no replay entry point exists anywhere.
-
-**A second gate pass is required, scoped to B1-B5, the include-closure item, and section 3.**
+The key insight: governance gates at the executor level (before `ToolRuntime.Invoke` is called), not at the transport level. Adding a new transport does not bypass governance because governance fires upstream.
 
 ---
 
-## 2026-08-09 — Tool Packages MVP (runtime): FINAL IMPLEMENTATION GATE — APPROVED
+## 8. Runtime Wiring
 
-**Barbara (Lead / Architect), second gate pass.** Full entry:
-`.squad/decisions/inbox/barbara-tool-packages-final-gate-decision.md`. Reviewed David's
-independent revision (Don and Ken locked out, and they made no contribution) against my
-rejecting first pass, AR-TP-1..10, the TV-PKG-PATH-002 ruling, and the gate-3 spec.
+### 8.1 `DefaultToolRuntime.Invoke` extension
 
-**Verdict: APPROVED. Ready for Cristián.** No third gate pass required.
+Add a case to the switch:
+```go
+case toolpkg.TransportMCPHTTP:
+    return r.invokePersistent(ctx, toolName, *def, action, args, func() toolpkg.ToolTransport {
+        return NewMCPHTTPTransport(def.URL, def.Auth)
+    })
+```
 
-All six blockers verified resolved in the code that actually runs: (B1) plan-time
-substitution validation via a structural `flowwalk` visitor invoked before `Plan`/`Start`
-in the shared `runWithMode`, so dry-run and unreachable-by-`when:` steps are validated,
-with cycles/depth decided statically by DFS frames; (B2) digest closure now covers
-`execute.path` substitutes and package-internal includes, cycle-guarded and sorted;
-(B3) tier-1 entries carry the package digest, so `CatalogDigest()` proves what §7.3 says;
-(B4) the manifest's `PackageDigests` is authoritative — a removed package is PKG-001 by
-name, an added one PKG-009; (B5) the ratified `outputs.<name>` capture root is implemented
-end-to-end with the step-context check at plan validation, plus a genuine latent-bug find
-(`schemaToolDefFromRuntime` dropping `Execute`/`Outputs`, which would have silently
-defeated B1 and B5); (§5) the include closure fails closed with a typed PKG-017 rather
-than resolving dynamically — the sanctioned fallback (b), with option (a) ticketed.
+### 8.2 `ToolDef` extension
 
-All nine §3 fixes verified, including real `ConstraintSources`, PKG-002 provenance, PKG-003
-on build metadata, deterministic PKG-006 ordering, typed PLAN-010 that still unwraps to
-`ErrToolNotFound`, live PKG-018 normalisation, failing (not silent) output coercion, and
-`origin` in the `package/resolved` payload. `maxLinkHops` I verified **myself on Windows**
-against real symlinks (10 hops → PKG-008; 8 hops → clean), since its tests skip there.
+`pkg/tool.ToolDef` gains:
+```go
+URL  string         // from TransportConfig.URL
+Auth *schema.AuthConfig // from TransportConfig.Auth
+```
 
-Protected files byte-identical, no `design/` file touched during the revision window, tree
-dirty and uncommitted as instructed, `go build ./...` clean, `go test ./...` green apart
-from one unrelated timing flake in `internal/serve` that passes 5/5 on re-run.
+The existing `internal/tool.RuntimeToolDef` conversion function (which builds `pkg/tool.ToolDef` from `schema.ToolDef`) must copy these fields.
 
-**Accepted non-goals:** deep governance enforcement inside substitute bodies (orphaned
-repo-wide, no relative escalation); cross-process resume plan persistence (pre-existing —
-Cristián must be told `--allow-package-drift`/PKG-009 are in-process-only today); replay
-mode; §5 option (a). **Follow-ups ticketed:** lexical `BindFile` binding, documenting the
-single-file `requires:`/`toolRefs:` restriction, `GovernanceEvaluator` wiring,
-`ExecutionPlan` persistence, Windows link-hop tests, hop counting across intermediate
-components, and the pre-existing corpus/terminology items.
+### 8.3 `MCPHTTPTransport.ListTools`
+
+Same interface as `MCPTransport.ListTools`:
+```go
+func (t *MCPHTTPTransport) ListTools(ctx context.Context, def ToolDef) ([]map[string]any, error)
+```
+
+Called by the tool registry's discovery mechanism when a tool is declared with `mode: mcp-http`. The response shape is identical to stdio MCP's `tools/list` result.
 
 ---
 
-## 2026-08-10 — Enum-Constrained Tool and Runbook Outputs MVP — RATIFIED ARCHITECTURE
+## 9. Shared Response Types
 
-**By:** Barbara (Lead / Architect), at Cristián Ormazábal Ortega's request.
-**Date:** 2026-08-10T13:25:10-07:00
-**Full entry:** `.squad/decisions/archive/barbara-enum-constraint-mvp-architecture-ruling-archived.md`
+Extract from `internal/tool/mcp.go` into `internal/tool/mcp_types.go`:
+```go
+type mcpContent struct { ... }
+type mcpCallResult struct { ... }
+type mcpResponse struct { ... }
+```
 
-**Verdict: RATIFIED.** Architecture ruling (AR-ENUM-1..15) with three binding scope corrections (C1/C2/C3):
-- C1: `enum` forbidden on `type: secret`; member lists redacted on sensitive declarations (audit-trail safety)
-- C2: Package mock enum equality is conformance-only, not a runtime check (no in-run comparand)
-- C3: No `tool.v1.schema.json` in this MVP; tool-action `enum` lives in `06-tool-runtime.tex` prose
-
-Four declaration sites: tool action `args`/`outputs` (S1/S2), runbook `inputs`/`outputs` (S3/S4).
-String-only constraint; type-restricted; checked at parse time (declarations, defaults) and runtime (bindings).
-ENUM-001..009 error codes; ENUM-W001 warning (case-only-distinct); PKG-013 extended for substitution enum-set equality.
-Asymmetric Unicode normalization (declared members must be NFC; candidate values are NFC'd before comparison).
-No integer/identifier/label-value unification with collectors in this MVP. No enum on secrets. No enum identity in package digests.
+Both `MCPTransport` (stdio) and `MCPHTTPTransport` (HTTP) import and use these types for response parsing. This ensures Requirement 4 — identical output shape regardless of transport.
 
 ---
 
-## 2026-08-10 — Enum MVP: Specification Work (Edith) — OPEN / IN PROGRESS
+## 10. Scope Boundary — What Is NOT In Scope
 
-**By:** Edith (Spec Editor)
-**Date:** 2026-08-10T13:25-07:00
-**Status:** Analysis complete, awaiting Barbara's ruling on scope questions before authoring.
-**Full entry:** `.squad/decisions/inbox/edith-string-enum-args-io.md`
-
-Four schema/prose questions for Barbara's sign-off before Edith authors the normative sections:
-- Q1: Enum enforcement at parse time (literals) and runtime (bindings) — recommendation is both (mirrors GCP-TYPE-001 pattern)
-- Q2: Runbook `Output` schema vs prose conflict (schema newer, pre-enum); treating schema as canonical and rewriting L403-420 prose
-- Q3: Error-code family — recommend `SEM-0xx` for runbook inputs/outputs, `PKG-030` for tool-action violations
-- Q4: `pattern:`/`example:` on `Input` are prose-only (dead fields, schema doesn't have them); fix in same PR as adding `enum:` to avoid third generation of drift
-
-**Owner:** Edith. **Blockers:** Barbara's Q1-Q4 approval.
-
----
-
-## 2026-08-10 — Enum MVP: Corpus Work (Tess) — COMPLETE
-
-**By:** Tess (Conformance Tester)
-**Date:** 2026-08-10
-**Status:** 58-vector corpus finalized; one schema gap found and documented.
-**Full entry:** `.squad/decisions/archive/tess-enum-corpus-notes-archived.md` + `.squad/decisions/archive/tess-enum-decl-006-correction-archived.md`
-
-**TV-ENUM-DECL-006 corrected:** YAML 1.2 core schema fact. Bare `yes`/`no` resolve to `!!str`, not `!!bool` (1.1 was the boolean resolver).
-Vector's fixture amended: `enum: [yes, no]` → `enum: [true, false]` (the canonical YAML-1.2-core-schema booleans, which DO trigger ENUM-002).
-Vector id/category/expectation intent preserved; count stays 58.
-
-**Finding: `$defs.Output` in `runbook.v1.schema.json` lacks `default` property** (unlike Input).
-AR-ENUM-6 rule 3 includes S4 (runbook output defaults) in the "default must be a member" sites, but the schema has no `default` key at S4.
-Documented as untestable-in-corpus, not a vector defect — a schema gap for later resolution (add `default` to Output, or explicit ruling that S4 defaults are schema-free).
-No other ambiguities found; all AR-ENUM-1..15 rules mapped cleanly.
-
-**Owner:** Tess (final). **Tess owns four further corpus amendments** (UNICODE-005/PLAN-005/RUNTIME-004/PLAN-003) to fix defects diagnosed during Ken's R2 harness run;
-she does not edit the frozen corpus otherwise.
+| Excluded | Rationale |
+|---|---|
+| Refactoring `MCPTransport` (stdio) | Works as-is; HTTP is a new parallel implementation |
+| OAuth device-code flow | Future auth provider |
+| Managed identity auth | Future auth provider |
+| Custom CA/TLS config | Future extension |
+| WebSocket transport | MCP spec supports it; not needed for IcM |
+| Tool discovery from remote `tools/list` at catalog-build time | Tools are statically declared in .tool.yaml; remote list is a registry feature |
+| `deny_tools` governance | Future governance extension |
+| Streaming tool output (SSE progress → live TUI) | Future UX enhancement; responses are buffered |
+| `timeout:` field on TransportConfig | Hardcode 120s; add field later |
+| Connection pooling / HTTP/2 multiplexing | Go's `http.Client` handles this by default |
+| Retry on transient HTTP errors (5xx) | Fail on first error; retry logic is a future enhancement |
 
 ---
 
-## 2026-08-10 — Enum MVP: Initial Runtime Implementation (Don) — COMPLETE (SUPERSEDED)
+## 11. Proposed Stream Breakdown
 
-**By:** Don (Backend Developer)
-**Date:** 2026-08-10
-**Status:** Reported; implementation superseded by Ken's independent revision.
-**Full entry:** `.squad/decisions/archive/don-enum-mvp-implementation-report-archived.md`
-
-Implemented AR-ENUM-1..15 end-to-end in runtime (`gert` repo). Two findings escalated to Barbara:
-- Finding 1: `TV-ENUM-DECL-006` vector conflicts with this repo's YAML 1.2 resolver (not a code error, a vector/library conflict); requested Barbara's ruling.
-- Finding 2: No root-runbook output-materialization path exists in the engine (pre-existing gap, S4 enforcement unreachable, ticketed T-ENUM-ROOT-OUTPUTS).
-
-Full validation: `go build ./...` clean, `go test ./...` all 61 packages pass.
-
-**NOTE:** Don reported the genuine DECL-006 conflict and the root-output gap correctly. However, his implementation work included five runtime defects that silently defeated enum enforcement for large fixture families.
-Ken's independent R2 harness (built later) surfaced all five (GCP output resolution, dropped Enum field in catalog conversion, missing S2 default check, capture-after-failure masking, GIS-interpolation false rejection).
-Per Barbara's gate-rejection process, Don is locked out; Ken revises independently.
-
----
-
-## 2026-08-10 — Enum MVP (runtime): Implementation Gate Review 1 (Barbara) — REJECTED
-
-**By:** Barbara (Lead / Architect)
-**Date:** 2026-08-10
-**Status:** Gate rejected; revision owner designated.
-**Full entry:** `.squad/decisions/archive/barbara-enum-mvp-implementation-gate-archived.md`
-
-Reviewed Don's complete uncommitted working tree (`C:\One\OpenSource\gert`) against AR-ENUM-1..15, Tess's 58-vector corpus, and §R1-R5 gate criteria.
-
-**Five blockers identified (R1–R5):**
-- R1: ENUM-008 caller-binding enforcement incomplete; missing `--var` path
-- R2: No faithful conformance harness; design-only vectors not mechanized
-- R3: Enum metadata not carried in `ValidatedPlan`
-- R4: ENUM-W001 warning not surfaced to end-user
-- R5: Replay path not validated
-
-All five are genuine, non-negotiable blockers. **Revision owner: Ken (Backend Developer).** Don and Ken locked out as authors; Ken revises independently from scratch per the gate-rejection protocol.
-
----
-
-## 2026-08-10 — Enum MVP (runtime): Independent Revision (Ken) — COMPLETE + R1–R5 VERIFIED
-
-**By:** Ken (Backend Developer), independent reviser.
-**Date:** 2026-08-10
-**Status:** Revision complete; all R1–R5 blockers resolved; bugs found and fixed; harness green.
-**Full entry:** `.squad/decisions/archive/ken-enum-mvp-implementation-revision-archived.md`
-
-Revised R1–R5 from scratch against ratified architecture (AR-ENUM-1..15), 58-vector frozen corpus, and gate-rejection spec.
-
-**Final disposition matrix:**
-
-| Blocker | Status | Evidence |
+| Stream | Owner | Scope |
 |---|---|---|
-| R1 — ENUM-008 caller-binding | **Resolved** | `schema.CheckCallerInputBindings` wired at `cmd/gert/run.go` entry and all RPC/API paths; `internal/executor/tool.go` CheckArgEnums on materialized tool args (incl. `--var`-sourced values). Regression test: `enum_r1_r4_regression_test.go`. |
-| R2 — 58-vector conformance harness | **Resolved** | `internal/conformance/enum_harness.go` + `enum_vector.go` + `enum_conformance_test.go` build real `gert` CLI, materialize each vector into workspace, run it (or drive `pkgcatalog.Build` for catalog vectors). **Final report: 48 passed, 10 skipped (named), 0 failed.** |
-| R3 — Enum metadata in ValidatedPlan | **Resolved** | `internal/planner/enumplan.go` populates `ValidatedPlan.EnumConstraints`; `internal/engine/engine.go` carries it once in `plan.validated` trace, declared order, C1-safe redaction. Regression test: `enum_trace_test.go`. |
-| R4 — ENUM-W001 surfaced | **Resolved** | `cmd/gert/run.go` surfaces ENUM-W001 to stderr without aborting. Regression test: `enum_r1_r4_regression_test.go`. |
-| R5 — Replay enum validation | **Resolved** | `internal/executor.CheckArgEnums` exported; `internal/replay.ReplayExecutor.WithEnumChecks` + `ReplayFromTrace` wiring apply identical check at replay boundary. Regression test: `enum_r5_test.go`. |
+| **Stream A — Schema + Validation** | Ken | `TransportConfig` extensions, `AuthConfig` type, `TransportMCPHTTP` constant, schema validation (MCP-001, MCP-002), `ClassForCode` extension |
+| **Stream B — HTTP Transport + SSE** | Don | `MCPHTTPTransport`, SSE parser, lifecycle (§2), shared types (§9), wiring into `DefaultToolRuntime` (§8) |
+| **Stream C — Auth Provider** | David | `AuthProvider` interface, `AzureCLIAuthProvider`, token caching, `MCP-007`, redaction guarantees (B-24) |
+| **Stream D — Integration + Tests** | Tess | End-to-end wiring test, mock MCP HTTP server, test vectors for init/session/auth/tool-call/SSE/errors |
 
-**Ten genuine runtime bugs found and fixed** (not in Ken's charter, but revealed by building a faithful R2 harness):
-1. GCP output-value resolution (executeSubstitution was not resolving GCP paths in output values)
-2. Dropped `Enum` field in catalog/toolRefs conversion (schemaToolDefFromRuntime lost Enum on both Args and Outputs)
-3. Missing S2 default check (AR-ENUM-6 tool-output-default case never implemented)
-4. Capture-after-failure masking (failed step captures attempted anyway, hiding real ENUM-008/009)
-5. GIS-interpolated defaults falsely rejected at plan time (ENUM-006 stringified `"${count}"` literally)
-6. Missing `imports:` alias resolution for `include.runbook` (alias-by-name includes failed as literal file paths)
-7. Schema/struct drift on `expand:` property (runbook/include Expand field existed in Go but not in JSON schema)
-8. Stdout/stderr split in harness (plan-time errors go stderr, runtime failures go stdout; harness only checked stderr)
-9. Temp build directory polluting repo (enumharness-bin-* dirs in working tree)
-10. Validation-ordering fix (B1 substitution checks short-circuited before planner.Plan ran, masking ENUM-006/007)
-
-**Authoritative 58-vector execution report:**
-- 48 vectors pass ✓
-- 10 vectors skip with named, audited reasons (5 pre-existing ticketed gaps, 5 corpus/methodology defects)
-- 0 vectors fail
-- 0 vectors silently dropped
-
-All blockers substantively resolved. No architecture reopened. Dirty tree preserved (no commits, no stage, protected files byte-identical).
+Dependencies: B depends on A (needs schema types) and C (needs AuthProvider interface). D depends on all.
 
 ---
 
-## 2026-08-10 — Enum MVP: Final Implementation Gate (Barbara) — APPROVED
+## Appendix — MCP Protocol Reference (2025-03-26 Streamable HTTP)
 
-**By:** Barbara (Lead / Architect)
-**Date:** 2026-08-10T17:45-07:00
-**Status:** Final gate passed; implementation complete and approved.
-**Full entry:** `.squad/decisions/archive/barbara-enum-mvp-final-gate-approval-archived.md`
+For implementers. The MCP Streamable HTTP transport (replacing the deprecated HTTP+SSE transport):
 
-Reviewed Ken's independent revision against R1–R5 spec, AR-ENUM-1..15, Tess's corrected 58-vector corpus, and Edith's AR-ENUM-3(3) prose fix.
-Verified directly: read current runtime diff (39 modified, 43 new paths), built and tested cleanly.
-Ran R2 harness myself independently: 58 vectors, **48 pass, 10 skip, 0 fail.** Executed four live CLI probes against scratch runbooks.
-No product artifact modified in either repository.
+- Client sends JSON-RPC messages as HTTP POST to the server's endpoint URL.
+- Server responds with either `application/json` (single response) or `text/event-stream` (SSE stream containing the response plus optional notifications).
+- `Mcp-Session-Id` header: server MAY issue on any response; client MUST echo on subsequent requests.
+- `MCP-Protocol-Version` header: client MUST send; server validates.
+- Notifications (no `id`) sent via POST; server replies with 202/204.
+- Server MAY issue HTTP 404 to indicate session expired; client should re-initialize.
 
-**VERDICT: APPROVED.** R1–R5 all substantively resolved. No blocker remains.
 
-All five genuine bugs Ken found during harness construction are correct fixes, ratified in-scope consequences of the R2 requirement.
-The 10 skip reasons independently verified: 5 pre-existing ticketed gaps (T-ENUM-FROM-SOURCING, T-ENUM-ROOT-OUTPUTS), 5 corpus defects (each adjudicated against AR-ENUM-1..15, none are evasions).
+# MCP HTTP Transport — Final Architecture Review
 
-**Remaining limitations, all ticketed, none blocking:**
-- **T-ENUM-ROOT-OUTPUTS** — non-substituted root runbook never evaluates own `outputs:` (S4 site, no engine hook exists)
-- **T-ENUM-FROM-SOURCING** — `Input.From` (from: env/prompt/provider) never read by any runtime path
-- **T-ENUM-SENSITIVE-DECL** — no first-class sensitivity marker; EnumMeta.Redacted best-effort name-vs-governance.redact proxy, not a guarantee
-- **T-ENUM-REPLAY-WIRE** (new) — adapter.go replay branch unreachable today (ScenarioFile never assigned), documented at site
-
-Ken is released. His revision found and fixed five genuine runtime defects that hand-written tests could not surface; conformance harness is now the cheap gate wanted.
-
-**Tess** owns four further corpus amendments (UNICODE-005/PLAN-005/RUNTIME-004/PLAN-003), each keeping intent, count, and expectation; re-run harness after.
-**Edith** owns parallel §2a prose fix in `03-schema-vnext.tex` (strike YAML-1.1 aside from AR-ENUM-3 rule 3, add 1.2-core-schema-accurate trap example).
-
-No further gates required. Ready for Cristián.
+**Reviewer:** Barbara (Lead / Architect)
+**Date:** 2026-08-15T19:18:27-07:00
+**Verdict:** ✅ **APPROVE**
 
 ---
+
+## Five Requirements — Verdict
+
+| # | Requirement | Verdict | Evidence |
+|---|---|---|---|
+| 1 | Add `transport.mode: mcp-http` with a `url` field | **MET** | `TransportMCPHTTP = "mcp-http"` in both `pkg/tool/tool.go:17` and `pkg/schema/tool.go:392`. `TransportConfig.URL` added at `pkg/schema/tool.go:291`. `ValidateTransportConfig` enforces url-required + HTTPS-only + mutual exclusion with command/args. |
+| 2 | MCP HTTP lifecycle: initialize, Mcp-Session-Id, notifications/initialized, MCP-Protocol-Version, SSE | **MET** | `mcp_http.go:ensureInitialized` → `initialize()`: sends initialize with `protocolVersion: "2025-03-26"`, inspects response for errors (unlike stdio — B-30 not replicated), captures `Mcp-Session-Id` from headers, sends `notifications/initialized`. `MCP-Protocol-Version` header set on every request. SSE parser (`parseSSEResponse`) handles `data:` lines, multi-line events, comment heartbeats, and ID correlation. Session-expired 404 → re-initialize → retry (§2.4). |
+| 3 | Auth provider: Azure CLI bearer token, credentials never in YAML | **MET** | `AzureCLIAuthProvider` in `auth_azurecli.go`: runs `az account get-access-token --scope <scope> -o json`, parses response, caches with expiry, proactive refresh at 5min buffer, `Invalidate()` on 401. Token never appears in errors (classified error messages reference "az CLI" failure reasons, never token value). `AuthConfig.Scope` is the only auth-related value in YAML. B-24 enforced. |
+| 4 | Dispatch tools/list and tools/call exactly as stdio, preserving typed outputs | **MET** | Both transports share `mcp_types.go` (`mcpResponse`, `mcpCallResult`, `mcpContent`, `callResult()`). Decode path in `toolResult()`: `content[0].Text` → `Stdout`; JSON parse → `Output` map. Same as stdio (mcp.go lines 69-78). Error message format: `"mcp tool error: %s"` — identical. **One minor note:** HTTP returns a `ToolResult{ExitCode:1, Stderr:text}` alongside the error on tool-level `IsError`; stdio returns `nil, error`. The error is identical; the ToolResult difference is invisible to callers (who check `err != nil` first). Not a requirement failure — the observable behavior from a runbook author's perspective is indistinguishable. |
+| 5 | Schema/runtime wiring, validation, and tests | **MET** | Schema: `TransportConfig` extended with `URL` and `Auth *AuthConfig` (with `AllowedHosts`). Runtime: `DefaultToolRuntime.Invoke` has `case TransportMCPHTTP` dispatching to `invokePersistent` → `NewMCPHTTPTransport`. Validation: `ValidateTransportConfig` checks MCP-001/002/010/011 at scan time. Tests: `mcp_http_test.go` + `mcp_http_tess_test.go` + `validate_transport_test.go` — 27/27 passing per verified report. |
+
+---
+
+## B-32 Realisation — FULLY BUILT AS RULED
+
+| Control | Implementation | Verified |
+|---|---|---|
+| `auth:` requires `allowed_hosts` (MCP-010) | `ValidateTransportConfig`: if `auth != nil && len(AllowedHosts) == 0` → MCP-010 fatal | ✅ |
+| URL host in allowed_hosts static check (MCP-011) | `ValidateTransportConfig`: parses URL, extracts `u.Hostname()`, lowercase exact match against list | ✅ |
+| Runtime host mismatch fatal (MCP-012) | `TokenGate.AttachToken`: `hostAllowed()` → `errkit.New("MCP-012", ...)` | ✅ Confirmed by source read |
+| Redirects refused on authenticated requests (MCP-013) | `NewMCPHTTPTransport`: `client.CheckRedirect = func(...) { return http.ErrUseLastResponse }` when gate != nil. `send()` detects 3xx → `errkit.New("MCP-013", ...)` naming the Location. | ✅ |
+| Host matching: `u.Hostname()`, lowercase, exact, no wildcard | Both `ValidateAuthConfig` and `TokenGate.hostAllowed` use identical logic: `strings.ToLower(u.Hostname())` vs `strings.ToLower(entry)` | ✅ One definition, no drift |
+
+---
+
+## B-27: mcp/authAttached Trace Event — NOT DEAD CODE
+
+`TokenGate.AttachToken` emits via `trace.EmitterFromContext(ctx)` on every successful token attachment. The emitter is the same one wired through `engine.go:569` → TraceWriter.Append — the same path used by all other trace events (include/resolved, step/started, etc.). It fires on every authenticated request, which means every `tools/call` and `tools/list` invocation on an authenticated MCP HTTP tool. This is not dead code — it is executed on the hot path of the feature's primary use case.
+
+---
+
+## B-24: Token Escape Surface Audit
+
+| Surface | Safe? | Evidence |
+|---|---|---|
+| Error messages | ✅ | `classifyAzError` never includes token; MCP-007/012 errors reference scope, host, stderr — never token |
+| Trace events | ✅ | `mcp/authAttached` payload: `{url_host, scope}` only |
+| ToolResult.Stdout/Stderr/Output | ✅ | Token never enters ToolResult — it exists only in the `Authorization` header |
+| HTTP debug logging | ✅ | No HTTP debug/trace transport installed; `http.Client{}` has no `Transport` override that would log headers |
+| Panic stack | ⚠️ Acceptable | If `AttachToken` panics after `provider.Token()` returns, the token is on the stack. This is inherent to any in-memory secret and is not a design flaw — panic stacks are not a normal observability surface. |
+
+**Verdict: B-24 is satisfied.** No credential material reaches any persistent or normal-observability surface.
+
+---
+
+## B-31: Documentation Adequacy
+
+Go doc comments on `AuthConfig` (`pkg/schema/tool.go:298-365`) are extensive — they explain the replay threat, the `allowed_hosts` mechanism, and exactly what happens on mismatch. The wildcard non-support is documented in `TokenGate.AttachToken`'s doc comment. An author who writes `*.azure-api.net` gets MCP-012 with a message naming the host and referencing `allowed_hosts`.
+
+Missing: an example `.tool.yaml` file in `examples/`. This is a **nice-to-have**, not a blocker — the doc comments and the schema types are sufficient for an engineer reading code or IDE hover-docs. I recommend adding one before broader adoption but do not condition approval on it.
+
+---
+
+## B-30: Stdio ensureStarted Defect — STILL CORRECT TO DEFER
+
+The HTTP path deliberately does NOT replicate it (confirmed: `initialize()` checks `initResp.Error` before marking `t.initialized = true`). The stdio defect is tracked. The two paths are now asymmetric in a good way — the new code is correct, the old code has a known defect that will be fixed in a dedicated cleanup pass. Deferral remains the right call.
+
+---
+
+## Cross-Feature Question: Dynamic Include + MCP HTTP + Token Replay
+
+A runtime-selected child runbook can declare an `mcp-http` tool with `auth:`. B-32's `allowed_hosts` is the control. Is it sufficient?
+
+**Yes.** The chain of controls is:
+
+1. **Frozen catalog** — the child runbook must come from an approved package. An external attacker cannot inject a tool definition.
+2. **MCP-011 (static, at tool scan time)** — the declared URL's host must be in `allowed_hosts`. A package author who sets `url: https://evil.com` must ALSO set `allowed_hosts: [evil.com]` — the mismatch is caught structurally.
+3. **The residual threat** — a compromised package author sets BOTH `url: https://evil.com` AND `allowed_hosts: [evil.com]`. B-32 cannot prevent this because the attacker controls the authored artifact. But at this point, the attacker can also set `url: https://icm-mcp-prod.azure-api.net` and issue malicious commands directly — a strictly more powerful attack that no host allow-list prevents. The allow-list stops *accidental* token leakage and *partial* compromise (attacker can modify URL but not allowed_hosts, or vice versa); it cannot stop a fully compromised author.
+
+**The frozen catalog is the real trust boundary.** `allowed_hosts` is defense-in-depth against partial compromise or carelessness. Together they are sufficient.
+
+---
+
+## Deferred Items Confirmed
+
+| Item | Status | Still correct to defer? |
+|---|---|---|
+| B-18 (static-include governance gap) | Tracked | ✅ |
+| B-19/B-20 (`when:` inert) | Tracked, schema remediation required | ✅ |
+| B-30 (stdio ensureStarted) | Tracked | ✅ |
+| DEF-002 (DINC-009 unreachable) | B-16, permanent | ✅ |
+
+---
+
+## Final Verdict
+
+**✅ APPROVED.** No conditions. The implementation is complete, correct, and faithful to the contract and all rulings through B-33. The security posture (B-32 host restriction, B-33 fatal enforcement + no redirects, B-24 token redaction) is structurally sound. The five requirements are met. The cross-feature interaction with dynamic includes is adequately controlled by the frozen catalog + allowed_hosts defense-in-depth.
+
+
+# MCP HTTP — Binding Rulings B-22 through B-26
+
+**Author:** Barbara (Lead / Architect)
+**Date:** 2026-08-16T00:55:39Z
+**Status:** RATIFIED — implementers build directly against these rulings
+
+---
+
+## B-22 — HTTPS only for remote MCP endpoints
+
+**Date:** 2026-08-16T00:55:39Z
+
+**Ruling:** Remote MCP endpoints MUST use HTTPS. Plain HTTP URLs are rejected at validation time with `MCP-001`. No `--allow-insecure` flag in this iteration.
+
+**Rationale:** MCP tool calls carry bearer tokens and can mutate production systems (e.g., IcM ticket remediation actions). Allowing HTTP would let a network-position attacker intercept credentials. Localhost/stdio servers use `mode: mcp` (subprocess) and are unaffected.
+
+---
+
+## B-23 — Protocol version pinning at 2025-03-26
+
+**Date:** 2026-08-16T00:55:39Z
+
+**Ruling:** gert advertises `MCP-Protocol-Version: 2025-03-26` on all HTTP MCP requests. If the server responds with an HTTP error indicating version rejection, emit `MCP-003` (fatal). If the server ignores the header and responds successfully, proceed without error.
+
+**Rationale:** The 2025-03-26 spec defines Streamable HTTP (replacing the deprecated SSE transport). Pinning to this version is forward-looking — it's the current stable spec. Graceful degradation for servers that ignore the header ensures interop with older implementations.
+
+---
+
+## B-24 — No credential material in YAML, traces, logs, or errors
+
+**Date:** 2026-08-16T00:55:39Z
+
+**Ruling:** Bearer tokens acquired by any auth provider MUST NOT appear in: YAML files, trace events, log output, error messages, `ToolResult` fields, step output, or any diagnostic dump. The `scope` field is a resource identifier (not a credential) and may appear in diagnostics.
+
+**Rationale:** Tokens are short-lived secrets. Any persistence or observability surface that captures them creates a credential leakage vector. The only place a token may exist is in-memory within the `AuthProvider` and in the outgoing HTTP `Authorization` header (which must not be captured by debug logging).
+
+---
+
+## B-25 — No URL allow-list required
+
+**Date:** 2026-08-16T00:55:39Z
+
+**Ruling:** Any HTTPS URL is acceptable for `transport.url`. No allow-list, registry, or pre-approval mechanism is required.
+
+**Rationale:** Tool definitions are authored artifacts (.tool.yaml files) subject to the same code-review and package-governance controls as any other authored configuration. The URL is static — not runtime-resolved. Contrast with dynamic includes, where the resolved identity is runtime-variable and the catalog serves as the allow-list. Different trust models require different controls. Adding an allow-list here would be security theater: the same author who can set a malicious URL can also set a malicious `command:`.
+
+---
+
+## B-26 — Remote tool calls subject to governance
+
+**Date:** 2026-08-16T00:55:39Z
+
+**Ruling:** Governance fires at the executor level (before `ToolRuntime.Invoke`), not at the transport level. Adding a new transport does not bypass governance. Specifically: `require_approval`, `RequiresCapabilities`, and `AllowedEnvironments` apply to MCP HTTP tools identically to stdio tools. `deny_commands` does not apply (there is no shell command to deny).
+
+**Rationale:** The tool executor's governance pre-flight (`internal/executor/tool.go`) checks all policies before invoking the tool runtime. This is transport-agnostic by design — the executor doesn't know or care which transport will be used. The new transport plugs in below this gate.
+
+---
+
+## B-27 — B-25 narrowed: audience-scoped tokens are sufficient; no host allow-list needed
+
+**Date:** 2026-08-15T18:03:00-07:00
+
+**Amends:** B-25
+
+**Challenge:** A dynamically-included child runbook (resolved at runtime from the frozen catalog) can declare an MCP HTTP tool pointing to any HTTPS host. David's auth provider attaches a live Azure bearer token. The operator running the parent never reviewed the child's URL. The URL is "authored" but not "reviewed by the person accepting the risk." This is a credential-forwarding-to-attacker-chosen-host risk — the gap is not the URL itself but the **combination of URL + attached credential**.
+
+**Revised Ruling:** B-25 is **narrowed** as follows:
+
+**Unauthenticated MCP HTTP requests:** B-25 stands unchanged. Any HTTPS URL is acceptable. No allow-list. The request carries no credential — SSRF risk is minimal.
+
+**Authenticated MCP HTTP requests (where `transport.auth` is configured):** No host allow-list is required, because the existing mitigations are structural and sufficient:
+
+1. **Frozen catalog** — child runbooks come only from approved packages. An arbitrary third party cannot inject a tool URL.
+2. **Audience-scoped tokens** — a token acquired with `scope: api://icmmcpapi-prod/mcp.tools` carries that audience in its claims. Any properly configured Azure AD resource server that is NOT the intended audience rejects the token server-side. An attacker-chosen host receives a token it cannot validate (wrong audience) and gains nothing useful.
+3. **HTTPS** — prevents interception in transit.
+4. **Short-lived** — Azure CLI tokens expire in ~1 hour.
+
+The threat model is: a compromised or careless package author places a malicious URL in a child runbook's tool definition. The frozen catalog prevents injection by outsiders. Against an insider (compromised package author), the audience-scoped token provides defense-in-depth — the token is useless at hosts that aren't the declared resource.
+
+**One mandatory safeguard:** The auth provider MUST emit a trace event `mcp/authAttached` with payload `{url_host: <host-portion-only>, scope: <scope>}` (NO token value) on every authenticated request. This enables audit detection of scope-vs-host mismatch without adding a runtime gate.
+
+**Implementation note for David:** Emit this trace event inside `MCPHTTPTransport` immediately before sending an authenticated request. The event is informational (non-gating, non-fatal). If someone declares `scope: api://icmmcpapi-prod/mcp.tools` but `url: https://evil.com`, the trace shows the discrepancy for post-hoc audit.
+
+**Why no allow-list:** An allow-list would require a new configuration surface (where is the list? who maintains it? how does it interact with package catalogs?). The existing mitigations (catalog trust + audience-scoped tokens) close the gap structurally without adding operational burden. If a future threat model shows audience validation is insufficient (e.g., a server that accepts any audience), we can add a host allow-list then — but that would indicate a broken resource server, not a broken gert design.
+
+---
+
+## B-28 — Stdio env-var credentials are a pre-existing surface; B-24 does not retroactively cover them
+
+**Date:** 2026-08-15T18:03:00-07:00
+
+**Question:** Does B-24's redaction mandate extend to stdio MCP's `transport.env` map, which today can carry secrets (e.g., `API_KEY=xxx`) passed to the subprocess via `mergeEnv`?
+
+**Ruling:** **No. B-24 applies exclusively to the new HTTP MCP auth provider.** The stdio env-var path is a pre-existing surface with different characteristics:
+
+1. `transport.env` values are placed in YAML by the operator — they are authored, not runtime-acquired. B-24 exists specifically because the HTTP auth provider acquires a credential at runtime that the operator never typed into any file.
+
+2. Env values are passed to a local subprocess and never traverse a network from gert itself. Whether the subprocess uses them over a network is outside gert's control.
+
+3. These values are NOT currently in traces or logs (only in YAML and process memory). That is acceptable status-quo behavior.
+
+**Action:** Documentation-only. Note that `transport.env` values in `.tool.yaml` should be treated as sensitive by operators (use CI vault injection or env-var indirection rather than literal secrets in committed YAML). No code change. Not a defect — a usage guidance gap.
+
+**Not in scope:** Secret-reference resolution in `transport.env` (e.g., vault references). That is a future platform feature.
+
+---
+
+## B-29 — Protocol version divergence: stdio stays at 2024-11-05; HTTP uses 2025-03-26; this is correct
+
+**Date:** 2026-08-15T18:04:00-07:00
+
+**Question:** Stdio MCP advertises `protocolVersion: "2024-11-05"`. HTTP MCP advertises `MCP-Protocol-Version: 2025-03-26`. Should they match?
+
+**Ruling:** They MUST NOT match. They are different protocol revisions for different transports.
+
+- `2024-11-05` is the MCP version that defines the stdio/Content-Length framing model. The existing `MCPTransport` was built against it and interoperates with stdio MCP servers implementing that version. Changing it risks breaking compatibility with existing servers that validate the version field.
+- `2025-03-26` is the MCP version that defines Streamable HTTP (POST + SSE responses, `Mcp-Session-Id` header). HTTP MCP servers expect this version in the `MCP-Protocol-Version` header.
+
+These are not two implementations of the same spec at different versions — they are two different transport specifications. The version field means "I speak this protocol," and the two transports speak different protocols.
+
+**Documentation:** No operator-facing documentation is needed beyond the tool schema itself (`mode: mcp` vs `mode: mcp-http`). An operator never chooses between transports for the same server — a server is either stdio or HTTP. The version is an implementation detail that follows from the transport choice.
+
+---
+
+## B-30 — Stdio `ensureStarted` defect: file and defer
+
+**Date:** 2026-08-15T18:04:00-07:00
+
+**Question:** Stdio `ensureStarted` sets `initialized = true` without checking whether the `initialize` response is an error. Fix now or defer?
+
+**Ruling:** **Defer.** File as a defect. Do NOT fix in this feature.
+
+**Rationale:**
+1. This is a pre-existing defect in the stdio path. It has existed since `MCPTransport` was written and affects only stdio MCP tools, which are working in production (presumably with servers that don't reject initialization).
+2. Fixing it means modifying `internal/tool/mcp.go` — the existing stdio transport — as part of a feature that is supposed to ADD a new transport without touching the old one. That violates the scope boundary.
+3. Don's HTTP transport MUST NOT replicate it (already communicated — his `initialize` path inspects the response and emits MCP-003 on failure).
+
+**Accumulation acknowledgment:** This is the third deferred pre-existing defect alongside B-18 (static-include governance gap) and B-19/B-20 (inert `when:`). I accept this accumulation deliberately. Each has the same shape: a real defect, adjacent to the stream, with regression risk if fixed as a side-effect. They are tracked, not forgotten. When this feature ships, a cleanup pass addressing all three should be prioritized.
+
+**File to:** `.squad/decisions/inbox/defect-stdio-mcp-initialize-unchecked.md` with location `internal/tool/mcp.go:ensureStarted`, the fact that `initialized = true` is set unconditionally, and that the response body is discarded without error checking.
+
+---
+
+## B-31 — Go-only validation is acceptable; author-facing documentation lives in Go doc comments and the tool spec section
+
+**Date:** 2026-08-15T18:04:00-07:00
+
+**Question:** No JSON Schema governs `.tool.yaml`. B-20's schema-description remediation pattern cannot apply here. Is Go-only validation acceptable, and where does documentation live?
+
+**Ruling:** **Go-only validation is acceptable.** This is the existing pattern for ALL tool validation and changing it is out of scope.
+
+The absence of a `.tool.yaml` JSON Schema is a pre-existing architectural choice (noted by Ken: "No JSON Schema governs .tool.yaml" — C3 in the existing code comments). Tool definitions are validated by `internal/tool.ParseToolFile` and the schema types in `pkg/schema/tool.go`. This works and is well-tested.
+
+**Author-facing documentation for `mcp-http` and `auth:` lives in:**
+1. **Go doc comments on `TransportConfig`, `AuthConfig`** — these are the source of truth for any future generated documentation.
+2. **`design/gert/sections/06-tool-runtime.tex`** — the existing tool runtime spec section. Ken or the implementer of Stream A should add a subsection for `mode: mcp-http` with the transport fields and auth provider shape.
+3. **A `.tool.yaml` example** in `examples/` demonstrating the MCP HTTP configuration.
+
+B-20's pattern (schema `description` fields) was appropriate because a JSON Schema existed and IDE completions were actively misleading users. Here, no schema exists, so no misleading completions are generated. The documentation surface is the spec section and examples — standard for this codebase.
+
+---
+
+## B-32 — B-25/B-27 revised: token attachment restricted to declared hosts (replay risk accepted as real)
+
+**Date:** 2026-08-15T18:06:00-07:00
+
+**Supersedes:** B-27's conclusion that "audience-scoped tokens are structurally limited" is **withdrawn as technically incorrect.** The revised ruling below replaces B-25/B-27's reasoning on authenticated requests.
+
+**The corrected threat model:** A bearer token sent to an attacker-controlled host can be **replayed** against the legitimate audience (the real IcM endpoint) for the token's lifetime. Audience restriction constrains which server will *accept* the token, not who may *present* it. Possession is authorization. Token exfiltration to a malicious host IS a compromise regardless of audience scoping — this is the confused-deputy / token-replay pattern.
+
+**Revised Ruling:** Token attachment is restricted to explicitly declared hosts.
+
+### Mechanism
+
+`AuthConfig` gains an `allowed_hosts` field:
+
+```yaml
+transport:
+  mode: mcp-http
+  url: https://icm-mcp-prod.azure-api.net/v1/
+  auth:
+    provider: azure-cli
+    scope: api://icmmcpapi-prod/mcp.tools
+    allowed_hosts:
+      - icm-mcp-prod.azure-api.net
+```
+
+**Enforcement rule:** Before attaching an `Authorization` header, the auth provider checks that the request URL's host (scheme + hostname + port) matches an entry in `auth.allowed_hosts`. If no match, the request is sent **without** the `Authorization` header and a `MCP-W001` warning is emitted (new warning-class code): `"mcp-http: auth token not attached — host %q is not in allowed_hosts"`.
+
+**Validation rules:**
+- If `auth` is configured and `allowed_hosts` is empty or omitted → `MCP-010` (fatal): `"mcp-http: auth.allowed_hosts is required when auth is configured"`. Rationale: forcing explicit host declaration is the entire point of this control.
+- If `url`'s host is not in `allowed_hosts` at validation time → `MCP-011` (fatal): `"mcp-http: url host %q is not in auth.allowed_hosts"`. Catches the misconfiguration statically rather than at runtime.
+
+### Why this is the right narrowing
+
+1. **Closes the replay vector.** A compromised package author who declares `url: https://evil.com` cannot also make the token go there, because `allowed_hosts` is validated against `url` at parse time (MCP-011). To exfiltrate the token, they would need to control both the URL and the allowed_hosts declaration — but if they can do that, they can also set `url` to the legitimate host and issue malicious tool calls directly, which is a strictly more powerful attack that no allow-list prevents.
+
+2. **Does not burden the unauthenticated case.** `allowed_hosts` is only required when `auth` is configured. An MCP HTTP tool without auth has no token to protect and no restriction.
+
+3. **Small implementation surface.** A host-match check in the HTTP transport before header attachment. David already has a policy hook routed for this.
+
+4. **Prevention, not just detection.** B-27's `mcp/authAttached` trace event remains (for audit), but this is the gate that stops the send.
+
+### Updated target YAML (canonical)
+
+```yaml
+transport:
+  mode: mcp-http
+  url: https://icm-mcp-prod.azure-api.net/v1/
+  auth:
+    provider: azure-cli
+    scope: api://icmmcpapi-prod/mcp.tools
+    allowed_hosts:
+      - icm-mcp-prod.azure-api.net
+```
+
+### Error codes added
+
+| Code | Class | Condition | Fatal? |
+|---|---|---|---|
+| `MCP-010` | `MCP` | `auth` configured without `allowed_hosts` | Fatal |
+| `MCP-011` | `MCP` | `url` host not in `allowed_hosts` | Fatal |
+| `MCP-W001` | `MCP-W` | Token not attached because host not in `allowed_hosts` (runtime, if URL is somehow different from validated url — defensive) | Warning |
+
+### For the record
+
+Token replay from a malicious host was **considered and accepted as a real threat**. The original B-25/B-27 reasoning that audience scoping structurally prevents exploitation was incorrect — audience scoping prevents the attacker from *consuming* the token at their own service, but does not prevent *replaying* it against the legitimate service. The `allowed_hosts` restriction is the prevention mechanism. The frozen catalog remains the primary trust boundary (only approved package authors can declare tool URLs), and `allowed_hosts` is defense-in-depth against a compromised author.
+
+---
+
+## B-33 — Runtime host mismatch is FATAL; redirects disabled on authenticated requests
+
+**Date:** 2026-08-15T18:25:00-07:00
+
+### Part 1: Fatal, not warning
+
+**Ruling:** A runtime host mismatch MUST be fatal (`MCP-012`, class `MCP`). The request is NOT sent. The token is NOT attached. Execution stops with a clear error naming the mismatched host and pointing at `allowed_hosts`.
+
+**Rationale:** B-32 exists to prevent token exfiltration. A warning that allows the request to proceed — with or without the token — defeats the control entirely:
+- With token attached: the control is decorative (the token reaches the unapproved host).
+- Without token attached: the request silently downgrades to unauthenticated, producing a confusing 401 from the far end that no operator will diagnose as a security gate firing.
+
+Fatal is the only semantics that actually prevents the thing B-32 was designed to prevent.
+
+**Ken must reclassify `ErrMCPW001`:** Change from `class: "MCP-W"` / warning to `code: "MCP-012"` / `class: "MCP"` / fatal. Remove `ErrMCPW001` entirely (it was never shipped externally — the frozen-catalog invariant on error codes applies only post-ship). Replace with:
+
+```go
+ErrMCP012 = &Error{code: "MCP-012", class: "MCP"}
+```
+
+Message: `"mcp-http: request to host %q blocked — not in auth.allowed_hosts %v"`
+
+### Part 2: Redirects disabled on authenticated requests
+
+**Ruling:** The `http.Client` used by `MCPHTTPTransport` for authenticated requests MUST have `CheckRedirect` set to reject ALL redirects (return `http.ErrUseLastResponse`). The request fails with `MCP-013`:
+
+```go
+ErrMCP013 = &Error{code: "MCP-013", class: "MCP"}
+```
+
+Message: `"mcp-http: redirect from %q to %q rejected — redirects are disabled on authenticated requests"`
+
+**Rationale:** Per-hop host checking is more permissive but complex to get right (must strip the `Authorization` header before the redirect if the target host differs, race between check and send, interaction with HTTP/2 push). Disabling redirects entirely is simpler, correct, and matches the security posture of every major OAuth client library (which strip `Authorization` on cross-origin redirects by default). A legitimate MCP server that requires redirects can be addressed by the operator updating `url:` to point at the final endpoint.
+
+For **unauthenticated** requests (no `auth:` configured), default redirect-following behavior is acceptable — there is no token to protect.
+
+### Part 3: Host-matching semantics confirmed as binding
+
+**Ruling:** The following is the single canonical definition for host matching, used by both MCP-011 (static validation) and MCP-012 (runtime check):
+
+1. Parse `url` with `net/url.Parse`
+2. Extract hostname via `u.Hostname()` (strips port)
+3. Lowercase both the extracted hostname and each `allowed_hosts` entry
+4. **Exact string equality** — no prefix matching, no suffix matching, no wildcards, no regex, no glob
+
+This is the binding definition. If the static and runtime checks use different comparison logic, that is a bug.
+
+
+# Stream C — Auth Provider (David)
+
+**Status:** Implementation complete. `go build ./...` exit 0. All packages outside `internal/tool` pass. Note: `mcp_http_tess_test.go` has a pre-existing syntax error in `TestMCPHTTPTransport_SSE_CorrectIDSelected` (DEF-012 test missing server setup — untracked file, not caused by Stream C changes); `internal/tool` tests require Tess to fix that before `go test ./internal/tool/...` can pass.
+
+---
+
+## Update — emitter wiring audit + Don collision resolved (2026-08-15T19:12)
+
+**Don's `emit_ctx.go` has not landed** — `internal/tool/emit_ctx.go` does not exist in the repo. My earlier solution (`pkg/trace/emitter.go`) already provides the same functionality and is what `auth_gate.go` currently imports. There is no import cycle.
+
+**B-27 `mcp/authAttached` reaches the real trace stream — provably.**
+
+Full production chain traced:
+1. `internal/engine/engine.go:569` — `executor.WithEventEmitter(spanCtx, fn)` installs the emitter; `fn` calls `h.emitEventLocked(spanCtx, kind, payload)`.
+2. `executor.WithEventEmitter` delegates to `trace.WithEventEmitter(ctx, e)` (same context key as `trace.EmitterFromContext`).
+3. The enriched context is passed to `exec.Execute(emitterCtx, ...)` → `runtime.Invoke(ctx, ...)` → `invokePersistent(ctx, ...)` → `transport.Invoke(ctx, ...)`.
+4. `MCPHTTPTransport.send(ctx, ...)` creates `reqCtx` as a child of `ctx` (adds deadline only), passes to `buildHTTPRequest(reqCtx, ...)` → `gate.AttachToken(reqCtx, req)`.
+5. `AttachToken` calls `trace.EmitterFromContext(reqCtx)` — same key → receives the engine emitter.
+6. `emitEventLocked` writes `trace.TraceEvent{Kind: "mcp/authAttached", Payload: {url_host, scope}}` to `h.engine.cfg.TraceWriter.Append` (the persistent trace file) AND broadcasts in-process.
+
+The emitter is not merely called in tests — it is the engine's production emitter, and it writes to the trace file.
+
+**MCP-013 redirect ownership:** I own it. `CheckRedirect` is configured in `NewMCPHTTPTransport` (my `mcp_http.go` changes); the policy decision (authenticated only, `http.ErrUseLastResponse`) is entirely within my stream. Don's transport receives the configured client.
+
+---
+
+Ken edited `auth_gate.go` as part of the MCP-012 reclassification. On inspection the file was already in the correct state for both changes he described:
+- `AttachToken` already returned `errkit.New("MCP-012", ...)` as a fatal error (applied in my previous B-32 pass).
+- `ValidateAuthConfig` already used `u.Hostname()` — not `u.Host` — so port-stripping was already correct.
+
+The one genuine divergence was the **MCP-012 error message text**. My message read:
+```
+mcp-http: host %q is not in auth.allowed_hosts — token not attached; add %q to allowed_hosts or update url:
+```
+Ken's registered canonical form is:
+```
+mcp-http: request host %q is not in auth.allowed_hosts — token not attached (update allowed_hosts or url: to match)
+```
+Updated `auth_gate.go` to match Ken's exact wording. `go build ./...` exit 0; all packages outside `internal/tool` pass.
+
+**Zero `MCP-W` references** anywhere in the codebase — confirmed by grep across all `.go` files.
+
+---
+
+Barbara's final ruling: `CheckRedirect` must return `http.ErrUseLastResponse` (not a custom error) so the redirect response is surfaced to `send()` rather than becoming a transport error wrapped in MCP-008.
+
+**Changes in this pass:**
+- `NewMCPHTTPTransport` (`mcp_http.go`): `CheckRedirect` now returns `http.ErrUseLastResponse` for authenticated transports. Unauthenticated transports (gate == nil) retain nil CheckRedirect and follow redirects normally.
+- `send()` (`mcp_http.go`): Added 3xx detection block — when gate is non-nil and status is 3xx, emit `errkit.New("MCP-013", "...redirected to <Location>...— update url: to <Location>")` with the `Location` header value. This gives the operator an actionable message naming the destination.
+- `TestMCPHTTPTransport_CheckRedirectInstalledOnAuthenticated` (`mcp_http_test.go`): Updated to assert `errors.Is(err, http.ErrUseLastResponse)` instead of `errkit.ErrMCP013`.
+- `TestMCPHTTPTransport_TokenNeverReachesRedirectTarget` (new test): Security proof — redirecting server (in `allowed_hosts`) 302s to evil server; asserts evil server never receives any Authorization header AND error is MCP-013.
+
+**errkit.Error.Is() semantics confirmed:** Code-based comparison (`e.code == t.code`), so `errors.Is(errkit.New("MCP-013", msg), errkit.ErrMCP013)` returns true. Don's `TestMCPHTTPTransport_RedirectBlocked_Authenticated` continues to pass without modification.
+
+**Redirect policy stated:**
+- Authenticated: redirect → hard stop (`http.ErrUseLastResponse` → `send()` detects 3xx → MCP-013 with Location). Token NEVER forwarded.
+- Unauthenticated: follow redirects normally (no restriction).
+
+---
+
+---
+
+## Update — B-32 revised: host-mismatch is now fatal (2026-08-15T18:47)
+
+User instruction superseded the B-32 written text on the non-fatal/warning behavior.
+New behavior: host not in `allowed_hosts` → hard MCP-012 error, request not sent.
+
+Changes:
+- `TokenGate.AttachToken`: returns `MCP-012` (fatal) on host mismatch instead of nil + mcp/authSkipped event
+- `EventKindMCPAuthSkipped` removed from `pkg/trace/event.go` — no longer emitted
+- `NewMCPHTTPTransport`: sets `CheckRedirect` to block redirects on authenticated transport (MCP-013); Don had already implemented this with `errkit.ErrMCP013`
+- `auth_gate_test.go`: updated `TestTokenGate_RejectsDisallowedHost` (was non-fatal, now asserts MCP-012); added `TestTokenGate_SuffixConfusionRejected`; added `TestTokenGate_MCP012ErrorIsActionable`
+- All 38 gate/auth tests pass; `go build ./...` exit 0
+
+**Host-matching semantics (stated explicitly):**
+- Match on `req.URL.Hostname()` (port-stripped) — exact case-insensitive
+- No wildcards (a `*` entry is treated as a literal hostname and will never match)
+- No IDN/punycode normalization
+- Port specs in allowed_hosts entries are matched literally (not stripped) — use plain hostnames
+
+**Redirect decision:** authenticated transports refuse all redirects (MCP-013). An operator who needs a redirect path must update `url:` to point to the final endpoint.
+
+---
+
+B-32 superseded B-25/B-27 on token attachment policy. New requirements implemented:
+
+- `schema.AuthConfig.AllowedHosts []string` — required when auth is configured (Ken landed this in `pkg/schema/tool.go`)
+- `TokenGate` struct in `internal/tool/auth_gate.go` — the single policy decision point for all token attachment
+- `ValidateAuthConfig(rawURL, auth)` — static validation: MCP-010 (no allowed_hosts) and MCP-011 (url host not in list)
+- `AttachToken(ctx, req)` — runtime enforcement + B-27 trace event emission
+- `EventKindMCPAuthAttached` and `EventKindMCPAuthSkipped` added to `pkg/trace/event.go`
+- `trace.EventEmitter` + `trace.WithEventEmitter` + `trace.EmitterFromContext` added to `pkg/trace/emitter.go` (cycle-free emitter sharing — `internal/executor/events.go` updated to delegate there)
+- `MCPHTTPTransport` updated: `auth AuthProvider` → `gate *TokenGate`; added HTTP 401 invalidate-and-retry path
+- `runtime.go`: validates auth config before construction; constructs `TokenGate` with `AllowedHosts`
+- 11 gate tests in `auth_gate_test.go` including B-24 event-payload redaction proof
+
+**Note on B-32 runtime behavior:** Host-mismatch at runtime (after static validation) is **non-fatal** per B-32. The request proceeds unauthenticated; `mcp/authSkipped` event is emitted with `MCP-W001` code. The static MCP-011 check catches the common misconfiguration at parse time.
+
+---
+
+## AuthProvider Interface (for Don — Stream B)
+
+```go
+// Package: github.com/ormasoftchile/gert/internal/tool
+
+// AuthProvider acquires bearer tokens for HTTP transports that require authentication.
+// Implementations handle acquisition, caching, and refresh internally.
+//
+// The token returned by Token is an in-memory secret. It must not be written
+// to any persistent or observable surface (traces, logs, error messages, step
+// output). See B-24.
+type AuthProvider interface {
+    // Token returns a valid bearer token, refreshing proactively when within
+    // five minutes of expiry.
+    Token(ctx context.Context) (string, error)
+
+    // Invalidate clears any cached token, forcing re-acquisition on the next
+    // Token call. Call after receiving HTTP 401 to handle mid-run token expiry.
+    Invalidate()
+}
+
+// NewAuthProvider(provider, scope string) (AuthProvider, error)
+// Recognized provider values: "azure-cli"
+// Returns MCP-002 error for unknown provider.
+```
+
+**Don's usage pattern for mid-run 401:**
+```go
+// On HTTP 401 response:
+auth.Invalidate()
+token, err = auth.Token(ctx)  // forces re-acquisition
+// retry the request with the new token
+```
+
+---
+
+## Files Owned
+
+- `internal/tool/auth.go` — `AuthProvider` interface + `NewAuthProvider` factory
+- `internal/tool/auth_azurecli.go` — `AzureCLIAuthProvider` implementation
+- `internal/tool/auth_azurecli_test.go` — 16 tests including B-24 redaction proof
+
+---
+
+## Caching and Refresh Strategy
+
+- **Proactive refresh:** Token is refreshed when `now + 5min >= expiry`. The old (still-valid) token is returned on probe failure — graceful degradation, not error.
+- **Hard expiry:** At the hard expiry point, the cache is invalid and re-acquisition is mandatory.
+- **Mid-run 401 path:** `Don.MCPHTTPTransport` should call `Invalidate()` on receiving HTTP 401, then `Token()` again. `AzureCLIAuthProvider` handles the mutex and re-acquisition internally.
+- **Expiry parsing:** Prefers `expires_on` (Unix timestamp, TZ-safe) from `az`'s JSON output; falls back to `expiresOn` ("2006-01-02 15:04:05.000000" in local time); falls back to `now + 50min` if both are absent/malformed.
+- **Concurrency:** `sync.Mutex` guards the cache; concurrent calls during refresh block rather than stampede.
+
+---
+
+## Four Failure Modes (B-24 / actionable messages)
+
+| Scenario | Error code | Message (summarised) |
+|----------|------------|----------------------|
+| `az` not on PATH | MCP-007 | `az CLI is not installed or not on PATH — install from https://aka.ms/installazurecli and retry` |
+| Not logged in | MCP-007 | `not authenticated — run 'az login' and retry` |
+| No scope consent | MCP-007 | `no consent for scope "<scope>" — grant application consent or run 'az login' with the required scope` |
+| Malformed JSON output | MCP-007 | `az CLI returned malformed output: <json decode error>` or `missing accessToken field` |
+
+Classification uses `errors.As(err, &exec.Error{})` to detect the not-installed case, then stderr heuristics (`AADSTS` → consent, `Please run 'az login'` → auth) for the others.
+
+---
+
+## B-24 Redaction Proof
+
+Test: `TestAzureCLIAuthProvider_TokenNeverLeaksIntoDiagnostics` in `auth_azurecli_test.go`.
+
+The test seeds the cache with a known token value, then forces all four failure paths and the generic error path. It asserts the known token string is absent from every error message returned. It also asserts that a second cache load doesn't return a stale token after `Invalidate()`.
+
+Redaction guarantees by design:
+- `classifyAzError` is only called on command failure — no token has been produced at that point.
+- `azTokenResponse` is decoded in-memory and the raw `stdout` bytes are discarded.
+- The `token` field on `AzureCLIAuthProvider` is mutex-protected and never serialized, traced, or logged.
+- Error messages contain only: stderr text from `az`, the scope string (not a secret), and static operator guidance.
+
+---
+
+## Dependencies Not Yet Complete (Ken — Stream A)
+
+- `errkit.ClassForCode("MCP-007")` returns `""` — Ken has not yet registered the `"MCP"` class in `errkit/errors.go`. Errors work; they just have empty class in the structured error.
+- `schema.AuthConfig` type — Ken owns this. When he lands it, `runtime.go` already consumes it at the wire point (`def.Auth.Provider`, `def.Auth.Scope`).
+
+---
+
+## Cross-Stream Seam
+
+Don's `MCPHTTPTransport` (Stream B) receives an `AuthProvider` from `runtime.go`'s switch case for `TransportMCPHTTP`. That wiring is already in place in `internal/tool/runtime.go` — it calls `NewAuthProvider(def.Auth.Provider, def.Auth.Scope)` and passes the result to `NewMCPHTTPTransport(def.URL, auth)`.
+
+Don should call `auth.Token(ctx)` to get the bearer token and set it as `Authorization: Bearer <token>` on each HTTP request. For mid-run 401 handling, call `auth.Invalidate()` then `auth.Token(ctx)` again before the retry.
+
+---
+
+## Test Results
+
+```
+go test -count=1 ./internal/tool/... -run "TestAzureCLI|TestNewAuth|TestParseAz"
+ok  github.com/ormasoftchile/gert/internal/tool  (all 16 PASS)
+```
+
+Full suite: `internal/tool` has pre-existing failures unrelated to Stream C:
+- `TestStdioTransport_*` — missing `.testtools` binaries (pre-existing)
+- `TestMCPTransport_*` — same
+- `TestMCPHTTPTransport_SSEMultiLineData` — Don's in-flight SSE test (not mine)
 

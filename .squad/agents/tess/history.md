@@ -1,4 +1,4 @@
-﻿# tess
+# tess
 
 Current role: Implementation engineer.
 
@@ -137,3 +137,18 @@ catalog's ParseToolFile wrapping is the enforcement point and PKG-010 is the app
 staged (git-add'd but not committed) files in the index. Running `git commit` would have picked
 them up. Always verify `git diff --cached --name-only` immediately before `git commit` to confirm
 only your files are staged. Unstage with `git restore --staged -- <path>` if needed.
+
+## 2026-08-17 — Phase 1 Closure: Runtime Portability Complete
+
+**Status:** COMPLETE — code exit 0, test exit 0, zero FAIL. 33 architectural rulings. All blocks satisfied.
+
+**Key accomplishments:**
+- Tri-state RequiresApproval (bool → *bool) + Classification field added
+- ProfileApprovalGate + declared attendance implemented
+- MCP HTTP transport (Don), auth provider (David), fixture migration (Tess), schema validation (Ken), profile spec (Edith)
+- 31 conformance vectors: 31 PASS / 0 SKIP / 0 FAIL
+- SQL Live-Site counterparty: 3 counter-positions accepted, refined
+
+**Deferred:** AllowedModes field (RunMode separate from context), per-tool auth override (Phase 3), lifecycle sanity (Phase 3)
+
+**Next phase:** OQ2 (library vs. subprocess) spike; resolver extends --package-map; Phase 2 host bridge with explicit framing protocol

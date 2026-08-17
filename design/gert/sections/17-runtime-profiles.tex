@@ -3,6 +3,11 @@
 %
 %  Status: NORMATIVE SPECIFICATION — design agreed 2026-08-17 between
 %          Gert Core Team and SQL Live-Site Operations (gert-sqllivesite).
+%          Updated 2026-08-17 to resolve OQ-1 (profile-id format),
+%          OQ-2 (per-tool auth inheritance + Phase 3 scoping), and
+%          OQ-3 (--show-profiles zero-match behavior).  Barbara ruling.
+%          Implementation status updated to reflect commits 773f332,
+%          d7b77c1, b420dda, b982804.
 %          Source of truth: .squad/decisions.md (Rev 4 Final Acknowledgment,
 %          Barbara arch-eval 2026-08-16, David integration-critique 2026-08-16,
 %          Don ground-truth 2026-08-16 and Slice-1 report 2026-08-17,
@@ -75,8 +80,20 @@ tools:
 \texttt{runtime-profile/v1}. A document whose \texttt{apiVersion} is absent or
 does not match this value MUST be rejected at parse time.
 
-\paragraph{\texttt{id}.} A non-empty string that uniquely identifies the profile
-within the project.  [SPEC]
+\paragraph{\texttt{id}.} REQUIRED.  A string matching the regular expression
+\verb|[a-z0-9][a-z0-9-]*| with a maximum length of 64 characters.
+Uppercase letters, spaces, underscores, and all characters other than
+lowercase ASCII alphanumerics and hyphens are forbidden.
+A leading digit is permitted.
+A profile whose \texttt{id} does not match this pattern MUST be rejected
+at parse time.
+
+\textit{Rationale:} The format is constrained for three independent reasons:
+(1)~shell-quoting safety — a bare \texttt{id} value MUST be usable as a
+\texttt{--profile} argument without quoting; (2)~tab-completion — shell
+completers can enumerate profile files without escaping; (3)~filesystem
+stem — profiles are stored as \texttt{<id>.yaml}, and the pattern is a
+valid filename component on all supported platforms.  [IMPL]
 
 \paragraph{\texttt{context}.} REQUIRED.  One of the five canonical values defined
 in \S\ref{sec:rp-context-vocab}.  A profile whose \texttt{context} field is absent
@@ -104,7 +121,20 @@ See \S\ref{sec:rp-test-transport}.  [SPEC]
 
 \paragraph{\texttt{tools.<tool-id>.endpoint}.} Per-tool endpoint override.  A
 profile MAY override the endpoint URL for a named tool.  A profile MUST NOT
-override the transport mode (see \S\ref{sec:rp-composition}).  [SPEC]
+override the transport mode (see \S\ref{sec:rp-composition}).
+
+Per-tool overrides \textbf{inherit profile-level auth by default.}  A
+\texttt{tools.<tool-id>:} block that specifies only \texttt{endpoint}
+uses the same auth configuration declared at the top-level profile scope.
+If a per-tool override requires \emph{distinct} authentication, it MAY
+declare an \texttt{auth:} block nested inside the per-tool entry.
+
+\textbf{Phase scoping:} Phase~1 implements endpoint-only overrides with
+inherited auth.  Per-tool \texttt{auth:} overrides are \textbf{Phase~3
+scope}: the schema field is reserved but the loader MUST reject a per-tool
+\texttt{auth:} block in Phase~1 with a clear error message directing the
+author to use a separate profile.  [IMPL — endpoint override and auth
+inheritance; per-tool auth override is [SPEC], Phase~3.]
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Execution Context Vocabulary}
@@ -205,15 +235,17 @@ present during execution.  It is \textbf{orthogonal} to context.
         governance rules.
 \end{itemize}
 
-\begin{tcolorbox}[colback=blue!5, colframe=blue!40, title=Non-Normative Note — Current Behavior]
-  Current Gert (as of commit \texttt{c810b96}) infers attendance from
-  \texttt{TTYOutput}, which is hardcoded to \texttt{true} in
-  \texttt{cmd/gert/run.go}.  No \texttt{isatty()} call is made.  As a result,
-  any pipeline job that triggers an approval gate will block on stdin
-  indefinitely.  This is a known latent bug; profile-declared attendance
-  replaces TTY inference and is the fix.  Until profile-driven attendance is
-  implemented ([SPEC]), any tool that declares
-  \texttt{requires-approval: true} MUST NOT be used in unattended contexts.
+\begin{tcolorbox}[colback=blue!5, colframe=blue!40, title=Non-Normative Note — Attendance Implementation History]
+  Prior to commits \texttt{c810b96}, \texttt{d7b77c1}, and \texttt{b420dda},
+  Gert inferred attendance from \texttt{TTYOutput}, which was hardcoded to
+  \texttt{true} in \texttt{cmd/gert/run.go}.  No \texttt{isatty()} detection
+  was performed.  This caused any pipeline job that triggered an approval gate
+  to block on stdin indefinitely.
+
+  Profile-declared \texttt{attendance} replaces TTY inference.  The
+  \texttt{ProfileApprovalGate} reads the declared value from the loaded profile
+  and selects the appropriate gate implementation.  This is now implemented.
+  [IMPL — commits \texttt{d7b77c1}, \texttt{b420dda}]
 \end{tcolorbox}
 
 % ─────────────────────────────────────────────────────────────────────────────
@@ -549,10 +581,10 @@ with \texttt{requires-approval: true}.  [IMPL]
 
 \begin{tcolorbox}[colback=blue!5, colframe=blue!40,
   title=Non-Normative Note — Profile-Driven Approval Gate]
-  The current approval gate is selected from TTY state, not from the declared
-  profile.  A profile-driven approval gate (one that consults
-  \texttt{attendance} and \texttt{approval.scope} from the profile document)
-  is specified here but not yet implemented.  [SPEC]
+  The \texttt{ProfileApprovalGate} reads the declared \texttt{attendance}
+  value from the loaded profile and selects the appropriate gate
+  implementation.  This is now implemented.
+  [IMPL — commits \texttt{d7b77c1}, \texttt{b420dda}]
 \end{tcolorbox}
 
 % ─────────────────────────────────────────────────────────────────────────────
@@ -736,7 +768,10 @@ configuration errors vs.\ runtime network errors.
     \texttt{toolRef} names a tool in no loaded package. \\
 \texttt{config/no-binding-for-profile} & 0 &
     Tool has no binding in the active profile.  The error message MUST
-    include which profiles DO provide a valid binding, if computable. \\
+    include (a)~the tool name, (b)~its declared transport mode,
+    (c)~the active profile ID, and (d)~the list of profiles that DO
+    provide a complete binding for this tool, if computable from the
+    discovered profile files.  See the mandatory message format below. \\
 \texttt{config/binding-incomplete} & 0 &
     Binding exists but required configuration field is absent.  Message
     MUST name the missing field and the unset environment variable, if
@@ -757,7 +792,45 @@ configuration errors vs.\ runtime network errors.
 \end{center}
 
 [SPEC — all error codes listed; Tier~0 code \texttt{config/tool-unresolved}
-corresponds to existing PLAN-010 gate [IMPL]; all others are [SPEC].]
+corresponds to existing PLAN-010 gate [IMPL]; Tier~0 codes PLAN-011 and
+PLAN-012 (\texttt{config/no-binding-for-profile} and
+\texttt{config/binding-incomplete}) are implemented as of commit
+\texttt{b982804} [IMPL]; remaining codes are [SPEC].]
+
+\subsubsection{Mandatory Message Format for \texttt{config/no-binding-for-profile}}
+\label{subsubsec:rp-no-binding-message}
+
+The \texttt{config/no-binding-for-profile} error is the highest-value
+operator output in the preflight design.  The final \texttt{note:} line —
+which profiles DO allow this runbook — turns a refusal into a next action.
+It is computable at Tier~0 from \texttt{plan.Tools} and the set of
+discovered profile files, without any network access.
+
+Implementations MUST produce output conforming to the following format:
+
+\begin{minted}{text}
+error: tool "<tool-name>" has no binding in runtime profile "<profile-id>".
+  tool transport declared: <transport-mode>
+  profile "<profile-id>" does not declare a binding for transport mode
+  "<transport-mode>" / tool "<tool-name>".
+  fix: add a binding for "<tool-name>" to the "<profile-id>" profile, or
+       run in a profile that includes it.
+  note: this runbook runs correctly in profiles: <id1>, <id2>
+\end{minted}
+
+The \texttt{note:} line MUST be emitted when at least one discovered
+profile provides a complete binding for the tool.  When zero profiles
+provide a complete binding, the \texttt{note:} line MUST be replaced with:
+
+\begin{minted}{text}
+  note: no discovered profile provides a complete binding for this tool.
+\end{minted}
+
+The static-vs-dynamic distinction MUST be unambiguous: the word ``error''
+in the first line is correct here because this is a static configuration
+error, not a runtime transient.  (Contrast with
+\texttt{auth/credential-failure} and \texttt{transport/endpoint-unreachable},
+which are Tier~2 runtime errors and MUST be labeled accordingly.)
 
 \subsection{\texttt{gert plan} Command}
 \label{subsec:rp-gert-plan}
@@ -777,8 +850,28 @@ Exit codes: \texttt{0} = Tier~0 clean; \texttt{1} = Tier~0 failures;
 \texttt{2} = Tier~2 failures (only with \texttt{--preflight=live}).
 \texttt{--output=json} for CI consumption.
 
-\texttt{gert plan --show-profiles <runbook>} lists all profiles in which every
-\texttt{toolRef} has a complete binding.
+\texttt{gert plan --show-profiles <runbook>} lists all profiles in which
+every \texttt{toolRef} has a complete binding.
+
+\paragraph{Zero-match behavior.}  When no discovered profile provides a
+complete binding for all \texttt{toolRef}s in the runbook,
+\texttt{gert plan --show-profiles} MUST exit with code~\texttt{0} and
+produce no output on stdout.  It MUST write the following single-line
+message to stderr:
+
+\begin{minted}{text}
+no profile in <search-paths> provides a complete binding for all
+toolRefs in <runbook>
+\end{minted}
+
+where \texttt{<search-paths>} is the comma-separated list of directories
+searched and \texttt{<runbook>} is the canonical runbook path.
+
+\textit{Rationale:} Zero matches is a valid, informative answer.  A
+non-zero exit code would cause CI scripts that grep the output list to
+misinterpret an informative empty result as a failure.  The stderr message
+ensures the information is surfaced to human readers without polluting
+machine-parseable stdout.
 
 \textbf{Explicit scope note:} \texttt{gert plan} reports what the tool YAML
 declares.  It cannot validate endpoint reachability or token acquisition (those
@@ -818,17 +911,29 @@ Monotone governance composition (runbook + per-tool OR) &
 Approval does not affect classification or retry &
 [IMPL — structural] & Type separation; no coupling in evaluator \\
 \midrule
-Profile document schema (\texttt{runtime-profile/v1}) & [SPEC] & Phase~1 \\
-Profile-driven approval gate (attendance-aware) & [SPEC] & Phase~1 \\
-Declared attendance (replacing TTY inference) & [SPEC] & Phase~1 \\
+Profile document schema (\texttt{runtime-profile/v1}) &
+[IMPL] & \texttt{773f332} \\
+Profile-driven approval gate (\texttt{ProfileApprovalGate}) &
+[IMPL] & \texttt{d7b77c1}, \texttt{b420dda} \\
+Declared attendance (replacing TTY inference) &
+[IMPL] & \texttt{c810b96}, \texttt{d7b77c1}, \texttt{b420dda} \\
+Tier~0 check — PLAN-010: toolRef resolves to a loaded package &
+[IMPL — pre-existing] & PLAN-010 gate \\
+Tier~0 check — PLAN-011: tool has binding in active profile &
+[IMPL] & \texttt{b982804} \\
+Tier~0 check — PLAN-012: binding structurally complete &
+[IMPL] & \texttt{b982804} \\
+Tier~0 checks 4–8 in \S\ref{subsec:rp-preflight-t0} (auth provider,
+env-var interpolation, AllowedEnvironments, test transport, attendance) &
+[SPEC] & Phase~1 \\
 \texttt{AllowedEnvironments} enforcement at Tier~0 & [SPEC] & Phase~1 \\
 \texttt{AllowedModes} enforcement at runtime & [SPEC] & Phase~1 \\
-Tier~0 preflight checks (2–8 in \S\ref{subsec:rp-preflight-t0}) & [SPEC] & Phase~1 \\
 Tier~1 and Tier~2 preflight & [SPEC] & Phase~1 \\
-\texttt{gert plan} command & [SPEC] & Phase~1 \\
+\texttt{gert plan} command & [SPEC] & Phase~1 (in flight) \\
 Profile binding resolver on post-catalog \texttt{plan.Tools} & [SPEC] & Phase~1 \\
 Late-result halt rules by classification & [SPEC] & Phase~1 \\
 Profile-driven \texttt{approval.scope} enforcement & [SPEC] & Phase~1 \\
+Per-tool \texttt{auth:} override in profile & [SPEC] & Phase~3 \\
 \bottomrule
 \end{longtable}
 \end{center}

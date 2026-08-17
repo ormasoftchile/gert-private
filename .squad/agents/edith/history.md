@@ -8,6 +8,24 @@ Detailed history archived in history-archive.md due to size threshold (>= 15360 
 
 ## Recent Activity
 
+### 2026-08-17 — OQ patch: resolved three open questions in Chapter 17
+
+**Session:** Barbara ratified OQ-1/2/3 from the initial Chapter 17 delivery.
+
+**Changes made to `design/gert/sections/17-runtime-profiles.tex`:**
+
+1. **OQ-1 (§17.1 `id` field):** Added format constraint `[a-z0-9][a-z0-9-]*` max 64 chars. Rationale: shell-quoting safety, tab-completion, filename stem. Leading digit permitted. Marked [IMPL].
+
+2. **OQ-2 (§17.1 `tools.<tool-id>` paragraph):** Added auth-inheritance rule (per-tool overrides inherit profile-level auth by default). Phase 3 scoping for per-tool `auth:` block: loader MUST reject it in Phase 1 with clear error. Marked [IMPL — endpoint + inheritance; per-tool auth is SPEC Phase 3].
+
+3. **OQ-3 (`gert plan --show-profiles` zero-match behavior, §17.6):** Exit 0, empty stdout, single-line stderr message specified verbatim. Rationale recorded.
+
+4. **`config/no-binding-for-profile` message format (§17.6 new subsubsection):** Mandatory message format including `note:` line ("this runbook runs correctly in profiles: X, Y") specified precisely. Don is implementing `gert plan` against this text.
+
+5. **Implementation status updates (§17.11):** Profile schema/loader, ProfileApprovalGate + attendance, PLAN-011/012 all updated to [IMPL] with commit references. Attendance tcolorbox and governance-composition tcolorbox updated to reflect current [IMPL] state.
+
+**`.squad/decisions/inbox/edith-profile-spec.md`:** OQs marked resolved; stale pre-ruling content removed.
+
 ### 2026-08-17 — Runtime Profiles and Execution Context specification
 
 **Session:** Runtime Portability spec delivery for SQL Live-Site Operations.

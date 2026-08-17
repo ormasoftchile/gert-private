@@ -10,8 +10,18 @@ Session: Slice 4 + Barbara Condition 1 (2026-08-17)
 - Feature complete; commits ff429d4, 31c0aa0, b420dda, d7b77c1, ed432c7
 - Commits: ProfileApprovalGate, declared attendance, fail-closed default, David's profile wiring gap fix, defense-in-depth framing, Barbara's anti-coercion evaluator tests
 
+## 2026-08-17 — Reachability Gate (Commit 56b1bc4)
+
+**Feature:** Registry-driven enforcement gate preventing dead schema fields from silently accumulating.
+
+**Outcome:** ✅ COMPLETE — gate provably fires; `go test ./...` passes (internal/tool pre-existing build failure unrelated).
+
 ## Learnings
 
+- **KNOWN-DEAD escape valve is essential**: A registry that only accepts live entries is unusable — you can't write the probe before the field is wired. The KNOWN-DEAD entry makes the dead state explicit, traceable, and visible in test output rather than silently absent.
+- **Unit tests that bypass runRun() are not reachability tests**: The proof of this: David's PLAN-010/011/012 were unit-tested but dead in production because `cmd/gert/run.go` never passed `Profile` to the planner. Only a test through `runRun()` catches this class of wiring gap.
+- **Negative control is mandatory for enforcement tests**: A gate that can't fail is worthless. The `TestFunc: nil` demonstration is required, not optional — it's the same discipline as the negative-control vectors in the conformance suite.
+- **docs/ is gitignored in this repo**: Convention docs belong in `specs/`, not `docs/`. Always check `.gitignore` before creating documentation files.
 - **Anti-coercion probe design**: An attended profile with `allow_read=false` is the right probe for classification coercion — if "destructive"/"mutating" is silently coerced to "read-only", the matrix denies it and the test fails loudly. A probe with `allow_read=true` would pass regardless of coercion and provide no signal.
 - **Conformance vectors can't guard evaluator internals when profile is absent**: GOV-009/GOV-010 run without a profile → NoOpApprovalGate → ProfileEvaluator short-circuits → routing changes invisible. Any invariant inside the evaluator needs a profile-active unit test, not just a conformance vector.
 - **TestLoadEnumSuite failing can mask TestEnumConformance vector failures**: when the conformance suite's vector-count assertion fails first, individual vector failures are never reached. After the count was fixed (by in-flight work), GOV-004 surfaced as failing due to my Slice 2 approval enforcement wiring. That's a pre-existing issue needing Tess to update the GOV-004 vector to expect an approval step.

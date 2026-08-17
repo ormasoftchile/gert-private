@@ -60,6 +60,10 @@
 - **Fail-fast at CLI boundary catches configuration errors early.** Correct seam: after profile check, before engine construction.
 - **Evidence record requires explicit non-fabrication design.** Pointer presence = completion unknown; nil Output avoids false inferences.
 - **Profile execution wiring is distinct from profile schema.** Schema fields exist; execution path does not. Verify end-to-end reachability.
+- **PLAN-013 must ship in same commit as endpoint-override wiring.** A window between commits where overrides execute without validation is a security regression. One commit = no window.
+- **Ratified Rule A is enforced structurally, not by runtime assertion.** ProfileToolOverride has no Scope/AllowedHosts fields; they simply cannot be set. Provider override IS wired; TokenGate always reads scope+allowedHosts from def.
+- **Reachability tests need two servers, not one.** A single-server reachability test passes trivially if the production read is removed (requests go to the same server regardless). Two servers (default vs override) produce a diagnostic assertion that fails directionally.
+- **Transport HTTPS enforcement is at ValidateTransportConfig (scan time), not ValidateAuthConfig (runtime).** Unit tests that bypass YAML parsing can use plain HTTP test servers without tripping the HTTPS check.
 
 Full detailed history: `.squad/agents/david/history-archive.md`
 
@@ -73,3 +77,31 @@ Full detailed history: `.squad/agents/david/history-archive.md`
 - Consumer-specific contracts (e.g., SQL Live-Site ICM contract) are owned by consumer team in their repo
 - Item 4 is now serial after Item 2 only; no external dependencies
 - Full details: Contract Proof Ownership Split decision (decisions.md)
+
+## Phase 1B Item 2 Complete (2026-08-17)
+
+### Profile Execution Wiring + PLAN-013
+
+**Status:** SHIPPED in commit `85bfa4a`.
+
+Wired `ProfileToolOverride.Endpoint` and `Provider` through `adapter.WireOptions` → `BuildEngineConfig` → `DefaultToolRuntime.SetProfile` → `Invoke`. PLAN-013 preflight check (endpoint override host must be in `allowed_hosts`) ships in same commit — no unvalidated execution window. Item 4 is now unblocked.
+
+## Phase 1B Items 5+B Complete (2026-08-17)
+
+### Profileless Non-Interactive Fail-Fast + --acknowledge-indeterminate
+
+**Status:** SHIPPED in commit `d1314cc`.
+
+**Item 5:** Added `interactiveTTYDetect` package-level var (overridable in tests) so existing profileless CLI tests aren't broken. `TestMain` in `cmd/gert/test_main_test.go` sets it to `true` for all tests; only the fail-fast-specific test overrides it to `false`. Fixed `TTYOutput: true` hardcode → `isInteractiveTTY()`. Fail-fast fires before any approval gate.
+
+**Part B (Tess complement):** Added `--acknowledge-indeterminate` flag wired to `engine.RunOptions.AcknowledgeIndeterminate` in the resume path.
+
+**Conformance harness:** Fixed by injecting `internal/conformance/testdata/unattended-test.profile.yaml`. Vectors unchanged: **72 / 62 / 10 / 0**.
+
+**Reachability registry:** Graduated `ProfileToolOverride.Endpoint` from `statusKnownDead` to `statusReachable` with `testCLI_ProfileToolOverrideEndpoint_Reachable` probe (PLAN-013 path).
+
+## Learnings
+
+- **Injectable TTY detection prevents pervasive test breakage.** A package-level function var for `isInteractiveTTY`, stubbed to `true` in TestMain, is the cleanest pattern for features that depend on TTY state without touching every existing test.
+- **makeWorkDir returns relative paths; use filepath.Abs before os.Chdir.** After chdir, a relative `dir` variable used in filepath.Join produces double-nested paths. Always resolve absolute before any chdir when seeding test fixtures.
+- **Resume test strategy: seed state, verify error changes.** For `--acknowledge-indeterminate`, seed a `RunStatusIndeterminate` snapshot via `SaveState`, then assert the flag changes the specific error returned — not that the run succeeds (plan isn't in-memory store).

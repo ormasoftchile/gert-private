@@ -1,3 +1,604 @@
+# Final Acknowledgment: Runtime Portability — Design Agreed (Rev 4 — Final)
+
+**Date:** 2026-08-17  
+**By:** Gert Core Team  
+**To:** SQL Live-Site Operations (gert-sqllivesite)  
+**Status:** Design closed. Implementation begins.  
+
+---
+
+## 1. Approval ≠ Classification — Accepted
+
+We withdraw the Rev 3 language stating that explicit `requires-approval: false` is "equivalent to `classification: read-only`." That was wrong. The two fields answer different questions:
+
+- `RequiresApproval` → whether active approval is required before invocation.
+- `Classification` → the action's side effects, governing retry, timeout, and late-result safety.
+
+A legacy action may explicitly suppress approval while still being mutating or destructive. Coercing `&false` to `read-only` would have granted retry eligibility and read-only late-result handling to actions that may be destructive — a safety regression introduced by a compatibility shim. That violates the governing principle we both agreed to: absence of classification must never grant additional execution rights.
+
+**Published semantics for `RequiresApproval = &false, Classification = nil`:**
+
+| Dimension | Behavior |
+|-----------|----------|
+| Approval routing | Legacy opt-out preserved. Gate does NOT fire for this action (approval dimension only). |
+| Classification | Remains `unspecified`. |
+| Retry | Never retry automatically. |
+| Late/lost result | INDETERMINATE + halt. Require verification. |
+| `legacy_unspecified_policy: allow` | Suppresses PKG-W migration **prompts** only. Never relaxes retry, idempotency, or late-result behavior. |
+
+`RequiresApproval` influences approval routing only. It must never assign, imply, or coerce a classification value.
+
+---
+
+## 2. Runbook-Level Cannot Override Per-Action — Accepted and Verified
+
+Your condition: runbook-level `requires-approval: false` must never override per-action approval or classification semantics. Verified against the source:
+
+**(a) Substitution path — structurally satisfied.** `pkg/pkgsubst/pkgsubst.go:276` composes governance as `eff.RequireApproval = eff.RequireApproval || subRequireApproval` (monotone-increasing OR). `internal/governance/builder.go:BuildPolicy()` only ever sets `requireApproval = true`, never back to false. Runbook-level false cannot suppress a tool-level true. The guarantee you want holds by construction.
+
+**(b) Plain (non-substitution) steps — correction of our earlier disclosure.** In the gate closure we told you approval fires from runbook-level governance on the plain-step path. That was inaccurate. The governance pre-flight block in `internal/engine/engine.go` (~line 506) is guarded by `if h.engine.cfg.GovernanceEvaluator != nil`, and `GovernanceEvaluator` is never assigned in any production wiring path — not in `internal/adapter/wire.go`, not in `pkg/run/run.go`. It is nil in all production code paths. For plain tool steps today, neither tool-level NOR runbook-level approval is enforced. We are correcting this unprompted because you are relying on our disclosures being accurate.
+
+**(c) Binding Phase 1 constraint.** When we wire `GovernanceEvaluator` to close the plain-step gap, the policy MUST be built from BOTH runbook-level and per-tool governance (not runbook governance alone, which is what `planner.go:110` does today for `Plan.Governance`). If built from runbook governance alone, tool-level `requires-approval: true` would be invisible and effectively suppressed — violating your condition. `BuildPolicy` is already variadic and supports multi-input composition, so this is a call-site change, not an API change. We adopt this as a binding implementation constraint for Phase 1.
+
+---
+
+## 3. No Landmine
+
+Nothing in current code couples approval state to retry. `RetryConfig` carries its own `Idempotent bool` with no reference to `RequiresApproval`. The 401 retry in `mcp_http.go` is token-refresh only. The orthogonality you are demanding is already true in the code — we only have to not break it.
+
+---
+
+## 4. Effort
+
+No change to the ~4.5 day total from Rev 3. The `BuildPolicy` call-site constraint falls inside the already-scoped "direct-invocation approval gate enforcement (1–2 days)" line item.
+
+---
+
+## 5. Close
+
+Design final. Six corrections from you across five rounds, six accepted. The runtime portability architecture — tiered preflight, declared attendance, per-action classification with tri-state approval, profile-context binding, conservative-by-default safety model — is agreed and ready for implementation. We start this week.
+
+---
+
+*Gert Core Team — 2026-08-17*
+
+
+---
+
+# Slice 1 + Slice 2 Review: Tri-State Schema + Direct-Invocation Approval Enforcement
+
+**Date:** 2026-08-17  
+**Reviewer:** Barbara (Lead / Architect)  
+**Commits:** `a2e7db0` (Don — schema), `c810b96` (Ken — enforcement)  
+**Verdict:** **APPROVED**  
+
+---
+
+## Requirement-by-Requirement Assessment
+
+### 1. GovernanceEvaluator is wired in production — ✅ DEMONSTRATED
+
+- `internal/adapter/wire.go:161`: `GovernanceEvaluator: internalgovernance.BuildEvaluator(approvalGate)` — unconditional.
+- `pkg/run/run.go`: same pattern in both engine-construction paths.
+- Sub-engine (`runSubStepsViaEngine`, wire.go:392): also wired.
+- Per-run evaluator built in `Start()` and `Resume()` from `plan.GovernanceSource`.
+- The previously-dead code path (`if GovernanceEvaluator != nil`) is now always active.
+- **Test:** `TestApproval_GovernanceEvaluatorWiredInProduction` — proves `BuildEvaluator(gate)` returns non-nil and is functional.
+
+### 2. Policy composes runbook AND per-tool governance — ✅ DEMONSTRATED
+
+- Runbook-level: `planner.go:111` sets `GovernanceSource: rb.Runbook.Governance` on the plan. `Start()/Resume()` passes it to `BuildEvaluator`.
+- Per-tool: `engine.go:497-498` extracts `*toolDef.Governance.RequiresApproval` into `stepInfo.ToolRequiresApproval`.
+- Evaluator (`evaluator.go`): `e.requireApproval || step.ToolRequiresApproval` — monotone OR at evaluation time.
+- Both sources genuinely contribute to the decision. Building from runbook-level alone would leave `ToolRequiresApproval` unused. Building from per-tool alone would ignore `e.requireApproval`. Both are consumed.
+- **Test:** `TestApproval_PolicyComposesRunbookAndToolGovernance` — tool has `requires-approval: true`, runbook has no governance. Gate fires. Proves tool-level is not silently ignored.
+
+### 3. Approval applies to substituted, stdio-MCP, and HTTP-MCP calls — ✅ DEMONSTRATED
+
+- The chokepoint is in `executeStep` (`engine.go:468-562`), BEFORE executor dispatch. The executor is what eventually selects the transport. So all transports — substituted, stdio-MCP, HTTP-MCP, native process — are gated by a single pre-dispatch check.
+- **Test:** `TestApproval_FiresForAllInvocationPaths` — uses a denying gate and verifies `exec.invoked == false`. The executor was never reached. This proves the gate fires pre-dispatch regardless of transport.
+- **Test:** `TestApproval_FiresForStdioMCPAndHTTPMCP` — labels match the spec (though technically all transports share the same code path, which is the point).
+
+### 4. Approval state never changes classification, retry, or late-result behavior — ✅ DEMONSTRATED (structurally)
+
+- `EvaluationResult` carries: `Allowed`, `Denied`, `RequiresApproval`, `MatchedRules`, `BlockedEnvVars`, `FilteredEnvVars`, `Evidence`. No Classification, no retry fields.
+- `StepInfo` carries: `ID`, `Kind`, `Command`, `EnvVars`, `ToolRequiresApproval`. No Classification field flows into the evaluator.
+- No code in `evaluator.go` references Classification or RetryConfig.
+- No code anywhere in the codebase couples RequiresApproval to retry logic (confirmed: RetryConfig has its own `Idempotent bool`; the only retry in mcp_http.go is token-refresh).
+- **Test:** `TestApproval_DoesNotAffectRetryOrClassification` — structural type assertion (verifies EvaluationResult has no retry/classification fields). Not a behavioral test, but the structural guarantee is valid: coupling would require adding fields to these shared types.
+
+### 5. Tri-state integrity — ✅ DEMONSTRATED
+
+- `RequiresApproval *bool` on ToolGovernance with `yaml:"requires-approval,omitempty"`.
+- **Test case (b)** in `TestRequiresApprovalTristate`: governance block contains `requires-capabilities: [network]` but NO `requires-approval`. Result: `Governance != nil`, `RequiresApproval == nil`. This is THE case the counterparty caught — and it passes correctly.
+- All four cases (a: absent, b: present-but-no-field, c: explicit-false, d: explicit-true) covered.
+- tv-enum.yaml's 25 `requires-approval: false` entries unmarshal to `&false` — confirmed by conformance suite passing.
+
+### 6. Orthogonality — ✅ DEMONSTRATED (structurally)
+
+- Classification lives on `ToolAction` (`*string`). RequiresApproval lives on `ToolGovernance` (`*bool`). Different structs, different conceptual levels. No code derives one from the other.
+- The evaluator flow never reads Classification. The Classification field is never consulted in approval routing.
+
+### 7. Monotone composition — ✅ DEMONSTRATED
+
+- `builder.go:39-41`: `if cfg.RequireApproval { p.requireApproval = true }` — can only set true, never clear it.
+- Evaluator: `e.requireApproval || step.ToolRequiresApproval` — OR, cannot suppress.
+- **Test:** `TestApproval_RunbookFalseCannotSuppressToolTrue` — runbook governance has `RequireApproval: false`, tool has `RequiresApproval: &true`. Gate fires. Proves monotone OR holds.
+
+### 8. Binding constraint (both sources feed policy) — ✅ DEMONSTRATED
+
+- Runbook-level: flows through `plan.GovernanceSource` → `BuildEvaluator` → `e.requireApproval`.
+- Per-tool: flows through `plan.Tools[name].Governance.RequiresApproval` → `stepInfo.ToolRequiresApproval`.
+- Both genuinely consumed in the evaluator's `||` expression. Building from only one source would leave the other dead.
+
+---
+
+## Test Quality Assessment
+
+| Test | What it actually proves | Genuine? |
+|------|------------------------|----------|
+| `TestRequiresApprovalTristate` (4 sub-tests) | YAML unmarshalling correctly distinguishes all four tri-state cases | ✅ Yes — parses real YAML, asserts on pointer values |
+| `TestApproval_GovernanceEvaluatorWiredInProduction` | BuildEvaluator returns a functional non-nil evaluator | ✅ Yes — proves the wiring call would produce a live evaluator |
+| `TestApproval_PolicyComposesRunbookAndToolGovernance` | Tool-level RequiresApproval feeds through to gate invocation | ✅ Yes — runs a full engine cycle with a countingApprovalGate |
+| `TestApproval_RunbookFalseCannotSuppressToolTrue` | Monotone OR holds under conflict | ✅ Yes — full engine cycle with conflicting governance |
+| `TestApproval_FiresForAllInvocationPaths` | Gate fires pre-dispatch; executor never reached on denial | ✅ Yes — denying gate + executor invocation check |
+| `TestApproval_FiresForStdioMCPAndHTTPMCP` | Same pre-dispatch gate fires for named transport labels | ✅ Yes — though redundant with the above (same code path) |
+| `TestApproval_DoesNotAffectRetryOrClassification` | Types structurally preclude coupling | ⚠️ Structural, not behavioral — but valid |
+
+No mock-only false positives. The engine tests run real `engine.Start()` → `Next()` cycles through `runPlanToCompletion`, exercising the actual dispatch path.
+
+---
+
+## Tri-State Collapse at the ToolRequiresApproval Boundary — Expected Gap
+
+In `engine.go:497-498`:
+```go
+if toolDef.Governance != nil && toolDef.Governance.RequiresApproval != nil {
+    stepInfo.ToolRequiresApproval = *toolDef.Governance.RequiresApproval
+}
+```
+
+When `RequiresApproval` is nil (unspecified), `ToolRequiresApproval` stays at its zero value (`false`). This means unspecified tools do NOT fire the gate via this path alone.
+
+Per our Rev 4 design, unspecified should fire the gate in interactive contexts and deny in unattended contexts. That behavior belongs to the **ProfileApprovalGate** (classification-aware, attendance-aware), which is a later slice. The current slice correctly implements: "if RequiresApproval is explicitly true, the gate fires on all paths." The nil-means-conservative behavior will come from the ProfileApprovalGate when it replaces the current TTY-based gate selection.
+
+**This is expected and correctly scoped. Not a defect — a documented gap for a later slice.**
+
+---
+
+## CI Hang Hazard Assessment
+
+`GovernanceEvaluator` is now always non-nil (previously nil in production). `cmd/gert/run.go` hardcodes `TTYOutput: true`. `buildApprovalGate()` selects `TerminalApprovalGate` when TTYOutput is true. If the gate fires, it calls `RequestApproval()` which reads stdin.
+
+**Risk assessment:** The gate fires ONLY when `e.requireApproval || step.ToolRequiresApproval` is true. This requires either:
+- A runbook with `governance.require_approval: true`, OR
+- A tool with `governance.requires-approval: true`
+
+The existing corpus has ZERO tools with `requires-approval: true` (all 25 conformance tools have explicit `false`). No existing runbook in the repo declares `require_approval: true`. So **no existing CI run will hang**.
+
+The hazard is now LIVE for any FUTURE tool or runbook that explicitly opts in to approval AND runs in CI without an unattended-aware gate. This is the same latent bug we already disclosed (TTYOutput hardcoded, no isatty). The fix is the declared-attendance work (later slice). The risk is contained to tools that explicitly request approval in an unattended context — which is a configuration error.
+
+**Verdict: not a regression. The bug pre-existed; the previously-dead code path now being live does not change observable behavior for any existing artifact.**
+
+---
+
+## Counterparty Validation Status
+
+| Criterion | Status | Evidence |
+|-----------|--------|----------|
+| 1. GovernanceEvaluator wired in production | **DEMONSTRATED** | wire.go:161, run.go (×2), sub-engine wire.go:392 |
+| 2. Policy composes runbook + per-tool | **DEMONSTRATED** | GovernanceSource on plan, ToolRequiresApproval on StepInfo, OR in evaluator |
+| 3. Approval applies to all transport paths | **DEMONSTRATED** | Pre-dispatch chokepoint in executeStep; executor never reached on denial |
+| 4. Approval never affects classification/retry | **DEMONSTRATED** | Structural type separation; no coupling in evaluator code |
+
+All four of their validation criteria can be honestly reported as demonstrated.
+
+---
+
+## Non-Blocking Notes for Later Slices
+
+1. **ProfileApprovalGate (later slice):** Must implement the "unspecified fires gate in interactive / denies in unattended" behavior. Current slice only enforces explicit `requires-approval: true`. The chokepoint is in place; the gate selection logic needs upgrading.
+
+2. **Declared attendance (later slice):** Must replace TTY-inferred gate selection. Until then, any new tool/runbook that declares `requires-approval: true` and runs in CI will block on stdin. Document this as a known limitation in the interim.
+
+3. **AllowedModes field:** Added to schema but no enforcement wired. Expected — enforcement is a later slice.
+
+4. **Classification validation:** `internal/tool/scan.go` rejects unknown classification values. Good. No runtime enforcement of classification-based approval policy yet — that is the ProfileApprovalGate's job (later slice).
+
+---
+
+**APPROVED. No revisions required. All eight requirements are met by the implementation as verified against source.**
+
+*Barbara — 2026-08-17*
+
+
+---
+
+# Runtime Portability — Tri-State `RequiresApproval` Assessment
+
+**Prepared by:** Don (Backend Dev)
+**Date:** 2026-08-17T06:37:00-07:00
+
+---
+
+## Q1 — Confirm the Defect
+
+**Confirmed. The defect is real and exactly as described.**
+
+`pkg/schema/tool.go:47`:
+```go
+RequiresApproval bool `yaml:"requires-approval,omitempty" json:"requires-approval,omitempty"`
+```
+
+Plain `bool`. No custom `UnmarshalYAML` on `ToolGovernance` (only `GovernanceConfig` has one, at `pkg/schema/runbook.go:107`). No `yaml.Node` capture, no raw-node field, no "set-tracking" companion field, no `mapstructure` metadata, nothing that records field presence.
+
+Given `governance: { requires-capabilities: [network] }` and `governance: { requires-capabilities: [network]; requires-approval: false }`: after YAML unmarshal, both produce a non-nil `*ToolGovernance` with `RequiresApproval == false`. Indistinguishable in Go. The grandfathering rule as published is unimplementable as written.
+
+SQL Live-Site's proposed fix — `RequiresApproval *bool` — is the correct and only clean fix short of a separate shadow-tracking mechanism (which would be worse).
+
+---
+
+## Q2 — Blast Radius of `bool → *bool` on `ToolGovernance`
+
+**Schema types and effective/resolved types are separate. The pointer only needs to live on the schema (authored) type.**
+
+The relevant types:
+- `pkg/schema.ToolGovernance` — **authored type**, YAML-parsed. This is what changes.
+- `pkg/schema.GovernanceConfig` — authored type for runbook-level governance. Separate struct, separate change question (see Q3).
+- `pkg/pkgsubst.EffectiveGovernance` — **resolved type** (`RequireApproval bool` at `pkgsubst.go:46`). Stays `bool` — SQL team's explicit permission.
+- `pkg/trace.EffectiveGovernancePayload` — trace wire type (`RequireApproval bool` at `event.go:130`). Stays `bool`.
+
+**Read sites for `schema.ToolGovernance.RequiresApproval` in Go code:**
+
+| File | Line | What it does | nil-safe? |
+|------|------|-------------|-----------|
+| `pkg/pkgsubst/pkgsubst.go` | 359 | `EffectiveGovernanceFromTool()`: `RequireApproval: g.RequiresApproval` — copies schema value into `EffectiveGovernance.RequireApproval bool` | **Needs update.** Change to: `if g.RequiresApproval != nil { eff.RequireApproval = *g.RequiresApproval }` — nil treated as false for resolution. |
+
+**That is the only Go read site for `schema.ToolGovernance.RequiresApproval`.** The field is otherwise only populated via YAML unmarshal. No test constructs `schema.ToolGovernance{RequiresApproval: ...}` directly in Go literals — all test tool defs are YAML-parsed through the conformance corpus (`tv-enum.yaml`) or through `ParseToolFile`. Verified: the grep for `RequiresApproval` in Go code hits `pkg/schema/tool.go:47` (declaration) and `pkgsubst.go:359` (read). All other `RequiresApproval` hits in Go code are for `GovernanceConfig.RequireApproval` (different struct) or `EffectiveGovernance.RequireApproval` (resolved type, stays `bool`).
+
+**The schema/effective split is clean today.** This is not a wide refactor. It is a 2-line Go change plus the schema declaration change.
+
+---
+
+## Q3 — Runbook-Level Scope
+
+`GovernanceConfig.RequireApproval` is a plain `bool` at `pkg/schema/runbook.go:91`. `GovernanceConfig` has a custom `UnmarshalYAML` at `runbook.go:107` — but that custom unmarshaller reconciles hyphenated vs. snake_case field spellings only. It still reads `RequireApproval` as a `bool` in both arms. No field-presence tracking there either.
+
+**However: the SQL team's request to apply tri-state at the runbook level is over-scoped for the agreed design. I recommend we push back on that point.**
+
+The reason: `GovernanceConfig.RequireApproval` gates ALL steps in a runbook uniformly — it is an operator-level declaration that "this runbook execution requires an approval step." It is not per-action classification. The grandfathering rule we defined (`requires-approval: false` explicitly authored = legacy read-only signal) only needs to work at the **tool/action level** to resolve the classification bootstrapping problem. Runbook-level `require_approval: false` has no semantic bearing on whether individual tool actions are classified — it means "don't gate the entire runbook." A `require_approval: false` runbook may still contain destructive tool actions, and those actions need classification regardless.
+
+The tri-state distinction at the runbook level (`nil` vs. `&false` vs. `&true`) buys us nothing for the classification design: even if we could detect "this runbook's governance block was authored with explicit `require_approval: false`", that would not tell us whether individual tool actions are safe. Classification is an action-level property, not a runbook-level property.
+
+**Blast radius if we were forced to change `GovernanceConfig.RequireApproval → *bool`:** Much wider. `GovernanceConfig.RequireApproval` is read at: `internal/governance/builder.go:BuildPolicy()` (extracts `cfg.RequireApproval` for the policy), `pkg/pkgsubst/pkgsubst.go:267-276` (subgov composition), `internal/executor/dynamic_resolver.go:ComposeGovernance()` (dynamic include governance composition), `internal/executor/gov_seed.go:WithEntryGovernance()` (seeds ctx with runbook governance), `internal/governance/evaluator.go:NewEvaluator()`. Plus all test code that constructs `schema.GovernanceConfig{RequireApproval: true/false}` directly — 15+ sites across 5+ test files. **This is the refactor worth avoiding.** The `ToolGovernance` change is clean; the `GovernanceConfig` change is not, and it doesn't help us.
+
+---
+
+## Q4 — Serialization / Compatibility
+
+**No golden file breaks. No round-trip marshal breaks.**
+
+Evidence:
+
+1. **`kit.go` marshals `kitfile` and `lockfile` structs** (package kit management). Neither contains `ToolGovernance` or `GovernanceConfig`. No tool governance is marshaled to YAML in the kit path.
+
+2. **Conformance corpus `tv-enum.yaml`** contains `requires-approval: false` in 25 locations — but these are **input strings** that the conformance harness unmarshals. The test reads them as YAML input, it does not marshal `ToolGovernance` back to YAML and compare against golden output. No golden files capture serialized `ToolGovernance`.
+
+3. **JSON trace events** use `pkg/trace.EffectiveGovernancePayload` (which stays `bool`) not `schema.ToolGovernance` directly. No trace event serializes a raw `ToolGovernance`.
+
+4. **`omitempty` behavior change for marshal:** Today, `bool` with `omitempty` suppresses the field when `false` (so `requires-approval: false` is already dropped from marshal output). With `*bool` and `omitempty`, `nil` (absent) is dropped and `&false` (explicit opt-out) is emitted as `false`. This is a change in marshal semantics — but since nothing in the codebase marshals `ToolGovernance` to YAML/JSON and compares the output, it breaks nothing today.
+
+One future-facing note: if a packaging step ever serializes resolved tool definitions back to YAML (e.g., for a `gert compile` output or kit artifact), the `*bool` with `omitempty` would emit `requires-approval: false` when explicitly set and omit it when absent — which is the correct and desired behavior for the tri-state semantics.
+
+---
+
+## Q5 — Effort Estimate
+
+**`schema.ToolGovernance.RequiresApproval bool → *bool`: 0.5 days.**
+
+- `pkg/schema/tool.go:47` — 1 line change.
+- `pkg/pkgsubst/pkgsubst.go:359` — 2 lines (nil-guard in `EffectiveGovernanceFromTool`).
+- `internal/conformance/enumdata/tv-enum.yaml` — no change needed. The 25 `requires-approval: false` entries unmarshal to `*bool` pointing to `false`, which is the correct "explicit opt-out" value. The conformance tests continue to pass.
+- No Go test literals construct `schema.ToolGovernance{RequiresApproval: ...}` — zero test changes required for `ToolGovernance`.
+
+If the SQL team's runbook-level `GovernanceConfig` request is accepted despite Q3 recommendation: add 1.5–2 days for the wider read-site updates (builder, pkgsubst compose, dynamic_resolver, evaluator, test literals at 15+ sites).
+
+---
+
+## Q6 — Subprocess Sandboxing Confirmation
+
+**Gert does zero sandboxing of subprocess transport. Confirmed.**
+
+`internal/tool/process.go:StartProcess()`:
+```go
+cmd := exec.Command(command, args...)
+cmd.Env = mergeEnv(env)
+```
+
+`mergeEnv()`:
+```go
+out := append([]string{}, os.Environ()...)  // full parent env inherited
+for k, v := range env {
+    out = append(out, k+"="+v)              // tool's extras appended
+}
+```
+
+No `SysProcAttr.Cloneflags` (no Linux namespaces), no seccomp filter, no network restriction, no cwd jail, no env scrubbing — in fact the opposite: the full parent process environment is inherited unconditionally, with tool-specific vars appended on top. The subprocess sees everything the Gert process sees.
+
+The SQL team's restatement is precisely correct: the test-profile subprocess opt-in (`transport.allow_subprocess_in_test: true`) is a **trusted profile assertion** that the operator declares the subprocess to be hermetic, not a guarantee from Gert. Gert's description of the opt-in should read: "The profile author asserts that the named subprocess command is a hermetic test double. Gert does not enforce isolation." This is a documentation/spec wording fix, not a code change.
+
+---
+
+---
+
+## SQL Live-Site Condition Verification (2026-08-17T06:56:00-07:00)
+
+### Condition under review
+> "We accept the refusal to make runbook-level approval tri-state, **PROVIDED** runbook-level `require_approval: false` never overrides per-action approval or classification semantics."
+
+---
+
+### Q1 — Plain tool step call path: what actually decides whether an approval gate fires?
+
+**Finding: for plain (non-substitution) tool steps, NO approval gate fires today at all.**
+
+The governance pre-flight in `internal/engine/engine.go:456` is:
+```go
+if h.engine.cfg.GovernanceEvaluator != nil {
+    ...
+    if evalResult.RequiresApproval { // line 506 — approval gate
+```
+
+`GovernanceEvaluator` is **never assigned** in any production `EngineConfig` construction:
+- `internal/adapter/wire.go:149–164` — returns `engine.EngineConfig{Executors, Dispatcher, TraceWriter, Platform, EventBus, Store, EvidenceHook, Evaluator, ConditionEvaluator, PromptProvider, InputProvider, ToolRuntime, ApprovalGate, TracerProvider}` — `GovernanceEvaluator` is absent.
+- `pkg/run/run.go:390–405` — same list, `GovernanceEvaluator` absent.
+
+Result: `cfg.GovernanceEvaluator == nil` in all production wiring. The nil-guard at `engine.go:456` is never entered. `ToolGovernance.RequiresApproval` is **not consulted on the plain-step path today**. Runbook-level `GovernanceConfig.RequireApproval` is also not enforced for plain steps (only the redaction patterns from `Plan.Governance` are used, via the separate check at `engine.go:641`).
+
+This is a pre-existing correctness gap, not a new regression. It is already on the Phase 1 work list ("direct-invocation approval gate enforcement on the Execute() path").
+
+---
+
+### Q2 — Substitution path: can runbook-level `require_approval: false` suppress a tool-level `requires-approval: true`?
+
+**No. The composition is strictly OR. A runbook-level `false` cannot suppress a tool-level `true`.**
+
+`pkg/pkgsubst/pkgsubst.go:276`:
+```go
+eff.RequireApproval = eff.RequireApproval || subRequireApproval
+```
+
+- `eff.RequireApproval` is seeded from the caller's `EffectiveGovernance.RequireApproval` (set via `WithEntryGovernance` in `gov_seed.go:30`, which copies `runbook.GovernanceConfig.RequireApproval` into context).
+- `subRequireApproval` is `subGov.RequireApproval` — the substituted tool package's `GovernanceConfig.RequireApproval` (line 273).
+
+If the caller (runbook) has `RequireApproval: false` and the substitute (tool) has `RequireApproval: true`, the result is `false || true = true`. The tool's requirement wins. The same logic applies in `BuildPolicy()` at `internal/governance/builder.go`:
+```go
+// RequireApproval: OR (if any source requires it, the merged policy requires it)
+if cfg.RequireApproval {
+    p.requireApproval = true
+}
+```
+
+There is no `false` assignment that can override a previously accumulated `true`. This is monotone-increasing composition — once `true`, it cannot go back to `false`. **The composition semantics do NOT allow runbook-level `false` to suppress tool-level `true`.**
+
+---
+
+### Q3 — Does current Gert satisfy their condition? Gap, if any?
+
+**Today:** Condition is **vacuously satisfied** on the plain-step path (no gate fires) and **structurally satisfied** on the substitution path (OR composition). There is no code path where runbook-level `require_approval: false` actively lowers a per-action approval requirement.
+
+**Phase 1 gap (not a violation of the condition, but a required implementation constraint):** When we wire `GovernanceEvaluator` for the plain-step path in Phase 1, the evaluator must be built from BOTH runbook-level governance AND per-tool-level governance (using the same OR semantics currently used in `BuildPolicy(configs...)`). If we naively build it from runbook-level governance only (as `planner.go:110` currently does for `Plan.Governance`), tool-level `requires-approval: true` would be invisible to the evaluator. That would be a new violation of the condition.
+
+**Required constraint for Phase 1 implementation:** The `GovernanceEvaluator` assigned to `EngineConfig.GovernanceEvaluator` must receive both `runbook.Governance` and the resolved per-tool `ToolGovernance` (collapsed to `GovernanceConfig` form) as inputs to `BuildPolicy(runbookConfig, toolConfig)`. The existing `BuildPolicy` variadic interface already supports this — it is an API call-site change, not an API change.
+
+**Composition semantics do NOT need changing.** The existing OR / max-restriction logic (`eff.RequireApproval || subRequireApproval` and `BuildPolicy`'s additive OR) is already correct. No structural change required.
+
+**Effort for the condition-preserving wiring:** included in the Phase 1 "direct-invocation approval gate" work. Not a separate item.
+
+---
+
+### Q4 — Does any retry/idempotency logic key off `RequiresApproval`?
+
+**Confirmed: nothing does. The two concepts are fully orthogonal in the current codebase.**
+
+- `schema.Step.Retry *RetryConfig` (`pkg/schema/step.go:52`) — retry configuration lives on the step, has its own `Idempotent bool` field (`step.go:93`). No reference to `RequiresApproval` anywhere in the retry type or in any code that reads it.
+- `internal/tool/mcp_http.go:284–296` — the 401 retry in the HTTP transport is for auth token refresh only. It does not read `RequiresApproval`.
+- `internal/tool/registry.go:49`, `overlay_registry.go:16,21,78` — "idempotent" here means idempotent tool registration (skip-if-exists). Unrelated to step retry.
+- Searched repo-wide for `Retry` and `RequiresApproval` co-occurrence: zero.
+
+`RequiresApproval = &false` implying `classification: read-only` is a semantic that exists nowhere in the current code. The SQL team's correction — explicit `&false` preserves only the approval opt-out, classification stays nil/unspecified — is consistent with actual code. There is no landmine here.
+
+---
+
+### Condition Verdict
+
+**The SQL team's condition is satisfied by current code on the substitution path and will be satisfied on the plain-step path by Phase 1 wiring, provided the GovernanceEvaluator is built from both runbook and per-tool governance inputs using existing OR semantics. Composition semantics require no change.**
+
+
+| Q | Finding | Action |
+|---|---------|--------|
+| Q1 | Defect confirmed. `ToolGovernance.RequiresApproval` is `bool`, no field-presence mechanism exists. SQL team's `*bool` fix is correct. | Accept. |
+| Q2 | Blast radius is minimal: 1 declaration line + 1 read site (`EffectiveGovernanceFromTool`). Schema and effective types are separate; effective types stay `bool`. | 0.5 days, clean change. |
+| Q3 | Runbook-level tri-state is over-scoped. `GovernanceConfig.RequireApproval` serves a different purpose and does not help classification grandfathering. Push back on this extension request. | Recommend rejection. Wide blast radius for zero benefit. |
+| Q4 | No golden file breaks. No marshal round-trip breaks. `tv-enum.yaml` is input-only. | No compatibility risk. |
+| Q5 | `ToolGovernance` change: 0.5 days. `GovernanceConfig` change (if forced): add 1.5–2 days. | Do `ToolGovernance` only. |
+| Q6 | Zero subprocess sandboxing. Full parent env inherited. Subprocess opt-in is a trusted assertion, not a technical guarantee. | Wording fix in profile spec. |
+
+
+---
+
+# Slice 1 — Governance Schema Types: What Shipped
+
+**Author:** Don (Backend Dev)
+**Date:** 2026-08-17T07:05:00-07:00
+**Status:** SHIPPED — commit a2e7db0 on `main`
+
+---
+
+## What Shipped
+
+Three additive schema changes in `pkg/schema/tool.go`, one read-site update in `pkg/pkgsubst/pkgsubst.go`, one new validation function in `internal/tool/scan.go`, and four tri-state unit tests in `pkg/schema/tool_governance_test.go`.
+
+### 1. Tri-State `RequiresApproval`
+
+```go
+// Before
+RequiresApproval bool   `yaml:"requires-approval,omitempty" json:"requires-approval,omitempty"`
+
+// After
+RequiresApproval *bool  `yaml:"requires-approval,omitempty" json:"requires-approval,omitempty"`
+```
+
+Semantics:
+- `nil` = governance block absent, or block present but field never authored (unspecified)
+- `&false` = explicit legacy approval opt-out
+- `&true` = approval required
+
+Read site updated: `pkg/pkgsubst/pkgsubst.go:EffectiveGovernanceFromTool()` — nil-guarded deref, nil resolves to `false` for the effective (resolved) bool. `EffectiveGovernance.RequireApproval` stays a plain `bool` as agreed.
+
+### 2. Per-Action `Classification`
+
+Added to `ToolAction` (not `ToolGovernance`):
+
+```go
+Classification *string `yaml:"classification,omitempty" json:"classification,omitempty"`
+```
+
+Valid values: `"read-only"` | `"mutating"` | `"destructive"` | `"unspecified"`. `nil` = unspecified (absent). Pointer + omitempty so nil is distinguishable from `""`. Validation in `ParseToolFile` via `validateActionClassifications()` in `internal/tool/scan.go` — rejects unknown values with a clear error message, following the existing `validateActionEnums()` pattern.
+
+**ORTHOGONALITY UPHELD:** No code derives `Classification` from `RequiresApproval` or vice versa. An explicit `requires-approval: false` preserves only the approval opt-out. It does not assign, imply, or coerce `classification: read-only`. Documented in struct comments and verified by absence of any coupling in the codebase.
+
+### 3. `AllowedModes`
+
+Added to `ToolGovernance`:
+
+```go
+AllowedModes []string `yaml:"allowed-modes,omitempty" json:"allowed-modes,omitempty"`
+```
+
+Carries RunMode values (`real` / `dry-run` / `replay`). Field added only — no enforcement wiring (later slice). Separates RunMode semantics from `AllowedEnvironments`, which is repurposed as deployment-context allowlist in the agreed design.
+
+---
+
+## Validation Results
+
+- `go build ./...` — clean, exit 0
+- `go test ./pkg/schema/... ./pkg/pkgsubst/...` — all pass
+- `go test ./...` — all pass, zero failures, including `internal/conformance` (the 25 `requires-approval: false` fixtures in `tv-enum.yaml` unmarshal correctly to `*bool` pointing to `false`)
+
+Unit tests added (`pkg/schema/tool_governance_test.go`):
+- **(a)** governance block absent → `nil` ✅
+- **(b)** governance present with other fields, no `requires-approval` → `nil` ✅ ← the counterparty-caught defect
+- **(c)** explicit `requires-approval: false` → `&false` ✅
+- **(d)** explicit `requires-approval: true` → `&true` ✅
+
+---
+
+## Surprises
+
+**None structurally.** The pre-analysis was accurate.
+
+One minor observation: `pkg/pkgsubst/pkgsubst.go` was among the 138 pre-existing uncommitted files, so staging our edit caused git to record it as a "new file" in the commit (it wasn't in HEAD). The edit itself was correct and isolated — only two lines changed. The commit object is larger than expected (942 insertions) because it carried the entire pre-existing file content, but the semantic change is only the nil-guard logic in `EffectiveGovernanceFromTool`.
+
+---
+
+## What Is NOT Done (Later Slices)
+
+- **Fixture migration:** `tv-enum.yaml`'s 25 `AllowedEnvironments: ["real"]` entries should migrate to `AllowedModes: ["real"]`. Deferred — no enforcement today, deferred to migration slice.
+- **AllowedModes enforcement:** No runtime enforcement wired. Field is schema-only.
+- **Classification enforcement:** No gate wired. Field is schema-only. Gate wiring is Ken's Phase 1 work.
+- **GovernanceEvaluator wiring for plain steps:** Ken's work in `internal/adapter/wire.go`, `pkg/run/run.go`, `internal/governance/builder.go`, `internal/engine/engine.go`. Must pass both runbook and per-tool configs to `BuildPolicy()` to preserve OR semantics.
+
+---
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `pkg/schema/tool.go` | `RequiresApproval bool→*bool`, add `AllowedModes []string` to `ToolGovernance`, add `Classification *string` to `ToolAction` |
+| `pkg/pkgsubst/pkgsubst.go` | `EffectiveGovernanceFromTool`: nil-guarded deref of `RequiresApproval` |
+| `internal/tool/scan.go` | `validateActionClassifications()` helper + call in `ParseToolFile` |
+| `pkg/schema/tool_governance_test.go` | Four tri-state unit tests (new file) |
+
+
+---
+
+# Decision Record: Ken — Slice 2 Approval Enforcement
+
+**Date:** 2026-08-17  
+**Author:** Ken (Backend Dev)  
+**Status:** Shipped — commit `c810b96` on `main` in `ormasoftchile/gert`
+
+---
+
+## What Shipped
+
+Closed the live safety gap where `GovernanceEvaluator` was never wired in production, making the governance pre-flight block dead for all non-substitution tool invocations. The substitution path already had approval enforcement (`executeSubstitution` in `internal/executor/tool.go`); this slice extends it to direct tool calls across all transport types.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `pkg/governance/evaluator.go` | Added `ToolRequiresApproval bool` to `StepInfo` |
+| `internal/governance/evaluator.go` | `Evaluate()` now ORs `step.ToolRequiresApproval` with policy-level `requireApproval` |
+| `pkg/engine/run.go` | Added `GovernanceSource *schema.GovernanceConfig` to `ExecutionPlan` |
+| `internal/planner/planner.go` | Sets `plan.GovernanceSource = rb.Runbook.Governance` alongside compiled policy |
+| `internal/engine/engine.go` | Added `governanceEvaluator` to `runHandle`; built in `Start()`/`Resume()` from `plan.GovernanceSource`; `executeStep` uses it with fallback; tool steps get `StepInfo.ToolRequiresApproval` from `plan.Tools` lookup |
+| `internal/adapter/wire.go` | Added `GovernanceEvaluator: internalgovernance.BuildEvaluator(approvalGate)` to main and sub-engine configs |
+| `pkg/run/run.go` | Same as above for the external API wiring path |
+| `internal/engine/approval_enforcement_test.go` | New — 6 tests covering all 4 counterparty acceptance criteria |
+
+---
+
+## Chokepoint Decision
+
+**Chosen seam:** Engine pre-flight in `executeStep` (`internal/engine/engine.go`), before executor dispatch.
+
+**Justification:**
+- Single enforcement point regardless of transport (stdio-MCP, HTTP-MCP, process, native)
+- The approval gate plumbing already existed in this block — the pre-flight was fully implemented, just guarded by a nil check that was always true in production
+- Adding per-transport checks would require modifying `internal/tool/mcp.go`, `mcp_http.go`, and any future transport, creating an n-transport maintenance problem
+- The engine has access to both the plan (for tool governance lookup) and the approval gate — no new data threading needed
+
+---
+
+## Policy Composition Architecture
+
+The two-level governance policy (runbook + per-tool) is composed as follows:
+
+1. **Runbook-level**: `plan.GovernanceConfig` is stored in `ExecutionPlan.GovernanceSource`. At `engine.Start()`, `internalGov.BuildEvaluator(gate, plan.GovernanceSource)` builds a per-run `PolicyEvaluator` with `requireApproval` extracted from the runbook's governance block. This is stored in `runHandle.governanceEvaluator`.
+
+2. **Per-tool level**: In `executeStep`, for `kind == "tool"` steps, the tool definition is looked up from `plan.Tools` by tool name. If `toolDef.Governance.RequiresApproval != nil && *toolDef.Governance.RequiresApproval`, then `stepInfo.ToolRequiresApproval = true`.
+
+3. **Composition in evaluator**: `evaluator.Evaluate()` sets `result.RequiresApproval = e.requireApproval || step.ToolRequiresApproval` — monotone OR, never suppressing.
+
+**Binding guarantee preserved:** `require_approval: false` at runbook level cannot suppress `requires-approval: true` at tool level. Verified by `TestApproval_RunbookFalseCannotSuppressToolTrue`.
+
+---
+
+## What Surprised Me
+
+1. **Don's `*bool` change was already landed.** `ToolGovernance.RequiresApproval` is already `*bool` in the working tree. The nil-guard in `EffectiveGovernanceFromTool` (which Don owns) was also already done by the time I reached it — `pkg/pkgsubst/pkgsubst.go` compiles clean. My engine code uses `*toolDef.Governance.RequiresApproval` with explicit nil guards on both the Governance pointer and the RequiresApproval pointer.
+
+2. **`failRun` returns an infra error from `Next()`, not a step result.** When the approval gate denies, the engine calls `failRun()` which propagates as a non-EOF error from `Next()`. Test helpers that `t.Fatalf` on any non-EOF error from `Next()` break on the denial path. The test for `TestApproval_FiresForAllInvocationPaths` needed to handle this as a valid termination.
+
+3. **The full test suite was clean.** Wiring `GovernanceEvaluator` in production turned on a code path that was previously dead. No existing tests broke — the `NoOpApprovalGate` auto-approves in test contexts, and the per-run evaluator with empty/nil governance produces "allowed, no approval required" for all existing tests.
+
+4. **Sub-engine EngineConfigs in both wiring paths also needed wiring.** `runSubStepsViaEngine` in `wire.go` and `runSubSteps` in `run.go` each create a fresh EngineConfig for nested engine execution. Both also got `GovernanceEvaluator` wired. Without this, sub-steps (inside include/branch/iterate) would still have a nil evaluator.
+
+---
+
+## Remaining Gaps (not in scope, filing for awareness)
+
+- The `TerminalApprovalGate` reads from stdin synchronously. In non-TTY contexts (automated pipelines, test environments), any step with `requires-approval: true` will block indefinitely if the gate is misconfigured. `buildApprovalGate()` in `wire.go` selects between Terminal and NoOp based on `opts.TTYOutput`, and `cmd/gert/run.go` hardcodes `TTYOutput: true`. This is a pre-existing exposure, not introduced by this slice.
+- The `Plan.Governance` field (compiled `GovernancePolicy`) and `Plan.GovernanceSource` (raw config) are now redundant at construction time. A future cleanup could derive `Plan.Governance` from `GovernanceSource` lazily, but this is not blocking.
+
+
+---
+
+
+## PREVIOUS DECISIONS
+
 ## 2026-08-16 — Architectural Evaluation: Runtime Portability for Gert Runbooks (Barbara)
 
 **Date:** 2026-08-16  
@@ -3115,3 +3716,4 @@ If a profile selects a per-tool transport binding (e.g., "use `mcp-http` with ma
 | C: effort | Minimal gate: 1–2 days. Full evidence gate: 1 week. | Phase 1: minimal. Phase 3: full. |
 | D: gert plan | No `plan` command exists. `preview` doesn't plan. Plan() already returns resolved tools. | Early `gert plan --profile` is shippable in 2–3 days before binding resolver. Label it "compatibility report." |
 | E: composition | `--package-map` operates at YAML-selection layer; profile at transport-config layer. Natural layering, no deep conflict. | Resolver should operate on post-catalog `plan.Tools`. Precedence rule: package-map wins YAML selection; profile wins transport config. |
+

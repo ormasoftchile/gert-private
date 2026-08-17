@@ -62,3 +62,16 @@ David's redaction tests and Group I's sentinel sweep are complementary — diffe
 - All deliverables verified and tested
 - Ready for production merge
 
+## 2026-08-17 — Team Notation: Runtime Portability Rounds 5–6 & Slices 1–2
+
+**Status:** Design negotiation closed; Slices 1 & 2 shipped and reviewed.
+
+**Implications for conformance work:**
+- `ToolGovernance` now has three new schema fields: `RequiresApproval *bool` (tri-state), `AllowedModes []string` (RunMode allowlist), and `ToolAction.Classification *string` (read-only/mutating/destructive/unspecified)
+- New conformance vectors required: tri-state approval coverage (nil/false/true), classification values per action, AllowedModes filtering
+- Future work: ProfileApprovalGate (unspecified behavior in interactive/unattended contexts), declared-attendance (TTY replacement), AllowedModes/Classification enforcement wiring
+- Schema changes are additive; existing conformance corpus (25 requires-approval fixtures) passes unchanged. No fixture edits required at this time.
+
+**Cross-team note:** Barbara's Slice 1+2 review identified expected gap (unspecified-fires-gate deferred) scoped for ProfileApprovalGate. Ken's test coverage for approval enforcement is complete; no defects open in this slice.
+
+**Learning:** When a design adds new schema options (Classification enum), make sure the conformance corpus includes vectors for all declared values before shipping enforcement. Current gap: Classification accepted but not enforced; enforcement added only when gate wiring lands in ProfileApprovalGate slice. Plan conformance accordingly.

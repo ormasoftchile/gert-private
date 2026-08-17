@@ -150,3 +150,12 @@ Detailed history: .squad/agents/david/history-archive.md
 **Design principle:** Fail-closed by default; explicit migration paths for breaking changes; source-grounded verification.
 
 **Impact:** Phase 1 addition ~4 days. All blocking conditions satisfied. Implementation starts this week.
+
+## 2026-08-17 — Team Notation: Slice 1–2 Schema & Enforcement
+
+**Slices shipped:** Commit a2e7db0 (Don, schema), c810b96 (Ken, enforcement).
+
+**Status:** Both passed Barbara's review gate. Deferred gaps noted and scoped for later slices (ProfileApprovalGate, declared-attendance, enforcement wiring).
+
+**David's involvement:** Cross-team findings from rounds 5–6 inform profile-binding architecture for Phase 1. Tiered-preflight from integration critique remains active design input for declared-attendance work.
+

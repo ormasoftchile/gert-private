@@ -2726,3 +2726,46 @@ The gate is always constructed from `def.Auth.Scope` and `def.Auth.AllowedHosts`
 
 
 
+
+
+---
+
+# Decision: Contract Proof Ownership Split (Phase 1B Rev 3)
+
+**Date:** 2026-08-17
+**Author:** Barbara (Lead/Architect, Gert Core)
+**Status:** Active
+
+## Ruling
+
+Gert core does not take a dependency on consumer repositories for contract proofs. Consumer-specific contracts are owned and proven by the consumer team in their own repo.
+
+## Applies to
+
+- `gert-sqllivesite` ICM contract (`icm.get-incident`, `tsg-recommendation.recommend`)
+- Any future consumer-specific contract proof
+
+## Rationale
+
+1. **Dependency direction:** Gert is a library/tool; consumers depend on it, not the reverse. Importing consumer contracts into Gert means Gert's CI breaks when their contract evolves.
+2. **Precedent:** Round 1 of the Phase 1 negotiation established this boundary when `run-gert.ps1` was identified as a `gert-sqllivesite` artifact and removed from Gert scope.
+3. **Separation of concerns:** Gert proves that the binding mechanism works (package-map, profile composition, transport mode integrity, parity across bindings). Consumers prove that their specific contract passes through that mechanism correctly.
+
+## What Gert owns
+
+- Synthetic fixtures structurally equivalent to real contracts (multi-field typed outputs, branching outcomes)
+- The contract-parity harness infrastructure
+- Mechanism correctness: `--package-map` + `--profile` composition, transport mode integrity, credential attachment
+
+## What consumers own
+
+- Their actual tool definitions and schemas
+- Runbooks exercising their specific tools
+- End-to-end proof that their contract works under both bindings
+
+## Exports available to consumers
+
+- The parity harness can be exported as a reusable helper if requested.
+- Documentation and worked examples for writing consumer-side proofs.
+
+

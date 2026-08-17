@@ -36,7 +36,7 @@ The feature-reachability gate is itself committed (`56b1bc4`) and demonstrated f
 Exported package, importable by any Go module:
 
 ```go
-import "github.com/<org>/gert/pkg/contractparity"
+import "github.com/ormasoftchile/gert/pkg/contractparity"
 ```
 
 A foreign repo adds `gert` as a module dependency, defines its contract fixture and bindings, and calls the harness API. No Gert-specific test code needs to be copied. 30 tests internally; 11 negative controls verify the harness is non-vacuous (detects injected violations).
@@ -107,7 +107,7 @@ No production credentials are required by any of this.
 | 5 | Package-map/profile composition demonstrated | **Met** | `d53a45f`, `05fd13b` — `TestSyntheticContract_CLI_PackageMap_Profile_MCPHTTPBinding`; mutation resistance measured |
 | 6 | INDETERMINATE state and acknowledgment tested | **Met** | `22ad3e7` — `*IndeterminateRecord` with 7 evidence fields; classification-aware timeout divergence (INDET-005); `--acknowledge-indeterminate` required for resume |
 | 7 | Profileless non-interactive execution fails immediately | **Met** | `d1314cc` — fails at startup before approval gate construction; `os.Stdin.Stat()` check fails closed |
-| 8 | No credential appears in runbook state, results, traces, or errors | **Met** | `c7decfd` — 13-surface sweep with sentinel token; 8-case negative control ensures the sweep cannot pass vacuously; extended to synthetic mcp-http path in `05fd13b` |
+| 8 | No credential appears in runbook state, results, traces, or errors | **Met** | `c7decfd` — sweep covers every observable output surface (stdout, stderr, serialized result, trace events, error chains, IndeterminateRecord fields); 8-case negative control (`TestCredentialLeak_SweepDetectsIntentionalLeak` sub-tests) injects the sentinel into each swept surface type and asserts detection, ensuring the sweep cannot pass vacuously; extended to synthetic mcp-http path in `05fd13b` |
 
 ---
 

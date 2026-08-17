@@ -75,3 +75,39 @@ David's redaction tests and Group I's sentinel sweep are complementary — diffe
 **Cross-team note:** Barbara's Slice 1+2 review identified expected gap (unspecified-fires-gate deferred) scoped for ProfileApprovalGate. Ken's test coverage for approval enforcement is complete; no defects open in this slice.
 
 **Learning:** When a design adds new schema options (Classification enum), make sure the conformance corpus includes vectors for all declared values before shipping enforcement. Current gap: Classification accepted but not enforced; enforcement added only when gate wiring lands in ProfileApprovalGate slice. Plan conformance accordingly.
+
+## Learnings — 2026-08-17 — Slice 7: allowed-environments migration & governance vectors
+
+**Migration audit:** Found exactly 25 occurrences of `allowed-environments: ["real"]` in
+`internal/conformance/enumdata/tv-enum.yaml`. Every single one was inside a `governance:` block
+on a package-exported tool definition — all unambiguously RunMode intent, none deployment-context.
+No other files in the repo used `allowed-environments` (only `pkg/schema/tool.go` declared the
+struct field itself). Migration was clean: 0 ambiguous cases, 0 escalations needed for this part.
+
+**Schema check:** `schemas/runbook.schema.json` does not declare `allowed-environments` or
+`allowed-modes` — no JSON schema changes needed. There is no tool definition JSON schema file;
+any future one will need to declare both fields.
+
+**requires-approval: true is live:** Contrary to the note in the design doc that governance fields
+are "not read by any runtime code today," `requires-approval: true` IS actively enforced by the
+engine — running the harness against a tool with `requires-approval: true` immediately hits the
+interactive approval prompt and exits non-zero. Added TV-CONFORM-GOV-004 to `enumRuntimeGapSkips`
+with a named reason (ticket T-GOVN-APPROVAL-HARNESS). This is a positive finding: enforcement
+landed without a corpus contract; the vector now anchors it.
+
+**Orthogonality vectors are the most important deliverable:** TV-CONFORM-GOV-009 and
+TV-CONFORM-GOV-010 are the vectors six rounds of negotiation hinge on. They prove `requires-approval:
+false` (legacy opt-out) does NOT coerce `classification` to read-only. Any future change that
+derives classification from requires-approval will break these vectors immediately.
+
+**Classification validation not yet enforced:** The schema accepts any string for
+`ToolAction.Classification`; there is no enum validation at parse time. The "unknown value must be
+rejected" contract requires (a) a new TOOL-PARSE error class in ErrorExpected and (b) parse-time
+enforcement in `pkg/schema`. Both escalated to Barbara in the decision note.
+
+**Category placement:** Used `CONFORM-CROSSCUT` for governance vectors (valid in the existing
+category enum). A dedicated `GOVN-*` category should be added when the corpus grows (decision note
+filed). The existing `TV-ENUM-*` harness (enum_harness.go) runs CONFORM-CROSSCUT vectors without
+modification — the harness dispatches on expected shape, not category.
+
+**Count:** 71 vectors total (58 original + 13 new). 60 passed, 11 skipped (named reasons), 0 failed.

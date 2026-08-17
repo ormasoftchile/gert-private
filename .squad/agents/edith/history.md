@@ -122,3 +122,40 @@ Edith continues in the role of Specification Editor for the GERT project.
 - Barbara's coordination cycle: 5 corrections applied (language, classifications, approvals, headers, deferral)
 - Production ICM validation blocked on Live-Site credential provisioning (external dependency, TBD)
 
+---
+
+## 2026-08-17 — Phase 1B Rev 2: Acceptance and Design Rulings
+
+**Status:** All eight corrections from SQL Live-Site Operations verified. Phase 1B Rev 2 plan ratified.
+
+**Design Ruling A: Profile Auth Schema Invariant**
+
+When Item 2 (Runtime Binding) extends `RuntimeProfile` schema:
+- **MAY:** Add `provider` field (credential mechanism selection).
+- **MUST NOT:** Add `scope` or `allowed_hosts`.
+
+**Rationale:** Token gate always constructed from tool definition's declared auth. Profile substitutes credential acquisition mechanism only, never the token's scope or destination hosts.
+
+**Implementation note for spec:** Add explicit constraint note to RuntimeProfile documentation clarifying the auth field scope limits.
+
+**Design Ruling B: IndeterminateRecord Non-Fabrication**
+
+Completion-unknown representation uses `*IndeterminateRecord` embedded on `StepResult`:
+- Non-nil pointer = completion unknown.
+- `Output` remains nil (no fabrication).
+- Fields: RunID, StepID, ToolName, ActionName, Classification, EndpointHost, AttemptNumber, Deadline, FailureTime, TransportErrCategory.
+
+**Spec implications:**
+- Add `IndeterminateRecord` definition to engine/step result schema section.
+- Document the nil-pointer semantics for distinguishing "empty output" from "completion unknown."
+
+**Phase 1B Rev 2 Scope:**
+- Item 1: Managed Identity (IMDS only) — 1.5 days
+- Item 2: Runtime Binding + PLAN-013 — 3–4 days
+- Item 3: INDETERMINATE + evidence — 5.5–6 days
+- Item 4: ICM proof — 3 days (gated on Item 2 + artifacts)
+- Item 5: Fail-fast + harness — 1.5 days (NEW)
+- Item 6: Credential-leak assertions — 1 day (NEW)
+
+**Edith's involvement:** Phase 1B Rev 2 scope finalized; no immediate spec changes required. Design rulings ratified for reference during Item 2 implementation.
+

@@ -53,3 +53,66 @@ equires-approval: false acts as read-only override)
 - **Milestone labeling must match negotiated scope exactly.** We shipped the governance/profile foundation and labeled it "Phase 1 complete" when the round-2 agreement explicitly included managed identity, timeout semantics, and an ICM proof. The counterparty verified independently and caught the overclaim. Lesson: before declaring a milestone complete, re-read the negotiated scope document line by line and confirm every item. Partial delivery is fine if labeled honestly (e.g., "Phase 1A complete, 1B in progress"). Overclaiming erodes credibility that takes rounds to build back.
 - **Specified-but-unreachable code is the same as absent.** `ProfileToolOverride.Endpoint` was parsed, tested in isolation, and never wired into the execution path. A unit test proving parse correctness does not prove the feature exists. Verify reachability end-to-end or do not claim the feature.
 - **External dependencies must be named at plan time, not discovery time.** We knew ICM required a managed-identity credential grant from their side but did not surface it as a blocking dependency in the original phase plan. Result: invisible critical path.
+- **A proof must be written against the consumer's actual contract, not a same-shaped sample.** Our Rev 1 ICM proof targeted Gert's own `tools/icm.tool.yaml` (`get_incident`, underscores) rather than the consumer's `icm.get-incident` (hyphen) with typed outputs. A green test against the wrong contract proves nothing — it is the same class of error as a test that cannot fail. Always obtain the actual definition artifacts before building a proof.
+
+---
+
+## 2026-08-17 — Phase 1B Rev 2: Acceptance and Design Rulings (Coordinator)
+
+**Status:** All eight corrections from SQL Live-Site Operations verified correct. Phase 1B Rev 2 plan ratified.
+
+**Barbara's coordination role:**
+- Authored comprehensive Phase 1B Rev 2 plan integrating all eight corrections from SQL Live-Site Operations.
+- **Turn 1 feedback:** Coordinator identified two issues: §9 (acceptance criteria coverage) had paraphrased their list and silently dropped criterion 8 (credential-leak assertions); §8 had dropped two required artifacts.
+- **Turn 2 corrections:** Both issues fixed. §9 now quotes criteria verbatim, acknowledges the gap, adds new Item 6 (credential-leak assertions, 1 day).
+
+### Key Findings
+
+**TokenGate Already Implemented:** The most significant finding in the entire Phase 1B investigation. `internal/tool/auth_gate.go:23` is complete and production-ready. This was the first field in the codebase found to be genuinely enforced at runtime rather than parsed-but-dead. Four of six endpoint-safety conditions already satisfied; only PLAN-013 (Tier 0 preflight for endpoint override) is new work.
+
+**Contract Accuracy Issue (Correction 2):** SQL Live-Site Operations identified that the ICM proof was targeting Gert's sample tool contract (underscores: `get_incident`) rather than their production contract (hyphens: `icm.get-incident`). A passing test against the sample would have validated the wrong thing. Correction ensures proof targets actual contract.
+
+### Phase 1B Rev 2 Scope
+
+| Item | Estimate | Status | Notes |
+|------|----------|--------|-------|
+| 1. Managed Identity (IMDS only) | 1.5 days | — | Revised down from 2 days |
+| 2. Runtime Binding + PLAN-013 | 3–4 days | — | Includes endpoint override validation |
+| 3. INDETERMINATE + evidence | 5.5–6 days | — | Revised up from 4–5 days |
+| 4. ICM proof (real contract) | 3 days | — | Revised up from 1 day; gated on Item 2 + artifacts |
+| 5. Fail-fast + harness | 1.5 days | NEW | Moved from Item 2 |
+| 6. Credential-leak assertions | 1 day | NEW | Added per SQL Live-Site criterion 8 |
+
+**Parallelization:** Items 1, 2, 3, 5, 6 in parallel; Item 4 serial after Item 2 completion and blocked on external artifact delivery.
+
+**Revised parallelized estimate:** 9–10 days (was 8–9 days).
+
+### Design Rulings (Ratified)
+
+**Ruling A: Profile Auth Schema Invariant**
+
+When Item 2 extends `RuntimeProfile` schema:
+- **MAY:** Add `provider` field (credential mechanism selection — e.g., `managed-identity` vs `azure-cli`).
+- **MUST NOT:** Add `scope` or `allowed_hosts`.
+
+**Rationale:** Token gate is always constructed from tool definition's declared auth (`def.Auth.Scope` and `def.Auth.AllowedHosts`). Profile substitutes credential acquisition mechanism only — never the token's scope or the hosts it may be sent to.
+
+**Current structural enforcement:** `RuntimeProfile` has no top-level `Auth` field. Scope-clobbering is structurally impossible today. Rule ensures this invariant is preserved as schema evolves.
+
+**Ruling B: `*IndeterminateRecord` as Non-Fabricated-Output Representation**
+
+**Problem:** `StepResult.Output == nil` is ambiguous — a tool returning empty outputs also yields nil. Cannot distinguish "timed out before response" from "returned nil output."
+
+**Solution:** Embed `*IndeterminateRecord` pointer on `StepResult`.
+- Non-nil pointer = completion unknown; `Output` remains nil (no fabrication).
+- Fields: `RunID`, `StepID`, `ToolName`, `ActionName`, `Classification`, `EndpointHost`, `AttemptNumber`, `Deadline`, `FailureTime`, `TransportErrCategory`.
+
+**Design rationale:** Nil `Output` + nil `IndeterminateRecord` pointer = tool returned empty output (valid result). Nil `Output` + non-nil `IndeterminateRecord` pointer = completion unknown (trace-safe evidence, no fabrication).
+
+**Implements:** SQL Live-Site requirement that trace-safe evidence "must not require fabricated output."
+
+### Process Learnings
+
+- **Eight corrections, all correct:** SQL Live-Site Operations analyzed the Phase 1B plan independently and submitted eight corrections covering auth gaps, endpoint safety, timeout semantics, and evidence requirements. All eight verified against code and found accurate. No factual errors.
+- **Coordinator caught acceptance-criteria paraphrase:** Coordinator's turn 1 had paraphrased SQL Live-Site's acceptance criteria list (not quoted verbatim) and claimed full coverage, silently dropping criterion 8. Turn 2 corrected this with explicit gap acknowledgment and new Item 6.
+- **Artifacts list requirement:** Item 4 blocked on six specific artifacts from SQL Live-Site Operations. These must be requested explicitly before Item 4 work can proceed. `gert-sqllivesite` repository is not present locally.

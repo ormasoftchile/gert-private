@@ -136,3 +136,21 @@ Detailed history: .squad/agents/ken/history-archive.md
 - Barbara's coordination cycle: 5 corrections applied (language, classifications, approvals, headers, deferral)
 - Production ICM validation blocked on Live-Site credential provisioning (external dependency, TBD)
 
+---
+
+## 2026-08-17 — Phase 1B Rev 2: Acceptance Confirmed
+
+**Status:** All eight corrections from SQL Live-Site Operations verified correct. Phase 1B Rev 2 plan ratified.
+
+**Phase 1B Rev 2 Scope (revised):**
+- Item 1: Managed Identity (IMDS only) — 1.5 days
+- Item 2: Runtime Binding + PLAN-013 (endpoint override validation) — 3–4 days
+- Item 3: INDETERMINATE + evidence — 5.5–6 days
+- Item 4: ICM proof (real contract) — 3 days (gated on Item 2 + external artifacts)
+- Item 5: Fail-fast + harness — 1.5 days (NEW)
+- Item 6: Credential-leak assertions — 1 day (NEW)
+
+**Revised parallelized estimate:** 9–10 days (was 8–9 days).
+
+**Ken's involvement:** None in Phase 1B Rev 2; Phase 1A/1B scope finalization complete.
+

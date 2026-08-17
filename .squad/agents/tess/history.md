@@ -98,6 +98,21 @@ landed without a corpus contract; the vector now anchors it.
 **Orthogonality vectors are the most important deliverable:** TV-CONFORM-GOV-009 and
 TV-CONFORM-GOV-010 are the vectors six rounds of negotiation hinge on. They prove `requires-approval:
 false` (legacy opt-out) does NOT coerce `classification` to read-only. Any future change that
+
+---
+
+## 2026-08-17 — Phase 1B Rev 2: Acceptance and Revised Conformance Plan
+
+**Status:** All eight corrections verified. Phase 1B Rev 2 scope ratified with new Items 5 & 6.
+
+**Phase 1B Rev 2 implications for conformance work:**
+- Item 3 (INDETERMINATE + evidence) adds new step status and requires 8 new conformance vectors (classification × timeout/transport-loss combinations).
+- Item 5 (Fail-fast + harness) requires harness to inject unattended test profile — existing 31 vectors unaffected.
+- Item 6 (Credential-leak assertions) adds negative-control vectors verifying credentials never appear in state/results/traces.
+- No conformance regressions expected; additions are orthogonal to existing coverage.
+
+**Tess's involvement:** None in Phase 1B Rev 2 direct implementation; conformance vector design deferred pending Items 1–4 completion.
+
 derives classification from requires-approval will break these vectors immediately.
 
 **Classification validation not yet enforced:** The schema accepts any string for

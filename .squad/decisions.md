@@ -1,10 +1,3 @@
-# Squad Decisions
-
-**Last Updated:** 2026-08-16T15:59:48-07:00
-**Archive Trigger:** decisions.md >= 51200 bytes threshold; entries older than 7 days archived to decisions-archive.md
-
----
-
 ## 2026-08-16 — Architectural Evaluation: Runtime Portability for Gert Runbooks (Barbara)
 
 **Date:** 2026-08-16  
@@ -39,566 +32,6 @@
 **Verdict: Three critical blockers in integration protocol; one critical phase-ordering risk; multiple tiering and error-taxonomy gaps.** (1) §10.1's preflight steps 2–3 answer the wrong question — they conflate static "is this configured?" with dynamic "can I reach it now?"; must split into Tier 0 (static, default, mandatory), Tier 1 (local reachability, opt-in), and Tier 2 (live, opt-in). (2) Error taxonomy `binding/tool-not-found` too coarse; must split into 5 codes: `config/tool-unresolved`, `config/no-binding-for-profile`, `config/binding-incomplete`, `auth/credential-failure`, `transport/endpoint-unreachable`. (3) Host bridge protocol missing four essential fields: `protocol_version`, host capability advertisement (required for Tier 0 preflight), `run_id/step_id` correlation (audit), and explicit `CancelRequest` message type for IPC. (4) **Phase-ordering risk:** §10.4 (reconnect/late-result handling) deferred to Phase 3 (8–12 weeks), but direct-HTTP MCP transport ships in Phase 1 with timeouts/disconnections that leave mutating-action state indeterminate. Mitigation: Phase 1 ships explicit "halt-on-timeout, no retry" policy, not undefined behavior. For destructive actions, must choose: implement proper Phase 3 semantics before ship, OR restrict Phase 1 to read-only tools only.
 
 **Full critique:** See `.squad/decisions/archive/david-runtime-portability-integration-critique-2026-08-16.md` — 3 areas (preflight, host bridge protocol, idempotency), 16 detailed findings, complete tiered-preflight specification, revised error taxonomy with operator messages, and explicit risk call-outs.
-
----
-
-## 2026-08-09 — GERT Tool Packages MVP — Spec Authored (Barbara ruling actioned)
-
-**By:** Edith (Spec Editor)
-**Ruling:** `.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md` (Barbara, ratified 2026-08-09, AR-TP-1..10) — moved from `inbox/` to `archive/` as fully actioned; no clauses reopened, no contradictions found.
-
-**What shipped:** The complete Tool Packages MVP is now normative spec text, not a proposal:
-
-- **Bindings (AR-TP-1):** `requires:` is canonical; `toolPackages:` is rejected (`PKG-020`, no alias, no dual-read); `toolRefs:` binds/narrows only; `alias` removed from the `ToolRef` schema; `source`/`actions` retained as deprecated (D-001/D-002), non-enforcing, warning-only (`PKG-W002`/`PKG-W001`).
-- **Resolution (AR-TP-2):** Two-phase (catalog freeze, then per-file bind) discovery, 5 deterministic tiers, same-tier collision is `PKG-006`, undeclared cross-tier shadowing is `PKG-022` (the one intentional breaking change vs. prior "later wins" text), enumeration fully sorted for byte-identical catalog digests.
-- **Schemas (AR-TP-3):** New `tool-package/v1`, `config/v1`, `package-lock/v1` schemas; `runbook.v1.schema.json` gained `requires`/`PackageRequirement` additively.
-- **Versioning (AR-TP-4):** Strict SemVer 2.0.0, small conjunctive constraint grammar, validation only — no solving.
-- **Substitution (AR-TP-5):** Declared in `.tool.yaml`, resolved relative to the declaring file, exact I/O signature match, governance composed by the ruled invariant table (never widened), max depth 4, traced as nested spans.
-- **Paths (AR-TP-6):** POSIX-only authored paths, realpath containment, junction/reparse handling, escape is `PKG-007` hard fail.
-- **Digests/trace/resume (AR-TP-7):** Raw-byte SHA-256, order-independent sha256sum-style digests; 5 new trace events; resume hard-refuses on drift (`PKG-009`, overridable), replay is non-fatal on drift.
-- **Scoping (AR-TP-8):** Tool-name binding is lexically scoped per file (asymmetric with shared variable scope); package set is global per run; lazy includes are still package-analysed at plan time.
-- **Conformance (AR-TP-9/9b):** Full `PKG-001..028` + `PKG-W001..003` error catalog registered in `03d-parse-time-enforcement.tex`; 7 new categories + `PackageExpected` shape registered in `conformance/vector.schema.json` for Tess to author `tv-pkg-resolve.yaml` against (not authored by Edith — file ownership per ruling).
-- **No shims (AR-TP-10):** Pre-1.0, no compatibility shims; the cross-tier shadowing behaviour change is documented as intentionally breaking.
-
-**Files changed:** see `.squad/agents/edith/history.md` entry "2026-08-09T14:44:49-07:00 — GERT Tool Packages MVP — Full Spec Authoring" for the full file list.
-
-**Validation:** `verify_corpus.py` 280/280 vectors validate (no regressions); full `tectonic` LaTeX build succeeds; all schemas Draft 2020-12 valid; example package + r23 fixture validate against their schemas.
-
-**Deferred to Tess:** `conformance/tv-pkg-resolve.yaml` and its conformance vectors — explicitly out of Edith's scope per the ruling's file-ownership split.
-
-**Status:** Ratified ruling fully actioned into spec. Ready for review.
-
----
-
-## 2026-08-09 — GERT Tool Packages MVP — Gate Review #1 (REJECTED)
-
-**By:** Barbara (Lead / Architect)  
-**Date:** 2026-08-09T14:47-07:00  
-**Requested by:** Cristián Ormazábal Ortega  
-**Reviews:** Edith's Tool Packages MVP spec/schemas/fixtures against `.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md` (AR-TP-1..10, ratified)  
-**Verdict:** **REJECTED** — 15 required corrections (R1–R15); architecture direction sound, defects are locally fixable wiring and under-specification.  
-**Reviser designated:** **Don** (Backend Dev / runtime semantics). **Edith is locked out** per reviewer lockout protocol.
-
-**Full entry:** `.squad/decisions/inbox/barbara-tool-packages-gate-review.md`
-
-### R1–R15 Blocking Issues (Summary)
-
-| # | Category | Issue |
-|---|----------|-------|
-| R1–R5 | Semantic contradictions / under-specification | Action shape (map vs. list), `impl:` collision, undefined output capture, invalid reference example, unstated path bases |
-| R6–R10 | Wiring failures | PKG-020/021 unreachable, `dependencies` schema contradiction, `apiVersion` mismatch, tier-3 incompatible, collision rule contradiction |
-| R11–R15 | Wiring failures (medium severity) | Undefined replay semantics, unreconciled `tool.version`, unenforced lock invariant, missing error codes, no real/mock acceptance scenario |
-
-### Requirements
-
-1. **R1:** Establish one canonical `tool/v1` action shape; reconcile `args/output` with `inputs/outputs`
-2. **R2:** Disambiguate per-action `impl:` key (collides with top-level mobile `impl:`)
-3. **R3:** Define `outputs.<name>` capture namespace for substituted actions
-4. **R4:** Rewrite reference substitute so it produces declared output via valid GCP
-5. **R5:** Create explicit "Resolution base per path kind" table; verify no escapes
-6. **R6:** Add mandated pre-schema raw-document scan for `toolPackages:` and `alias:`
-7. **R7:** Fix `dependencies` schema/PKG-016 contradiction
-8. **R8:** Normalize `apiVersion` values across examples and schemas
-9. **R9:** Make tier-3 addressing schema-compatible (qualified `name` only)
-10. **R10:** Split collision paragraph into cross-source vs. same-source cases
-11. **R11:** Define substitution replay behavior (relates to non-fatal `replay/packageDrift`)
-12. **R12:** Reconcile step-level `tool.version` as deprecated/intersected constraint
-13. **R13:** Tighten lock-root pattern to structurally forbid raw absolute paths
-14. **R14:** Assign error codes for unspecified conditions
-15. **R15:** Provide concrete unchanged-runbook scenario with mode variations
-
-### Deferred Tess Work
-
-Tess's `conformance/tv-pkg-resolve.yaml` (≥46 vectors) blocked pending R1–R9 resolution. Vector target list specified; do not author until R1–R9 land.
-
-### Gate Disposition
-
-**REJECTED.** Fifteen required corrections identified. Architecture ruling remains authoritative; no re-litigation. R1–R5 are highest-risk semantic areas (substitution, path safety); R6–R15 are wiring failures that make ruled error codes unreachable or ruled mechanisms unusable. All locally fixable.
-
-**Reviser:** Don (independent, Edith locked out). Re-submit for second gate pass.
-
----
-
-## 2026-08-09 — GERT Tool Packages MVP — Rejection Revision (R1–R15), by Don (independent)
-
-**By:** Don (Backend Developer), acting independently as revision owner. Edith (original
-author) was locked out per Cristian's directive and did not advise or contribute to this
-revision.
-
-**Subject:** Barbara rejected Edith's Tool Packages MVP spec/schemas/fixtures
-(`.squad/decisions/inbox/barbara-tool-packages-gate-review.md`, 15 blocking items
-R1–R15). This entry records Don's resolution of all 15, plus the optional R16
-(`warnings:` on `PackageExpected`), without reopening the ratified architecture ruling
-(`.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md`, AR-TP-1..10).
-
-**Resolution summary (see `.squad/decisions/inbox/don-tool-packages-revision-r1-r15.md`
-for the full R1–R15 matrix, file list, validation outcome, and Tess follow-up notes):**
-- R1: `actions:` is always a list; unified `args:` vocabulary; `output:` vs `outputs:` kept deliberately distinct.
-- R2: per-action `impl:` renamed `execute:` to stop colliding with top-level mobile `impl:`.
-- R3: new `outputs.<name>` GCP capture root for substituted-action outputs (`grammar/gcp.ebnf`).
-- R4: reference substitute (`drain-node.yaml`) reworked to actually produce its declared output via valid GCP, not a literal.
-- R5: new "Resolution base per path kind" table in `06-tool-runtime.tex` naming containment roots explicitly.
-- R6: PKG-020/PKG-021 made reachable via a mandated pre-schema raw-document scan.
-- R7: `dependencies` schema no longer contradicts PKG-016 reachability.
-- R8: `apiVersion` values corrected across manifest examples.
-- R9: tier-3 addressed only via qualified `name`, never `package` (schema-compatible with MCP single-label names).
-- R10: §05 collision paragraph split into cross-source (precedence) vs. same-source (hard error).
-- R11: substitution replays like `invoke` (executes against the caller's scenario file); tied explicitly to non-fatal `replay/packageDrift`.
-- R12: `ToolInvocation.version` redefined as plan-time-evaluated, intersected, deprecated in favor of `toolRefs[].version`.
-- R13: lock-file `root` pattern structurally forbids raw absolute paths.
-- R14: new `PKG-029` (package+path mutual exclusivity) and `PKG-030` (unresolved name) error codes.
-- R15: r23 fixture now documents an unchanged-runbook real/dry-run/replay acceptance scenario with a worked scenario-file override map.
-- R16: `PackageExpected.warnings` added to `conformance/vector.schema.json`.
-
-**Validation:** All touched JSON schemas valid; all touched YAML fixtures parse;
-`verify_corpus.py` 280/280 vectors validate (no regression from the `vector.schema.json`
-change); full `tectonic` LaTeX build of `main.tex` succeeds with no new errors or
-undefined references (the two pre-existing undefined refs are in untouched files, out of
-scope).
-
-**Deviations flagged for Barbara's second gate pass (not fixed, out of scope):** a
-pre-existing terminology overload between §07's trace-event replay and §13's
-execution-mode replay (both called "replay"); the corpus-wide `apiVersion: runbook/v2`
-issue (Barbara's non-blocking note #5, separately ticketed).
-
-**Deferred to Tess (unchanged from the ruling):** the ≥46-vector
-`conformance/tv-pkg-resolve.yaml` corpus. Not authored in this revision per explicit
-task scope — Tess should author it against the now-resolved contracts once this revision
-clears gate review.
-
-**Status:** Revision complete; returned to Barbara for second gate pass.
-
----
-
-## 2026-08-09 — GERT Tool Packages MVP — Gate Review #2 (REJECTED, narrow scope)
-
-**By:** Barbara (Lead / Architect)  
-**Date:** 2026-08-09T15:40-07:00  
-**Requested by:** Cristián Ormazábal Ortega  
-**Reviews:** Don's R1–R15 revision against `.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md` (AR-TP-1..10) and `.squad/decisions/inbox/barbara-tool-packages-gate-review.md`  
-**Revision under review:** `.squad/decisions/inbox/don-tool-packages-revision-r1-r15.md` (Don, independent)  
-**Verdict:** **REJECTED** — narrow scope: S1 (documentation) and S2 (documentation) sweep required. R1–R15 verified resolved; architecture locked.  
-**Reviser designated:** **Ken** (Backend Dev). **Edith and Don are both locked out** — they authored the original and the revision now under review.
-
-**Full entry:** `.squad/decisions/inbox/barbara-tool-packages-gate-review-2.md`
-
-### R1–R15: Verified Resolved (by manual re-derivation)
-
-All 15 items re-derived from actual artifacts (not taken on trust) and verified resolved:
-- R1–R5: Semantic contradictions fixed (action shape, `impl:` collision, output capture, reference example, path bases)
-- R6–R15: Wiring failures fixed (PKG-020/021 reachable, schema contradictions, apiVersion, tier-3, collision, replay, version, lock invariant, error codes, scenarios)
-- R16 (optional): `warnings:` added to `PackageExpected`
-
-**Validation re-run:** `verify_corpus.py` 280/280, `jsonschema` 0 errors on all fixtures, `\label`/`\ref` closure 0 unresolved.
-
-### S1 — Documentation Issue: §03 `\subsection{toolRefs}` teaches deleted rules
-
-**Location:** `03-schema-vnext.tex` lines ~170–188
-
-**Problem:** Schema chapter (first place readers look for document shape) still instructs authors to use `alias:` (now `PKG-021` hard error) and default discovery path `tools/<name>.tool.yaml` (deleted by AR-TP-2 ratified tier model).
-
-**Fix Required:** Rewrite subsection to drop `alias`, drop default-discovery sentence, cross-reference §06 ratified tier model instead of restating it locally.
-
-### S2 — Documentation Issue: Three `.tool.yaml` listings use forbidden mapping-shaped `actions:`
-
-**Locations:** 
-1. `03-schema-vnext.tex:3175` (`actions: {get-pods: ...}`)
-2. `03-schema-vnext.tex:3296` (`actions: {check: ...}`)
-3. `08-security-and-trust.tex:320` (`actions: {deploy: ... sensitive_inputs ...}`)
-
-**Problem:** §06 now mandates `actions:` is always a list, never a mapping. Three listings contradict this. §08 case contains the only normative statement of `sensitive_inputs` placement.
-
-**Fix Required:** Convert all three to list form (`- name: ...`), preserving all fields including `sensitive_inputs`.
-
-### Optional Cleanups Approved
-
-Four mechanical, non-blocking cleanups authorized:
-1. Stale `inbox/` ruling citations → `archive/` (15 occurrences)
-2. Package name drift `com.acme.` → `acme.incident-tools` (30 occurrences)
-3. `LocalStructured` → `LocalOutputs` §3.4a mis-citation
-4. r23 dry-run narrative accuracy
-
-### Gate Disposition
-
-**REJECTED**, narrowly. All R1–R15 verified genuine resolved and locked. Two new blockers (S1, S2) identified — pure documentation sweep with no design decisions needed. The correct answers are already written in §06 and §08; §03 and §08 just need to be brought into alignment. Spec goes to user next; reader opening schema chapter first must not be told to author keys that parse gate rejects.
-
-**Reviser:** Ken (independent, Edith and Don locked out). Scope strictly limited to S1/S2. Re-submit for third gate pass; will be diff-only check + validation re-run.
-
----
-
-## 2026-08-09 — GERT Tool Packages MVP — S1/S2 Documentation Sweep (Ken, independent)
-
-**By:** Ken (Backend Developer), acting independently as revision owner. Edith (original author) and Don (first revision author) were locked out per Cristián's directive.
-
-**Subject:** Barbara's second gate identified two documentation-only issues (S1, S2) requiring mechanical sweep. Scope explicitly limited to §03 and §08; AR-TP-1..10 and R1–R15 remain closed and were not reopened.
-
-**Resolution summary (see `.squad/decisions/inbox/ken-tool-packages-revision-s1-s2.md` for full matrix and validation):**
-
-- **S1 resolved:** `03-schema-vnext.tex` §03 `\subsection{toolRefs}` rewritten: removed `alias:` example (replaced with one-line `PKG-021` note), removed default-discovery-path sentence, added cross-references to §06 ratified tier model. All cross-references verified.
-- **S2 resolved:** All three mapping-shaped `actions:` listings converted to canonical list form (`- name: ...`); `sensitive_inputs` preserved under §08's converted entry. Corpus-wide scan: zero mapping-shaped `actions:` blocks remain.
-- **Optional cleanups completed:** Stale `inbox/` ruling citations swept to `archive/` (0 remaining); `com.acme.` → `acme.incident-tools` normalized (30 occurrences consistent); `LocalStructured` → `LocalOutputs` §3.4a mis-citation corrected; r23 dry-run narrative made accurate; one clarifying sentence on `StepCapture` form scope.
-
-**Validation:** `verify_corpus.py` 280/280, all 5 schemas valid JSON, `jsonschema` 0 errors, `tectonic` build 0 new errors, `\label`/`\ref` closure 0 unresolved, full diff review confirms only S1/S2 changes + optional cleanups (no collateral edits).
-
-**No semantic changes:** No schema modifications, no error codes changed, no grammar productions altered, no runtime semantics modified. AR-TP-1..10 and R1–R15 remain byte-compatible with Gate 2 acceptance.
-
-**Status:** Revision complete; returned to Barbara for third (final) gate pass.
-
----
-
-## 2026-08-09 — GERT Tool Packages MVP — Gate Review #3 (final): APPROVED
-
-**By:** Barbara (Lead / Architect), at Cristian Ormazabal Ortega's request.
-**Reviews:** Ken's S1/S2 sweep (`.squad/decisions/inbox/ken-tool-packages-revision-s1-s2.md`),
-authored independently with Edith and Don locked out.
-**Full entry:** `.squad/decisions/inbox/barbara-tool-packages-gate-review-3.md`
-
-**Verdict: APPROVED. The specification is ready for Cristian's review.**
-
-- **S1 resolved.** `03-schema-vnext.tex` `\subsection{toolRefs}` no longer teaches `alias:` (now
-  `PKG-021`, hard parse-gate error) and no longer teaches the deleted `tools/<name>.tool.yaml`
-  default-discovery rule; it now states the negation and cross-references the ratified
-  frozen-catalog/tier model in §06 instead of restating it. All three cross-references resolve.
-- **S2 resolved.** All three mapping-shaped `actions:` listings converted to the canonical list
-  form; `sensitive_inputs` preserved under §08's converted `deploy` entry. Corpus-wide scan of
-  every `actions:` block (`.tex`/`.yaml`/`.md`): zero mapping-shaped occurrences remain.
-- **No stale alias / default-discovery guidance survives in any normative example.** Remaining
-  `alias` hits are prohibitions, the unrelated `imports:` alias map, or GXL/GCP function aliases.
-- **Ken's optional cleanups altered no accepted semantics.** Stale `inbox/` ruling citations swept
-  to `archive/` (0 remaining); `com.acme.` -> `acme.incident-tools` normalized consistently and
-  still schema-valid; `LocalStructured` -> `LocalOutputs` §3.4a mis-citation corrected; r23's
-  dry-run narrative made accurate; one clarifying sentence added that `StepCapture` gains no
-  `step.{id}.outputs.{name}` form (MVP scope choice). No schema, error code, grammar production,
-  or runtime semantic changed. AR-TP-1..10 and R1-R15 remain closed.
-- **Validation re-run independently:** `verify_corpus.py` 280/280; all 5 JSON Schemas valid;
-  `gert-package.yaml` and `drain-node.yaml` validate with 0 errors; `\label`/`\ref` closure 293
-  labels / 0 unresolved. r23's single `apiVersion: runbook/v2` error is the known corpus-wide
-  pre-existing issue.
-
-**Deferred, Tess-owned (unblocked, not blocking):** `conformance/tv-pkg-resolve.yaml`, >=46
-vectors, against the now-stable surfaces (`PKG-*` enum, `TV-PKG-*` ids, `PackageExpected` incl.
-`warnings:`, `outputs.<name>`, `execute:`, `PKG-029`/`PKG-030`, `tab:tool-path-bases`,
-replay-as-`invoke`). Gate-2 §3 target list stands.
-
-**Non-blocking pre-existing issues (own tickets):** corpus-wide `apiVersion: runbook/v2`; the
-§07/§13 `replay` terminology overload; the spec-wide under-specification of downstream behaviour
-after an upstream mode-skip; the optional r23 `assessment.md` companion. One editorial nit: a
-`\S\ref` macro leaks verbatim inside a `minted` comment at `03-schema-vnext.tex:184` — typographic
-only, fold into the next §03 touch.
-
-**No reviser designated. No further gate pass required.**
-
----
-
-## 2026-08-09T15:59:36-07:00 — Tool Packages MVP: Runtime Implementation (Don)
-
-**By:** Don (Backend Developer), at Cristián Ormazábal Ortega's request.
-**Repo:** `C:\One\OpenSource\gert` (runtime repo). **Status: not committed** (working-tree only,
-per task instructions) — this is a status/decision entry, not a merge record.
-**Full entry:** `.squad/agents/don/history.md` (2026-08-09 section) has the complete file/scope
-inventory.
-
-**Decision: ship a realistic, fully-tested core subset now rather than a shallow full-surface
-attempt.** Implemented and unit-tested: PKG-001..030/PKG-W001..003 error codes; strict SemVer +
-MVP constraint grammar; secure path resolution with symlink containment; `tool-package/v1`,
-`config/v1`, `package-lock/v1` schema types; the PKG-020/021 pre-schema forbidden-key scan; the
-full two-phase (`Build`/`BindFile`) five-tier catalog freeze and resolution engine with all
-ratified collision rules (PKG-006/011/022/029/030) and digest algorithm; a new
-`internal/adapter.BuildPackageCatalog`/`ResolveToolRefsViaCatalog` API pair for Ken's future CLI
-wiring, added alongside (not replacing) the existing path-only `ResolveToolRefs`.
-
-**Explicitly deferred, reported not hidden:** substitution (`execute.kind: runbook`) end-to-end;
-evidence/trace event emission and resume/replay drift behavior (`PKG-009`,
-`--allow-package-drift`, `replay/packageDrift`); real MCP/extension tier-3 discovery (only an
-extension point exists); `.gert/config.yaml` loading into `pkg/run/run.go`; a fully faithful
-two-resolution-base implementation for `requires[].path` (project-scope vs runbook-scope) —
-currently a workspace-then-runbook-dir fallback heuristic. Also flagged, not fixed: the existing
-runtime's `ToolDef.Actions` is a `map[string]*ToolAction`, diverging from the ratified spec's
-"actions MUST be an array" rule — converting it was judged out of scope (large, unrelated,
-sweeping breaking change) for this task.
-
-**Bug fixed during implementation:** `toolRefs[].version` was originally a resolution no-op
-(the runtime `ToolDef` type carries no version field); fixed by threading
-`schema.ToolDef.Version` through to a new `pkgcatalog.Entry.Version` field and enforcing
-`semver.Constraint.Satisfies` in the package-pin and tier-4 path binding, per the ratified
-"checked against the resolved tool definition's meta.version" rule. One pre-existing test fixture
-had been silently passing under the old no-op and was corrected.
-
-**Validation:** `go build ./...` and full `go test ./...` are green across the entire repo with
-zero regressions (including all 22 pre-existing runbook parser fixtures). The mandated dirty-tree
-constraint files (`native.go`/`native_test.go`/the example runbook/the untracked `.code-workspace`)
-were inspected once, never modified, and verified unchanged at session end.
-
-**Deferred, still-owned-by-others work is unaffected:** Tess's `conformance/tv-pkg-resolve.yaml`
-remains unblocked and untouched; the `PKG-*`/tier surfaces it will test against are now
-implemented and unit-tested (not conformance-vector-tested) in `pkg/pkgcatalog`.
-
-**No reviser designated for this entry. Next owner (Ken for CLI wiring, or whoever picks up
-substitution/evidence/resume) should treat `pkg/pkgcatalog`/`pkg/semver`/`pkg/pkgpath` as stable,
-tested building blocks, not scaffolding to be redesigned.**
-
----
-
-## 2026-08-09T17:58-07:00 — Tool Packages MVP: Implementation Gate Review (Barbara) — REJECTED
-
-**By:** Barbara (Lead/Architect), at Cristian Ormazabal Ortega's request.
-**Under review:** the complete uncommitted working tree of `C:\One\OpenSource\gert`
-(Don: runtime core + final integration pass; Ken: CLI wiring), against AR-TP-1..10, the
-TV-PKG-PATH-002 binding ruling, the gate-3-approved spec, `gcp.ebnf` 3.4a, and Tess's
-85-vector corpus. Production wiring read directly; agent summaries used only to locate code.
-**Full entry:** `.squad/decisions/inbox/barbara-tool-packages-implementation-gate-review.md`.
-
-**Verdict: REJECTED. Revision owner: David (Integration Engineer)** — Don and Ken are locked
-out as authors of the code under review; the residual work is integration/wiring, which is
-David's competence. Edith and Tess remain locked out of runtime code by role.
-
-**Verified correct (not re-litigable):** SemVer + constraint grammar; secure path resolution
-and exact conformance to my TV-PKG-PATH-002 workspace-escape ruling; two-phase Build/BindFile
-with no post-freeze mutation; five tiers with tier-3 bare-name stripping; PKG-006 hard
-collision and genuine PKG-022 enforcement; the full binding contract incl. the Phase-0
-raw-YAML PKG-020/PKG-021 scan; non-fatal warning discipline; `.gert/config.yaml` genuinely
-loaded on the production path; `--package-map` partial override proven with a byte-identical
-runbook through the real CLI; substitution declaration/scope isolation/signature exactness;
-exact governance composition arithmetic incl. a true `allow_commands` intersection; the three
-trace events emitted at the real Phase-C boundary with a shared run_id; dry-run side-effect
-avoidance; resume PKG-009 refusal and `governance/packageDriftAccepted` with both digests and
-operator. Protected user edits byte-identical; dirty tree preserved; zero regressions.
-
-**Blockers:** (B1) `pkgsubst.Plan` has one call site — inside the executor — so PKG-013/014/
-015/026/027/028 fire only when a step executes; unreachable steps and all of dry-run are
-unvalidated, contradicting 5.4/5.5/5.6 verbatim. (B2) package digest closure omits
-`execute.path` substitutes and package-internal includes, so a substitute runbook can be
-rewritten without changing any digest — defeating 7.5 resume integrity. (B3) catalog digest
-uses the export file digest where 7.3 requires the package digest for tier-1. (B4) resume
-drift iterates only currently-present packages, so a removed package is never detected and
-PKG-001 is unreachable. (B5) the ratified `outputs.<name>` capture root (`gcp.ebnf` 3.4a,
-`LocalOutputs`) is absent from the runtime GCP parser. Plus a sixth, found in review: the
-include closure is never traversed — child `requires:`/`toolRefs:` are ignored, so resolution
-is dynamically scoped, the exact model 8.1 rejected; implement it or fail closed. Nine
-lower-severity required fixes are listed in section 3 of the full entry.
-
-**Don's reported gaps, classified:** deep governance deny/allow enforcement — ACCEPTABLE
-NON-GOAL (the evaluator is orphaned repo-wide, so substitution grants no relative escalation;
-conditional on B1 landing, ticketed). Capture of substitution outputs — BLOCKER (B5): the
-grammar was ratified and simply not implemented. In-memory resume plan — ACCEPTABLE NON-GOAL,
-genuinely pre-existing; Don's refusal to fake a passing CLI test was the right call; ticket
-plan persistence and document drift-checking as in-process-only. Empty `ConstraintSources` —
-REQUIRED FIX, not a non-goal: the provenance already exists in `mergeRequirements`, and a
-permanently-empty field in an evidence record is worse than an absent one. Absent replay mode
-— ACCEPTABLE NON-GOAL, confirmed no replay entry point exists anywhere.
-
-**A second gate pass is required, scoped to B1-B5, the include-closure item, and section 3.**
-
----
-
-## 2026-08-09 — Tool Packages MVP (runtime): FINAL IMPLEMENTATION GATE — APPROVED
-
-**Barbara (Lead / Architect), second gate pass.** Full entry:
-`.squad/decisions/inbox/barbara-tool-packages-final-gate-decision.md`. Reviewed David's
-independent revision (Don and Ken locked out, and they made no contribution) against my
-rejecting first pass, AR-TP-1..10, the TV-PKG-PATH-002 ruling, and the gate-3 spec.
-
-**Verdict: APPROVED. Ready for Cristián.** No third gate pass required.
-
-All six blockers verified resolved in the code that actually runs: (B1) plan-time
-substitution validation via a structural `flowwalk` visitor invoked before `Plan`/`Start`
-in the shared `runWithMode`, so dry-run and unreachable-by-`when:` steps are validated,
-with cycles/depth decided statically by DFS frames; (B2) digest closure now covers
-`execute.path` substitutes and package-internal includes, cycle-guarded and sorted;
-(B3) tier-1 entries carry the package digest, so `CatalogDigest()` proves what §7.3 says;
-(B4) the manifest's `PackageDigests` is authoritative — a removed package is PKG-001 by
-name, an added one PKG-009; (B5) the ratified `outputs.<name>` capture root is implemented
-end-to-end with the step-context check at plan validation, plus a genuine latent-bug find
-(`schemaToolDefFromRuntime` dropping `Execute`/`Outputs`, which would have silently
-defeated B1 and B5); (§5) the include closure fails closed with a typed PKG-017 rather
-than resolving dynamically — the sanctioned fallback (b), with option (a) ticketed.
-
-All nine §3 fixes verified, including real `ConstraintSources`, PKG-002 provenance, PKG-003
-on build metadata, deterministic PKG-006 ordering, typed PLAN-010 that still unwraps to
-`ErrToolNotFound`, live PKG-018 normalisation, failing (not silent) output coercion, and
-`origin` in the `package/resolved` payload. `maxLinkHops` I verified **myself on Windows**
-against real symlinks (10 hops → PKG-008; 8 hops → clean), since its tests skip there.
-
-Protected files byte-identical, no `design/` file touched during the revision window, tree
-dirty and uncommitted as instructed, `go build ./...` clean, `go test ./...` green apart
-from one unrelated timing flake in `internal/serve` that passes 5/5 on re-run.
-
-**Accepted non-goals:** deep governance enforcement inside substitute bodies (orphaned
-repo-wide, no relative escalation); cross-process resume plan persistence (pre-existing —
-Cristián must be told `--allow-package-drift`/PKG-009 are in-process-only today); replay
-mode; §5 option (a). **Follow-ups ticketed:** lexical `BindFile` binding, documenting the
-single-file `requires:`/`toolRefs:` restriction, `GovernanceEvaluator` wiring,
-`ExecutionPlan` persistence, Windows link-hop tests, hop counting across intermediate
-components, and the pre-existing corpus/terminology items.
-
----
-
-## 2026-08-10 — Enum-Constrained Tool and Runbook Outputs MVP — RATIFIED ARCHITECTURE
-
-**By:** Barbara (Lead / Architect), at Cristián Ormazábal Ortega's request.
-**Date:** 2026-08-10T13:25:10-07:00
-**Full entry:** `.squad/decisions/archive/barbara-enum-constraint-mvp-architecture-ruling-archived.md`
-
-**Verdict: RATIFIED.** Architecture ruling (AR-ENUM-1..15) with three binding scope corrections (C1/C2/C3):
-- C1: `enum` forbidden on `type: secret`; member lists redacted on sensitive declarations (audit-trail safety)
-- C2: Package mock enum equality is conformance-only, not a runtime check (no in-run comparand)
-- C3: No `tool.v1.schema.json` in this MVP; tool-action `enum` lives in `06-tool-runtime.tex` prose
-
-Four declaration sites: tool action `args`/`outputs` (S1/S2), runbook `inputs`/`outputs` (S3/S4).
-String-only constraint; type-restricted; checked at parse time (declarations, defaults) and runtime (bindings).
-ENUM-001..009 error codes; ENUM-W001 warning (case-only-distinct); PKG-013 extended for substitution enum-set equality.
-Asymmetric Unicode normalization (declared members must be NFC; candidate values are NFC'd before comparison).
-No integer/identifier/label-value unification with collectors in this MVP. No enum on secrets. No enum identity in package digests.
-
----
-
-## 2026-08-10 — Enum MVP: Specification Work (Edith) — OPEN / IN PROGRESS
-
-**By:** Edith (Spec Editor)
-**Date:** 2026-08-10T13:25-07:00
-**Status:** Analysis complete, awaiting Barbara's ruling on scope questions before authoring.
-**Full entry:** `.squad/decisions/inbox/edith-string-enum-args-io.md`
-
-Four schema/prose questions for Barbara's sign-off before Edith authors the normative sections:
-- Q1: Enum enforcement at parse time (literals) and runtime (bindings) — recommendation is both (mirrors GCP-TYPE-001 pattern)
-- Q2: Runbook `Output` schema vs prose conflict (schema newer, pre-enum); treating schema as canonical and rewriting L403-420 prose
-- Q3: Error-code family — recommend `SEM-0xx` for runbook inputs/outputs, `PKG-030` for tool-action violations
-- Q4: `pattern:`/`example:` on `Input` are prose-only (dead fields, schema doesn't have them); fix in same PR as adding `enum:` to avoid third generation of drift
-
-**Owner:** Edith. **Blockers:** Barbara's Q1-Q4 approval.
-
----
-
-## 2026-08-10 — Enum MVP: Corpus Work (Tess) — COMPLETE
-
-**By:** Tess (Conformance Tester)
-**Date:** 2026-08-10
-**Status:** 58-vector corpus finalized; one schema gap found and documented.
-**Full entry:** `.squad/decisions/archive/tess-enum-corpus-notes-archived.md` + `.squad/decisions/archive/tess-enum-decl-006-correction-archived.md`
-
-**TV-ENUM-DECL-006 corrected:** YAML 1.2 core schema fact. Bare `yes`/`no` resolve to `!!str`, not `!!bool` (1.1 was the boolean resolver).
-Vector's fixture amended: `enum: [yes, no]` → `enum: [true, false]` (the canonical YAML-1.2-core-schema booleans, which DO trigger ENUM-002).
-Vector id/category/expectation intent preserved; count stays 58.
-
-**Finding: `$defs.Output` in `runbook.v1.schema.json` lacks `default` property** (unlike Input).
-AR-ENUM-6 rule 3 includes S4 (runbook output defaults) in the "default must be a member" sites, but the schema has no `default` key at S4.
-Documented as untestable-in-corpus, not a vector defect — a schema gap for later resolution (add `default` to Output, or explicit ruling that S4 defaults are schema-free).
-No other ambiguities found; all AR-ENUM-1..15 rules mapped cleanly.
-
-**Owner:** Tess (final). **Tess owns four further corpus amendments** (UNICODE-005/PLAN-005/RUNTIME-004/PLAN-003) to fix defects diagnosed during Ken's R2 harness run;
-she does not edit the frozen corpus otherwise.
-
----
-
-## 2026-08-10 — Enum MVP: Initial Runtime Implementation (Don) — COMPLETE (SUPERSEDED)
-
-**By:** Don (Backend Developer)
-**Date:** 2026-08-10
-**Status:** Reported; implementation superseded by Ken's independent revision.
-**Full entry:** `.squad/decisions/archive/don-enum-mvp-implementation-report-archived.md`
-
-Implemented AR-ENUM-1..15 end-to-end in runtime (`gert` repo). Two findings escalated to Barbara:
-- Finding 1: `TV-ENUM-DECL-006` vector conflicts with this repo's YAML 1.2 resolver (not a code error, a vector/library conflict); requested Barbara's ruling.
-- Finding 2: No root-runbook output-materialization path exists in the engine (pre-existing gap, S4 enforcement unreachable, ticketed T-ENUM-ROOT-OUTPUTS).
-
-Full validation: `go build ./...` clean, `go test ./...` all 61 packages pass.
-
-**NOTE:** Don reported the genuine DECL-006 conflict and the root-output gap correctly. However, his implementation work included five runtime defects that silently defeated enum enforcement for large fixture families.
-Ken's independent R2 harness (built later) surfaced all five (GCP output resolution, dropped Enum field in catalog conversion, missing S2 default check, capture-after-failure masking, GIS-interpolation false rejection).
-Per Barbara's gate-rejection process, Don is locked out; Ken revises independently.
-
----
-
-## 2026-08-10 — Enum MVP (runtime): Implementation Gate Review 1 (Barbara) — REJECTED
-
-**By:** Barbara (Lead / Architect)
-**Date:** 2026-08-10
-**Status:** Gate rejected; revision owner designated.
-**Full entry:** `.squad/decisions/archive/barbara-enum-mvp-implementation-gate-archived.md`
-
-Reviewed Don's complete uncommitted working tree (`C:\One\OpenSource\gert`) against AR-ENUM-1..15, Tess's 58-vector corpus, and §R1-R5 gate criteria.
-
-**Five blockers identified (R1–R5):**
-- R1: ENUM-008 caller-binding enforcement incomplete; missing `--var` path
-- R2: No faithful conformance harness; design-only vectors not mechanized
-- R3: Enum metadata not carried in `ValidatedPlan`
-- R4: ENUM-W001 warning not surfaced to end-user
-- R5: Replay path not validated
-
-All five are genuine, non-negotiable blockers. **Revision owner: Ken (Backend Developer).** Don and Ken locked out as authors; Ken revises independently from scratch per the gate-rejection protocol.
-
----
-
-## 2026-08-10 — Enum MVP (runtime): Independent Revision (Ken) — COMPLETE + R1–R5 VERIFIED
-
-**By:** Ken (Backend Developer), independent reviser.
-**Date:** 2026-08-10
-**Status:** Revision complete; all R1–R5 blockers resolved; bugs found and fixed; harness green.
-**Full entry:** `.squad/decisions/archive/ken-enum-mvp-implementation-revision-archived.md`
-
-Revised R1–R5 from scratch against ratified architecture (AR-ENUM-1..15), 58-vector frozen corpus, and gate-rejection spec.
-
-**Final disposition matrix:**
-
-| Blocker | Status | Evidence |
-|---|---|---|
-| R1 — ENUM-008 caller-binding | **Resolved** | `schema.CheckCallerInputBindings` wired at `cmd/gert/run.go` entry and all RPC/API paths; `internal/executor/tool.go` CheckArgEnums on materialized tool args (incl. `--var`-sourced values). Regression test: `enum_r1_r4_regression_test.go`. |
-| R2 — 58-vector conformance harness | **Resolved** | `internal/conformance/enum_harness.go` + `enum_vector.go` + `enum_conformance_test.go` build real `gert` CLI, materialize each vector into workspace, run it (or drive `pkgcatalog.Build` for catalog vectors). **Final report: 48 passed, 10 skipped (named), 0 failed.** |
-| R3 — Enum metadata in ValidatedPlan | **Resolved** | `internal/planner/enumplan.go` populates `ValidatedPlan.EnumConstraints`; `internal/engine/engine.go` carries it once in `plan.validated` trace, declared order, C1-safe redaction. Regression test: `enum_trace_test.go`. |
-| R4 — ENUM-W001 surfaced | **Resolved** | `cmd/gert/run.go` surfaces ENUM-W001 to stderr without aborting. Regression test: `enum_r1_r4_regression_test.go`. |
-| R5 — Replay enum validation | **Resolved** | `internal/executor.CheckArgEnums` exported; `internal/replay.ReplayExecutor.WithEnumChecks` + `ReplayFromTrace` wiring apply identical check at replay boundary. Regression test: `enum_r5_test.go`. |
-
-**Ten genuine runtime bugs found and fixed** (not in Ken's charter, but revealed by building a faithful R2 harness):
-1. GCP output-value resolution (executeSubstitution was not resolving GCP paths in output values)
-2. Dropped `Enum` field in catalog/toolRefs conversion (schemaToolDefFromRuntime lost Enum on both Args and Outputs)
-3. Missing S2 default check (AR-ENUM-6 tool-output-default case never implemented)
-4. Capture-after-failure masking (failed step captures attempted anyway, hiding real ENUM-008/009)
-5. GIS-interpolated defaults falsely rejected at plan time (ENUM-006 stringified `"${count}"` literally)
-6. Missing `imports:` alias resolution for `include.runbook` (alias-by-name includes failed as literal file paths)
-7. Schema/struct drift on `expand:` property (runbook/include Expand field existed in Go but not in JSON schema)
-8. Stdout/stderr split in harness (plan-time errors go stderr, runtime failures go stdout; harness only checked stderr)
-9. Temp build directory polluting repo (enumharness-bin-* dirs in working tree)
-10. Validation-ordering fix (B1 substitution checks short-circuited before planner.Plan ran, masking ENUM-006/007)
-
-**Authoritative 58-vector execution report:**
-- 48 vectors pass ✓
-- 10 vectors skip with named, audited reasons (5 pre-existing ticketed gaps, 5 corpus/methodology defects)
-- 0 vectors fail
-- 0 vectors silently dropped
-
-All blockers substantively resolved. No architecture reopened. Dirty tree preserved (no commits, no stage, protected files byte-identical).
-
----
-
-## 2026-08-10 — Enum MVP: Final Implementation Gate (Barbara) — APPROVED
-
-**By:** Barbara (Lead / Architect)
-**Date:** 2026-08-10T17:45-07:00
-**Status:** Final gate passed; implementation complete and approved.
-**Full entry:** `.squad/decisions/archive/barbara-enum-mvp-final-gate-approval-archived.md`
-
-Reviewed Ken's independent revision against R1–R5 spec, AR-ENUM-1..15, Tess's corrected 58-vector corpus, and Edith's AR-ENUM-3(3) prose fix.
-Verified directly: read current runtime diff (39 modified, 43 new paths), built and tested cleanly.
-Ran R2 harness myself independently: 58 vectors, **48 pass, 10 skip, 0 fail.** Executed four live CLI probes against scratch runbooks.
-No product artifact modified in either repository.
-
-**VERDICT: APPROVED.** R1–R5 all substantively resolved. No blocker remains.
-
-All five genuine bugs Ken found during harness construction are correct fixes, ratified in-scope consequences of the R2 requirement.
-The 10 skip reasons independently verified: 5 pre-existing ticketed gaps (T-ENUM-FROM-SOURCING, T-ENUM-ROOT-OUTPUTS), 5 corpus defects (each adjudicated against AR-ENUM-1..15, none are evasions).
-
-**Remaining limitations, all ticketed, none blocking:**
-- **T-ENUM-ROOT-OUTPUTS** — non-substituted root runbook never evaluates own `outputs:` (S4 site, no engine hook exists)
-- **T-ENUM-FROM-SOURCING** — `Input.From` (from: env/prompt/provider) never read by any runtime path
-- **T-ENUM-SENSITIVE-DECL** — no first-class sensitivity marker; EnumMeta.Redacted best-effort name-vs-governance.redact proxy, not a guarantee
-- **T-ENUM-REPLAY-WIRE** (new) — adapter.go replay branch unreachable today (ScenarioFile never assigned), documented at site
-
-Ken is released. His revision found and fixed five genuine runtime defects that hand-written tests could not surface; conformance harness is now the cheap gate wanted.
-
-**Tess** owns four further corpus amendments (UNICODE-005/PLAN-005/RUNTIME-004/PLAN-003), each keeping intent, count, and expectation; re-run harness after.
-**Edith** owns parallel §2a prose fix in `03-schema-vnext.tex` (strike YAML-1.1 aside from AR-ENUM-3 rule 3, add 1.2-core-schema-accurate trap example).
-
-No further gates required. Ready for Cristián.
 
 ---
 
@@ -2481,3 +1914,1204 @@ go test ./...    → exit 0 (62 packages, all green)
 ```
 
 
+
+
+---
+
+# Final Acknowledgment: Runtime Portability — Design Agreed (Rev 2)
+
+**Date:** 2026-08-17  
+**By:** Gert Core Team  
+**To:** SQL Live-Site Operations (gert-sqllivesite)  
+**Status:** Design agreed. Implementation begins.  
+
+---
+
+## Accepted
+
+All items accepted. Corrections incorporated below, plus two disclosures from our implementation costing.
+
+---
+
+## 1. Interactive `unspecified` — Corrected
+
+Accepted. Human presence does not guarantee human attention. We adopt your principle as the governing design rule for the entire classification feature:
+
+> **Classification is an opt-in to reduced friction. Absence of classification must never grant additional execution rights.**
+
+Final behavior table:
+
+| Context | `unspecified` behavior |
+|---------|----------------------|
+| Interactive operator | **Gate fires.** Active confirmation required. |
+| CI / headless | Denied unless explicitly permitted by policy. |
+| Test (native-only) | Auto-approve. |
+| Retry | Never. |
+| Late/lost result | INDETERMINATE + halt. |
+
+### Disclosure: migration impact of "interactive unspecified → gate fires"
+
+While costing this change we found a breaking regression we must address together. Today:
+
+- The approval gate on plain (non-substituted) tool calls fires based on runbook-level governance, NOT per-tool `requires-approval`. Tool-level `RequiresApproval` only applies on the substitution path.
+- So today, a plain `icm.get-incident` call in interactive mode triggers **zero prompts**.
+- Under the new rule, every unclassified tool action in interactive mode would prompt. **A 10-step runbook goes from 0 prompts to 10 prompts.**
+- Scope: every tool in gert-sqllivesite is currently unclassified. You would be hit hardest on day 1.
+
+**Mitigation — grandfathered explicit opt-out:**
+
+| Governance state | Behavior |
+|------------------|----------|
+| `requires-approval: false` **explicitly written** | Treat as legacy equivalent to `classification: read-only`. No prompt. The author explicitly opted out. |
+| `requires-approval: true` explicitly written | Gate fires, unchanged. |
+| Governance block **absent entirely** (nil pointer) | `unspecified`. Interactive: gate fires. Unattended: deny. |
+
+**Why this is implementable:** `ToolGovernance` is a pointer (`*ToolGovernance`) on the tool definition. A nil pointer = no governance block = author never expressed intent = unspecified. A non-nil pointer with `RequiresApproval: false` = author explicitly wrote a governance block opting out = honor that. This distinction exists in the schema today.
+
+**Migration path:**
+
+1. **New profile field: `legacy_unspecified_policy: allow | prompt`.** Default: `prompt` (enforces the new rule). Existing deployments set `allow` during migration to preserve pre-classification behavior. Explicit, named, auditable escape hatch.
+2. **Plan-time warning (PKG-W level):** For each unclassified action when the profile is non-test: `"action 'icm.get-incident' has no classification; treating as unspecified. Add classification: read-only to suppress."` Migration pressure visible without breaking runs.
+3. You add `classification: read-only` to your tool actions at your own pace. When complete, remove `legacy_unspecified_policy: allow` from your profile.
+
+This reinforces rather than weakens your principle: absence of a governance block still means unspecified and still means the gate fires. We are only honoring an explicit prior opt-out that an author already wrote down.
+
+---
+
+## 2. Attendance as a Separate Profile Property — Accepted
+
+You are separating execution host (context) from human presence (attendance). Correct — an autonomous agent inside VS Code is unattended despite the host being `vscode-operator`.
+
+**Profile schema:**
+
+```yaml
+apiVersion: runtime-profile/v1
+id: vscode-autonomous
+context: vscode-operator        # execution HOST
+attendance: unattended           # approval semantics
+approval:
+  scope:
+    allow_read: true
+    allow_mutating: false
+    allow_destructive: false
+```
+
+`attendance` is a top-level enum: `attended | unattended`. Orthogonal to `context` and `approval.scope`:
+
+- `context` → which tool bindings are valid (AllowedEnvironments).
+- `attendance` → which approval gate behavior applies.
+- `approval.scope` → which classifications the profile permits at all.
+
+**Disclosure: TTYOutput conflates three properties.** Current Gert hardcodes `TTYOutput: true` unconditionally in `cmd/gert/run.go` — there is no `isatty()` detection. Consequence: `gert run` in a CI pipeline today gets the TerminalApprovalGate and will **block on stdin** if any approval fires. This is a live latent bug, and it is exactly the failure mode your declared-attendance requirement fixes.
+
+Additionally, `TTYOutput` currently drives three distinct things: (a) approval gate selection, (b) physical stdin/stdout availability for collector/choice steps, and (c) terminal-rendered prompts. Profile-declared `attendance` replaces ONLY (a). Physical IO availability (b, c) remains driven by TTY detection because those concern whether stdin/stdout exist, not whether a human is attentive. Implementation: `Attended *bool` on WireOptions; nil inherits legacy TTY inference; profile populates it explicitly when present.
+
+**Edge cases:**
+
+- Profile declares `attended` but no TTY → **Tier 0 failure** (`config/attendance-mismatch`). A profile promising an approver who cannot be reached is a configuration error.
+- `attended: false` with `context: cli-operator` → **Legal.** Your autonomous-agent case. Gets unattended rules.
+
+---
+
+## 3. Test Context Must Not Bind to Production — Accepted (revised)
+
+**Tier 0 rule (corrected):**
+
+| Transport mode | In test context |
+|---------------|----------------|
+| `native` | Always allowed. |
+| `mcp` (subprocess) | **Blocked by default.** Allowed with explicit profile opt-in: `transport.allow_subprocess_in_test: true`. |
+| `mcp-http` | **Never allowed.** No override. |
+
+Rationale for the subprocess escape hatch: a hermetic local fake MCP server (`fake-icm-mcp` binary producing deterministic responses, no real endpoint) is a legitimate pattern for integration-testing the MCP transport layer itself. Banning subprocess entirely forecloses that. The opt-in is explicit, named, auditable — and HTTP endpoints remain absolutely forbidden.
+
+Error code: `config/test-context-non-native-binding`  
+Message (mcp-http case):
+```
+error: tool "icm" uses transport mode "mcp-http" in a test-context profile.
+  Test profiles must not bind to HTTP endpoints.
+  fix: use a package-map pointing to your mock package, or change the profile context.
+```
+
+Message (subprocess, no opt-in):
+```
+error: tool "icm" uses transport mode "mcp" (subprocess) in a test-context profile.
+  Subprocess transport requires explicit opt-in in test context.
+  fix: set transport.allow_subprocess_in_test: true in the profile, or use native transport.
+```
+
+This check reads `plan.Tools` (post-resolution, post-package-map), so it ships with the early `gert plan` work at zero additional effort. The `--package-map` interaction validates exactly as designed: test profile + production package-map → reads `mcp-http` → Tier 0 error. Right layer, correct behavior.
+
+The approval rule remains sound: native transport has no real side effects; subprocess fakes under explicit opt-in are by definition hermetic (the author vouched by opting in); HTTP is banned. Auto-approve in test context is safe.
+
+---
+
+## 4. OQ2 — Closed: Subprocess
+
+Confirmed. Extension already uses a Gert subprocess. Phase 0 validates framing and lifecycle:
+
+| Phase 0 deliverable | Owner |
+|---------------------|-------|
+| Framing protocol document | Gert Core |
+| Lifecycle spec (start, stop, crash-recovery, version detection) | Gert Core + extension team |
+| Capability-advertisement handshake | Gert Core |
+| CancelRequest message type | Gert Core |
+| Feasibility validation against current extension | SQL Live-Site Ops |
+
+Library integration only if subprocess proof fails on a blocking criterion.
+
+---
+
+## 5. Final Status
+
+**Design agreed. Gate closed. Implementation starts.**
+
+New Phase 1 items from this round:
+
+| Item | Effort |
+|------|--------|
+| Per-action `Classification *string` on ToolAction | 0.5 days |
+| `legacy_unspecified_policy` profile field + gate routing | 0.5 days |
+| Plan-time PKG-W warning for unclassified actions | 0.5 days |
+| Declared `attendance` on WireOptions + profile | 0.5 days |
+| `config/attendance-mismatch` Tier 0 check | included |
+| `config/test-context-non-native-binding` Tier 0 check | 0.5 days |
+| Direct-invocation approval gate enforcement (Execute() path) | 1–2 days |
+
+These join the existing Phase 1 scope. Total addition: ~4 days.
+
+You have corrected us four times in this exchange and been right every time — your unspecified correction surfaced the migration hazard we would otherwise have shipped blind. The design is better for it. We start work this week.
+
+---
+
+*Gert Core Team — 2026-08-17*
+
+
+---
+
+# Gate Closure: Runtime Portability for Gert Runbooks (Revised)
+
+**Date:** 2026-08-16  
+**By:** Gert Core Team  
+**To:** SQL Live-Site Operations (gert-sqllivesite)  
+**Re:** Gate ruling on your reply to our conditional acceptance  
+**Status:** GATE CLOSED — work authorized to begin  
+
+---
+
+## Verdict: All blocking conditions are satisfied. Gate is closed.
+
+This revision incorporates source-grounded findings from our implementation review completed after the initial closure. It corrects our earlier ruling on environment vocabulary, discloses a coverage gap in the current approval gate that is load-bearing for your §11 requirements, and refines several technical details.
+
+---
+
+## Condition Status
+
+| # | Condition | Status |
+|---|-----------|--------|
+| 1 | Accept additive schema extensions | **SATISFIED.** |
+| 2 | Accept tiered preflight | **SATISFIED.** |
+| 3 | Accept corrected late-result semantics | **SATISFIED.** |
+| 4 | Close host bridge protocol gaps before Phase 2 | **SATISFIED.** |
+| 5 | Answer OQ2 before Phase 2 | **SATISFIED.** |
+| 6 | Revised phasing and estimates | **SATISFIED.** |
+
+---
+
+## Rulings on Your Three Counter-Positions
+
+### 2a. `classification: unspecified` — ACCEPTED
+
+You are right. Defaulting absent classification to `read-only` would silently mark existing mutating tools as safe. `unspecified` is the correct conservative default.
+
+**Schema detail.** `classification` is a **per-action** field, not per-tool. A single tool legitimately has read-only `get-incident` and destructive `kill-process`. In Go: `Classification *string` on the `ToolAction` struct — a pointer so `nil` (absent/unspecified) is cleanly distinguishable from an explicit value. `yaml:"classification,omitempty"`. Four-value enum: `read-only | mutating | destructive | unspecified` (nil = unspecified). This is permanent — no deprecation horizon.
+
+**Reconciled precedence table.** This supersedes our earlier draft:
+
+| `requires-approval` | `classification` | Behavior |
+|---------------------|-------------------|----------|
+| `true` | any (incl. nil/unspecified) | Gate fires. Explicit legacy bool wins; preserved. |
+| `false` or absent | `read-only` | No gate. |
+| `false` or absent | `mutating` | Gate fires if profile approval mode ≥ interactive. Auto-approve in test context. |
+| `false` or absent | `destructive` | Gate ALWAYS fires. |
+| `false` or absent | nil (unspecified) | **FAIL CLOSED** in unattended contexts. In interactive contexts: warn and proceed (human present to notice). |
+
+**All code paths** (retry, late-result, approval) must handle `unspecified` explicitly — no default-case fallthrough to `read-only`:
+
+| Dimension | `unspecified` behavior |
+|-----------|----------------------|
+| Retry | No retry. |
+| Late-result | INDETERMINATE + halt (conservative, same as mutating). |
+| Unattended approval | Denied (fail-closed). |
+
+### 2b. Unattended approval gate — ACCEPTED, with scoping and a disclosure
+
+**Your concern is well-founded — more so than either of us realized.** We owe you a disclosure before stating the fix.
+
+**Disclosure: current approval gate coverage is partial.** The existing `ApprovalGate` enforcement fires ONLY on the substitution path (`executor/tool.go:executeSubstitution()`, where `planResult.EffectiveGovernance.RequireApproval` is checked). The direct-invocation path (`Execute()` → `runtime.Invoke()`) — which is the path for plain process-backed, stdio-MCP, and mcp-http tool calls — has **no approval check at all**. A destructive tool invoked directly today bypasses the gate entirely.
+
+This means the `ApprovalGate` interface you are relying on as the enforcement seam for §11 currently covers only substituted actions. Shipping a `ProfileApprovalGate` without closing the direct-invocation path would give you a false sense of safety.
+
+**Phase 1 fix:** We will add the classification-aware approval check to `Execute()` on the direct-invocation path at the same time we ship the `ProfileApprovalGate`. This is a ~1–2 day addition. After Phase 1, ALL tool invocations — substituted and direct — pass through the gate.
+
+**Phase 1 gate behavior (`ProfileApprovalGate`):**
+- Reads the runtime profile's `approval.scope` (which classifications are permitted).
+- `read-only` actions: auto-approves.
+- `mutating`, `destructive`, `unspecified` actions: **denies** unless the profile explicitly permits that classification.
+- Denial is a typed `approval/denied` error naming the profile, action, and classification.
+
+This is fail-closed by denial. No evidence infrastructure needed.
+
+**Phase 3 upgrades to evidence-recording:** Adds policy ID, identity (managed identity object ID, workload identity subject), run/step/retry provenance, and a structured approval-evidence trace event to `ApprovalRecord`. Good news: the current `ApprovalRecord` type (`pkg/governance/evidence.go`) is a value type with only `Approver`, `ApprovedAt`, `Token`. Adding `PolicyID`, `RunID`, `StepID`, `RetryCount`, `Classification` as `omitempty` fields breaks no existing trace readers and requires no interface signature change. Backward-compatible.
+
+Phase 1 = fail-closed by denial; Phase 3 = fail-closed by requiring evidence. Both safe.
+
+### 2c. Environment/context vocabulary — CORRECTED from our initial ruling
+
+Our initial ruling said `AllowedEnvironments` values are free-form strings and the existing `"real"` values in conformance fixtures are "a test vocabulary, not a production standard." That was wrong. Here is what we found on closer examination.
+
+**The two-axis problem.** The existing 25 occurrences of `allowed-environments: ["real"]` in `tv-enum.yaml` sit on a `kubectl` tool that drains nodes (real side effects). The value `"real"` maps to Gert's existing `engine.RunModeReal` constant — one of three `RunMode` values: `real | dry-run | replay`. The original corpus author was marking tools that must not be bypassed by dry-run mode.
+
+`RunMode` and deployment context are **two orthogonal axes**:
+
+| Axis | Values | Meaning |
+|------|--------|---------|
+| **RunMode** (exists today) | `real`, `dry-run`, `replay` | Whether the engine actually executes steps |
+| **Profile context** (new) | `cli-operator`, `vscode-operator`, `ci`, `headless-server`, `test` | Which deployment environment the runbook runs in |
+
+Overloading one field for both axes would silently destroy the existing dry-run safety intent — a `kubectl drain` tool marked `allowed-environments: ["real"]` (meaning "don't skip in dry-run") would suddenly mean "only runs in a profile named 'real'", which is not what the author intended.
+
+**Our resolution:**
+
+1. **`AllowedEnvironments`** becomes the profile-context allowlist, as you assumed. Values are your §6 context vocabulary: `cli-operator`, `vscode-operator`, `ci`, `headless-server`, `test`. Matching is exact, case-sensitive, against the runtime profile's `context:` field. Empty = all contexts allowed (backward compatible).
+
+2. **NEW field: `AllowedModes []string`** on `ToolGovernance` for the RunMode dimension. `yaml:"allowed-modes,omitempty"`. Carries the `real | dry-run | replay` vocabulary. Empty = all modes allowed.
+
+3. **Migration:** We migrate the 25 existing `allowed-environments: ["real"]` fixtures to `allowed-modes: ["real"]`. This is a test-data-only change in `tv-enum.yaml`. Zero runtime breakage because neither field is enforced today — the enforcement code we write will read the new field names.
+
+4. **`RequiresCapabilities`:** Deferred. We will NOT enforce or populate this field until the profile schema settles what a "capability" is (transport types? auth providers? host features?). Populating it now creates another ghost field. Phase 1 does not need it.
+
+5. **Vocabulary convention:** We will document a recommended context vocabulary table in the Phase 0 profile spec, based on your §6 matrix. Values are free-form strings (not a closed enum), but we provide the canonical set for interoperability. Confirm you will use your §6 values; we will enforce against them.
+
+**This is no longer blocking the early win.** We define the vocabulary and the field semantics. You confirm your context values match your §6 matrix (or tell us otherwise). The fixture migration is ours to do.
+
+---
+
+## Binding Model — Confirmed
+
+Your statement matches our position:
+
+> A profile must not silently rewrite a tool definition's transport mode. Different physical implementations remain separate tool definitions/packages selected through the existing binding machinery. `--profile` and `--package-map` compose rather than compete.
+
+**Composition precedence:**
+
+1. `--package-map` wins at **YAML selection**: which package's tool definition resolves each `toolRef`. `mergePackageBindings()` applies CLI-over-project precedence; `package/resolved` trace events record `origin: project | package-map`.
+
+2. `--profile` wins at **runtime parameterization**: auth provider, endpoint URLs, approval policy, context identity. It operates on the already-resolved tool definition.
+
+3. **Architectural constraint for Phase 1:** The binding resolver MUST consume `plan.Tools` (the post-catalog, post-package-map resolved tool set returned by `planner.Plan()`), NOT re-resolve toolRefs independently. This guarantees both flags operate on the same resolved tool set. If `--package-map` selects a `native` mock while the profile expects `mcp-http`, the Tier 0 compatibility check surfaces the mismatch before execution — correct behavior, because the operator explicitly chose an incompatible combination.
+
+---
+
+## `gert plan` — Profile Compatibility Report
+
+We confirm this ships early in Phase 1 as you requested. Implementation scope:
+
+- Reuses `run.go`'s existing wiring (~150 lines, extractable to a shared helper) to load profile, package-map, and call `planner.Plan()`.
+- Checks each resolved tool's `AllowedEnvironments` against the profile context and `transport.mode` compatibility.
+- Prints a binding table: one row per toolRef (transport, auth, endpoint, status).
+- Exit codes: 0 = Tier 0 clean, 1 = Tier 0 failures. `--output=json` for CI.
+- **Estimated effort: 2–3 days.**
+
+**Explicit limits (set expectations now):** This is a **profile compatibility report**, not a full binding table. It reports what the tool YAML declares. It cannot validate endpoint reachability or token acquisition (those are Tier 2 runtime probes). It cannot show profile-overridden transport configs (that requires the resolver, which lands later in Phase 1). We will label it accordingly in the CLI help text.
+
+---
+
+## Open Items
+
+| Item | Owner | Blocks |
+|------|-------|--------|
+| Confirm your context vocabulary matches §6 values (`cli-operator`, `ci`, `headless-server`, `test`, `vscode-operator`) | SQL Live-Site Ops | Early win (minor — confirmation only, not design) |
+| `AllowedModes` field + fixture migration | Gert Core | Part of early win |
+| Profile spec — context semantics, `--profile`/`--package-map` composition, Tier 0 rules | Gert Core | Phase 1 |
+| OQ2 — library vs. subprocess spike | Joint | Phase 2 |
+
+---
+
+## Phase Agreement — Confirmed
+
+- **Early win (immediate):** `AllowedEnvironments` enforcement in `resolveTool()`, `AllowedModes` field + fixture migration, approval gate on direct-invocation path. Pending only your context vocabulary confirmation.
+- **Phase 0 (2 weeks):** Profile spec, host architecture decision, framing protocol, managed-identity feasibility.
+- **Phase 1 (6–8 weeks):** Binding resolver, tiered preflight, `gert plan` (profile compatibility report, early), managed identity, per-action `classification`/`idempotent` fields, `ProfileApprovalGate` (fail-closed by denial), halt-on-timeout, ICM proof.
+- **Phase 2 (re-estimated after Phase 0):** Generic host transport, VS Code adapter.
+- **Phase 3 (4–6 weeks):** Workload identity, reconnect/idempotency hardening, approval evidence recording.
+
+We are ready to start. Confirm your context vocabulary and we begin this week.
+
+---
+
+*Gert Core Team — 2026-08-16*
+
+
+---
+
+# Gert Core Team Response: Runtime Portability for Gert Runbooks
+
+**Date:** 2026-08-16  
+**From:** Gert Core Team  
+**To:** SQL Live-Site Operations (gert-sqllivesite)  
+**Re:** Implementation Request — Runtime Portability for Gert Runbooks  
+**Status:** Conditional acceptance  
+
+---
+
+## Verdict: ACCEPT-WITH-MODIFICATIONS
+
+We accept the architecture direction. The layering — invariant tool contract → runtime binding resolver → transport + auth — is the right shape and maps cleanly onto the existing `ToolTransport` interface and `AuthProvider`/`TokenGate` machinery. Your consumer scenario is legitimate, and the five-context matrix is the correct target.
+
+We will not implement it as specified. The document has four categories of issue: factual corrections to your current-state section, a structural contradiction between your stated non-goals and your actual requirements, a preflight design that answers the wrong question for the consumer's core need, and safety defects in the late-result / reconnect semantics that are blocking.
+
+Conditions of acceptance, in priority order:
+
+1. **[BLOCKING]** Acknowledge the §13 contradiction and accept additive schema extensions (§A below).
+2. **[BLOCKING]** Accept our tiered preflight redesign replacing §10.1 (§C below).
+3. **[BLOCKING]** Accept the corrected late-result semantics for mutating/destructive actions (§E below).
+4. **[REQUIRED-BEFORE-PHASE-2]** Close the host bridge protocol gaps (§F below).
+5. **[REQUIRED-BEFORE-PHASE-2]** Answer open question #2 (library vs. subprocess) — we have a recommendation but need your extension architecture constraints (§G below).
+6. **[ADVISORY]** Accept our revised phasing and estimates (§H below).
+
+---
+
+## §A. Corrections to Current-State Claims
+
+### A.1 — `run-gert.ps1` (§3.2, your table row "CLI runner")
+
+`run-gert.ps1` does not exist in Gert core. No `.ps1` file of any name exists in the Gert repository. This is a gert-sqllivesite artifact. Please correct the attribution — it confused our source verification and will confuse anyone reviewing the request downstream.
+
+### A.2 — Plan-time tool resolution already exists
+
+Your §10.1 frames preflight as if no plan-time validation exists today. That is incorrect. Gert already has a plan-time tool resolution gate:
+
+- `planner.go:resolveTool()` (line 533) verifies every tool step's tool+action can be resolved from the registry. Unresolvable tools fail with `PLAN-010` — a typed `PlanError` — before execution begins.
+- `cmd/gert/run.go` calls `adapter.ResolveToolRefsViaCatalog()` and exits with code 2 (`exitValidation`) on failure.
+- `internal/planner/validate.go` runs additional structural checks.
+
+What is missing is not preflight itself, but **environment-contextual binding validation within** the existing plan-time gate. The resolver extends this gate; it does not replace it.
+
+### A.3 — `--package-map` already exists
+
+Your document describes "pointing Gert at different package directories" as the current context-switching mechanism but does not mention `--package-map`, which is the formalized version of exactly that. `--package-map` accepts a `config/v1` file that overrides the project's `requires:` and `tool-paths:` bindings, so the same runbook resolves different tool packages. This is already tested (including trace provenance recording — each resolved package records whether it came from the project config or the package-map override).
+
+The binding resolver should extend `--package-map` semantics — it is the existing foundation for "same runbook, different bindings." Do not design the resolver as if this mechanism doesn't exist.
+
+### A.4 — The ghost fields: `AllowedEnvironments` and `RequiresCapabilities` [BLOCKING — early win]
+
+Your document asks for capability preflight but missed the fact that Gert's tool governance schema (`pkg/schema/tool.go`, `ToolGovernance` struct) **already declares** two fields directly relevant to your need:
+
+```go
+RequiresCapabilities []string `yaml:"requires-capabilities,omitempty"`
+AllowedEnvironments  []string `yaml:"allowed-environments,omitempty"`
+```
+
+These fields are parsed, serialized, and appear in conformance test fixtures. They are **not enforced at runtime** — zero lines of Go code read or check them. They are dead.
+
+Wiring enforcement into the existing `planner.go:resolveTool()` — comparing a tool's `AllowedEnvironments` against a runtime context string — would deliver the consumer's core need ("tell me this runbook can't run in this environment") with:
+
+- Zero schema changes (the fields already exist in the schema)
+- Zero new abstractions (it's a string-set check inside an existing plan-time gate)
+- A ~2-day implementation effort
+
+**We propose starting this immediately, in parallel with Phase 0, as an early win.** It does not require the full binding resolver — it is a plan-time check using existing declared metadata. Your tool authors can start populating `allowed-environments:` on tool definitions today. The full resolver (Phase 1) builds on top of this foundation.
+
+This is the lowest-cost path to your core need and we are surprised the request missed it.
+
+### A.5 — `RequiresApproval` / `ApprovalGate` already exists
+
+Your §11 proposes action classification and approval policy. The approval enforcement pattern already exists in Gert:
+
+- `governance.ApprovalGate` interface with `RequestApproval(ctx, stepID, reason)` returning an `ApprovalRecord`.
+- `TerminalApprovalGate` (interactive: prompts stdin/stdout) and `NoOpApprovalGate` (non-interactive: auto-approves).
+- Gate selection is already context-dependent: `TTYOutput=true` → `TerminalApprovalGate`; `TTYOutput=false` → `NoOpApprovalGate`.
+- Enforced at substitution time in `executor/tool.go:executeSubstitution()` and for dynamic includes via `IncludeExecutor.WithApprovalGate()`.
+- `ToolGovernance.RequiresApproval` is the existing per-tool declaration, already enforced.
+
+Your §11's classification scheme (read-only / mutating / destructive) is a finer-grained replacement for the boolean `RequiresApproval`. That is a reasonable evolution, but the approval enforcement pattern — `ApprovalGate.RequestApproval()` gated by policy before execution — is the pattern §11 must follow, not reinvent.
+
+### A.6 — §14 Open Question 5 is CLOSED
+
+OQ5 asks: "What deadline and cancellation APIs does the current AuthProvider interface expose?"
+
+**Answer:** `AuthProvider.Token(ctx context.Context)` accepts a context. `AzureCLIAuthProvider.acquire()` passes that context to `exec.CommandContext(ctx, azPath, args...)`. The OS kills the `az` subprocess on context cancellation or deadline expiration. Deadline propagation works today. The managed identity and workload identity providers must follow the same pattern (use `http.NewRequestWithContext(ctx, ...)` for IMDS/token-exchange calls).
+
+Drop this Phase 0 spike. It is already answered.
+
+---
+
+## §B. The Schema-Freeze Contradiction [BLOCKING]
+
+§13 declares as explicit non-goals: "No runbook schema changes" and "No tool contract schema changes."
+
+Your own document contradicts this in at least three places:
+
+1. **§10.1 (preflight)** requires knowing which contexts a tool supports — that is a tool-level declaration. Without it, you can only discover "not configured here" by attempting to bind and failing at runtime.
+2. **§10.4 (idempotency)** says "unless the tool action is declared idempotent" — but there is no `idempotent` field on the action schema. You cannot declare idempotency without a schema change.
+3. **§11 (action classification)** defines read-only / mutating / destructive, but never says where this classification is declared. It must be on the tool action schema.
+
+**Our position:** We accept no-BREAKING-changes as a constraint. We require ADDITIVE schema extensions — new optional fields with safe defaults that do not break existing tool definitions:
+
+| Field | Schema location | Default | Purpose |
+|-------|----------------|---------|---------|
+| `allowed-environments` | `tool/v1` governance block | `[]` (all environments) | Static preflight: which contexts this tool supports |
+| `requires-capabilities` | `tool/v1` governance block | `[]` (no special capabilities) | Static preflight: host capabilities required |
+| `classification` | Per-action | `read-only` (safe default) | Approval policy per §11 |
+| `idempotent` | Per-action | `false` (safe default) | Reconnect/retry policy per §10.4 |
+
+The first two already exist in the schema (§A.4). The latter two are new but backward-compatible — unset means the safe default applies.
+
+**Please acknowledge this contradiction and confirm you accept additive extensions.** We will not design a resolver that requires runtime discovery for information that should be statically declared.
+
+---
+
+## §C. Preflight Redesign [BLOCKING]
+
+### The problem with §10.1
+
+Your preflight (§10.1 steps 1–4) conflates three fundamentally different operations:
+
+- **Step 1** (resolve toolRef → transport + auth) is a static config-graph traversal. Zero I/O. Microseconds.
+- **Step 2** (validate auth can obtain a token) is a real credential operation — may prompt for login, hit IMDS, contact AAD token exchange, consume rate limits, emit tenant audit events.
+- **Step 3** (validate transport endpoint reachable) is a network probe subject to transient failures.
+
+An operator who sees `binding/auth-unavailable` cannot tell whether the issue is "this tool is not configured for this environment" (fix: add a binding to the profile) or "IMDS hasn't warmed up yet" (fix: wait 30 seconds and retry). These require completely different responses. The error taxonomy (§10.2) is too coarse to distinguish them.
+
+### Our required design: Tiered Preflight
+
+**Tier 0 — Static / offline. Zero I/O. MANDATORY before every run. Not optional, not skippable.**
+
+Pure config-graph traversal:
+
+1. Every `toolRef` resolves to a `tool.yaml` in a loaded package (existing PLAN-010 gate).
+2. The resolved tool's `transport.mode` has a binding entry in the active runtime profile.
+3. That binding entry is structurally complete: `mcp-http` needs `endpoint` + `auth.provider`; `mcp` (subprocess) needs `command`; `native` needs nothing; `host-bridge` needs a registered adapter ID.
+4. The referenced auth provider is a known type with required config present.
+5. Environment variable interpolations (e.g. `${GERT_MCP_ENDPOINT}`) resolve to non-empty values.
+6. `AllowedEnvironments`, if declared on the tool, includes the current profile's context.
+
+Nothing invoked, nothing dialed, no tokens. Runs in CI, runs in an editor, runs with zero credentials. This is the check that answers your consumer's core need.
+
+**Tier 1 — Local / no network. Opt-in: `--preflight=local`.**
+
+- Subprocess `command` is on PATH and executable.
+- `az` is on PATH for `azure-cli` provider.
+- IMDS `169.254.169.254` responds within 500ms (link-local reachability, not a token call).
+- Native transport runbook files exist on disk.
+
+**Tier 2 — Live / network. Opt-in: `--preflight=live`.**
+
+- Token acquisition attempted (your §10.1 step 2).
+- Endpoint probed (your §10.1 step 3).
+- This is where `auth/credential-failure` and `transport/endpoint-unreachable` surface.
+
+`--preflight=live` ADDS Tier 2 on top of Tier 0 — never instead of it.
+
+### Corrected Error Taxonomy
+
+Replaces the §10.2 table. Five codes, split by static vs. dynamic:
+
+| Code | Tier | Meaning | Operator message includes |
+|------|------|---------|--------------------------|
+| `config/tool-unresolved` | 0 | toolRef names a tool in no loaded package | Runbook path, checked packages, fix guidance |
+| `config/no-binding-for-profile` | 0 | **The consumer's case.** Tool has no binding in the active profile | Tool name, declared transport mode, profile ID, AND which profiles DO work (computable at Tier 0) |
+| `config/binding-incomplete` | 0 | Binding exists, required config absent | Missing field name AND the unset env var |
+| `auth/credential-failure` | 2 | Token acquisition failed at runtime | "This is a runtime error, not a configuration error. The binding is valid." |
+| `transport/endpoint-unreachable` | 2 | Endpoint probe failed at runtime | "This is a runtime/network error. The binding and credentials are valid." |
+
+The static-vs-dynamic distinction must be explicit **in the message text**. Operator action is completely different for each class.
+
+The `config/no-binding-for-profile` message format:
+
+```
+error: tool "icm" has no binding in runtime profile "headless-server".
+  tool transport declared: mcp-http
+  profile "headless-server" does not declare a binding for transport mode
+  "mcp-http" / tool "icm".
+  fix: add a binding for "icm" to the "headless-server" profile, or run
+       in a profile that includes it.
+  note: this runbook runs correctly in profiles: cli-workstation, test
+```
+
+That final `note:` line — which profiles DO work — is computable at Tier 0 from the binding table alone and is the single highest-value line in this entire design.
+
+### `gert plan` command
+
+We will implement `gert plan --profile <id> <runbook>` as a non-executing binding table report:
+
+```
+$ gert plan --profile headless-server runbooks/icm-tsg-router.runbook.yaml
+  toolRef               transport    auth              endpoint                   status
+  icm                   mcp-http     managed-identity  ${ICM_MCP_ENDPOINT}        ✓ bound
+  tsg-recommendation    mcp-http     managed-identity  ${TSG_MCP_ENDPOINT}        ✓ bound
+
+$ gert plan --profile vscode-extension runbooks/icm-tsg-router.runbook.yaml
+  toolRef               transport    auth              endpoint                   status
+  icm                   host-bridge  extension-managed  —                         ✗ config/no-binding-for-profile
+  tsg-recommendation    host-bridge  extension-managed  —                         ✗ config/no-binding-for-profile
+```
+
+Exit codes: 0 = Tier 0 clean, 1 = Tier 0 failures, 2 = Tier 2 failures (only with `--preflight=live`).
+
+`--output=json` for CI consumption. Companion `gert plan --show-profiles <runbook>` lists all profiles in which every toolRef has a complete binding.
+
+This belongs in Phase 1, not deferred.
+
+---
+
+## §D. Transport Mode Conflict and Per-Tool Overrides [REQUIRED-BEFORE-PHASE-1]
+
+### The unspecified conflict
+
+Your §5.1 says the tool's `transport` block declares WHAT transport a tool uses; the profile determines HOW it's satisfied. But your document never addresses the conflict case:
+
+- Tool declares `transport.mode: mcp` (subprocess, `command: icm-mcp`)
+- Profile says `transport.mcp.mode: direct-http`
+
+Is this an override? An error? A silent re-interpretation?
+
+**Our position: the profile does NOT override the tool's declared transport mode.** Switching from `mode: mcp` (subprocess-owned auth) to `mode: mcp-http` (Gert-brokered auth) changes operational semantics — it is not a parameter substitution. The correct mechanisms are:
+
+1. The package provides **multiple tool definitions** (one per context), selected by the resolver. Mock packages already work exactly this way. This is proven.
+2. Or, the resolver matches on the tool's declared mode and provides **parameters** for that mode (endpoint URL, auth config), without changing the mode itself.
+
+Mechanism (1) is already proven by `--package-map`. The resolver should formalize it, not replace it.
+
+### Per-tool overrides in profiles
+
+A flat profile that says "all tools use direct-http" fails when one tool is mock-only or subprocess-only. Profiles must allow per-tool binding overrides:
+
+```yaml
+apiVersion: runtime-profile/v1
+id: integration-test
+context: ci
+defaults:
+  transport: direct-http
+  auth: workload-identity
+overrides:
+  tsg-recommendation:
+    transport: native-mock
+    auth: none
+```
+
+Without this, you cannot express a partially-mocked integration test profile — a scenario we consider essential.
+
+---
+
+## §E. Safety Defects [BLOCKING]
+
+### E.1 — Late-result semantics for mutating/destructive actions
+
+§10.4 says: "Late results (arriving after deadline or cancellation) must be discarded with a logged warning — never applied."
+
+For read-only actions, discarding late results is correct. For mutating/destructive actions, it is a **safety defect**.
+
+Scenario: `dsconsole.reissue-update-slo` is called. Connection is lost at 3 seconds. Deadline fires at 30 seconds. Gert discards the late success. Gert records failure. Reality: the SLO WAS reissued. The operator now has a false picture of system state. Retry double-executes. For `dsconsole.kill-sql-process` or `dsconsole.stop-database-copy`, anything less than halting with an indeterminate state is unacceptable.
+
+**Required correction:** §10.4 must split behavior by action classification:
+
+| Classification | On late/lost result | Runbook behavior |
+|---------------|-------------------|-----------------|
+| `read-only` | Discard, log warning | Continue (or retry if idempotent) |
+| `mutating` | Record as INDETERMINATE | Halt. Trace records state is unknown. Operator must verify before resuming. |
+| `destructive` | Record as INDETERMINATE | Halt. Trace records state is unknown. Operator must verify before resuming. |
+
+This directly follows from your own Invariant #4 (fail-closed).
+
+### E.2 — Reconnect retry requires re-approval
+
+§10.4 (reconnect/retry) and §11 (approval) are never cross-referenced. A reconnect retry is a new invocation event:
+
+- In interactive contexts: the original approval covers a specific invocation at a specific time. Reconnect must re-prompt.
+- In unattended contexts: the retry must be recorded in §11.3 approval evidence, including that it IS a retry and the original `run_id`.
+
+### E.3 — Phase 1 / Phase 3 ordering creates an unsafe window [BLOCKING]
+
+§10.4 (reconnect/idempotency) is Phase 3. But Phase 1 ships direct-HTTP to a headless server with managed identity. HTTP calls time out — slow servers, intermittent networks, IMDS cold starts, cross-region latency. For the entire duration of Phase 1 and Phase 2 (8–12 weeks by your estimates), every timeout on a mutating/destructive action leaves the runbook in an indeterminate state with no recovery semantics and no operator guidance.
+
+**Required mitigation (choose one):**
+
+**Option A (preferred):** Phase 1 commits to an explicit halt-on-timeout, no-retry policy:
+- Timeout halts the runbook with a typed `transport/timeout` error.
+- For mutating/destructive actions, the error message includes: "This action's completion state is unknown. Manual verification is required before retrying."
+- No automatic retry, no reconnect. Runbook is terminal.
+- This is safe, honest, and implementable in Phase 1 without pulling Phase 3 forward.
+
+**Option B:** Phase 1 is formally restricted to `read-only` tool actions as an explicit acceptance criterion. Mutating/destructive actions over direct-HTTP are deferred to Phase 3 when the recovery semantics are in place.
+
+We strongly prefer Option A. Confirm which you accept.
+
+---
+
+## §F. Host Bridge Protocol Gaps [REQUIRED-BEFORE-PHASE-2]
+
+The `ToolRequest`/`ToolResult` types in §7.2 are underspecified. Before Phase 2 implementation begins, the following must be resolved:
+
+### F.1 — Protocol version (REQUIRED)
+
+The VS Code extension auto-updates independently of Gert core. Without a `protocol_version` field on the registration handshake, mismatched versions will silently misinterpret fields. Add a version field; define version negotiation or hard-fail semantics.
+
+### F.2 — Host capability advertisement (REQUIRED)
+
+At registration time, the host adapter must advertise:
+
+```
+HostCapabilities {
+  adapter_id:       string
+  protocol_version: string
+  tools: [{
+    tool_name: string,
+    actions:   [string]
+  }]
+}
+```
+
+This is not independent of the preflight design. It IS the data source that makes Tier 0 preflight work when the transport is a host bridge. Without it, `config/no-binding-for-profile` is unanswerable in the VS Code context, and the consumer's core need is unmet.
+
+### F.3 — Correlation IDs (REQUIRED)
+
+`ToolRequest` needs `run_id` and `step_id` in addition to `request_id`. `TokenGate` already emits per-auth-attachment trace events (host + scope, B-24/B-27); without step correlation, that event cannot be joined to the runbook step in the audit log. For headless mutating actions this is a compliance gap.
+
+### F.4 — `CancelRequest` message type (REQUIRED)
+
+`ToolResult.status` includes `"cancelled"` but there is no cancel channel. §10.3 says "propagate cancellation to the transport adapter" — this is unimplementable over IPC without an explicit `CancelRequest { request_id }` message type.
+
+### F.5 — Streaming/progress (ADVISORY)
+
+Tool calls lasting 30+ seconds with no progress signal look hung. If streaming is out of scope for Phase 2, say so explicitly in the spec — do not leave it as a silent gap.
+
+### F.6 — Framing protocol document (REQUIRED-BEFORE-PHASE-2)
+
+If Gert runs as a subprocess (our recommendation per §G), stdout carries both execution trace events and `ToolResult` messages on one channel. The "interaction channel" named in the Phase 0 spike is not specified enough to implement against. Require an explicit framing protocol document before Phase 2 ships: message envelope format, all message types with a `message_type` discriminator, length-prefix or NDJSON framing, ordering guarantees, malformed-message handling.
+
+### F.7 — Token isolation is convention, not enforcement (ADVISORY)
+
+Invariant #5 ("no token leakage") is currently a gentleman's agreement. Actual enforcement requires: (a) `ToolRequest` has no field capable of carrying a token, (b) schema-validate `ToolResult.outputs` against the tool's declared output schema before Gert core processes or traces it, stripping unknown fields with a logged warning, (c) extend the existing B-24 scrubber to cover tool result outputs written to the trace. This is advisory for Phase 2, but should be on the Phase 3 hardening checklist.
+
+---
+
+## §G. Open Questions — Our Answers
+
+### OQ1 — Profile file location and format
+
+**Position:** All three. Profiles should be discoverable in a precedence order:
+
+1. CLI flag: `--profile <path>` (highest precedence, overrides everything)
+2. Repo-local: `.gert/profiles/<id>.yaml` (version-controlled, team-shared)
+3. User config: `~/.config/gert/profiles/<id>.yaml` (per-user defaults)
+
+Profile IDs are resolved in this order; first match wins. `gert plan --show-profiles` lists all discovered profiles and their source locations. This is consistent with how `.gert/config.yaml` and `--package-map` work today. `--profile` and `--package-map` should compose — profile provides auth/transport parameters, package-map provides tool resolution.
+
+### OQ2 — Library vs. subprocess for VS Code
+
+**Our recommendation: subprocess with IPC.** Reason: fault isolation. A VS Code extension crash (or a bug in the bridge adapter) must not kill a running Gert execution. In-process embedding means a panic in either direction is fatal to both. Subprocess isolation contains blast radius.
+
+However, this is a question about YOUR extension's architecture, not ours. We need you to evaluate fault isolation, latency, and the multiplexing cost (§F.6) against your extension's constraints and give us a binding answer before Phase 2 design begins. Phase 0 should include a spike evaluating both options, with fault isolation as a primary criterion alongside latency.
+
+### OQ3 — Auth token caching and refresh
+
+**Answer:** Follow the existing precedent. `AzureCLIAuthProvider` (verified: `auth_azurecli.go:47-90`) already implements in-memory caching with proactive refresh at a 5-minute-before-expiry buffer, with fallback to the still-valid cached token if early refresh fails. Managed identity and workload identity providers must follow the same pattern. Per-call acquisition is unacceptable — IMDS alone can be 200ms+ per call.
+
+### OQ4 — Profile inheritance
+
+**Position:** No inheritance. Keep profiles flat. The complexity of inheritance resolution (which fields merge, which override, conflict semantics, circular inheritance) is not justified by the use case. Instead, per-tool overrides within a profile (§D) provide the necessary composability. If you need a "base azure" configuration shared across profiles, extract it as a YAML anchor or use a profile template convention in your repo — that is a consumer-side concern, not a runtime feature.
+
+### OQ5 — AuthProvider deadline behavior
+
+**CLOSED.** See §A.6 above. Already works. Drop this spike.
+
+---
+
+## §H. Revised Phasing and Estimates
+
+### Early Win — AllowedEnvironments enforcement (can start immediately, ~1 week)
+
+Wire the existing dead `AllowedEnvironments` and `RequiresCapabilities` fields in `ToolGovernance` into `planner.go:resolveTool()`. Compare declared `AllowedEnvironments` against a runtime context string (from `--profile` or a new `--context` flag). Plan-time failure with a typed error. Zero schema changes, zero new abstractions. Delivers the consumer's core capability check before any Phase 0 work completes.
+
+**We can start this now.** Confirm you agree and we will land it independently.
+
+### Phase 0 — Spikes (2 weeks) — accepted scope, plus additions
+
+Your Phase 0 scope is correct, minus the OQ5 spike (already answered), plus:
+
+- **[ADD]** Resolve OQ2 (library vs subprocess) with a binding decision, evaluating fault isolation as primary criterion.
+- **[ADD]** Resolve profile file location (OQ1 — we propose the three-level precedence above; confirm or counter).
+- **[ADD]** Prototype `gert plan --profile X` dry-run (validates Tier 0 preflight without live infrastructure).
+- **[DROP]** AuthProvider deadline behavior spike (OQ5 — answered).
+
+### Phase 1 — Resolver + Managed Identity + ICM Proof (6–8 weeks, not 4–6)
+
+Your 4–6 week estimate is optimistic. Specific risks:
+
+- `DefaultToolRuntime` caches transports in a `persistent map[string]ToolTransport` keyed by tool name. Profile-scoped endpoints/auth require re-scoping that cache — `OverlayRegistry` is the existing precedent, but adapting it adds work.
+- `gert plan` and the tiered preflight taxonomy are included in our Phase 1, not deferred.
+- The `classification` and `idempotent` action schema additions must land here so Phase 1's halt-on-timeout messages (§E.3 Option A) can reference the action's classification.
+
+Phase 1 scope (ours):
+
+| Work item | From your ask | Modified? |
+|-----------|--------------|-----------|
+| Runtime profile schema | §6 | Yes — add per-tool overrides (§D) |
+| Binding resolver | §5.2 | Yes — extends `--package-map`, not replaces |
+| Managed identity AuthProvider | §8.2 | Unchanged |
+| Tiered preflight (Tier 0 mandatory, Tier 1/2 opt-in) | §10.1 | Redesigned (§C) |
+| Corrected error taxonomy (5 codes) | §10.2 | Redesigned (§C) |
+| `gert plan` command | Not in your ask | Added |
+| `classification` + `idempotent` additive schema fields | Not in your ask | Added (§B) |
+| Halt-on-timeout with classification-aware messages | §E.3 Option A | Added |
+| ICM proof on headless server | Your Phase 1 | Unchanged |
+
+### Phase 2 — Host Bridge + VS Code (6–10 weeks, not 4–6)
+
+Your 4–6 week estimate covers only the Gert-core side. The extension-side adapter, framing protocol, capability advertisement, and cancel channel are unaccounted for. Additionally, the estimate is unreliable until OQ2 (library vs subprocess) is answered in Phase 0. We will re-estimate after Phase 0 delivers a binding decision.
+
+Before Phase 2 starts, the framing protocol document (§F.6) and host capability advertisement schema (§F.2) must be specified. We will not implement against an unspecified IPC channel.
+
+### Phase 3 — Workload Identity + Hardening (4–6 weeks, not 3–4)
+
+Your estimate omits unestimated transport work: `MCPHTTPTransport` today has no `request_id` on outbound JSON-RPC, no idempotency key, no late-result discard. That is new transport plumbing, not just a new AuthProvider. Add the late-result classification-aware handling from §E.1, re-approval on reconnect from §E.2, and token isolation enforcement from §F.7.
+
+---
+
+## §I. What We Commit To
+
+1. **Immediate:** Wire `AllowedEnvironments` / `RequiresCapabilities` enforcement into `resolveTool()`. Confirm you want this and we start this week.
+2. **Phase 0 (2 weeks from agreement):** Spikes as revised above. Deliverable: spike report + binding decision on OQ2 + profile schema draft.
+3. **Phase 1 (6–8 weeks after Phase 0):** Resolver + managed identity + `gert plan` + tiered preflight + ICM proof.
+4. **Phase 2 (re-estimated after Phase 0):** Host bridge + VS Code adapter. Scoped after OQ2 is resolved.
+5. **Phase 3 (4–6 weeks after Phase 2):** Workload identity + reconnect/idempotency + hardening.
+
+## What We Are Not Committing To Yet
+
+- **Device code auth (§8.4).** Lower priority than the five-context matrix. Deferred indefinitely.
+- **Profile inheritance (OQ4).** Rejected in favor of per-tool overrides.
+- **Streaming/progress for the host bridge (§F.5).** Advisory, not Phase 2 scope. Revisit in Phase 3 hardening.
+- **Multi-cloud auth.** Agreed — out of scope, per your §13.
+
+---
+
+## Next Steps
+
+1. Confirm you accept the additive schema extensions (§B). This is blocking.
+2. Confirm you accept tiered preflight (§C) replacing §10.1. This is blocking.
+3. Confirm you accept halt-on-timeout for Phase 1 mutating/destructive actions (§E.3 Option A or B). This is blocking.
+4. Confirm you want the `AllowedEnvironments` early win started immediately.
+5. Answer OQ2 (library vs subprocess) with your extension architecture constraints, or confirm you will evaluate it as part of Phase 0.
+6. Correct the `run-gert.ps1` attribution.
+
+We are ready to start the early win and Phase 0 upon agreement on the blocking items.
+
+---
+
+*Gert Core Team — 2026-08-16*
+
+
+---
+
+# Runtime Portability — Final Impact Assessment (Three Questions)
+
+**Prepared by:** Don (Backend Dev)
+**Date:** 2026-08-17T06:15:17-07:00
+**For:** Barbara (close-out ruling)
+
+---
+
+## Q1 — Attendance: What Does Declaring It Actually Cost?
+
+### Current wiring — confirmed
+
+`buildApprovalGate()` body in `internal/adapter/wire.go:319`:
+
+```go
+func buildApprovalGate(opts WireOptions) governance.ApprovalGate {
+    if opts.TTYOutput {
+        return internalgovernance.NewTerminalApprovalGate(os.Stdin, os.Stdout)
+    }
+    return internalgovernance.NewNoOpApprovalGate()
+}
+```
+
+`TTYOutput` is a plain `bool` field on `WireOptions` (`internal/adapter/options.go:25`). It is NOT auto-detected from terminal state — it is a **hardcoded constant** at every call site:
+
+| Call site | Value set | Source |
+|-----------|-----------|--------|
+| `cmd/gert/run.go:148` | `TTYOutput: true` | Hardcoded — `gert run` always gets Terminal gate |
+| `cmd/gert/serve.go:110` | `TTYOutput: false` | Hardcoded — `gert serve` always gets NoOp |
+| `cmd/serve/main.go:83` | `TTYOutput: false` | Hardcoded — standalone serve binary |
+| `internal/e2e/helpers_test.go:171` | `TTYOutput: false` | Hardcoded — test harness always non-interactive |
+| `internal/perf/fixtures.go:102` | `TTYOutput: false` | Hardcoded — perf fixtures |
+
+**`gert run` hardcodes `TTYOutput: true` regardless of whether an actual TTY is attached.** There is no `isatty()`/`term.IsTerminal()` detection anywhere. A CI pipeline running `gert run` gets the Terminal gate and blocks on stdin — a bug that profile-declared attendance would fix.
+
+### What else `TTYOutput` drives beyond gate selection
+
+`TTYOutput` branches in TWO additional places in `wire.go`:
+
+1. **`buildInputProvider()` (line 305):** `if opts.TTYOutput { promptInput = internalinput.NewPromptProvider(os.Stdin, os.Stdout) }` — whether stdin/stdout are wired as an input provider for collector/choice steps.
+
+2. **`buildPromptProvider()` (line 312):** `if !opts.TTYOutput { return nil }` — whether a `TerminalInputProvider` is constructed for human-in-the-loop prompt steps.
+
+These are NOT the same semantic as "is a human present to approve." A non-interactive CI run may still want structured prompt inputs from env vars (the `ChainProvider` already handles that via `envProvider` regardless of TTYOutput). **This means `TTYOutput` currently conflates three distinct properties: (a) approval attendance, (b) stdin/stdout terminal interactivity for collector steps, and (c) prompt rendering.** Decoupling them is right.
+
+### Recommended shape
+
+Add `Attended *bool` to `WireOptions`. When the profile declares `attended: true` or `attended: false`, set it explicitly. When absent, derive from TTY detection (or keep the legacy `TTYOutput` default). The gate selection becomes:
+
+```
+if opts.Attended != nil {
+    attended = *opts.Attended  // profile wins
+} else {
+    attended = opts.TTYOutput  // legacy inference
+}
+```
+
+The stdin/stdout wiring for prompt/input providers should remain driven by `TTYOutput` (it's about whether physical IO streams are usable, not about approval semantics). These are now separate switches.
+
+**Call sites to update:** `buildApprovalGate()` — 1 function, 3 lines changed. No other logic changes. The `WireOptions` struct gets one field. The profile loader populates it when profile has `attended:` declared. `cmd/gert/run.go` sets `TTYOutput: true` and leaves `Attended` nil (inherits `TTYOutput` inference). CI profile sets `Attended: false` explicitly, regardless of whether `gert run` was invoked with a TTY.
+
+**Effort: 0.5 days.** Field addition, gate selection update, profile loader sets the field. No other structural changes.
+
+---
+
+## Q2 — Test-Context Binding Restriction: Statically Enforceable?
+
+### Is `transport.mode` available on `plan.Tools` at plan time?
+
+Yes. `internalplanner.Plan()` returns `plan.Tools map[string]*schema.ToolDef`, and each `ToolDef.Transport` is a `TransportConfig` struct with `Type schema.Transport` (the `mode` value, already resolved from the YAML `mode:` field via `UnmarshalYAML`'s `Mode → Type` copy). This is populated by the catalog resolution + `RuntimeToolDef()` conversion path, not by any transport runtime. **The transport mode is fully available at plan time without executing anything.** The test-context check lands squarely in the early `gert plan` work.
+
+### Is "must be native" too strict?
+
+Yes — too strict. Checking the repo's own test/conformance posture:
+
+- The **e2e test harness** (`internal/e2e/helpers_test.go`) injects a `mockToolRuntime` that overrides dispatch entirely. Transport mode in the tool YAML is irrelevant — the mock runtime intercepts before any transport runs.
+- The **conformance corpus** (`tv-enum.yaml`) uses `transport.mode: stdio` on all 25 fixture tool definitions (the same `kubectl` tool with `allowed-environments: ["real"]`). Transport mode in a conformance fixture is structural metadata, not execution intent.
+- **No fixture or test in the Gert repo uses `transport.mode: mcp` (subprocess) in a test context.** Zero matches across test YAML files.
+
+However, the right rule must account for a legitimate use case the SQL team themselves will encounter: **a hermetic local test server** — a deterministic fake MCP subprocess (`fake-icm-mcp`) that responds predictably without hitting a real endpoint. A strict "native only" rule would ban this valid testing pattern. The SQL team's `tests/packages/incident-routing-mock/` is already `transport.mode: native`, which is correct for deterministic runbook-backed mocks. But a team running a local fake subprocess for integration testing of the MCP transport layer itself needs `mode: mcp` to be allowed.
+
+**Proposed corrected rule for `context: test`:**
+
+| Transport mode | Default | Override |
+|----------------|---------|----------|
+| `native` | ✅ Always allowed | — |
+| `mcp` (subprocess) | ❌ Blocked by default | Allowed with explicit profile opt-in: `transport.allow_subprocess_in_test: true` |
+| `mcp-http` | ❌ Never allowed in test context | No override — real HTTP endpoints are production |
+
+The opt-in for subprocess keeps the fail-closed default (test = native, deterministic) while not breaking the legitimate "hermetic local fake server" pattern. The key invariant: `mcp-http` is always banned in test context — that's the actual production-endpoint protection the SQL team cares about.
+
+### Interaction with `--package-map`
+
+The check is exactly the right layer. `--package-map` resolves first (determines which `.tool.yaml` backs each toolRef). The profile test-context check reads `plan.Tools` after catalog resolution. If a test-context profile is combined with a `--package-map` pointing at the real production package (which declares `transport.mode: mcp-http`), the check reads `mcp-http` from the resolved `plan.Tools` entry and fires a Tier 0 error: "test context profile does not permit mcp-http transport for tool 'icm'." Exactly the mistake it should catch. The layering makes this work for free.
+
+**Effort: 0.5 days.** The check is a loop over `plan.Tools` in the new `gert plan` command. One function, ~15 lines. Ships with the early `gert plan --profile` work.
+
+---
+
+## Q3 — Interactive `unspecified` Fires the Gate: Migration Hazard
+
+### Is the regression real?
+
+Yes, and it is significant. Here is the actual scope:
+
+- The Gert core repo has 4 real `.tool.yaml` files in `tools/`. `ping`, `nslookup`, and `curl` use the legacy map-form actions (no `- name:` prefix) and have no `classification` or `requires-approval` — they would become `unspecified`.
+- The `icm.tool.yaml` in `tools/` has 3 actions via the canonical list form, no `classification`.
+- The conformance corpus (`tv-enum.yaml`) has 75 tool actions embedded as fixture strings; 25 of those have `requires-approval: false` explicitly set, the remaining 50 have neither field.
+- **The gert-sqllivesite production tools (outside this repo) are entirely unclassified.** Every one of their `icm`, `tsg-recommendation`, and any other tool actions would become `unspecified` on day 1 of classification shipping.
+
+However, there is an important nuance from the current approval wiring: the gate for plain (non-substitution) tool calls in interactive mode currently fires based on **runbook-level governance** (`engine.go:506` — `evalResult.RequiresApproval` from `GovernancePolicy`), not on tool-level `requires-approval`. Tool-level `RequiresApproval` is only checked on the substitution path. So today, a plain `icm.get-incident` call in interactive mode does NOT prompt — there is no gate. Under the new rule, if `classification` is absent and we fire the gate, every plain tool call suddenly prompts. For a runbook with 10 tool steps, that is 10 approval prompts where there were 0 before. **This is a breaking UX regression for every existing interactive runbook.**
+
+### Recommendation: Grandfathering via explicit `requires-approval: false`
+
+The SQL team's principle is right: classification is an opt-in to REDUCED friction. Absence must not grant additional execution rights. But they also said "existing `RequiresApproval` behavior remains authoritative for legacy definitions." These two principles together define the migration path.
+
+**Proposed rule:**
+
+1. `requires-approval: false` explicitly set on a tool action (or inherited from the tool's governance block) acts as a **legacy classification override** equivalent to `classification: read-only` for the purpose of the classification gate. The action is treated as read-only: no prompt, no approval evidence required. This is the grandfathering clause.
+
+2. `requires-approval: true` explicitly set continues to fire the gate as today (unchanged).
+
+3. `classification` absent AND `requires-approval` absent (or default `false` not explicitly set — the ambiguity from `omitempty` on bool) → `unspecified`. In interactive contexts: fires the gate. In test contexts: auto-approve only for native transport (per Q2). In unattended contexts: deny.
+
+4. A profile-level field `legacy_unspecified_policy: allow | prompt` that defaults to `prompt` in new profiles and can be set to `allow` for a migration window. This lets existing deployments opt in to the old behavior for a deprecation period, explicitly, not by default.
+
+**Why grandfathering on `requires-approval: false` is the right anchor:** It is already an explicit author signal. The author of `kubectl.tool.yaml` who wrote `requires-approval: false` was explicitly saying "this tool does not need human approval." Under the proposed scheme, that explicit signal is preserved without requiring tool authors to touch their YAML. The gate fires only for tools where the author made no explicit decision either way.
+
+**The practical migration checklist:**
+1. Ship `Classification *string` on `ToolAction`.
+2. Ship `legacy_unspecified_policy` on the profile schema with default `prompt` and a clear deprecation notice.
+3. Emit a `PKG-W` warning (non-fatal, stderr) for every unclassified action encountered at plan time when the profile is non-test: "action 'icm.get-incident' has no classification; treating as unspecified. Add `classification: read-only` to suppress this warning."
+4. Existing deployments that need continuity set `legacy_unspecified_policy: allow` in their profile during the migration window. They see the warnings but don't get prompted.
+5. Set a deprecation deadline: profiles that don't set `legacy_unspecified_policy` get `prompt` behavior once `classification` ships, with the explicit opt-out available.
+
+This gives the SQL team their principle (unspecified fires the gate by default in new profiles) while giving existing runbook operators a named, explicit, auditable escape hatch — not a silent reversal of the principle.
+
+**Effort for Q3 plumbing:** `Classification *string` addition: 0.5 days. `legacy_unspecified_policy` field on profile schema + routing in gate: 0.5 days. PKG-W warning at plan time: 0.5 days. **Total: ~1.5 days**, plus documentation of the migration path.
+
+
+---
+
+# Implementation Impact Assessment: Runtime Portability Counter-Positions
+
+**Prepared by:** Don (Backend Dev)
+**Date:** 2026-08-16T16:52:05-07:00
+**For:** Barbara (ruling) and Gert Core Team
+**Re:** SQL Live-Site Operations counter-positions (1) classification default, (2) fail-closed unattended gate, (3) environment identifier semantics + `gert plan` early delivery
+
+Source read: `C:\One\OpenSource\gert` (read-only).
+
+---
+
+## A. Environment Vocabulary Collision (HIGHEST PRIORITY — blocker on the early win)
+
+### Every occurrence of the two fields across the entire repo
+
+A full-repo search across `.go`, `.yaml`, `.yml`, `.md`, and `.tex` files finds:
+
+**`allowed-environments` / `AllowedEnvironments`:**
+- `pkg/schema/tool.go:45–46` — declaration only.
+- `internal/conformance/enumdata/tv-enum.yaml` — **25 occurrences**, every single one the same value: `["real"]`.
+- **No other file anywhere in the repo contains either spelling.**
+- In Go code: the field is declared in `ToolGovernance` and is carried through YAML unmarshal. Zero Go code ever reads or acts on it.
+
+**`requires-capabilities` / `RequiresCapabilities`:**
+- `pkg/schema/tool.go:45` — declaration only.
+- **Zero occurrences anywhere else in the entire repo.** No test data, no fixtures, no conformance corpus, no docs.
+
+### What the value `"real"` means
+
+The conformance fixture (`tv-enum.yaml`) defines the `kubectl` tool in a mock package with `allowed-environments: ["real"]`. Reading the context around it and the `RunMode` constants in the codebase, `"real"` is a RunMode discriminator value — it appears to mean "this tool must not run under `dry-run` mode" (i.e., the tool has real side effects). The value maps semantically to `engine.RunModeReal` (`"real"` / `"dry-run"` / `"replay"`), NOT to a deployment context. This is confirmed by the fact that zero test data uses any other value and the field was never wired to anything: whoever wrote the schema field in `ToolGovernance` left a note for the enforcement to come later, using a value that parallels the only runtime-mode distinction Gert already has.
+
+### Vocabulary collision with the proposed profile contexts
+
+The SQL Live-Site ask proposes profile `context` values: `cli-operator`, `vscode-operator`, `ci`, `headless-server`, `test`. These are deployment/execution-context identifiers. `"real"` is a RunMode indicator. **These are orthogonal axes:**
+
+| Axis | Example values | Meaning |
+|------|---------------|---------|
+| RunMode (existing) | `real`, `dry-run`, `replay` | Whether side effects execute |
+| Profile context (new) | `cli-operator`, `headless-server`, `test` | Where/how Gert runs |
+
+A value like `allowed-environments: ["real"]` in the current fixtures says "don't dry-run me." It says nothing about whether the tool works on a headless server vs. a developer workstation.
+
+### Recommendation on the value space for `AllowedEnvironments`
+
+**Do not reuse `"real"` as a profile-context identifier.** The existing value must be treated as a RunMode qualifier, not a deployment context. There are two clean paths:
+
+**Option A — Separate axes, two fields:**
+Rename (or re-purpose) `AllowedEnvironments` explicitly for profile contexts, and add a separate `AllowedModes` (or enforce the RunMode check via existing DryRunExecutor logic). Then populate `AllowedEnvironments` with the profile-context vocabulary: `cli-operator`, `headless-server`, `ci`, `test`, etc.
+
+Migration: any tool currently using `allowed-environments: ["real"]` must be re-evaluated — the intent was likely `allowed-modes: ["real"]`, not a context restriction. Since the field is unenforced today, there is no runtime breakage. The 25 fixture occurrences are all in one test file (`tv-enum.yaml`) which the Gert team controls.
+
+**Option B — Keep one field, define `"real"` as a reserved legacy alias:**
+Define `"real"` as meaning "this tool may not run in dry-run or replay mode." All other values are profile-context identifiers. This is expedient but creates a mixed-axis vocabulary in one field. Not recommended.
+
+**My recommendation: Option A.** The field is unenforced, so there is no backwards-compatibility cost. Define `AllowedEnvironments` as a profile-context allowlist with values matching exactly the profile's declared `context` field (confirming the SQL team's assumption in counter-position (3)). Add a separate `AllowedModes: []string` to `ToolGovernance` for the RunMode dimension. The 25 fixture occurrences in `tv-enum.yaml` need a one-line update to `allowed-modes: ["real"]` — that is the full migration scope.
+
+**Adopted environment identifier vocabulary (proposed):**
+`cli-operator`, `vscode-operator`, `ci`, `headless-server`, `test`
+
+These match the SQL team's profile `context` field values exactly. A tool with `allowed-environments: ["headless-server", "ci"]` would only be planner-reachable when the selected profile declares `context: headless-server` or `context: ci`.
+
+### Analysis for `RequiresCapabilities`
+
+Zero values exist anywhere in the codebase. The field is a completely blank slate. No defined vocabulary, no design document, no comment beyond the struct declaration. It is not analogous to `AllowedEnvironments` — where there were at least 25 real uses with a consistent value — it has truly never been used.
+
+**What a "capability" is here is undefined.** It could mean:
+- Transport-level capabilities (e.g., `mcp-http`, `subprocess`),
+- Auth capabilities (e.g., `azure-cli`, `managed-identity`),
+- Host capabilities (e.g., `interactive-prompt`, `headless`), or
+- Something else entirely.
+
+**Recommendation:** Don't touch `RequiresCapabilities` in Phase 1. Define it only after the profile schema and binding resolver are designed, at which point "capabilities" will have a concrete referent (the profile's declared transport/auth capabilities). Using it now without a defined vocabulary creates another ghost field.
+
+---
+
+## B. Unspecified-Classification Implementation Impact
+
+### Where classification needs to be read
+
+There is no `classification` field anywhere in the codebase today. Adding it means touching:
+
+1. **Schema** (`pkg/schema/tool.go` — `ToolAction` struct): Add `Classification string` (or typed) field on `ToolAction`, not on `ToolGovernance`. Classification is per-action (an `icm` tool may have a read-only `get-incident` and a mutating `close-incident`). The `ToolGovernance` block is per-tool, not per-action. This is a schema extension.
+
+2. **Approval gating in `executor/tool.go:Execute()`**: The plain (non-substitution) path at line ~95 calls `e.runtime.Invoke(ctx, toolName, action, args)` with no classification check whatsoever — there is no gate on the direct invocation path. The `RequiresApproval` gate only exists on the substitution path (`executeSubstitution`, line ~147). **This means the existing `RequiresApproval` is only enforced for `execute.kind: runbook` actions today, not for plain process-backed or HTTP-backed tool actions.** Classification-gating for plain actions would require a new check in `Execute()` before `e.runtime.Invoke()`.
+
+3. **Substitution path in `executor/tool.go:executeSubstitution()`** (line ~195): Already checks `planResult.EffectiveGovernance.RequireApproval` and calls `e.approvalGate.RequestApproval()`. Classification-based gating would be added here alongside or as a replacement for the bool check.
+
+4. **Preflight / planner**: `internal/planner/planner.go:resolveTool()` is the natural place to add a classification-vs-profile check at plan time. This requires the profile to be threaded into the planner context.
+
+5. **Retry/late-result logic in transport layer**: Does not exist yet. `MCPHTTPTransport` has no retry semantics today other than the one 401-retry and the 404-reinit cycle. No retry-on-idempotent-only logic exists anywhere. This is new infrastructure. The SQL team's requirement that unspecified actions must NOT get automatic retry is a guard against future retry logic being added naively — there is nothing to change today, but the constraint must be built in from the start when retry is added in Phase 3.
+
+### `RequiresApproval` (bool) × `classification` (string) — precedence table
+
+The critical finding above: `RequiresApproval` is today only enforced on the substitution path. For this precedence table, I'm defining what the safe rule should be for all paths once classification is added:
+
+| RequiresApproval | Classification | Safe rule |
+|-----------------|----------------|-----------|
+| `true` | `read-only` | Gate fires (explicit override wins; a tool author who marks a read-only action as requires-approval probably has a reason) |
+| `true` | `mutating` or `destructive` | Gate fires |
+| `true` | `unspecified` | Gate fires (legacy: existing behavior preserved) |
+| `false` | `read-only` | No gate |
+| `false` | `mutating` | Gate fires if runtime profile's approval mode is `interactive` or stricter; no gate in test/mock |
+| `false` | `destructive` | Gate always fires |
+| `false` | `unspecified` | **Fail closed in unattended contexts.** In interactive contexts: treat as legacy `requires-approval: false` (no gate, with a PKG-W warning that classification is missing). See below. |
+| not set (omitempty) | `unspecified` | Same as `false`+`unspecified` |
+
+**Safe rule for the `RequiresApproval` bool:** It remains the authoritative gate for legacy tools that have it set. For new tools, classification is the primary mechanism. If classification is `unspecified` AND `requires-approval: false` (or absent) AND the runtime profile is unattended, the unattended gate should DENY — the SQL team's requirement is satisfied without changing legacy tools that have `requires-approval: true` (those keep working as before).
+
+### `unspecified` in the existing schema types
+
+`ToolAction` does not currently have a classification field at all. Adding one:
+
+```go
+// In pkg/schema/tool.go, ToolAction struct:
+Classification string `yaml:"classification,omitempty" json:"classification,omitempty"`
+```
+
+With `omitempty`, YAML unmarshalling produces an empty string `""` for a missing field. An empty string is distinguishable from an explicit `""` only if we use a pointer or a sentinel. **Using a pointer (`*string`) is the right representation here:** `nil` means genuinely absent ("unspecified"), while a pointer to `""` would mean explicitly empty (which we'd treat as an error). For the bool `RequiresApproval`, `omitempty` on a `bool` does the right thing — `false` and absent are indistinguishable, which is why the legacy field works as-is.
+
+**Concrete recommendation:** `Classification *string` on `ToolAction` with `yaml:"classification,omitempty"`. Recognized values: `"read-only"`, `"mutating"`, `"destructive"`. `nil` = unspecified. This is cleanly representable with the existing YAML parsing machinery (`omitempty` on a pointer causes absent fields to unmarshal as `nil`).
+
+---
+
+## C. Fail-Closed Unattended Approval Gate
+
+### Current gate implementations — exact signatures and fields
+
+**Interface** (`pkg/governance/approval.go:9`):
+```go
+type ApprovalGate interface {
+    RequestApproval(ctx context.Context, stepID string, reason string) (ApprovalRecord, error)
+}
+```
+
+**`ApprovalRecord`** (`pkg/governance/evidence.go:33`):
+```go
+type ApprovalRecord struct {
+    Approver   string `json:"approver"`
+    ApprovedAt string `json:"approved_at"`
+    Token      string `json:"token"`
+}
+```
+
+**`NoOpApprovalGate`** (`internal/governance/approval.go:17`): Always returns `ApprovalRecord{Approver: "noop-gate", ApprovedAt: ..., Token: <uuid>}`. Never denies. No awareness of classification, profile, or action semantics.
+
+**`TerminalApprovalGate`** (`internal/governance/approval.go:35`): Prompts on stdin, reads approver identity, returns record. Blocks until input or ctx cancellation. No awareness of classification.
+
+**Gate selection** (`internal/adapter/wire.go:buildApprovalGate()`):
+```go
+func buildApprovalGate(opts WireOptions) governance.ApprovalGate {
+    if opts.TTYOutput {
+        return internalgovernance.NewTerminalApprovalGate(os.Stdin, os.Stdout)
+    }
+    return internalgovernance.NewNoOpApprovalGate()
+}
+```
+
+The binary is: TTY present → Terminal gate; no TTY → NoOp gate. There is no third option today. `gert serve` sets `TTYOutput: false` and gets the NoOp gate. A headless server running `gert run` also gets NoOp via the same path.
+
+### What the SQL team's evidence requirement adds
+
+They require the approval record to carry: **policy ID, approving identity, run ID, step ID, retry count, and classification**. Current `ApprovalRecord` has only: `Approver`, `ApprovedAt`, `Token`. Missing fields: `PolicyID`, `RunID`, `StepID` (stepID is passed as a parameter to `RequestApproval` but not stored in the record), `RetryCount`, `Classification`.
+
+Since `ApprovalRecord` is a value type embedded in `Evidence` and written to the trace JSONL, extending it is a **backward-compatible additive change** — new fields with `omitempty` do not break existing trace readers. The interface signature does not change (the record is returned, not a parameter). This is a small, low-risk change.
+
+### Effort estimate for two options
+
+**Option (i) — Phase 1 minimal: fail-closed unattended gate that DENIES all mutating/destructive/unspecified actions outright.**
+
+This is a new gate type: `UnattendedApprovalGate`. Implementation:
+- Receives an action classification (needs to be threaded into the call site — `RequestApproval` signature passes `stepID` and `reason` today, not classification). Either add classification to the `reason` string (expedient) or extend the interface (cleaner but requires updating all three existing call sites).
+- If classification is `read-only`: return approval without a record (read-only actions don't need an approval gate).
+- If classification is `mutating`, `destructive`, or `unspecified`: return error (deny).
+- Effort: **1–2 days** for the gate itself, plus 1 day to thread the profile selection into `buildApprovalGate`. No evidence infrastructure needed.
+
+**Option (ii) — Full evidence-recording gate as specified.**
+
+- Extend `ApprovalRecord` with `PolicyID`, `RunID`, `StepID`, `RetryCount`, `Classification` fields.
+- `UnattendedApprovalGate` checks the runtime profile for allowed action classifications, records evidence, writes a `governance/approvalGranted` trace event.
+- Requires profile to be threaded from CLI flags through `WireOptions` to `buildApprovalGate` and into the gate implementation.
+- Effort: **1 week** (gate + record extension + profile threading + trace event definition + tests).
+
+**Recommendation for Phase 1:** Build Option (i) (fail-closed deny) with a clean extension point. The full evidence gate is Phase 3 work (the SQL team themselves put "approval evidence for unattended" in Phase 3 at §11.3). Phase 1 needs the gate to not be a silent yes — that is Option (i). The full audit trail can follow.
+
+One important note: `RequiresApproval` enforcement currently only fires on the substitution path (`executeSubstitution`, `executor/tool.go:~195`). Plain tool invocations (direct `e.runtime.Invoke`) have no gate at all today. The Phase 1 gate must add a classification check to the non-substitution path in `Execute()` — otherwise a plain `mcp-http` tool call with `classification: destructive` would bypass the gate entirely.
+
+---
+
+## D. `gert plan --profile` Early Delivery Feasibility
+
+### What `gert preview` already does
+
+There is currently no `gert plan` command. The closest is `gert preview`, which parses a runbook, optionally recurses through includes, and renders it as prose/mermaid/graphjson. It does NOT plan (no tool resolution, no planner step, no execution plan structure). The underlying `internalplanner.Plan()` is only invoked inside `gert run` and `gert dry-run`.
+
+### What Plan() already produces
+
+`internalplanner.Plan()` returns `*engine.ExecutionPlan` which contains:
+- `Steps []engine.ResolvedStep` — every step resolved and flattened
+- `Tools map[string]*schema.ToolDef` — **the resolved tool set**, keyed by name, with full transport config, governance, and action definitions
+- `Metadata.RunbookID`, `PlannedAt`, etc.
+
+**This is the key finding:** the plan already contains the complete resolved tool set. A `gert plan --profile <id> <runbook>` command can:
+1. Load the profile YAML.
+2. Run `internalplanner.Plan()` using the existing wiring (which already resolves toolRefs via the package catalog and populates `plan.Tools`).
+3. For each tool in `plan.Tools`, compare the profile's declared context against the tool's `AllowedEnvironments`, compare the tool's `transport.mode` against what the profile's transport section declares, and report whether the binding resolves.
+4. Print a binding table: tool name → transport mode → auth provider → profile match status.
+
+**This is genuinely shippable before the full binding resolver exists.** The "binding table" is computed from data Plan() already returns. The profile loading is a new YAML parser (small). The match logic is a simple loop over `plan.Tools`. No new executor, no transport dispatch, no ApprovalGate changes needed.
+
+**What it cannot do yet (and must be labeled clearly):**
+- It cannot validate that the transport endpoint is reachable or that auth can actually obtain a token — those are runtime probes, not plan-time checks.
+- It cannot inject profile-overridden transport configs — the tool YAMLs in phase 1 still bake the transport in. The plan output shows what the tool YAML declares, not what the profile would override (that's the resolver work).
+- It cannot validate `AllowedEnvironments` enforcement semantics until the enforcement is wired into the planner.
+
+**Honest label for early delivery:** call it `gert plan --profile <id> <runbook>` and document it as "binding compatibility report — shows whether each tool's declared transport and environment constraints are compatible with the selected profile. Does not validate endpoint reachability or auth token acquisition." That is accurate and useful without being misleading.
+
+**Effort for the early command:** 2–3 days. It's a new top-level command in `cmd/gert/main.go`, a YAML loader for `runtime-profile/v1`, a loop over `plan.Tools`, and a formatted output. The existing `internalplanner.Plan()` call and `adapter.BuildPackageCatalog` wiring from `run.go` can be reused nearly verbatim.
+
+---
+
+## E. `--profile` / `--package-map` Composition
+
+### How `--package-map` currently works
+
+`cmd/gert/run.go` loads two config/v1 files: the project's `.gert/config.yaml` and optionally the `--package-map` file. Both have the same schema shape (`requires: []PackageRequirement`, `tool-paths: []string`). `mergePackageBindings()` in `packagemap.go` merges them: **package-map entries win over project entries for the same package name** (CLI precedence). The merged list then drives `adapter.BuildPackageCatalog()`, which resolves which `.tool.yaml` file on disk backs each toolRef.
+
+**Effect:** `--package-map` determines which YAML file provides the tool definition for a given logical name. It redirects at the package/file level. It does NOT override the transport block inside that YAML.
+
+**Trace provenance:** `package/resolved` trace events include `"origin": "project" | "package-map"` so auditors can see when a package-map override was used. This is already implemented.
+
+### Where the collision occurs
+
+If a profile selects a per-tool transport binding (e.g., "use `mcp-http` with managed identity for this tool") AND a `--package-map` redirects the same toolRef to a completely different `.tool.yaml` (e.g., a mock package with `transport.mode: native`), the question is: which wins?
+
+**The natural precedence from the code structure:** `--package-map` operates at the catalog/registry layer (which YAML file to load). The profile binding resolver will operate at the transport-config layer (which transport config to use for an already-loaded tool). These are different abstraction layers.
+
+**Recommended rule for Barbara's reply:**
+
+> `--package-map` wins at the YAML-selection layer: it determines which tool definition file backs each toolRef. The runtime profile's transport binding applies after YAML selection: it can override the transport/auth config of the resolved definition, but it cannot override which logical toolRef maps to which package. If a `--package-map` redirects `icm` to a mock package, the profile sees the mock tool definition — not the production one — as its binding target. This means `--package-map` and `--profile` compose without conflict when used for their respective intended purposes: `--package-map` for package-level substitution (mock vs. real), `--profile` for transport/auth/context selection within the selected package's tool definitions.
+
+**The one conflict case:** if someone uses `--package-map` to redirect a toolRef to a mock (native transport) AND selects a headless-server profile that requires `mcp-http`, the plan-time binding check will correctly report a mismatch: the tool as loaded has `transport.mode: native`, the profile requires `direct-http`. This is the right behavior — the operator explicitly chose an incompatible combination.
+
+**Implementation implication:** the binding resolver should operate on the plan's already-resolved `Tools` map (populated after `--package-map` merging and catalog resolution), not on raw toolRef declarations. This is consistent with building `gert plan` on top of `internalplanner.Plan()` output (section D).
+
+---
+
+## Summary Table
+
+| Question | Finding | Action required |
+|----------|---------|----------------|
+| A: vocabulary collision | `"real"` is a RunMode value, not a profile context. New vocabulary needed. | Define two fields: `AllowedEnvironments` (profile contexts) + `AllowedModes` (RunMode). Update 25 fixtures in `tv-enum.yaml`. |
+| A: RequiresCapabilities | Zero real values anywhere. Undefined vocabulary. | Leave for post-Phase 1 design. |
+| B: classification field | Does not exist. Must add `Classification *string` to `ToolAction`. | Schema addition + enforcement in `Execute()` and `executeSubstitution()`. |
+| B: RequiresApproval interaction | Bool only enforced on substitution path today. Plain tool calls have no gate. | Add gate to non-substitution `Execute()` path in Phase 1. |
+| C: NoOpApprovalGate | Silently approves everything. Gate selection is binary (TTY/no-TTY). | Add `UnattendedApprovalGate` (deny-all for unattended). `ApprovalRecord` extension is backward-compatible. |
+| C: effort | Minimal gate: 1–2 days. Full evidence gate: 1 week. | Phase 1: minimal. Phase 3: full. |
+| D: gert plan | No `plan` command exists. `preview` doesn't plan. Plan() already returns resolved tools. | Early `gert plan --profile` is shippable in 2–3 days before binding resolver. Label it "compatibility report." |
+| E: composition | `--package-map` operates at YAML-selection layer; profile at transport-config layer. Natural layering, no deep conflict. | Resolver should operate on post-catalog `plan.Tools`. Precedence rule: package-map wins YAML selection; profile wins transport config. |

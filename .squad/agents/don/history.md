@@ -53,6 +53,58 @@ Detailed history: .squad/agents/don/history-archive.md
 
 ## Learnings
 
+Session: Runtime Portability Final Impact Assessment (2026-08-17T06:15:17-07:00)
+
+**Q1 — Attendance:**
+- `TTYOutput` is HARDCODED at every call site (not TTY-detected). `gert run` hardcodes `true`; `gert serve` hardcodes `false`. No isatty() anywhere.
+- `TTYOutput` drives THREE things: (a) approval gate selection, (b) stdin/stdout prompt provider, (c) terminal input provider. These semantics must be decoupled.
+- `Attended *bool` on WireOptions is the right shape. Profile populates it when declared; `TTYOutput` is the fallback default. Change is 0.5 days, one function.
+- Approval gate selection in `buildApprovalGate()` at `wire.go:319`.
+
+**Q2 — Test-context binding:**
+- `plan.Tools` has `.Transport.Type` populated at plan time — checkable from `gert plan` without executing anything.
+- "must be native" is too strict: hermetic local fake subprocess is a valid test pattern. Correct rule: native always allowed; `mcp` (subprocess) allowed with explicit profile opt-in; `mcp-http` NEVER allowed in test context.
+- Check catches the package-map + production-package mistake naturally (package-map resolves first, profile check reads plan.Tools after).
+- Ships with early `gert plan --profile` work. 0.5 days.
+
+**Q3 — Unspecified fires gate in interactive:**
+- Real regression: `gert run` hardcodes TTYOutput=true, today no gate fires on plain tool calls. Classification shipping with unspecified=prompt would break every existing interactive runbook.
+- `requires-approval: false` explicitly set acts as legacy classification override → treated as read-only, no prompt.
+- `legacy_unspecified_policy: allow | prompt` profile field provides explicit opt-out during migration window (default: prompt for new profiles).
+- PKG-W warning for every unclassified action encountered at plan time when running non-test.
+- ~1.5 days plumbing.
+
+
+
+Session: Runtime Portability Impact Assessment — Counter-Positions (2026-08-16T16:52:05-07:00)
+
+**A — Vocabulary collision:**
+- `AllowedEnvironments` has EXACTLY ONE value in use across the entire repo: `"real"` (25 occurrences in `tv-enum.yaml`). `RequiresCapabilities` has ZERO values — completely blank.
+- `"real"` is a RunMode discriminator (`engine.RunModeReal`), NOT a deployment context. It was used to mean "don't dry-run this tool." It is orthogonal to the proposed profile contexts.
+- The SQL team's profile contexts (`cli-operator`, `headless-server`, etc.) are a DIFFERENT vocabulary axis. We need two fields: `AllowedEnvironments` for profile contexts, `AllowedModes` for RunMode. The 25 fixture occurrences in `tv-enum.yaml` need a one-line update. No runtime breakage (field is unenforced today).
+
+**B — Classification field:**
+- `classification` does not exist anywhere. Must add `Classification *string` on `ToolAction` (NOT `ToolGovernance` — it's per-action, not per-tool). Use pointer to distinguish nil (unspecified) from `""` (invalid).
+- CRITICAL FINDING: `RequiresApproval` is only enforced on the substitution path (`executeSubstitution`) today. Plain tool invocations (`Execute()` → `runtime.Invoke()`) have no approval gate at all. This means a `classification: destructive` plain tool call has zero gating today. The Phase 1 gate MUST add a check to the non-substitution `Execute()` path.
+
+**C — Approval gate:**
+- `buildApprovalGate()` in `internal/adapter/wire.go` is a binary: TTY → Terminal gate, no-TTY → NoOp gate. NoOp always approves ("noop-gate" approver).
+- `ApprovalRecord` has only: `Approver`, `ApprovedAt`, `Token`. Missing: `PolicyID`, `RunID`, `StepID`, `RetryCount`, `Classification`. Extension is backward-compatible (new fields with omitempty, value type not interface).
+- Phase 1 minimal gate (fail-closed deny): 1–2 days. Full evidence gate (Phase 3): 1 week.
+
+**D — gert plan early delivery:**
+- No `gert plan` command exists today (`main.go` has no `plan` case). `gert preview` does not plan.
+- BUT: `internalplanner.Plan()` already returns `plan.Tools map[string]*schema.ToolDef` — the complete resolved tool set. A `gert plan --profile` command that reports binding compatibility can be built in 2–3 days on top of existing `Plan()` output WITHOUT building the binding resolver first. Label it "compatibility report."
+
+**E — --profile / --package-map composition:**
+- `--package-map` operates at YAML-selection layer (which file backs a toolRef). Profile binding resolver operates at transport-config layer (which config to use for an already-loaded tool). Natural layering — no deep conflict.
+- Precedence rule: `--package-map` wins YAML selection; profile wins transport config. Resolver should operate on post-catalog `plan.Tools` map.
+- The one mismatch case (package-map redirects to mock, profile requires mcp-http) is detected correctly as a plan-time binding incompatibility — which is the right behavior.
+
+Deliverable: `.squad/decisions/inbox/don-runtime-portability-impact-assessment.md`
+
+
+
 Session: Runtime Portability Ground Truth (2026-08-16T15:59:48-07:00)
 - Verified all 13 claims in §3.2/§5/§8 of the SQL Live-Site Operations ask against live Gert source
 - One false claim: `run-gert.ps1` does not exist in Gert core (zero .ps1 files in the tree)
@@ -77,3 +129,25 @@ Session: Runtime Portability Ground Truth (2026-08-16T15:59:48-07:00)
 - All deliverables verified and tested
 - Ready for production merge
 
+
+---
+
+## 2026-08-17 — Runtime Portability Negotiation Concluded
+
+**Status:** Design agreed, gate closed, Phase 1 scope finalized.
+
+**Negotiation:** Four-round multi-agent negotiation with SQL Live-Site Operations on runtime portability for Gert runbooks (rounds 2–4; round 1 committed as d355bf5).
+
+**Key technical outcomes:**
+- AllowedEnvironments/AllowedModes field separation (profile contexts vs RunMode)
+- Approval gate coverage closure (direct-invocation path enforcement added to Phase 1)
+- Grandfathering rule for interactive unspecified (legacy equires-approval: false acts as read-only override)
+- Declared attendance orthogonal to context (fixes TTYOutput conflation, resolves CI blocking-on-stdin bug)
+- Test-context binding restriction at plan time (native-only default, subprocess opt-in, mcp-http never)
+- OQ2 closed as subprocess continuation with Phase 0 framing deliverables
+
+**Agents involved:** Barbara (architect), Don (backend verification), David (round 1).
+
+**Design principle:** Fail-closed by default; explicit migration paths for breaking changes; source-grounded verification.
+
+**Impact:** Phase 1 addition ~4 days. All blocking conditions satisfied. Implementation starts this week.

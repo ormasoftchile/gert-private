@@ -62,3 +62,14 @@
 - **Profile execution wiring is distinct from profile schema.** Schema fields exist; execution path does not. Verify end-to-end reachability.
 
 Full detailed history: `.squad/agents/david/history-archive.md`
+
+## Phase 1B Rev 3 Update (2026-08-17)
+
+### Item 4 Ownership Restructure
+
+**Status Update:** Item 4 ("Dual-Binding Mechanism Proof") no longer imports consumer contracts and is not artifact-gated.
+
+- Gert core owns mechanism proof using synthetic fixtures
+- Consumer-specific contracts (e.g., SQL Live-Site ICM contract) are owned by consumer team in their repo
+- Item 4 is now serial after Item 2 only; no external dependencies
+- Full details: Contract Proof Ownership Split decision (decisions.md)

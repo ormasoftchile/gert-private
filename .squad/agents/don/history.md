@@ -199,3 +199,14 @@ When Item 2 extends `RuntimeProfile` schema:
 
 Token gate is always constructed from tool definition's declared auth — profile substitutes credential acquisition mechanism only, never the token's scope or destination hosts.
 
+
+## Phase 1B Rev 3 Update (2026-08-17)
+
+### Item 4 Ownership Restructure
+
+**Status Update:** Item 4 ("Dual-Binding Mechanism Proof") no longer imports consumer contracts and is not artifact-gated.
+
+- Gert core owns mechanism proof using synthetic fixtures
+- Consumer-specific contracts (e.g., SQL Live-Site ICM contract) are owned by consumer team in their repo
+- Item 4 is now serial after Item 2 only; no external dependencies
+- Full details: Contract Proof Ownership Split decision (decisions.md)

@@ -48,6 +48,28 @@ equires-approval: false acts as read-only override)
 
 **Estimate:** ~6–7 days parallelized engineering; production ICM date controlled by them.
 
+---
+
+## 2026-08-17 — Phase 1B Implementation: Items 1, 2, 3, 5, 6 Complete; Item 4 Blocked
+
+**Status:** 5 of 6 Phase 1B items complete. Full suite exits 0. Conformance 72/62/10/0 unchanged. Item 4 awaiting transport-mode answer from SQL Live-Site.
+
+**Items delivered:**
+- **Item 1** (Don, 0ce2054): Managed-identity provider via IMDS (no Azure SDK, no ambient env vars, NewAuthProviderWithClientID extension for Item 2)
+- **Item 2** (David, 85bfa4a): Profile execution wiring + PLAN-013 endpoint validation (atomic same commit, Ratified Rule A structurally enforced)
+- **Item 3** (Tess, 22ad3e7): INDETERMINATE semantics (classification-aware routing, EndpointHost invariant, approval orthogonality proven by INDET-012)
+- **Item 5** (David, d1314cc): Profileless fail-fast + --acknowledge-indeterminate + reachability graduation (ProfileToolOverride.Endpoint statusReachable)
+- **Item 6** (Don, c7decfd): Credential non-leakage assertion (13 surfaces, negative control 8-case sweep, IndeterminateRecord explicit)
+
+**Reachability gate** (Ken, 56b1bc4): Registry enforcement working; AllowedEnvironments proven via PLAN-010; 4 founding entries established.
+
+**Blocked:**
+- **Item 4** (dual-binding mechanism proof): Awaiting SQL Live-Site's MCP-002 transport-mode answer (workload-identity ambient auto-selection semantics)
+
+**Open risk:** Repository HEAD untracked state (91 files including pkg/pkgcatalog, pkg/pkgpath; internal/tool/auth_gate.go, cmd/gert/packagemap_integration_test.go cited but untracked). Pre-existing, not caused by Phase 1B. Awaiting Cristiano's remediation decision.
+
+**Decision ledger:** All 6 inbox decision records merged into `.squad/decisions.md`. Canonical ledger now contains Items 1–6 rationale and proofs.
+
 ## Learnings
 
 - **Milestone labeling must match negotiated scope exactly.** We shipped the governance/profile foundation and labeled it "Phase 1 complete" when the round-2 agreement explicitly included managed identity, timeout semantics, and an ICM proof. The counterparty verified independently and caught the overclaim. Lesson: before declaring a milestone complete, re-read the negotiated scope document line by line and confirm every item. Partial delivery is fine if labeled honestly (e.g., "Phase 1A complete, 1B in progress"). Overclaiming erodes credibility that takes rounds to build back.

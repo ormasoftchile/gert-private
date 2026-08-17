@@ -2,12 +2,67 @@
 
 ## Overview
 
-**Stream:** Backend transport and authentication. Implemented MCP HTTP transport, verified Phase 1B auth gaps.
+**Stream:** Backend transport and authentication. Implemented MCP HTTP transport, verified Phase 1B auth gaps, delivered managed-identity provider and credential-leak assertions.
 
 **Key Contributions:**
-- Designed and implemented MCPHTTPTransport for mode: mcp-http (Slice B, Phase 1A)
-- Verified managed-identity auth absence (Claim 1, Phase 1B) — requires 2-day implementation
-- Verified headless ICM proof absence (Claim 2, Phase 1B) — requires 1-day proof + external credential provisioning
+- MCP HTTP transport implementation (Phase 1A)
+- Phase 1B Item 1: Managed-identity auth provider (2026-08-17)
+- Phase 1B Item 6: Credential non-leakage assertion suite (2026-08-17)
+
+---
+
+## Phase 1A Work Summary
+
+### MCP HTTP Transport Implementation (Complete)
+
+**Files added/modified:** internal/tool/mcp_http.go, mcp_types.go, mcp_http_test.go; updated mcp.go, runtime.go, pkg/schema/tool.go, pkg/tool/tool.go.
+
+**Context:** Used json.RawMessage for mcpResponse.Result to support both tools/call and tools/list response shapes.
+
+---
+
+## Phase 1B Implementation Summary
+
+### Item 1: Managed Identity Provider (Commit 0ce2054)
+
+**Status:** COMPLETE
+
+- `ManagedIdentityAuthProvider` in internal/tool/auth_managed_identity.go
+- IMDS HTTP endpoint only (no Azure SDK); zero ambient environment variable inspection
+- Token caching with 5-minute refresh buffer, graceful-degradation on proactive refresh failure
+- `imdsHTTPClient` function injection seam for test compatibility
+- `NewAuthProviderWithClientID` constructor for future runtime binding (Item 2)
+- 13 tests covering IMDS endpoint, timeouts, malformed JSON, cache behavior, context cancellation
+
+**Key Design:** Determinism structural guarantee — no `os.Getenv` calls for AZURE_FEDERATED_TOKEN_FILE or other workload-identity env vars. Profile mechanism selection only, never ambient auto-selection.
+
+### Item 6: Credential Non-Leakage Assertions (Commit c7decfd)
+
+**Status:** COMPLETE
+
+- `credentialSweeper` pattern collects all surfaces, unified scan at end (not per-surface)
+- Non-vacuity assertions: every test proves code-under-test actually executed
+- Permanent negative control `TestCredentialLeak_SweepDetectsIntentionalLeak` with 8 sub-cases (one per surface type)
+- Surfaces covered: 13 total including trace events, ToolResult, errors, IndeterminateRecord, MCP-012 errors
+- Tests live in internal/tool (no CLI layer needed)
+
+**Key Design:** Error failure paths are highest-risk — four tests specifically target errors to prove they exclude HTTP bodies and full URLs.
+
+---
+
+## Design Rulings
+
+### Managed-Identity Scope
+
+Provider implementation must be deterministic across hosts. Environment-variable-based auto-selection (Correction 1) prevents identical profiles from behaving differently. `NewAuthProvider` switches on explicit string name only.
+
+### Credential Sweep Invariant
+
+All credential surfaces must be swept or test cannot pass. If sweeper breaks, negative control immediately fails CI. No vacuous "token did not appear" assertions without proof that token was actually used.
+
+### EndpointHost Credential Invariant
+
+`IndeterminateRecord.EndpointHost` must be parsed hostname only. No credentials, tokens, URLs, or query strings. Test verifies non-vacuously with high-entropy sentinel.
 
 ---
 
@@ -210,3 +265,66 @@ Token gate is always constructed from tool definition's declared auth — profil
 - Consumer-specific contracts (e.g., SQL Live-Site ICM contract) are owned by consumer team in their repo
 - Item 4 is now serial after Item 2 only; no external dependencies
 - Full details: Contract Proof Ownership Split decision (decisions.md)
+
+---
+
+## Learnings — Phase 1B Item 1: Managed Identity IMDS (2026-08-17)
+
+### Implementation Complete
+
+**Files shipped:**
+- `internal/tool/auth_managed_identity.go` — `ManagedIdentityAuthProvider` implementing `Token(ctx)` and `Invalidate()`
+- `internal/tool/auth_managed_identity_test.go` — 13 tests (httptest mock; happy path; user-assigned clientID; non-200; malformed JSON; context cancellation; cache hit; expiry-triggered refresh; IMDS unreachable; token-not-in-error; parseIMDSExpiry variants)
+- `internal/tool/auth.go` — `NewAuthProvider` dispatches `"managed-identity"`; added `NewAuthProviderWithClientID` for optional client ID threading
+- `internal/tool/validate_transport.go` — `knownAuthProviders` entry for `"managed-identity"` + updated MCP-002 error message
+- `internal/tool/auth_azurecli_test.go` — Updated `TestNewAuthProvider_UnknownProvider` to use `"workload-identity"`; added `TestNewAuthProvider_ManagedIdentity` and `TestNewAuthProvider_WorkloadIdentityReturns002`
+
+**Build and test:** `go build ./...` and `go test ./internal/tool/...` both pass (46 tests, 0 failures).
+
+### Key Observations
+
+1. **Caching pattern transplanted exactly.** AzureCLIAuthProvider's graceful-degradation pattern (still-valid token returned on proactive-refresh failure) is replicated verbatim. Both providers now use the same `tokenRefreshBuffer` constant from `auth_azurecli.go`.
+
+2. **imdsHTTPClient seam.** Injecting `imdsHTTPClient func(*http.Request) (*http.Response, error)` let tests rewrite the URL to an httptest.Server without any interface bloat. This is the correct seam for a single-endpoint HTTP-only provider.
+
+3. **No ambient detection.** The provider has zero `os.Getenv` calls. `AZURE_FEDERATED_TOKEN_FILE`, `AZURE_CLIENT_ID`, and similar workload-identity env vars are not read. The determinism requirement from Correction 1 is structurally enforced, not just by policy.
+
+4. **Body exclusion from errors.** Non-200 and malformed-JSON errors surface the HTTP status code and endpoint URL only — never the response body. This is asserted by `TestManagedIdentity_Non200DoesNotLeakBody` which sends a body containing a fake token value and verifies the token string does not appear in the error.
+
+5. **Pre-existing stray file issue.** During commit, two pre-staged files from other agents (`cmd/gert/reachability_probes_test.go`, `cmd/gert/reachability_registry_test.go`) and one more (`specs/reachability-gate.md`) appeared in the first commit attempt despite showing as `??` in status. Root cause: those files were already in the git index when I ran `git stash` to verify the pre-existing failure; the stash pop restored them as staged. Used `git rm --cached` + `git commit --amend` to produce a clean 5-file commit. **Lesson:** never run `git stash` when other agents have staged work in a shared index. For pre-existing test verification, use a separate worktree or just run the test from a known clean branch.
+
+---
+
+## Learnings — Phase 1B Item 6: Credential Non-Leakage Assertions (2026-08-17)
+
+### Implementation Complete
+
+**File shipped:** `internal/tool/auth_credential_leak_test.go`
+
+**Tests (10 total, 17 sub-tests via negative control):**
+- `TestCredentialLeak_SuccessPath_TokenNotOnAnyOutputSurface` — full provider→gate→transport→ToolResult path; proves token was delivered (auth header captured) but not on any output surface
+- `TestCredentialLeak_Non200IMDS_ErrorDoesNotLeakToken` — non-200 IMDS body with embedded sentinel; error must not include the body
+- `TestCredentialLeak_MalformedJSON_ErrorDoesNotLeakToken` — 200 OK with malformed JSON embedding the sentinel; JSON parse error must not echo it
+- `TestCredentialLeak_ContextCancellation_ErrorDoesNotLeakToken` — IMDS hangs, context cancelled; cancellation error must not include partial response
+- `TestCredentialLeak_MCP012_ErrorDoesNotLeakToken` — token pre-cached; request to disallowed host; MCP-012 must not include the cached token
+- `TestCredentialLeak_TraceEvent_NoTokenInAuthAttached` — mcp/authAttached carries url_host+scope only; asserts event was emitted (non-vacuity)
+- `TestCredentialLeak_IndeterminateRecord_NoToken` — correctly-constructed record sweeps clean; inline negative control for EndpointHost surface
+- **`TestCredentialLeak_SweepDetectsIntentionalLeak` (8 sub-tests)** — MANDATORY NEGATIVE CONTROL; deliberately injects sentinel into every surface type and asserts sweep fires
+- `TestCredentialLeak_TokenNotInStepOutput` — echo-args MCP server; even when server echoes call args, no token appears in ToolResult
+- `TestCredentialLeak_Invalidate_DoesNotExposeToken` — failing re-acquire after Invalidate must not expose previous cached token in error
+
+### Key Design Decisions
+
+1. **`credentialSweeper` struct pattern.** Collecting all surfaces into a single `credentialSweeper` and calling `scan()` at the end gives a unified report naming every surface that leaked, rather than stopping at the first. An auditor can see all leak sites simultaneously.
+
+2. **Non-vacuity checks in every test.** Every success-path test has an explicit assertion that the token WAS actually used (e.g., auth header captured, trace event emitted). Without this, a test that never exercises the auth path would pass vacuously and certify nothing.
+
+3. **Negative control is a permanent test.** `TestCredentialLeak_SweepDetectsIntentionalLeak` is not a one-time experiment — it runs on every `go test` invocation and would fail if anyone broke the sweeper. This satisfies the counterparty's acceptance criterion verbatim: *"test fails if the synthetic token is intentionally leaked."*
+
+4. **IndeterminateRecord sweep.** The record is structurally covered (Tess's Item 3): both the correctly-constructed version (no sentinel) and the deliberately bad version (sentinel in EndpointHost) are tested. If a future change to `IndeterminateRecord` accidentally adds a token field, the sweep will catch it.
+
+5. **Error failure paths are the highest-risk surfaces.** Four of the ten tests specifically target error paths — these are the most likely leak vectors because naive implementations include HTTP response bodies or full URLs in errors. All four pass, proving the current implementation excludes sensitive content.
+
+### Confirmed
+
+**The sweep fires on intentional leaks.** `TestCredentialLeak_SweepDetectsIntentionalLeak` has 8 sub-cases, each injecting the sentinel into a different surface type (plain string, trace kind, trace payload value, trace JSON, ToolResult.Stdout, ToolResult JSON, IndeterminateRecord JSON, error string). All 8 fire.

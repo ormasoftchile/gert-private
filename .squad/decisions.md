@@ -2768,4 +2768,481 @@ Gert core does not take a dependency on consumer repositories for contract proof
 - The parity harness can be exported as a reusable helper if requested.
 - Documentation and worked examples for writing consumer-side proofs.
 
+---
+
+# Ruling: Reachability Gate Design
+
+**Date:** 2026-08-17
+**Author:** Ken
+**Status:** SHIPPED — commit 56b1bc4
+
+## Problem
+
+Four schema fields were declared, schema-validated, unit-tested, and never
+read by production code. In every case the test suite was green. The pattern:
+a unit test reads the field from the struct; no test exercises the field
+through `cmd/gert/run.go`. Phase 1B adds new fields with the same shape.
+
+## Decision
+
+**A reachability test must prove a field changes observable CLI behavior
+through the real `runRun()` code path.** Reading the field in a unit test
+that bypasses `cmd/gert/run.go` does NOT count.
+
+## Mechanism
+
+A registry table in `cmd/gert/reachability_registry_test.go` with
+`TestCLI_ReachabilityGate` as the enforcement test. Every schema field or
+CLI feature must appear as either:
+- `statusReachable` with a non-nil `TestFunc` (the reachability probe), or
+- `statusKnownDead` with a non-empty `DeadReason` citing the item that will wire it.
+
+There is no silent option. A `statusReachable` entry with `nil TestFunc`
+fails CI immediately. A `statusKnownDead` entry with empty `DeadReason`
+also fails CI.
+
+## Alternatives considered
+
+- **Lint-style scanner**: would need to parse YAML schemas and match Go
+  struct fields; brittle and complex. Rejected.
+- **TestCLI_*_Reachable naming convention alone** (Barbara's proposal):
+  a convention without enforcement. Engineers forget. Rejected.
+- **Registry with only live entries**: forces engineers to write the probe
+  before the field is wired (impossible). The KNOWN-DEAD escape valve is
+  essential; it makes the dead state explicit and traceable rather than silent.
+
+## Four founding entries
+
+| Feature | Status | Note |
+|---|---|---|
+| AllowedEnvironments | REACHABLE | PLAN-010 via `runRun()`; probe confirms |
+| RequiresCapabilities | KNOWN-DEAD | No active Phase 1B item |
+| ProfileToolOverride.Endpoint | KNOWN-DEAD | David Phase 1B Item 2 |
+| Contract.Idempotent | KNOWN-DEAD | Phase 2 retry/idempotency |
+
+## CI wiring
+
+`go test ./...` in `.github/workflows/go-test.yml` runs `TestCLI_ReachabilityGate`
+as part of the `cmd/gert` package. No CI config changes were needed.
+
+## Negative-control verification
+
+Setting `TestFunc: nil` on the `AllowedEnvironments` entry produces:
+```
+--- FAIL: TestCLI_ReachabilityGate/AllowedEnvironments
+    feature "AllowedEnvironments" is marked statusReachable but TestFunc is nil
+FAIL
+```
+The gate provably fires.
+
+---
+
+# Decision: Managed Identity Provider Shape (Phase 1B Item 1)
+
+**Date:** 2026-08-17
+**Author:** Don (Backend, Gert Core)
+**Status:** Implemented and committed
+
+---
+
+## Context
+
+Phase 1B Item 1 required implementing `managed-identity` as an IMDS-only auth provider. Two design decisions were non-obvious and are recorded here.
+
+---
+
+## Decision 1: `imdsHTTPClient` function injection seam
+
+**Decision:** The provider holds a `httpClient imdsHTTPClient` field typed as `func(*http.Request) (*http.Response, error)`. In production it is nil (falls back to a real `http.Client`). In tests it is replaced with a closure that rewrites the request URL to point at an `httptest.Server`.
+
+**Alternatives considered:**
+- Inject an `*http.Client` — would require either a custom `Transport` or replacing the entire client. A `Transport` rewrite is more complex and harder to read.
+- Use an `http.RoundTripper` interface — adds an interface definition and a wrapper type just to rewrite a URL.
+- The function seam is already the pattern used elsewhere in this codebase (see `azRunner` in `auth_azurecli.go`) — consistent.
+
+**Why:** Single-function seam is the smallest, most readable test shim for a provider that makes exactly one kind of HTTP request. No interface definition required.
+
+---
+
+## Decision 2: `NewAuthProviderWithClientID` rather than config struct expansion
+
+**Decision:** Added `NewAuthProviderWithClientID(provider, scope, clientID string)` as a secondary constructor alongside `NewAuthProvider`. `NewAuthProvider` calls it with `clientID=""`. The `clientID` comes from a future `AuthConfig.ClientID` field (not added in this item).
+
+**Why not add `ClientID` to `AuthConfig` now:**
+- Adding schema fields has downstream effects (YAML parsing, validation, documentation).
+- `AuthConfig.ClientID` is only meaningful for `managed-identity`. Adding it to the shared struct without wiring it through `ValidateTransportConfig` (i.e., warning on non-MI providers) risks silently ignored config.
+- The constructor exists so Item 2 (Runtime Binding) can wire `clientID` when it reads `AuthConfig` and constructs the provider. The schema change belongs in Item 2.
+
+**Invariant established:** `NewAuthProvider` is the public surface. `NewAuthProviderWithClientID` is the extension point for runtime binding. No caller needs to know about `clientID` until Item 2 lands.
+
+---
+
+## Decision 3: No ambient environment variable inspection
+
+**Decision:** `ManagedIdentityAuthProvider` contains zero `os.Getenv` calls. It does not check `AZURE_FEDERATED_TOKEN_FILE`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, or any other Azure SDK ambient environment variable.
+
+**Why:** Correction 1 from SQL Live-Site Operations was explicit: managed-identity and workload-identity must be separate providers precisely because a provider that silently chooses its mechanism based on ambient state makes identical profiles behave differently across hosts. The determinism requirement is structural, not policy — a code reviewer can verify it by `grep`ing for `os.Getenv` in the file.
+
+---
+
+## What Item 2 Must Do
+
+When Item 2 (Runtime Binding) wires `AuthConfig` through the runtime:
+1. Add `ClientID string` to `AuthConfig` (schema change, YAML field `client_id`).
+2. Validate in `ValidateTransportConfig` that `client_id` is only set when `provider: managed-identity`.
+3. Call `NewAuthProviderWithClientID(provider, scope, auth.ClientID)` instead of `NewAuthProvider`.
+
+---
+
+# Decision: Profile Execution Wiring + PLAN-013
+
+**Date:** 2026-08-17
+**Author:** David (Integration)
+**Status:** Shipped — commit `85bfa4a`, gert repo main branch
+**Related:** Phase 1B Item 2; counterparty correction 4; PLAN-013
+
+---
+
+## Context
+
+`gert run --profile <id>` parsed and validated profiles but the selected
+endpoint and auth parameters never reached the transport. The counterparty
+flagged this as their outstanding item 4. `ProfileToolOverride.Endpoint` was
+one of four instances of the project's systemic dead-field bug.
+
+---
+
+## Decisions Made
+
+### 1. Threading path: profile flows through WireOptions, not a separate lookup
+
+Profile is passed `adapter.WireOptions.Profile` → `BuildEngineConfig` →
+`DefaultToolRuntime.SetProfile(profile)`. This is the same thread as
+`--package-map` wiring. The profile is NOT re-read from disk inside the
+runtime; it is set once before the first invocation. Call `SetProfile` before
+returning from `BuildEngineConfig` so callers cannot forget.
+
+### 2. Ratified Rule A enforcement is structural, not runtime assertion
+
+`ProfileToolOverride` has no `Scope` or `AllowedHosts` fields. Those fields
+cannot be set through a profile — the schema physically prevents it. `Provider`
+IS added to `ProfileToolOverride` so the caller can specify which credential
+mechanism acquires the token. `TokenGate` ALWAYS reads `def.Auth.Scope` and
+`def.Auth.AllowedHosts` from the tool definition, even when Provider comes
+from the profile.
+
+### 3. PLAN-013 ships in the same commit as endpoint-override wiring
+
+No window exists where overrides execute unvalidated. If the check were
+separate, an attacker or misconfiguration in that window could forward a bearer
+token to an unapproved host. The constraint is: one commit, both changes, or
+neither lands.
+
+### 4. PLAN-013 check lives in `checkToolEnvironmentPreflight` (non-test branch)
+
+The seam already receives `def` and `profile`. PLAN-013 runs inside the
+`profile.Context != schema.ProfileContextTest` branch because test-context
+mcp-http is already unconditionally blocked by PLAN-012 (and PLAN-013 only
+applies to mcp-http). For non-test contexts, the check validates:
+- Tool transport is mcp-http (otherwise endpoint override is a no-op)
+- Tool has auth configured with AllowedHosts (required for the check)
+- Override endpoint's hostname is in AllowedHosts (exact, case-insensitive)
+
+Failure: `ErrEndpointHostNotAllowed` at plan time, before step 1 executes.
+
+### 5. Reachability test uses two in-process MCP servers
+
+`TestCLI_ProfileEndpointOverride_Reachable` (in `internal/tool/runtime_profile_test.go`,
+`package tool`) creates two httptest.Server instances: `defaultSrv` (written
+into the tool definition URL) and `overrideSrv` (written into the profile's
+per-tool endpoint). With the profile wired in, all traffic goes to `overrideSrv`.
+Removing the `effectiveURL = override.Endpoint` read causes traffic to flow to
+`defaultSrv` and the assertion fails. Plain HTTP is used because
+`ValidateTransportConfig` (HTTPS enforcement) is called at scan time, not at
+runtime; bypassing YAML parsing bypasses that check cleanly.
+
+The test is written standalone per the "TestCLI_<Feature>_Reachable" convention
+(Ken's pattern); a shared helper can adopt it later without changing the test's
+logic.
+
+### 6. Provider override uses the same `NewAuthProvider` function
+
+When a profile override specifies Provider, the runtime calls
+`NewAuthProvider(override.Provider, def.Auth.Scope)` — same function as the
+non-override path. If the profile provider name is not recognized, the error
+propagates from `NewAuthProvider` (MCP-002). The `_` discard of the error is
+intentional: the transport factory is called lazily; the caller's first
+`Invoke` will propagate the error. This mirrors existing behavior for the
+non-override path.
+
+---
+
+## Constraints Preserved
+
+| Constraint | Mechanism |
+|---|---|
+| Scope/AllowedHosts never from profile | No fields on ProfileToolOverride for them |
+| TokenGate always from def | runtime.go reads `def.Auth.Scope`, `def.Auth.AllowedHosts` unconditionally |
+| Transport mode never rewritten by profile | PROF-001 at parse time; no mode field in execution path |
+| Endpoint override validated before execution | PLAN-013 same commit; preflight fires before plan.Start |
+| --package-map and --profile compose | Package map selects tool def; profile parameterizes it; neither touches the other's domain |
+
+---
+
+## Files Changed
+
+| File | Change |
+|---|---|
+| `pkg/schema/profile.go` | Added `Provider` field to `ProfileToolOverride` |
+| `pkg/planner/planner.go` | Added `ErrEndpointHostNotAllowed` (PLAN-013 sentinel) |
+| `internal/planner/preflight.go` | PLAN-013 check in `checkToolEnvironmentPreflight` |
+| `internal/planner/preflight_test.go` | Six PLAN-013 unit tests |
+| `internal/adapter/options.go` | Added `Profile *schema.RuntimeProfile` to `WireOptions` |
+| `internal/adapter/wire.go` | `toolRuntime.SetProfile(opts.Profile)` after construction |
+| `internal/tool/runtime.go` | `profile` field + `SetProfile` + wired in `Invoke` (mcp-http) |
+| `internal/tool/runtime_profile_test.go` | `TestCLI_ProfileEndpointOverride_Reachable` reachability test |
+| `cmd/gert/run.go` | `Profile: runtimeProfile` in `WireOptions` literal |
+
+Commit: `85bfa4a` on gert repo main branch.
+
+---
+
+# Decision: Phase 1B Item 3 — INDETERMINATE Semantics
+
+**Date:** 2026-08-17  
+**Author:** Tess  
+**Status:** SHIPPED — commit 22ad3e7
+
+---
+
+## What Was Shipped
+
+**`pkg/engine/run.go`**
+- `StepStatusIndeterminate StepStatus = "indeterminate"` — distinct from Failed and Completed.
+- `RunStatusIndeterminate RunStatus = "indeterminate"` — run-level halt state, not terminal failure.
+- `IndeterminateRecord` struct with all 7 required evidence fields (ratified by counterparty).
+- `*IndeterminateRecord` on `StepResult` (pointer, not value, per Ratified Rule B — nil-output is ambiguous for tools that legitimately return nothing; a pointer gives an unambiguous signal).
+- `AcknowledgeIndeterminate bool` on `RunOptions` — the engine-side half of `--acknowledge-indeterminate`.
+- `ErrIndeterminate` and `ErrIndeterminateAcknowledgmentRequired` sentinel errors.
+
+**`pkg/schema/tool.go`**
+- `Idempotent *bool` on `ToolAction` — declares an action safe to retry after transport loss. Only meaningful for `classification: read-only`; ignored (and never retried) for mutating/destructive/unspecified.
+
+**`internal/engine/engine.go`**
+- Replaced unconditional `failRun()` after `execErr != nil` on tool steps with classification-aware branching:
+  - `read-only` → `failRun` (retry future work when `idempotent: true`)
+  - `mutating` → `haltIndeterminate`
+  - `destructive` → `haltIndeterminate`
+  - `unspecified` (nil) → `haltIndeterminate` (conservative)
+- Same branching applied to the step-result path (executor returns `StepStatusFailed` + `context.DeadlineExceeded` without an `execErr`).
+- `haltIndeterminate(...)` — emits `step/indeterminate` and `run/indeterminate` trace events, sets `RunStatusIndeterminate`, closes the run handle.
+- `buildIndeterminateRecord(...)` — populates all 7 fields; `EndpointHost = url.Parse(URL).Hostname()` only (credential invariant enforced here).
+- `resolveStepClassification(...)` — extracts `ToolAction.Classification` from the plan's tool map.
+- `requiresIndeterminate(classification *string) bool` — returns `true` for mutating/destructive/unspecified, `false` for read-only. **The approval state (`RequiresApproval`) is never consulted here — this is the orthogonality contract.**
+- `isTransportLoss(err)` — detects `context.DeadlineExceeded` and `context.Canceled`.
+- Resume guard: `Resume()` returns `ErrIndeterminateAcknowledgmentRequired` when `state.Status == RunStatusIndeterminate && !opts.AcknowledgeIndeterminate`.
+
+---
+
+## Key Decisions
+
+### Rule B: pointer, not sentinel
+`*IndeterminateRecord` is a pointer because `Output == nil` is ambiguous — a tool that returns nothing also yields nil Output. The non-nil pointer is an unambiguous signal that completion could not be established. Do not encode this as a sentinel value in any existing field.
+
+### EndpointHost invariant
+`EndpointHost` is set via `url.Parse(toolDef.Transport.URL).Hostname()` — the parsed hostname only. Under no circumstances do credentials, tokens, Authorization header values, query strings, or full URLs appear in this field, its JSON serialization, trace events, or error messages. The credential sweep test (INDET-010) uses a high-entropy sentinel to verify this non-vacuously.
+
+### Orthogonality: approval state is never consulted in timeout routing
+`RequiresApproval` (including `false`) is an approval-routing opt-out only. It never assigns, implies, or coerces `classification: read-only`. The `requiresIndeterminate()` function receives only the classification pointer; the approval state is not passed. INDET-012 vectors prove this with nil/false approval combinations on mutating actions.
+
+### unspecified → INDETERMINATE (conservative)
+When `classification` is nil (unspecified), `requiresIndeterminate` returns `true`. This is the conservative default: we cannot know whether an unspecified action is side-effect-free. If callers want read-only timeout behavior they must declare `classification: read-only`.
+
+### context.Canceled treated as transport loss
+Both `context.DeadlineExceeded` and `context.Canceled` are treated as transport loss. `context.Canceled` is included because the engine may cancel a step context for reasons outside the engine's own run-cancel path (e.g., a step-level timeout context). The category string distinguishes them (`context-canceled` vs `context-deadline-exceeded`).
+
+### Non-timeout errors are not affected
+A non-transport error (e.g., malformed response, auth failure) on any classification still calls `failRun()`. The INDETERMINATE path is specifically for transport losses where the server may have processed the request despite the client receiving an error.
+
+### Resume guard is engine-side only
+The `--acknowledge-indeterminate` CLI flag wiring belongs in `cmd/gert/run.go` (David's file). The engine-side behavior is complete: `Resume()` returns `ErrIndeterminateAcknowledgmentRequired` when the guard fires. The CLI flag is a thin wire step.
+
+---
+
+## Test Coverage
+
+30 vectors in `internal/engine/indeterminate_test.go`:
+
+| Vector | What It Proves |
+|--------|---------------|
+| INDET-001 | read-only timeout → StepStatusFailed, NOT INDETERMINATE |
+| INDET-002 | mutating timeout → INDETERMINATE |
+| INDET-003 | destructive timeout → INDETERMINATE |
+| INDET-004 | unspecified timeout → INDETERMINATE (conservative) |
+| INDET-005 | destructive ≠ read-only divergence (regression guard) |
+| INDET-006 | All 7 fields populated in IndeterminateRecord |
+| INDET-006b | Deadline recorded when context carries one |
+| INDET-007 | context.Canceled categorized correctly |
+| INDET-008 | Non-timeout error → failRun for all 4 classifications |
+| INDET-009 | Step-result-level transport loss — both classifications |
+| INDET-010 | Credential sentinel absent from record AND trace events; sweep non-vacuous |
+| INDET-011 | Resume blocked without acknowledge; allowed with it; non-INDET run not affected |
+| INDET-012 | RequiresApproval nil/false/true does NOT change classification or timeout routing |
+| INDET-013 | step/indeterminate and run/indeterminate events emitted |
+| INDET-014 | read-only+idempotent:true does not trigger INDETERMINATE |
+
+**Destructive-vs-read-only divergence is proven by INDET-005**, which asserts the statuses differ and would fail if anyone made the paths converge again.
+
+---
+
+## Deferred
+
+- Actual retry loop for `read-only` + `idempotent: true` (no retry infrastructure today; the classification check and flag exist, falling through to `failRun`).
+- `cmd/gert/run.go`: wire `--acknowledge-indeterminate` flag → `RunOptions.AcknowledgeIndeterminate` (David's file, not edited).
+- `legacy_unspecified_policy: allow` mentioned in design: not present in schema today; if added it must NOT relax retry, idempotency, or INDETERMINATE behavior (same orthogonality contract as approval state).
+
+---
+
+# Decision: Credential Non-Leakage Assertion Design (Phase 1B Item 6)
+
+**Date:** 2026-08-17
+**Author:** Don (Backend, Gert Core)
+**Status:** Implemented and committed (c7decfd)
+
+---
+
+## Context
+
+The counterparty's final acceptance criterion (criterion 8 of 8) is:
+> *No credential appears in runbook state, results, traces, or errors.*
+> *Test fails if the synthetic token is intentionally leaked.*
+
+This is the criterion that was dropped from an earlier draft and then added back. The implementation is in `internal/tool/auth_credential_leak_test.go`.
+
+---
+
+## Decision 1: `credentialSweeper` pattern — collect all surfaces, scan once
+
+Rather than checking each surface inline with `if strings.Contains(err.Error(), token)`, all swept values are registered in a `credentialSweeper` and a single `scan()` call at the end reports all matches.
+
+**Why:** A per-surface inline check stops at the first leak. If a single error on the non-200 path and a trace field both leaked, the test would only report one. The sweeper reports all surfaces simultaneously — useful for debugging multiple simultaneous leaks.
+
+**Why not a single large string.Contains over a marshaled aggregate:** Different surfaces have different types (errors, maps, structs). Marshal all of them and concatenate — you lose the surface name in the failure message. `credentialSweeper.scan()` reports `surface "trace[0].url_host" contains sentinel`, which is immediately actionable.
+
+---
+
+## Decision 2: Non-vacuity assertions in every positive test
+
+Every success-path test explicitly asserts that the code under test actually DID something. `TestCredentialLeak_SuccessPath_TokenNotOnAnyOutputSurface` checks that the Authorization header was captured by the MCP server, proving the token was actually attached. `TestCredentialLeak_TraceEvent_NoTokenInAuthAttached` checks that the `mcp/authAttached` event was emitted.
+
+**Why:** A test that asserts "the token does not appear on surface X" is vacuously true if the token is never acquired or the surface is never populated. Non-vacuity checks turn an absence assertion into a presence-then-absence assertion.
+
+---
+
+## Decision 3: Negative control is a permanent first-class test
+
+`TestCredentialLeak_SweepDetectsIntentionalLeak` runs on every invocation of `go test ./internal/tool/...`. It deliberately injects the sentinel into 8 surface types and asserts the sweeper fires on each one.
+
+**Why it must be permanent:** An absence-assertion test without a working sweep is the same as no test at all. This is the same failure mode as the dead-field bugs that have bitten this project four times. If someone changes the sweep mechanism and breaks it, this test will catch it immediately.
+
+**Why 8 sub-cases instead of one:** Each surface type (plain string, trace kind, trace payload, trace JSON, ToolResult.Stdout, ToolResult JSON, IndeterminateRecord JSON, error string) uses a different code path through the sweeper. Testing all 8 proves the sweeper reaches all surfaces, not just the one the author had in mind.
+
+---
+
+## Decision 4: IndeterminateRecord is explicitly swept
+
+`IndeterminateRecord.EndpointHost` is swept in its own test. The struct is serialized to JSON and the JSON is swept. An inline negative control inside the same test proves a bad EndpointHost value would be caught.
+
+**Why explicit:** `IndeterminateRecord` is new (Tess's Item 3). It is the newest place a credential could hide — if a future engineer adds a `TokenValue` or `LastToken` field to the struct by mistake, the sweep will catch it. Making the sweep explicit rather than implicit in a general JSON serialization ensures it cannot be silently skipped.
+
+---
+
+## Decision 5: Test lives in `internal/tool`, not `cmd/gert`
+
+The test exercises `ManagedIdentityAuthProvider`, `TokenGate`, and `MCPHTTPTransport` directly — all in `internal/tool`. No CLI layer is needed. This keeps the test fast (no subprocess), deterministic (no process environment), and offline (no network or credentials).
+
+**What this does NOT cover:** The test does not sweep the full engine's `StepResult` JSON as written to a run store or JSONL trace file. That coverage would require wiring through the engine, which David owns. If Item 3 (IndeterminateRecord in the engine) or Item 2 (runtime binding) introduce new surfaces, those items should add their own leak tests.
+
+---
+
+## Surfaces covered (and their sweep coverage)
+
+| Surface | Test |
+|---------|------|
+| `mcp/authAttached` trace event (all fields) | `TestCredentialLeak_TraceEvent_NoTokenInAuthAttached` |
+| All trace events JSON-serialised | `TestCredentialLeak_SuccessPath_TokenNotOnAnyOutputSurface` |
+| `ToolResult.Stdout` | `TestCredentialLeak_SuccessPath_TokenNotOnAnyOutputSurface`, `TestCredentialLeak_TokenNotInStepOutput` |
+| `ToolResult.Stderr` | `TestCredentialLeak_SuccessPath_TokenNotOnAnyOutputSurface` |
+| `ToolResult` JSON | `TestCredentialLeak_TokenNotInStepOutput` |
+| `ToolResult.Output` map values | `TestCredentialLeak_SuccessPath_TokenNotOnAnyOutputSurface` |
+| Error from non-200 IMDS | `TestCredentialLeak_Non200IMDS_ErrorDoesNotLeakToken` |
+| Error from malformed JSON | `TestCredentialLeak_MalformedJSON_ErrorDoesNotLeakToken` |
+| Error from context cancellation | `TestCredentialLeak_ContextCancellation_ErrorDoesNotLeakToken` |
+| Error from MCP-012 host rejection | `TestCredentialLeak_MCP012_ErrorDoesNotLeakToken` |
+| Error after Invalidate + failing re-acquire | `TestCredentialLeak_Invalidate_DoesNotExposeToken` |
+| `IndeterminateRecord` JSON | `TestCredentialLeak_IndeterminateRecord_NoToken` |
+| `IndeterminateRecord.EndpointHost` string | `TestCredentialLeak_IndeterminateRecord_NoToken` |
+
+---
+
+# Decision Record: Phase 1B Items 5+B — Profileless Fail-Fast + --acknowledge-indeterminate
+
+**Date:** 2026-08-17  
+**Author:** David (Integration)  
+**Commit:** d1314cc  
+**Canonical ledger:** `.squad/decisions.md`
+
+---
+
+## Decision 1: Injectable TTY detection for test compatibility
+
+**Context:** The profileless non-interactive fail-fast check calls `isInteractiveTTY()`, which inspects `os.Stdin`. In `go test`, stdin is a pipe (non-TTY), so ALL existing profileless CLI tests would fail with the new check.
+
+**Decision:** Delegate `isInteractiveTTY()` to a package-level function variable `interactiveTTYDetect`. The production default (`defaultInteractiveTTYDetect`) reads `os.Stdin.Stat()`. `TestMain` in `cmd/gert/test_main_test.go` overrides it to `func() bool { return true }` for all tests. Only `TestCLI_Profileless_NonInteractive_FailFast` temporarily restores the false-returning stub.
+
+**Rejected alternative:** Adding `--profile` to every existing profileless test. Too wide, touches many files not owned by this agent, and obscures the purpose of those tests.
+
+**Invariant:** `interactiveTTYDetect` is unexported. It is a testing seam, not a public API. No code outside `run.go` and `*_test.go` reads it.
+
+---
+
+## Decision 2: Fail-fast fires before engine construction
+
+**Context:** The counterparty rejected "warn and continue" because a hung CI job is a real operational problem, not a cosmetic one.
+
+**Decision:** The check fires immediately after the profile loading block, before `adapter.BuildEngineConfig` is called. This means no goroutines are started, no approval gate is installed, and no resources are allocated before the fast exit.
+
+**Error format:**
+```
+error: non-interactive execution requires an unattended runtime profile
+fix: pass --profile <profile>
+```
+Exit code: `exitValidation` (2) — this is a configuration error, not a runtime failure.
+
+---
+
+## Decision 3: --acknowledge-indeterminate wired only to Resume
+
+**Context:** `engine.RunOptions.AcknowledgeIndeterminate` only matters for resume. A fresh `Start` cannot produce a prior INDETERMINATE state.
+
+**Decision:** The flag is parsed unconditionally but wired only in the `eng.Resume` call, not in `eng.Start`. The `eng.Start` call does not receive `AcknowledgeIndeterminate`; it would be dead. This matches Tess's engine design intent.
+
+---
+
+## Decision 4: Conformance harness gets an unattended profile, not a TTY stub
+
+**Context:** `internal/conformance/enum_harness.go` invokes `gert run` as a subprocess. Subprocesses always have non-TTY stdin. After the fail-fast check, the harness would fail on every invocation.
+
+**Decision:** Add `internal/conformance/testdata/unattended-test.profile.yaml` and have `NewEnumHarness` resolve and pass it via `--profile`. The profile declares `attendance: unattended` and allows all approval scopes, so no conformance vector's semantics change.
+
+**Verification:** Conformance counts before and after: **72 vectors / 62 pass / 10 skip / 0 fail** — identical.
+
+---
+
+## Decision 5: Reachability registry graduation in same commit
+
+**Context:** `ProfileToolOverride.Endpoint` was `statusKnownDead` with a note to graduate it after Item 2. Item 2 shipped in 85bfa4a; the registry wasn't updated in that commit.
+
+**Decision:** Graduate `ProfileToolOverride.Endpoint` to `statusReachable` in this commit (d1314cc) with probe `testCLI_ProfileToolOverrideEndpoint_Reachable` (PLAN-013 path: mcp-http tool + disallowed endpoint override → exitValidation). The probe fails if `effectiveURL = override.Endpoint` is removed from `runtime.go`.
+
 

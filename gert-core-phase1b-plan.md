@@ -1,9 +1,15 @@
-# Gert Core → SQL Live-Site Operations: Phase 1B Implementation Plan — Rev 2
+# Gert Core → SQL Live-Site Operations: Phase 1B Implementation Plan — Rev 3
 
 **Date:** 2026-08-17
-**Supersedes:** Rev 1 (2026-08-17, same file, preserved in git history)
+**Supersedes:** Rev 2 (2026-08-17, same file, preserved in git history)
 **From:** Barbara (Lead/Architect, Gert Core)
 **To:** SQL Live-Site Operations
+
+---
+
+## What Changed in Rev 3
+
+We withdrew the eight-artifact request (former §8) and split ownership of the contract proof. Gert core proves the *mechanism* with a synthetic fixture we own; SQL Live-Site proves their *exact contract* in their own repo. Item 4 is no longer externally blocked — it depends only on Item 2.
 
 ---
 
@@ -20,13 +26,13 @@ Correction 2 deserves specific acknowledgment: our Rev 1 proof targeted Gert's s
 | # | Correction | Accepted | What Changes | Evidence |
 |---|-----------|----------|--------------|----------|
 | 1 | Split managed-identity (IMDS) from workload-identity (federated) | Yes | Item 1 ships IMDS only; workload identity deferred to its agreed later phase. Estimate reduced to 1.5d. | `internal/tool/auth.go:29` — plain string switch, no ambient detection |
-| 2 | ICM proof targets the wrong contract | Yes | Item 4 rebuilt against `icm.get-incident` / `tsg-recommendation.recommend` with their typed outputs. Gated on artifact delivery. Estimate increased to 3d. | `tools/icm.tool.yaml` — different action names, no typed outputs |
+| 2 | ICM proof targets the wrong contract | Yes | Item 4 rebuilt as mechanism proof with synthetic fixture. Consumer contract proof owned by SQL Live-Site. | `tools/icm.tool.yaml` — different action names, no typed outputs |
 | 3 | Consumer classifications apply to their contract, not our sample | Yes | `icm.get-incident` → `read-only`; `tsg-recommendation.recommend` → `read-only`. Our sample tool classified separately. | Their explicit declaration |
 | 4 | Auth/endpoint override safety — four of six conditions already satisfied | Yes | Item 2 gains PLAN-013 same-commit constraint. +0.5d. TokenGate / `allowed_hosts` already complete. | `internal/tool/auth_gate.go:23,82`; `validate_transport.go:60-74`; `runtime.go:71-74` |
 | 5 | INDETERMINATE trace-safe evidence — seven fields absent | Yes | Item 3 gains `*IndeterminateRecord` struct with all seven fields. Estimate increased to 5.5-6d. | `pkg/engine/run.go:160-190` — existing `StepResult` lacks all seven |
 | 6 | Profileless non-interactive must fail fast in Phase 1B | Yes | New Item 5 added. Reversal of our deferral accepted. | `cmd/gert/run.go:166` — `TTYOutput: true` hardcoded; zero `isatty()` in codebase |
 | 7 | External production validation decoupled from mock proof | Yes | Live ICM validation is a separate integration gate they control. Mock proof is fully ours to deliver. | Removes external blocker on code-complete |
-| 8 | `--package-map` proven execution-wired; `--profile` is not | Yes | Item 4 hard-serial after Item 2 (profile must be execution-wired first). | `cmd/gert/packagemap_integration_test.go:23` — proves package-map wiring |
+| 8 | `--package-map` proven execution-wired; `--profile` is not | Yes | Item 4 hard-serial after Item 2 (profile must be execution-wired first). No external artifact gate. | `cmd/gert/packagemap_integration_test.go:23` — proves package-map wiring |
 
 ---
 
@@ -80,16 +86,16 @@ Chain is unbroken: `tools/icm.tool.yaml:31` → `def.Auth.AllowedHosts` → `New
 | **Estimate** | 5.5-6 days |
 | **Acceptance** | Vectors: {read-only, destructive, unspecified} x {timeout, network-error} with expected status, halt behavior, and all IndeterminateRecord fields populated. |
 
-### Item 4: ICM Contract Proof
+### Item 4: Dual-Binding Mechanism Proof + Contract Parity Harness
 
 | Aspect | Detail |
 |--------|--------|
-| **Ships** | (a) Runbook targeting `icm.get-incident` (hyphen, their contract) with typed outputs `title`, `service`, `environment`, `logical_server`, `database`. (b) Second runbook targeting `tsg-recommendation.recommend` with outcomes `suggested` / `no-suggestion`. (c) Mock MCP server implementing both contracts. (d) Cross-binding parity harness: same runbook under real and mock bindings, deep-compare structured outputs. |
-| **Contract source** | Their actual tool definitions and schema — NOT reconstructed from prose. |
+| **Ships** | (a) A synthetic two-tool fixture pair we own — deliberately NOT named after or copied from any consumer contract. One tool with a typed multi-field structured output (≥5 fields), one tool with two distinct outcome shapes. Structurally mirrors a realistic contract without encoding consumer-specific semantics. (b) Native/mock binding and `mcp-http` binding for the same logical tools, selected via `--package-map`. (c) `--profile` supplying managed identity + endpoint for the HTTP binding, composed with `--package-map` in the same invocation. (d) A contract-parity harness that runs the runbook under both bindings and deep-compares structured outputs (new infrastructure, ~1 day). (e) Assertion that the profile does NOT rewrite transport mode. (f) Both outcome paths exercised under both bindings. |
+| **Fixture design** | The fixture is shaped to exercise the same code paths a real multi-tool contract would: typed outputs requiring structural validation, branching outcomes requiring path coverage, and two distinct logical tools requiring package-map resolution. It is ours to maintain and evolves with Gert's binding infrastructure, not with any consumer's API. |
 | **`--package-map` usage** | Already execution-wired (`TestRun_PackageMap_RealVsMockBinding`, `cmd/gert/packagemap_integration_test.go:23`). Same tool name, `--package-map` selects binding without touching the runbook. |
-| **Dependencies** | **Serial after Item 2** (profile must be execution-wired for `--profile` to reach transport). **Gated on artifact delivery** (section 8). |
-| **Estimate** | 3 days (starts only after Item 2 ships AND artifacts arrive) |
-| **Acceptance** | Mock proof passes with correct typed outputs; parity harness validates output structure matches between bindings. |
+| **Dependencies** | **Serial after Item 2** (profile must be execution-wired for `--profile` to reach transport). No external artifact dependency. |
+| **Estimate** | 3 days (starts after Item 2 ships) |
+| **Acceptance** | Parity harness passes: structured outputs match between native-mock and mcp-http bindings. Both outcome paths covered. Profile does not rewrite transport mode. Composition of `--package-map` + `--profile` in a single invocation demonstrated. |
 
 ### Item 5: Profileless Non-Interactive Fail-Fast
 
@@ -110,14 +116,14 @@ Chain is unbroken: `tools/icm.tool.yaml:31` → `def.Auth.AllowedHosts` → `New
         |IMDS only |   |  Binding  |   |INDETERM. |   |Fail-fast |
         +----------+   +-----+-----+   +----------+   +----------+
                              |
-                             v (after Item 2 ships + artifacts arrive)
+                             v (after Item 2 ships)
                        +-----------+
                        |  Item 4   |
-                       | ICM proof |  3 days
+                       |Mech proof |  3 days
                        +-----------+
 ```
 
-Items 1, 2, 3, 5 parallelize. Item 6 starts after Item 1, fits within the parallel window. Item 4 is serial after Item 2, gated on artifacts.
+Items 1, 2, 3, 5 parallelize. Item 6 starts after Item 1, fits within the parallel window. Item 4 is serial after Item 2 only (no external gate).
 
 ---
 
@@ -167,35 +173,39 @@ Item 5 (fail-fast) affects the conformance harness. `internal/conformance/enum_h
 | 1: Managed Identity (IMDS) | 1.5 | Yes | — |
 | 2: Runtime Binding + PLAN-013 | 3.5-4.5 | Yes | — |
 | 3: INDETERMINATE + evidence | 5.5-6 | Yes | — |
-| 4: ICM contract proof | 3 | No | After Item 2 + artifacts |
+| 4: Dual-binding mechanism proof | 3 | No | After Item 2 |
 | 5: Profileless fail-fast | 1.5 | Yes | — |
 | 6: Credential-leak assertions | 1 | Yes | After Item 1 |
-| **Critical path** | **~9-10 days** | | Items 1,2,3,5 parallel (longest: Item 3 at 6d); Item 6 after Item 1 (fits within Item 3's window); Item 4 at 3d after Item 2 + artifacts |
+| **Critical path** | **~9 days** | | Items 1,2,3,5 parallel (longest: Item 3 at 6d); Item 6 after Item 1 (fits within Item 3's window); Item 4 at 3d after Item 2. If Item 2 finishes by day 4.5, Item 4 ends by day 7.5 — within Item 3's window. |
 
-Serial chain: Item 2 must ship before Item 4 can start. Item 4's 3 days begin only after artifacts arrive (section 8). If artifacts arrive before Item 2 completes, the critical path is Item 3's 6 days + Item 4's 3 days = 9 days. If artifacts arrive late, Item 4 slides accordingly. Item 6 (1 day) starts after Item 1 (1.5 days) and fits within the parallel window of Item 3.
+Serial chain: Item 2 must ship before Item 4 can start. No external artifact gate. Critical path is Item 3 at 6 days (Items 1, 2, 5, 6 all complete within that window; Item 4's 3 days begin after Item 2's ~4.5 days but finish by ~7.5 days, still within the 9-day envelope if Item 3 takes the full 6 days plus buffer).
 
 Production ICM validation: separate integration gate controlled by them (correction 7). Not included in this estimate.
 
 ---
 
-## 8. BLOCKING ARTIFACT REQUEST
+## 8. Ownership Split and What We Need From You
 
-**Item 4 cannot start without the following eight artifacts.** This is a hard precondition.
+### The boundary
 
-| # | Artifact | Purpose |
-|---|----------|---------|
-| 1 | `icm.get-incident` tool definition (YAML or equivalent) with typed output schema (`title`, `service`, `environment`, `logical_server`, `database`) | Contract we are proving against |
-| 2 | `tsg-recommendation.recommend` tool definition with outcome schema (`suggested`, `no-suggestion`) | Second contract in the proof |
-| 3 | A runbook (or runbook fragment) that exercises both tools in their intended sequence | Ensures our proof runs the same workflow they run |
-| 4 | The `--package-map` binding entry for their mock server, including the explicit schema the mock must implement | Correct mock construction. We will not infer schema from prose. |
-| 5 | Expected structured output examples for both tools (at least one success case each) | Parity assertion targets |
-| 6 | Their runtime profile for headless/CI execution (or the relevant fields: provider, endpoint, attendance) | End-to-end binding validation |
-| 7 | Transport mode for each tool in their production binding (`mcp-stdio` vs `mcp-http`) | Determines whether the HTTP proof needs a separate contract-identical `mcp-http` binding selected through package-map, with the profile not rewriting transport mode |
-| 8 | Whether their runbook uses `toolRefs:` with package names or bare file-path references | Determines whether package-map substitution applies to their runbook as written |
+Gert core does not take a dependency on a consumer repo. This is the same boundary established in round 1 when `run-gert.ps1` was identified as a `gert-sqllivesite` artifact, not Gert core — the ask was corrected on that basis. Importing your ICM contract into Gert would mean our test suite breaks when your contract changes, our CI requires your fixtures, and Gert core encodes incident-management semantics it has no business knowing. That is backwards.
 
-**Why we will not reconstruct from prose:** Guessing a contract schema from description is exactly how a proof validates the wrong thing — this is the error correction 2 caught. We will build the proof against their actual definitions or not at all. This includes mock schema (artifact 4) — if they cannot supply the package-map entry, we need their explicit schema delivered, not permission to infer it.
+### Ownership table
 
-**Delivery options:** Repo access to `gert-sqllivesite` (not currently available on this machine — confirmed absent from `C:\One\OpenSource\`), or the eight files sent directly. Either works; please advise which you prefer.
+| Owner | Proves | Where |
+|---|---|---|
+| **Gert core** | The *mechanism*: `--package-map` + `--profile` compose at execution; both a native/mock binding and an `mcp-http` binding resolve for the same logical tool; contract parity holds across bindings; managed identity attaches to the HTTP binding; transport mode is never rewritten by the profile. Proven with a **synthetic contract-shaped fixture we own**. | `gert` repo |
+| **SQL Live-Site** | Your *actual* contract — `icm.get-incident` and `tsg-recommendation.recommend`, the real `icm-tsg-router.runbook.yaml`, both recommendation outcomes — passes under both bindings, using Gert as a dependency. | `gert-sqllivesite` repo |
+
+### What we need — two confirmations, no files
+
+1. **Confirm the production transport mode** for each of `icm.get-incident` and `tsg-recommendation.recommend` (`mcp-stdio` or `mcp-http`). This determines whether the HTTP proof needs a separate contract-identical `mcp-http` binding selected through package-map — which is what you told us in correction 2.
+
+2. **Confirm you will own the consumer-side contract proof in `gert-sqllivesite`**, and tell us what you need from Gert to write it. We can provide documentation, a worked example, or export the contract-parity harness (Item 4) as a reusable helper if that would be useful.
+
+### Withdrawal
+
+We withdraw the request for repo access to `gert-sqllivesite` and the eight artifacts listed in Rev 2 §8. The reason is architectural: Gert core must not encode or depend on consumer-specific contracts. Your contract is yours to own and prove.
 
 ---
 
@@ -210,8 +220,8 @@ Their verbatim acceptance criteria, mapped to the item that satisfies each:
 | 1 | managed identity and workload identity are not ambiguously combined | Item 1 | Correction 1 accepted: IMDS only, workload identity deferred. No ambient detection, no fallback between them. |
 | 2 | profile/provider/endpoint compatibility fails closed | Item 2 (PLAN-013) | Endpoint-vs-allowed_hosts validated at preflight; unknown provider → parse error; same-commit constraint. |
 | 3 | endpoint overrides respect `allowed_hosts` | Item 2 (PLAN-013) + section 3 (already satisfied) | TokenGate enforcement already shipped (`auth_gate.go:82`). PLAN-013 adds preflight check. |
-| 4 | the exact SQL Live-Site contract passes native-mock and managed-identity HTTP bindings | Item 4 | Gated on artifacts (section 8). Built against their definitions, not our sample. |
-| 5 | package-map/profile composition is demonstrated | Item 4 | The proof exercises both flags *together*: `--package-map` selects the mock binding, `--profile` selects managed-identity + endpoint. Composition, not independent use. |
+| 4 | the exact SQL Live-Site contract passes native-mock and managed-identity HTTP bindings | **Jointly owned** — Item 4 (Gert) + consumer proof (SQL Live-Site) | Gert proves the mechanism with a synthetic fixture; SQL Live-Site proves their exact contract in `gert-sqllivesite`. Neither team alone covers this criterion. |
+| 5 | package-map/profile composition is demonstrated | Item 4 | The proof exercises both flags *together*: `--package-map` selects the binding, `--profile` selects managed-identity + endpoint. Composition, not independent use. |
 | 6 | INDETERMINATE state and acknowledgment are tested | Item 3 | Vectors cover timeout/network-error × classification; `--acknowledge-indeterminate` gate tested. |
 | 7 | profileless non-interactive execution fails immediately | Item 5 | Stdlib TTY detection; hard error before side effects. |
 | 8 | no credential appears in runbook state, results, traces, or errors | **Item 6 (NEW)** | **Not previously covered.** See Item 6 below. |
@@ -246,4 +256,4 @@ Their verbatim acceptance criteria, mapped to the item that satisfies each:
 
 ---
 
-*End of plan. Artifact delivery method and timeline requested.*
+*End of plan. Two confirmations requested (section 8).*

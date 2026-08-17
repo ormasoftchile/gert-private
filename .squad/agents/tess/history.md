@@ -111,3 +111,29 @@ filed). The existing `TV-ENUM-*` harness (enum_harness.go) runs CONFORM-CROSSCUT
 modification — the harness dispatches on expected shape, not category.
 
 **Count:** 71 vectors total (58 original + 13 new). 60 passed, 11 skipped (named reasons), 0 failed.
+## Learnings — 2026-08-17 — Barbara ruling on GOV-004, GOV-009/010 feedback
+
+**TTYOutput: true is hardcoded in the CLI; the NoOp hypothesis was wrong.** Barbara's ruling
+predicted the harness might get NoOpApprovalGate (TTYOutput:false) and auto-approve, but
+`cmd/gert/run.go` hardcodes `TTYOutput: true` → TerminalApprovalGate is ALWAYS used in the
+subprocess. When the harness runs with stdin=devnull, the terminal gate prompts then exits 3.
+The fix was to recast GOV-004 to prove schema-acceptance (via toolRefs parsing) without
+execution (no tool step → no approval gate invocation). Lesson: empirically verify runtime
+behavior before claiming "the harness auto-approves."
+
+**GOV-009/010 orthogonality vectors: partial coverage acknowledged.** Barbara correctly noted
+these vectors prove the combination is schema-valid and executes, but would NOT catch a silent
+routing coercion in ProfileEvaluator (harness runs without a profile). The claim "this vector
+would FAIL if anyone derives classification from requires-approval" needed narrowing: it would
+catch a *schema-level rejection*, not a silent evaluator detour. Vectors are correct for what
+they prove; the claim in notes was overclaimed. Going forward: when asserting a vector guards
+an invariant, identify exactly what code change would make it red.
+
+**Classification validation IS enforced at catalog-load time.** GOV-014 passes with PKG-010.
+This means Q2 (requesting a new TOOL-PARSE error class) is moot for this specific case — the
+catalog's ParseToolFile wrapping is the enforcement point and PKG-010 is the appropriate code.
+
+**Pre-staged files in the git index are a hazard.** The in-flight 130 uncommitted files included
+staged (git-add'd but not committed) files in the index. Running `git commit` would have picked
+them up. Always verify `git diff --cached --name-only` immediately before `git commit` to confirm
+only your files are staged. Unstage with `git restore --staged -- <path>` if needed.

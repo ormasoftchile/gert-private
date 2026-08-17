@@ -1,0 +1,834 @@
+% ─────────────────────────────────────────────────────────────────────────────
+%  §17  Runtime Profiles and Execution Context
+%
+%  Status: NORMATIVE SPECIFICATION — design agreed 2026-08-17 between
+%          Gert Core Team and SQL Live-Site Operations (gert-sqllivesite).
+%          Source of truth: .squad/decisions.md (Rev 4 Final Acknowledgment,
+%          Barbara arch-eval 2026-08-16, David integration-critique 2026-08-16,
+%          Don ground-truth 2026-08-16 and Slice-1 report 2026-08-17,
+%          Ken Slice-2 report 2026-08-17).
+%
+%  This section is a deliverable for the SQL Live-Site Operations team.
+%  They MUST NOT annotate tool definitions with AllowedEnvironments values
+%  until §\ref{sec:rp-context-vocab} is published.
+%
+%  Implementation status of every normative claim is marked explicitly:
+%    [IMPL]   — implemented and wired in production as of 2026-08-17.
+%    [SPEC]   — specified here but not yet implemented or enforced.
+%               An external team reading this section MUST treat [SPEC]
+%               items as design commitments, not current behavior.
+%
+%  The key words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD,
+%  SHOULD NOT, RECOMMENDED, MAY, and OPTIONAL are used in the RFC 2119
+%  sense throughout this section.
+% ─────────────────────────────────────────────────────────────────────────────
+
+\chapter{Runtime Profiles and Execution Context}
+\label{ch:runtime-profiles}
+
+A \emph{runtime profile} is a named, versioned YAML document that parameterizes
+how a Gert run executes after the tool-definition binding phase is complete.
+It declares the execution context (which class of host the run occurs on),
+the attendance mode (whether an active approver is present), the approval
+scope, transport opt-ins, and per-tool endpoint overrides.
+
+This chapter defines the profile document schema (\S\ref{sec:rp-schema}),
+the closed vocabulary of context identifiers (\S\ref{sec:rp-context-vocab}),
+attendance declaration (\S\ref{sec:rp-attendance}), profile flatness
+(\S\ref{sec:rp-flatness}), the composition of profiles with the
+package-map mechanism (\S\ref{sec:rp-composition}), action classification
+(\S\ref{sec:rp-classification}), the orthogonality of approval and
+classification (\S\ref{sec:rp-approval-classification}), governance
+composition rules (\S\ref{sec:rp-governance-composition}),
+test-context transport rules (\S\ref{sec:rp-test-transport}),
+tiered preflight (\S\ref{sec:rp-preflight}), and the current
+implementation status (\S\ref{sec:rp-impl-status}).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Profile Document Schema}
+\label{sec:rp-schema}
+% ─────────────────────────────────────────────────────────────────────────────
+
+A runtime profile document MUST conform to the following shape:
+
+\begin{minted}{yaml}
+apiVersion: runtime-profile/v1
+id: <profile-id>
+context: <one of five values; see §17.2>
+attendance: attended | unattended
+approval:
+  scope:
+    allow_read: bool
+    allow_mutating: bool
+    allow_destructive: bool
+  legacy_unspecified_policy: allow | prompt
+transport:
+  allow_subprocess_in_test: bool
+tools:
+  <tool-id>:
+    endpoint: <url>
+\end{minted}
+
+\subsection{Field-by-Field Rules}
+
+\paragraph{\texttt{apiVersion}.} MUST be the literal string
+\texttt{runtime-profile/v1}. A document whose \texttt{apiVersion} is absent or
+does not match this value MUST be rejected at parse time.
+
+\paragraph{\texttt{id}.} A non-empty string that uniquely identifies the profile
+within the project.  [SPEC]
+
+\paragraph{\texttt{context}.} REQUIRED.  One of the five canonical values defined
+in \S\ref{sec:rp-context-vocab}.  A profile whose \texttt{context} field is absent
+or holds an unrecognized value MUST be rejected at parse time.  [SPEC]
+
+\paragraph{\texttt{attendance}.} REQUIRED.  One of \texttt{attended} or
+\texttt{unattended}.  Attendance MUST NOT be inferred from ambient state such as
+TTY presence, the value of \texttt{CI} environment variables, or any other runtime
+signal.  It MUST be declared explicitly in the profile.  See
+\S\ref{sec:rp-attendance}.  [SPEC]
+
+\paragraph{\texttt{approval.scope}.} Controls which action classifications the
+profile permits.  All three sub-fields are boolean.  Absent means \texttt{false}.
+[SPEC]
+
+\paragraph{\texttt{approval.legacy\_unspecified\_policy}.} Controls the migration
+UX for actions whose \texttt{classification} and \texttt{requires-approval}
+fields are both unspecified. \texttt{allow} suppresses the migration PROMPT only.
+It MUST NOT relax retry, idempotency, or late-result behavior.  See
+\S\ref{sec:rp-approval-classification}.  [SPEC]
+
+\paragraph{\texttt{transport.allow\_subprocess\_in\_test}.} Boolean; default
+\texttt{false}.  Governs MCP subprocess transport in the \texttt{test} context.
+See \S\ref{sec:rp-test-transport}.  [SPEC]
+
+\paragraph{\texttt{tools.<tool-id>.endpoint}.} Per-tool endpoint override.  A
+profile MAY override the endpoint URL for a named tool.  A profile MUST NOT
+override the transport mode (see \S\ref{sec:rp-composition}).  [SPEC]
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Execution Context Vocabulary}
+\label{sec:rp-context-vocab}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Canonical Context Identifiers}
+\label{subsec:rp-context-values}
+
+The set of valid \texttt{context} values is \textbf{closed}.  There are exactly
+five.  Implementations MUST NOT accept any value not in this set.
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Value} & \textbf{Meaning} \\
+\midrule
+\texttt{cli-operator}     & Interactive terminal session driven by a human operator \\
+\texttt{vscode-operator}  & VS Code host (human-driven or autonomous agent in VS Code) \\
+\texttt{ci}               & Continuous-integration pipeline \\
+\texttt{headless-server}  & Autonomous server process (daemon, job, background agent) \\
+\texttt{test}             & Local test execution \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent These values describe the \textbf{execution host} only.  They MUST NOT
+encode:
+\begin{itemize}[noitemsep]
+  \item incident state (e.g., ``this is a live-site incident'');
+  \item approval policy (e.g., ``approval required''); or
+  \item attendance mode (e.g., ``a human is watching'').
+\end{itemize}
+
+Approval policy and attendance are declared as separate top-level fields (see
+\S\ref{sec:rp-schema} and \S\ref{sec:rp-attendance}).
+
+\subsection{Correspondence with \texttt{AllowedEnvironments}}
+\label{subsec:rp-allowed-environments}
+
+\textbf{Answer to counterparty question (SQL Live-Site Operations, 2026-08-17):}
+The value populated in a tool definition's \texttt{AllowedEnvironments} field
+MUST correspond to one or more of the canonical context identifiers defined in
+\S\ref{subsec:rp-context-values}.  Specifically:
+
+\begin{quote}
+  The \texttt{AllowedEnvironments} value on a tool definition corresponds to the
+  \texttt{context} field of the selected runtime profile.  A Tier~0 preflight
+  check (see \S\ref{sec:rp-preflight}) fires the error code
+  \texttt{config/no-binding-for-profile} when the active profile's context is
+  not listed in the tool's \texttt{AllowedEnvironments}.
+\end{quote}
+
+\noindent This is a normative requirement, not a convention.  Tool definitions MUST
+use the identifiers from \S\ref{subsec:rp-context-values} verbatim — no aliases,
+no compound values, no free-form strings.
+
+\begin{tcolorbox}[colback=yellow!10, colframe=orange!60, title=Implementation Status]
+  \texttt{AllowedEnvironments} is declared in the schema
+  (\texttt{pkg/schema/tool.go}).  Runtime enforcement is \textbf{not yet wired}.
+  The Tier~0 preflight that evaluates this field against the active profile's
+  context is specified here and will land in Phase~1.  [SPEC]
+\end{tcolorbox}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Attendance Declaration}
+\label{sec:rp-attendance}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Attendance is the property that governs whether an active human approver is
+present during execution.  It is \textbf{orthogonal} to context.
+
+\begin{itemize}[noitemsep]
+  \item \texttt{context: vscode-operator} with \texttt{attendance: unattended}
+        is a valid and meaningful combination.  It describes an autonomous agent
+        process running inside the VS Code host with no human monitoring the
+        approval queue.
+  \item \texttt{context: cli-operator} with \texttt{attendance: unattended}
+        is also valid.  It describes a script running in a terminal that nobody
+        is actively watching.
+\end{itemize}
+
+\textbf{Operator contexts MUST NOT auto-imply attended.}  A profile whose
+\texttt{context} is \texttt{cli-operator} or \texttt{vscode-operator} and whose
+\texttt{attendance} field is absent MUST be rejected; the field is required (see
+\S\ref{sec:rp-schema}).
+
+\textbf{Edge cases (normative):}
+
+\begin{itemize}[noitemsep]
+  \item A profile that declares \texttt{attendance: attended} when no TTY is
+        available MUST fail at Tier~0 preflight with error code
+        \texttt{config/attendance-mismatch}.  A profile that promises an
+        approver who cannot be reached is a configuration error, not a
+        runtime transient.  [SPEC]
+  \item A profile that declares \texttt{attendance: unattended} with
+        \texttt{context: cli-operator} is legal.  It receives unattended
+        governance rules.
+\end{itemize}
+
+\begin{tcolorbox}[colback=blue!5, colframe=blue!40, title=Non-Normative Note — Current Behavior]
+  Current Gert (as of commit \texttt{c810b96}) infers attendance from
+  \texttt{TTYOutput}, which is hardcoded to \texttt{true} in
+  \texttt{cmd/gert/run.go}.  No \texttt{isatty()} call is made.  As a result,
+  any pipeline job that triggers an approval gate will block on stdin
+  indefinitely.  This is a known latent bug; profile-declared attendance
+  replaces TTY inference and is the fix.  Until profile-driven attendance is
+  implemented ([SPEC]), any tool that declares
+  \texttt{requires-approval: true} MUST NOT be used in unattended contexts.
+\end{tcolorbox}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Profile Flatness}
+\label{sec:rp-flatness}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Runtime profiles are flat.  A profile document MUST NOT contain an
+\texttt{extends}, \texttt{inherit}, \texttt{parent}, or any other field that
+causes values to be merged from another profile document at load time.
+
+Per-tool overrides within a single profile document are permitted (see
+\S\ref{sec:rp-schema}, \texttt{tools.<tool-id>.endpoint}).  These are
+overrides within the same document, not cross-document inheritance.
+
+The rationale for this constraint is auditability: the effective configuration
+of any run MUST be readable from a single document without recursive
+resolution.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Profile and Package-Map Composition}
+\label{sec:rp-composition}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Gert accepts two flags that govern tool binding:
+
+\begin{itemize}[noitemsep]
+  \item \texttt{--package-map}: governs \textbf{which tool-definition file
+        (YAML)} is loaded for each \texttt{toolRef}.  It operates at the
+        catalog/registry layer.  It determines which
+        \texttt{*.tool.yaml} on disk backs each logical tool name.
+  \item \texttt{--profile}: parameterizes execution \textbf{after} YAML
+        selection: context, attendance, endpoint URLs, authentication, and
+        per-tool endpoint overrides within the selected tool definitions.
+\end{itemize}
+
+These two mechanisms compose; they do not compete.  The composition rules are:
+
+\begin{enumerate}
+  \item \texttt{--package-map} wins at the YAML-selection layer.  It
+        determines which tool-definition file backs each \texttt{toolRef}.
+        The profile's transport configuration is applied to the
+        \textbf{already-selected} (post-package-map) tool definition.
+
+  \item The profile-aware binding resolver MUST consume
+        \texttt{plan.Tools} — the post-catalog, post-package-map resolved
+        tool set — as its input.  It MUST NOT re-resolve \texttt{toolRef}
+        declarations independently.  A mismatch between the resolved
+        tool-definition's transport mode and the profile's transport
+        requirements MUST be surfaced as a Tier~0 error (see
+        \S\ref{sec:rp-preflight}); it MUST NOT be silently overridden.
+        [SPEC]
+
+  \item A profile MUST NOT silently rewrite a tool definition's transport
+        mode.  Different physical implementations (e.g., a mock subprocess
+        and a production HTTP endpoint) are separate tool definitions
+        selected via \texttt{--package-map}.
+
+  \item If \texttt{--package-map} redirects a \texttt{toolRef} to a mock
+        package (transport mode: \texttt{native}) while the active profile
+        expects \texttt{mcp-http}, the Tier~0 check reports
+        \texttt{config/no-binding-for-profile}.  This is the correct
+        behavior: the operator explicitly composed incompatible choices.
+\end{enumerate}
+
+\begin{tcolorbox}[colback=blue!5, colframe=blue!40, title=Non-Normative Note — Current State]
+  \texttt{--package-map} is implemented and wired.  [IMPL].  The
+  profile-aware binding resolver described in rules (2)–(4) is not yet
+  implemented.  [SPEC]
+\end{tcolorbox}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Action Classification}
+\label{sec:rp-classification}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Governing Principle}
+
+\begin{tcolorbox}[colback=red!5, colframe=red!50, title=Governing Principle — Classification]
+  Classification is an \textbf{opt-in to reduced friction}.  Absence of a
+  classification value MUST NEVER grant additional execution rights, enable
+  automatic retry, or relax late-result handling.  Conservative behavior is
+  always the default.
+\end{tcolorbox}
+
+\noindent This principle applies without exception.  Any implementation that
+provides additional permissions or relaxes safety constraints in the absence of a
+classification value violates this specification.
+
+\subsection{Field Location and Type}
+
+Classification is a \textbf{per-action} field on \texttt{ToolAction}, not a
+per-tool field on \texttt{ToolGovernance}:
+
+\begin{minted}{go}
+// pkg/schema/tool.go
+type ToolAction struct {
+    // ...
+    Classification *string `yaml:"classification,omitempty" json:"classification,omitempty"`
+}
+\end{minted}
+
+A pointer type is used so that absence (\texttt{nil}) is distinguishable from
+the explicit value \texttt{"unspecified"}.  [IMPL]
+
+\subsection{Valid Classification Values}
+
+The set of valid classification values is closed.  Implementations MUST reject
+any value not in this set at parse time.  The validation check
+\texttt{validateActionClassifications()} in \texttt{internal/tool/scan.go}
+enforces this.  [IMPL]
+
+\begin{center}
+\begin{tabular}{lp{9.5cm}}
+\toprule
+\textbf{Value} & \textbf{Meaning} \\
+\midrule
+\texttt{read-only}    & The action has no side effects observable outside the
+                         calling context.  Retry is PERMITTED only when the
+                         action is also marked explicitly idempotent
+                         (see \S\ref{sec:rp-late-result}). \\
+\texttt{mutating}     & The action changes external state in a reversible or
+                         non-destructive manner. \\
+\texttt{destructive}  & The action deletes, overwrites, or permanently alters
+                         external state. \\
+\texttt{unspecified}  & Explicit declaration that the classification is not
+                         known.  This is a permanent classification, not a
+                         transitional placeholder.  It receives the same
+                         conservative handling as absent. \\
+\midrule
+\emph{absent (nil)}   & Treated identically to \texttt{unspecified}. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent \textbf{\texttt{unspecified} is permanent, not transitional.}  Authors
+who cannot determine whether an action is safe to retry MUST use
+\texttt{unspecified} or leave the field absent.  Neither value implies that the
+author intends to add classification later.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Approval and Classification Are Orthogonal}
+\label{sec:rp-approval-classification}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{tcolorbox}[colback=red!5, colframe=red!50, title=Most Important Section]
+  Approval and classification answer different questions and MUST NOT be derived
+  from each other.  This section encodes the correction accepted from SQL
+  Live-Site Operations in Round~4 of the design negotiation.
+\end{tcolorbox}
+
+\paragraph{\texttt{requires-approval} answers:} Is active approval required
+before this action is invoked?
+
+\paragraph{\texttt{classification} answers:} What are this action's side effects,
+and is automatic retry or late-result handling safe?
+
+\noindent These are independent properties.  A legacy action MAY suppress
+approval while being mutating or destructive.  A read-only action MAY require
+approval for audit purposes.
+
+\subsection{The \texttt{requires-approval} Tri-State}
+\label{subsec:rp-tristate}
+
+\texttt{ToolGovernance.RequiresApproval} is a pointer to bool (\texttt{*bool}).
+[IMPL]
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Go value} & \textbf{YAML}                     & \textbf{Meaning} \\
+\midrule
+\texttt{nil}      & absent, or governance block present but field not authored
+                  & Unspecified — approval routing defers to context rules \\
+\texttt{\&false}  & \texttt{requires-approval: false}
+                  & Explicit legacy approval opt-out \\
+\texttt{\&true}   & \texttt{requires-approval: true}
+                  & Approval required \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent Prior to commit \texttt{a2e7db0}, \texttt{RequiresApproval} was a
+plain \texttt{bool}.  This made \texttt{nil} (unspecified) and \texttt{\&false}
+(explicit opt-out) indistinguishable after YAML unmarshal.  The pointer change
+corrects this.
+
+\subsection{Non-Coercion Rule}
+
+\texttt{requires-approval: false} (\texttt{\&false}) MUST NEVER assign, imply,
+or coerce \texttt{classification: read-only}.
+
+\textbf{Rationale:} The Gert Core Team accepted the following correction from
+SQL Live-Site Operations (Round~1, 2026-08-17): an earlier Rev~3 draft stated
+that explicit \texttt{requires-approval: false} was ``equivalent to
+\texttt{classification: read-only}.''  That statement was wrong.  Coercing
+\texttt{\&false} to \texttt{read-only} would have granted retry eligibility and
+read-only late-result handling to actions that may be destructive — a safety
+regression.
+
+\textbf{Published semantics for the combination
+\texttt{RequiresApproval = \&false, Classification = nil}:}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Dimension} & \textbf{Behavior} \\
+\midrule
+Approval routing    & Legacy opt-out preserved; gate does not fire. \\
+Classification      & Remains \texttt{unspecified}. \\
+Retry               & MUST NOT retry automatically. \\
+Late/lost result    & INDETERMINATE; halt; require verification. \\
+\texttt{legacy\_unspecified\_policy: allow} &
+    Suppresses migration prompts only.  MUST NOT relax retry,
+    idempotency, or late-result behavior. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Behavior of \texttt{unspecified} by Context}
+\label{subsec:rp-unspecified-by-context}
+
+When \texttt{classification} is \texttt{nil} or \texttt{"unspecified"}, the
+following rules govern invocation:
+
+\begin{center}
+\begin{longtable}{p{4.5cm}p{9cm}}
+\toprule
+\textbf{Context / situation} & \textbf{Normative behavior} \\
+\midrule
+Interactive operator (attended) &
+    Approval gate fires; active confirmation REQUIRED before invocation. \\
+CI / headless (unattended) &
+    Invocation is DENIED unless explicitly permitted by
+    \texttt{legacy\_unspecified\_policy: allow} in the profile. \\
+Test &
+    Auto-approve, but only for deterministic transport bindings
+    (see \S\ref{sec:rp-test-transport}). \\
+Retry after failure &
+    MUST NOT retry automatically; regardless of context. \\
+Lost or late result &
+    Mark INDETERMINATE; halt; require operator verification. \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Late and Lost Result Semantics by Classification}
+\label{sec:rp-late-result}
+% ─────────────────────────────────────────────────────────────────────────────
+
+When a response is not received within the expected window (transport timeout,
+disconnection, or process crash), the following rules apply per classification:
+
+\begin{center}
+\begin{longtable}{p{3cm}p{10cm}}
+\toprule
+\textbf{Classification} & \textbf{Normative behavior} \\
+\midrule
+\texttt{read-only} &
+    Retry is PERMITTED only when the action is explicitly marked idempotent
+    (step-level \texttt{retry.idempotent: true}).  If not marked idempotent,
+    fail normally — do not retry. \\
+\texttt{mutating} &
+    Mark INDETERMINATE; halt; require operator verification.
+    MUST NOT retry automatically. \\
+\texttt{destructive} &
+    Mark INDETERMINATE; halt; require operator verification.
+    MUST NOT retry automatically. \\
+\texttt{unspecified} \emph{or absent} &
+    No automatic retry.  If completion cannot be established, halt
+    and require operator verification. \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\noindent \texttt{RequiresApproval} has no bearing on any of these rules.
+Retry and late-result behavior are derived solely from \texttt{classification}
+and the step-level \texttt{retry} block.  No code path in the current
+implementation couples these two properties; the orthogonality is structural
+(they inhabit separate types: \texttt{ToolGovernance} and
+\texttt{ToolAction} respectively).  [IMPL — structural guarantee; runtime
+enforcement of these halt rules is [SPEC].]
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Runbook-Level vs.\ Per-Action Governance}
+\label{sec:rp-governance-composition}
+% ─────────────────────────────────────────────────────────────────────────────
+
+A runbook MAY declare a top-level \texttt{governance.require\_approval} field.
+The following rules govern how runbook-level and per-action governance compose.
+
+\begin{enumerate}
+  \item Runbook-level \texttt{require\_approval} gates the entire run
+        uniformly.  It applies to all steps unless overridden at the per-action
+        level.
+
+  \item Composition is \textbf{monotone-increasing}.  Runbook-level
+        \texttt{require\_approval: false} MUST NOT override or suppress a
+        per-action \texttt{requires-approval: true}.
+
+  \item Formally, the effective approval requirement for a step is:
+
+        \[
+          \textit{effective} = \textit{runbook\_level} \;\lor\;
+          \textit{tool\_level}
+        \]
+
+        Because this is a logical OR, the result can only increase.  Once
+        either side requires approval, the effective decision is ``required.''
+
+  \item A runbook-level \texttt{require\_approval} MUST NEVER override or
+        suppress per-action classification or per-action late-result behavior.
+        Classification is an action-level property and is not influenced by
+        runbook-level governance.
+\end{enumerate}
+
+\paragraph{Implementation.} Monotone composition is implemented at two sites:
+\begin{itemize}[noitemsep]
+  \item \texttt{pkg/pkgsubst/pkgsubst.go}:
+        \verb|eff.RequireApproval = eff.RequireApproval || subRequireApproval|
+        on the substitution path.  [IMPL]
+  \item \texttt{internal/governance/builder.go:BuildPolicy()}: only ever sets
+        \texttt{requireApproval = true}, never resets it to \texttt{false}.
+        [IMPL]
+  \item \texttt{internal/governance/evaluator.go}: evaluates
+        \texttt{e.requireApproval || step.ToolRequiresApproval}.  [IMPL]
+\end{itemize}
+
+Test \texttt{TestApproval\_RunbookFalseCannotSuppressToolTrue} demonstrates
+that a runbook with \texttt{require\_approval: false} does not suppress a tool
+with \texttt{requires-approval: true}.  [IMPL]
+
+\begin{tcolorbox}[colback=blue!5, colframe=blue!40,
+  title=Non-Normative Note — Profile-Driven Approval Gate]
+  The current approval gate is selected from TTY state, not from the declared
+  profile.  A profile-driven approval gate (one that consults
+  \texttt{attendance} and \texttt{approval.scope} from the profile document)
+  is specified here but not yet implemented.  [SPEC]
+\end{tcolorbox}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Test-Context Transport Rules}
+\label{sec:rp-test-transport}
+% ─────────────────────────────────────────────────────────────────────────────
+
+When the active profile's \texttt{context} is \texttt{test}, the following
+transport rules apply at Tier~0 preflight (see \S\ref{sec:rp-preflight}).
+
+\begin{center}
+\begin{longtable}{p{3cm}p{10cm}}
+\toprule
+\textbf{Transport mode} & \textbf{Rule in \texttt{test} context} \\
+\midrule
+\texttt{native} &
+    Always allowed.  No profile opt-in required. \\
+\texttt{mcp} (subprocess) &
+    Blocked by default.  Allowed only with
+    \texttt{transport.allow\_subprocess\_in\_test: true} explicitly set
+    in the profile. \\
+\texttt{mcp-http} &
+    Never allowed.  No override exists.  This prohibition is
+    technically enforced at Tier~0 (static check); it cannot be
+    bypassed by any profile field. \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{Subprocess Opt-In: Governance Assertion, Not Technical Sandbox}
+\label{subsec:rp-subprocess-assertion}
+
+Setting \texttt{transport.allow\_subprocess\_in\_test: true} is an
+\textbf{auditable governance assertion} by the profile author, not a technical
+sandbox guarantee.
+
+The profile author asserts, by setting this field, that the named subprocess
+command is a hermetic test double and will not contact production systems or
+produce irreversible side effects.
+
+\textbf{Gert does not enforce isolation.}  Specifically:
+\begin{itemize}[noitemsep]
+  \item No Linux namespace isolation (\texttt{SysProcAttr.Cloneflags} is not
+        set).
+  \item No seccomp filter.
+  \item No network restriction.
+  \item No working-directory jail.
+  \item No environment scrubbing: the subprocess inherits the full parent
+        process environment unconditionally
+        (\texttt{mergeEnv()} prepends \texttt{os.Environ()} before
+        appending tool-specific variables).
+\end{itemize}
+
+The subprocess sees everything the Gert process sees.  This behavior is
+confirmed in \texttt{internal/tool/process.go:StartProcess()}.  [IMPL]
+
+By contrast, the \texttt{mcp-http} prohibition in \texttt{test} context
+\textbf{is} technically enforced at Tier~0: the static check fires before any
+process is started or any network call is made.
+
+The rationale for the subprocess escape hatch: a hermetic local MCP server
+(e.g., a fake binary producing deterministic responses) is a legitimate pattern
+for integration-testing the MCP transport layer.  Banning subprocess entirely
+in \texttt{test} context would foreclose that pattern.  The opt-in is explicit,
+named, and appears in the profile, making its use auditable.  HTTP endpoints
+have no such legitimate test use case at the Gert layer and are banned
+unconditionally.
+
+\paragraph{Error codes.}
+
+\begin{center}
+\begin{tabular}{lp{9cm}}
+\toprule
+\textbf{Code} & \textbf{Message conditions} \\
+\midrule
+\texttt{config/test-context-non-native-binding}
+  & Fires for any non-native, non-opted-in transport in a test-context
+    profile.  The \texttt{mcp-http} variant cannot be overridden; the
+    \texttt{mcp} variant is suppressible with
+    \texttt{allow\_subprocess\_in\_test: true}. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Tiered Preflight}
+\label{sec:rp-preflight}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Preflight validation is divided into three tiers.  Higher tiers require
+additional I/O; lower tiers are always required.
+
+\subsection{Tier~0 — Static / Offline (Mandatory)}
+\label{subsec:rp-preflight-t0}
+
+Tier~0 performs pure config-graph traversal with \textbf{zero I/O}: no
+network calls, no subprocess execution, no credential operations, no
+filesystem reads beyond the already-loaded plan.  Tier~0 MUST execute before
+every run.  It is not optional and cannot be skipped.
+
+Tier~0 MUST be able to answer the question ``can this runbook run in this
+context?'' with no credentials and no network access.
+
+The following checks constitute Tier~0:
+
+\begin{enumerate}
+  \item Every \texttt{toolRef} resolves to a \texttt{tool.yaml} in a loaded
+        package (existing PLAN-010 gate).  [IMPL]
+  \item The resolved tool's \texttt{transport.mode} has a binding entry in
+        the active runtime profile.  [SPEC]
+  \item That binding entry is structurally complete for its transport type:
+        \texttt{mcp-http} requires \texttt{endpoint} and
+        \texttt{auth.provider}; \texttt{mcp} (subprocess) requires
+        \texttt{command}; \texttt{native} requires nothing.  [SPEC]
+  \item The referenced auth provider is a known type with required
+        configuration fields present.  [SPEC]
+  \item Environment variable interpolations (e.g.,
+        \texttt{\$\{GERT\_MCP\_ENDPOINT\}}) resolve to non-empty values.
+        [SPEC]
+  \item \texttt{AllowedEnvironments}, if declared on the tool, includes the
+        active profile's \texttt{context} value
+        (see \S\ref{subsec:rp-allowed-environments}).  [SPEC]
+  \item Test-context transport rules from \S\ref{sec:rp-test-transport}
+        pass.  [SPEC]
+  \item If the profile declares \texttt{attendance: attended} and no TTY is
+        available, emit \texttt{config/attendance-mismatch}.  [SPEC]
+\end{enumerate}
+
+The Tier~0 input is \texttt{plan.Tools} — the post-catalog,
+post-package-map resolved tool set — not raw \texttt{toolRef} declarations.
+
+\subsection{Tier~1 — Local / No Network (Opt-in)}
+\label{subsec:rp-preflight-t1}
+
+Activated with \texttt{--preflight=local}.  Tier~1 runs Tier~0 first, then
+additionally checks:
+
+\begin{itemize}[noitemsep]
+  \item Subprocess \texttt{command} is on \texttt{PATH} and executable.
+  \item \texttt{az} (Azure CLI) is on \texttt{PATH} when an
+        \texttt{azure-cli} auth provider is configured.
+  \item IMDS (\texttt{169.254.169.254}) responds within 500~ms
+        (link-local reachability probe; no token is requested).
+  \item Native-transport runbook files exist on disk.
+\end{itemize}
+
+[SPEC]
+
+\subsection{Tier~2 — Live / Network (Opt-in)}
+\label{subsec:rp-preflight-t2}
+
+Activated with \texttt{--preflight=live}.  Tier~2 runs Tier~0 and Tier~1
+first, then additionally performs:
+
+\begin{itemize}[noitemsep]
+  \item Token acquisition (actual credential operation against the auth
+        provider).
+  \item Endpoint probe (HTTP HEAD or equivalent against the declared
+        endpoint URL).
+\end{itemize}
+
+\texttt{--preflight=live} adds Tier~2 on top of Tier~0 — never instead of it.
+Tier~2 failures surface the dynamic error codes \texttt{auth/credential-failure}
+and \texttt{transport/endpoint-unreachable}.
+
+[SPEC]
+
+\subsection{Error Taxonomy}
+\label{subsec:rp-error-taxonomy}
+
+The static vs.\ dynamic distinction MUST be explicit in operator-facing error
+message text.  Operator remediation is completely different for static
+configuration errors vs.\ runtime network errors.
+
+\begin{center}
+\begin{longtable}{p{3.5cm}cp{7.5cm}}
+\toprule
+\textbf{Code} & \textbf{Tier} & \textbf{Meaning} \\
+\midrule
+\texttt{config/tool-unresolved} & 0 &
+    \texttt{toolRef} names a tool in no loaded package. \\
+\texttt{config/no-binding-for-profile} & 0 &
+    Tool has no binding in the active profile.  The error message MUST
+    include which profiles DO provide a valid binding, if computable. \\
+\texttt{config/binding-incomplete} & 0 &
+    Binding exists but required configuration field is absent.  Message
+    MUST name the missing field and the unset environment variable, if
+    applicable. \\
+\texttt{config/attendance-mismatch} & 0 &
+    Profile declares \texttt{attended} but no TTY is available. \\
+\texttt{config/test-context-non-native-binding} & 0 &
+    Test-context profile references a non-native transport (see
+    \S\ref{sec:rp-test-transport}). \\
+\texttt{auth/credential-failure} & 2 &
+    Token acquisition failed.  Message MUST note this is a runtime
+    error; the configuration binding is valid. \\
+\texttt{transport/endpoint-unreachable} & 2 &
+    Endpoint probe failed.  Message MUST note this is a runtime/network
+    error; the binding and credentials are valid. \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+[SPEC — all error codes listed; Tier~0 code \texttt{config/tool-unresolved}
+corresponds to existing PLAN-010 gate [IMPL]; all others are [SPEC].]
+
+\subsection{\texttt{gert plan} Command}
+\label{subsec:rp-gert-plan}
+
+\texttt{gert plan --profile <id> <runbook>} is a non-executing binding table
+report that runs Tier~0 preflight and displays per-tool binding status.
+Example output:
+
+\begin{minted}{text}
+$ gert plan --profile headless-server runbooks/icm-tsg-router.runbook.yaml
+  toolRef            transport   auth              endpoint               status
+  icm                mcp-http    managed-identity  ${ICM_MCP_ENDPOINT}    bound
+  tsg-recommendation mcp-http    managed-identity  ${TSG_MCP_ENDPOINT}    bound
+\end{minted}
+
+Exit codes: \texttt{0} = Tier~0 clean; \texttt{1} = Tier~0 failures;
+\texttt{2} = Tier~2 failures (only with \texttt{--preflight=live}).
+\texttt{--output=json} for CI consumption.
+
+\texttt{gert plan --show-profiles <runbook>} lists all profiles in which every
+\texttt{toolRef} has a complete binding.
+
+\textbf{Explicit scope note:} \texttt{gert plan} reports what the tool YAML
+declares.  It cannot validate endpoint reachability or token acquisition (those
+are Tier~2 runtime probes).  It cannot show profile-overridden transport
+configurations until the profile binding resolver lands.
+
+[SPEC]
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Implementation Status}
+\label{sec:rp-impl-status}
+% ─────────────────────────────────────────────────────────────────────────────
+
+The table below summarizes the implementation status of every normative
+requirement in this chapter as of 2026-08-17.  An external team reading this
+specification MUST treat [SPEC] entries as design commitments for Phase~1
+implementation, not current behavior.
+
+\begin{center}
+\begin{longtable}{p{7cm}cp{4cm}}
+\toprule
+\textbf{Requirement} & \textbf{Status} & \textbf{Evidence / commit} \\
+\midrule
+Tri-state \texttt{RequiresApproval} (\texttt{*bool} on
+\texttt{ToolGovernance}) &
+[IMPL] & \texttt{a2e7db0}; \texttt{tool\_governance\_test.go} \\
+Per-action \texttt{classification} field with enum validation &
+[IMPL] & \texttt{a2e7db0}; \texttt{scan.go} \\
+\texttt{AllowedModes} field on \texttt{ToolGovernance} &
+[IMPL — field only] & \texttt{a2e7db0} \\
+\texttt{GovernanceEvaluator} wired in production &
+[IMPL] & \texttt{c810b96}; \texttt{wire.go:161}, \texttt{run.go} \\
+Approval gate fires pre-dispatch (all transports) &
+[IMPL] & \texttt{c810b96}; \texttt{engine.go} chokepoint \\
+Monotone governance composition (runbook + per-tool OR) &
+[IMPL] & \texttt{c810b96}; \texttt{evaluator.go}, \texttt{builder.go} \\
+Approval does not affect classification or retry &
+[IMPL — structural] & Type separation; no coupling in evaluator \\
+\midrule
+Profile document schema (\texttt{runtime-profile/v1}) & [SPEC] & Phase~1 \\
+Profile-driven approval gate (attendance-aware) & [SPEC] & Phase~1 \\
+Declared attendance (replacing TTY inference) & [SPEC] & Phase~1 \\
+\texttt{AllowedEnvironments} enforcement at Tier~0 & [SPEC] & Phase~1 \\
+\texttt{AllowedModes} enforcement at runtime & [SPEC] & Phase~1 \\
+Tier~0 preflight checks (2–8 in \S\ref{subsec:rp-preflight-t0}) & [SPEC] & Phase~1 \\
+Tier~1 and Tier~2 preflight & [SPEC] & Phase~1 \\
+\texttt{gert plan} command & [SPEC] & Phase~1 \\
+Profile binding resolver on post-catalog \texttt{plan.Tools} & [SPEC] & Phase~1 \\
+Late-result halt rules by classification & [SPEC] & Phase~1 \\
+Profile-driven \texttt{approval.scope} enforcement & [SPEC] & Phase~1 \\
+\bottomrule
+\end{longtable}
+\end{center}

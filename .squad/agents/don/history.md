@@ -16,7 +16,53 @@
 
 ---
 
-## TSG Unresolved Provider Binding (2026-08-18)
+## TSG Unresolved Provider Binding — Corrected (2026-08-18)
+
+### Correction from Cristiano
+Task 2 (VSCODE-003 schema field, fail-closed check, reachability probe) was
+cancelled. tsg-recommendation is a SQL Live-Site tool, not a Gert deliverable.
+Inventing new schema surface to describe their unresolved state was out of
+scope. The platform guarantee already exists: absent tool → bridge returns
+`tool_unavailable` → branch step cannot consume → run terminates (ba9d6d4).
+
+### What was discarded
+- `TransportConfig.ProviderUnresolved` field from `pkg/schema/tool.go`
+- VSCODE-003 check from `validate_transport.go`
+- Reachability registry entry and probe
+- All changes to `deliverable_contract_test.go` from task 2
+- Branch `feature/tsg-unresolved-provider-binding` (deleted, commit 1824af7)
+- gert-private commits b598128, fa7c497 (reverted by 307c8f1)
+
+### What was implemented
+**Task 1 kept:** Six logical args added exactly as specified:
+`incident_id`, `title`, `service`, `environment`, `logical_server`, `database`
+— all `type: string`, `required: true`.
+
+**Fabricated transport removed:** `vscode_tool: tsg-recommendation-recommend`
+and `transport.mode: vscode-mcp` stripped from both files.
+
+**Option chosen: (a) keep as logical-contract-only record (no transport key).**
+Schema evidence: `ValidateTransportConfig` switch has no default case and no
+empty-mode check — a file with no `transport:` key is schema-valid at
+`ParseToolFile` level. `mapTransport` fails on empty mode but `testdata/` is
+excluded from all scans (`scanSchemaDir` skips dirs named `testdata`).
+
+### Files changed (gert, branch feature/tsg-logical-contract, commit 16e2d6e)
+- `internal/tool/testdata/tsg-recommendation.vscode-mcp.tool.yaml`
+- `internal/tool/deliverable_contract_test.go`
+
+### Mutation control
+Removed `database` arg from YAML → `arg "database" is missing from action 'recommend'` → FAIL (measured).
+
+### Detached worktree
+63 ok / 23 no-test / 0 FAIL, exit 0.
+
+### Parity
+`check-deliverable-parity.js` exit 0: 2 matched, 0 drifted.
+
+---
+
+## TSG Unresolved Provider Binding (2026-08-18, DISCARDED)
 
 ### Problem
 The TSG deliverable had `vscode_tool: tsg-recommendation-recommend` — a guessed name, identical defect class to the `icm-get-incident` guess caught in Rev 2. SQL Live-Site confirmed the LOGICAL contract (six args) but could NOT supply the PROVIDER contract (registered VS Code MCP tool name + parameter schema).

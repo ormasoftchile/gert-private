@@ -167,3 +167,22 @@ When Item 2 extends `RuntimeProfile` schema:
 
 - **Disclose what you cannot verify, even when the mechanism is sound.** CI runs on push against tracked files only — so it is clean-checkout evidence by construction. But "it should pass" and "we observed it pass" are different claims. Report the former as reasoning, not as evidence. The counterparty has corrected us nine times; each correction was factually correct. Understating earns more credit than overstating with this audience.
 - **Mutation resistance is stronger evidence than a passing test.** Demonstrating that removing a flag causes a specific, different failure mode proves the flag is load-bearing. A test that passes with and without the feature under test proves nothing. Always measure both directions.
+
+---
+
+## 2026-08-17 — Phase 2 Architectural Evaluation Issued
+
+**Status:** ACCEPT WITH MODIFICATIONS. Evaluation delivered to `gert-core-phase2-evaluation.md`. Decision record in inbox.
+
+**Key findings:**
+- Output contract enforcement for non-substituted tools is a fifth instance of the declared-but-unenforced pattern class. Consumer's mutation control assumes a runtime check that doesn't exist. Scoped as prerequisite core work.
+- Extension repo (`gert-vscode`) has three blocking prerequisites: reproducibility (unbuildable from clean checkout), `engines.vscode` floor too low for LM APIs, no extension-host test harness.
+- `serve` all-interfaces/no-auth is a live security issue independent of Phase 2.
+- Executor-kind hazard: recommended structural enforcement via extracted governance function with compile-time non-nil parameter requirement.
+
+**Estimate:** 10–14 days parallelized after 3–4 days of extension prerequisites.
+
+## Learnings
+
+- **When a consumer's required test assumes a runtime check, verify the check exists before accepting scope.** The mutation control "remove the output contract parity check and prove drift is caught" is a reasonable ask — but the parity check doesn't exist at runtime for non-substituted tools. Accepting scope that includes proving a mechanism works, when the mechanism must first be built, requires honest sequencing. The build work is prerequisite, not part of the proof.
+- **Count the instances of a pattern class.** This is the fifth declared-but-unenforced gap. At five instances, it stops being an individual bug and becomes a systematic weakness in the development process. The reachability gate was built to catch new instances; output contract enforcement is a pre-existing instance it didn't cover because `returns:` is not a transport mode.

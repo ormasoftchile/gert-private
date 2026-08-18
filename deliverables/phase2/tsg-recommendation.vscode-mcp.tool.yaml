@@ -1,0 +1,26 @@
+apiVersion: tool/v1
+meta:
+  name: tsg-recommendation
+  version: "1.0.0"
+  description: "TSG recommendation — VS Code MCP binding."
+transport:
+  mode: vscode-mcp
+  vscode_tool: tsg-recommendation-recommend
+actions:
+  - name: recommend
+    description: "Return a TSG recommendation for the current incident context."
+    classification: read-only
+    idempotent: true
+    outputs:
+      recommendation_status:
+        type: string
+        required: true
+        description: "Outcome: 'suggested' or 'no-suggestion'"
+      suggested_tsg_id:
+        type: string
+        required: false
+        description: "TSG document ID (absent when recommendation_status is 'no-suggestion')"
+      suggested_tsg_title:
+        type: string
+        required: false
+        description: "TSG document title (absent when recommendation_status is 'no-suggestion')"

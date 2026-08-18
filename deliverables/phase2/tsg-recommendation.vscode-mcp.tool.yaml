@@ -2,10 +2,10 @@ apiVersion: tool/v1
 meta:
   name: tsg-recommendation
   version: "1.0.0"
-  description: "TSG recommendation — VS Code MCP binding."
-transport:
-  mode: vscode-mcp
-  provider_unresolved: true
+  description: >-
+    TSG recommendation — logical contract of record (SQL Live-Site Operations).
+    No transport is bound: the provider tool must be provisioned by SQL Live-Site
+    in their VS Code session. Gert core does not author or own this binding.
 actions:
   - name: recommend
     description: "Return a TSG recommendation for the current incident context."

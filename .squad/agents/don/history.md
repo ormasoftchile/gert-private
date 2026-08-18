@@ -16,7 +16,47 @@
 
 ---
 
-## TSG Unresolved Provider Binding — Corrected (2026-08-18)
+## TSG Filename Rename + Parity Script Fix (2026-08-18)
+
+### Problem
+`tsg-recommendation.vscode-mcp.tool.yaml` was named for a binding it no longer
+declares (transport removed). The `.vscode-mcp.` infix implied a VS Code MCP
+binding; the file's own description said "No transport is bound." Also, the
+parity script's `.endsWith('.vscode-mcp.tool.yaml')` filter would silently
+drop coverage if any file was renamed.
+
+### Rename
+`tsg-recommendation.vscode-mcp.tool.yaml` → `tsg-recommendation.contract.tool.yaml`
+on both sides via `git mv`. Updated `deliverable_contract_test.go` path reference.
+
+### Parity script fix (bidirectional set comparison)
+- Was: one-sided glob on `.vscode-mcp.` infix — coverage silently halved on rename
+- Now: enumerate `.tool.yaml` from BOTH sides; fail if either side has a file
+  the other lacks (MISSING-TESTDATA / ORPHAN-TESTDATA errors)
+- `TESTDATA_SYNTHETIC_ONLY` exclusion set for intentional testdata-only fixtures
+  (`vscode-mcp-ops-synthetic.tool.yaml`); argument for exclusion list over pure
+  set comparison: testdata contains synthetic fixtures that are not deliverables;
+  pure set comparison would false-fail on them
+- `MIN_COMPARED=2` guard: comparison is never vacuously empty
+- Printed union count so coverage drop is visible in CI logs
+
+### Mutation controls (all measured)
+| Scenario | Exit | Output |
+|---|---|---|
+| Rename deliverable only | 1 | MISSING-TESTDATA + ORPHAN-TESTDATA + min-count |
+| Rename both consistently | 0 | 2 matched, 0 drifted |
+| Delete deliverable | 1 | ORPHAN-TESTDATA + min-count |
+
+### Commits
+- gert: `374fef0` on `feature/tsg-logical-contract`
+- gert-private: `0a7399d`
+
+### Worktree
+63 ok / 23 no-test / 0 FAIL, exit 0.
+
+---
+
+
 
 ### Correction from Cristiano
 Task 2 (VSCODE-003 schema field, fail-closed check, reachability probe) was

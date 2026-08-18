@@ -5,12 +5,37 @@ meta:
   description: "TSG recommendation — VS Code MCP binding."
 transport:
   mode: vscode-mcp
-  vscode_tool: tsg-recommendation-recommend
+  provider_unresolved: true
 actions:
   - name: recommend
     description: "Return a TSG recommendation for the current incident context."
     classification: read-only
     idempotent: true
+    args:
+      incident_id:
+        type: string
+        required: true
+        description: "IcM incident ID"
+      title:
+        type: string
+        required: true
+        description: "Incident title"
+      service:
+        type: string
+        required: true
+        description: "Owning service name"
+      environment:
+        type: string
+        required: true
+        description: "Affected environment"
+      logical_server:
+        type: string
+        required: true
+        description: "Logical server name"
+      database:
+        type: string
+        required: true
+        description: "Database name"
     outputs:
       recommendation_status:
         type: string

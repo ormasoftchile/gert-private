@@ -2,14 +2,93 @@
 
 ## Overview
 
-**Stream:** Backend transport and authentication. Implemented MCP HTTP transport, verified Phase 1B auth gaps, delivered managed-identity provider and credential-leak assertions.
+**Stream:** Backend transport and authentication. Implemented MCP HTTP transport, verified Phase 1B auth gaps, delivered managed-identity provider and credential-leak assertions. Fixed dry-run regression and serve security issue. Phase 2 Rev 3: serve --package-map + declarative vscode_input adaptation. TSG binding fail-closed (VSCODE-003).
 
 **Key Contributions:**
 - MCP HTTP transport implementation (Phase 1A)
 - Phase 1B Item 1: Managed-identity auth provider (2026-08-17)
 - Phase 1B Item 6: Credential non-leakage assertion suite (2026-08-17)
+- Live defect: dry-run profileless fail-fast regression (2026-08-17, commit d19f933)
+- Live defect: serve all-interface bind without auth (2026-08-17, commit a6b1106)
+- Phase 2 Rev 3 Deliverable A: serve --package-map (2026-08-18, commit 4da94b2)
+- Phase 2 Rev 3 Deliverable B: declarative vscode_input adaptation (2026-08-18, commit 4da94b2)
+- TSG binding fail-closed + six logical args (2026-08-18, gert commit 1824af7, private commit b598128)
 
 ---
+
+## TSG Unresolved Provider Binding (2026-08-18)
+
+### Problem
+The TSG deliverable had `vscode_tool: tsg-recommendation-recommend` — a guessed name, identical defect class to the `icm-get-incident` guess caught in Rev 2. SQL Live-Site confirmed the LOGICAL contract (six args) but could NOT supply the PROVIDER contract (registered VS Code MCP tool name + parameter schema).
+
+### Approach
+Added `TransportConfig.ProviderUnresolved bool` (`provider_unresolved: yaml key`) to `pkg/schema/tool.go`. When `true` on a `vscode-mcp` transport, `ValidateTransportConfig` returns VSCODE-003 at scan time.
+
+**Earliest achievable fail point:** ValidateTransportConfig is called from ParseToolFile, which is called during scan (ScanDir/ScanSchemaDir). The tool never enters the registry, so planning and runtime are never reached. This is the same path used by VSCODE-001 (empty vscode_tool) and VSCODE-002 (invalid vscode_input).
+
+**Why not runtime:** A runtime check would allow the tool into the registry and would reach the bridge. The scan-time check fires before any registry insertion.
+
+**Error message distinguishes "unresolved" from "not found":**
+> vscode-mcp: provider_unresolved is true — the VS Code MCP provider contract (registered tool name and parameter schema) has not been supplied for this binding. This is NOT a "tool not found" error: nobody has told us the real vscode.lm.tools name yet.
+
+### Five-point chain
+- `pkg/schema/tool.go` — `ProviderUnresolved bool` field declared
+- `internal/tool/validate_transport.go` — VSCODE-003 check; also rejects `provider_unresolved` on non-vscode-mcp (mirrors VSCODE-001 pattern)
+- `internal/tool/scan.go` — no change; already calls ValidateTransportConfig via ParseToolFile
+- `internal/tool/runtime.go` — no change; never reached for provider_unresolved tools
+- `cmd/gert/reachability_registry_test.go` + probe — `TransportConfig.ProviderUnresolved` entry with testCLI_ProviderUnresolved_Reachable
+
+### Mutation control
+Disabled the ProviderUnresolved check; measured:
+- `TestCLI_ReachabilityGate/TransportConfig.ProviderUnresolved`: PASS → FAIL (got exitRuntime=1, wanted exitValidation=2)
+- `TestDeliverableContracts_TSGRecommendation`: PASS → FAIL (ParseToolFile succeeded when it must fail)
+
+### Parity
+`check-deliverable-parity.js` exit 0: both icm and tsg deliverables matched testdata fixtures.
+
+### Detached worktree
+`go build ./...` exit 0, `go test ./...` exit 0: 63 ok / 23 no-test / 0 FAIL.
+
+---
+
+## Phase 2 Rev 3 Implementation Summary (2026-08-18)
+
+### Deliverable A: gert serve --package-map (commit 4da94b2)
+
+Added `--package-map` to `gert serve` with the same help text and `loadPackageMap` semantics as `run.go:71` (followed `run` not `plan`; run.go has the more complete help text). Loads at startup before any network operations (fail-stop: missing or malformed → exitValidation). Applies package-map `tool-paths:` to both the planner registry (`newServingToolRegistry`, variadic `extraPaths`) and the execution registry (`adapter.WireOptions.ExtraToolScanPaths` → `OverlayRegistry.Override`). Extra paths are scanned LAST so they override base-scan duplicates deterministically.
+
+**Why run.go over plan.go:** run.go flag has `"Path to a package-map file (config/v1 shape: requires:/tool-paths:) overriding the project's .gert/config.yaml package bindings"` — more explicit, matches the full schema description. plan.go says `"overriding project package bindings"` — less precise.
+
+### Deliverable B: declarative vscode_input adaptation (commit 4da94b2)
+
+Five-point transport chain thread:
+1. `pkg/schema/tool.go` — `VSCodeInputMapping` type + `VSCodeInput map[string]*VSCodeInputMapping` on `ToolAction`
+2. `pkg/tool/tool.go` — `VSCodeInput map[string]*schema.VSCodeInputMapping` on runtime `ToolAction`
+3. `internal/tool/validate_transport.go` — `ValidateVSCodeInputActions` (VSCODE-002 for wrong transport, from: undeclared arg, unsupported coerce:)
+4. `internal/tool/scan.go` — `ValidateVSCodeInputActions` called from `ParseToolFile`; `VSCodeInput` carried through `RuntimeToolDef`
+5. `internal/tool/runtime.go` — `applyVSCodeInputAdaptation` called before bridge wire in `TransportVSCodeMCP` case
+
+New file `internal/tool/vscode_input.go`: `applyVSCodeInputAdaptation` + coerce helpers. Fail-closed: required/absent, unmapped arg, lossy coerce all fail before bridge request.
+
+### Key Learnings
+
+**OverlayRegistry.Override pattern:** The correct mechanism for priority overrides in the serve path. Extra-path tools are scanned into the overlay after the base scan, and `Override` (not `Register`) is used so they unconditionally win. This mirrors how catalog-resolved toolRefs win in the run path.
+
+**ValidateVSCodeInputActions placement:** Must be called AFTER `ValidateVSCodeToolActions` in `ParseToolFile` so the transport mode is already confirmed clean before checking per-action vscode_input content.
+
+---
+
+## Learnings
+
+### 2026-08-17: Dry-run and serve security fixes
+
+**Dry-run fail-fast gate (commit d19f933):**
+The Phase 1B fail-fast gate comment said "without a profile the engine installs TerminalApprovalGate which blocks in CI." This is empirically wrong. `buildApprovalGate` (internal/adapter/wire.go:330) installs `TerminalApprovalGate` only when `attended==true`; in non-TTY (CI) contexts it installs `NoOpApprovalGate`, which never blocks. In dry-run mode specifically, `DryRunExecutorRegistry` (internal/adapter/wire.go:121) replaces all executors with no-ops; governance/approval runs before executor dispatch (internal/engine/engine.go:592-604) but cannot block in non-TTY. The gate was over-broad. Fix: add `mode == engine.RunModeReal` guard. Phase 1B contract unchanged.
+
+**Serve default bind (commit a6b1106):**
+Changed `--addr` default from `:7778` (all interfaces) to `127.0.0.1:7778`. Added startup safety check: non-loopback + no auth → refuse with actionable error. The check lives in `runServe` (cmd/gert/serve.go) before any network operations; `internal/serve/server.go:165` net.Listen call is not touched (it faithfully binds what it's given, which is correct). Loopback + no auth is always safe (local dev, extension unaffected).
+
+**Untracked-files incident (sixth occurrence, 2026-08-17):** When editing serve.go, I read the working-tree state (which already had `ExcludeTestTools` added by another agent) rather than the committed state. My a6b1106 committed that usage without committing the definition, breaking HEAD. Fixed by separate commit 06b0a83 with an explicit acknowledgment. Process note: always diff `git show HEAD:path` against the working tree before staging to detect in-flight changes from other agents.
 
 ## Phase 1A Work Summary
 
@@ -328,3 +407,63 @@ Token gate is always constructed from tool definition's declared auth — profil
 ### Confirmed
 
 **The sweep fires on intentional leaks.** `TestCredentialLeak_SweepDetectsIntentionalLeak` has 8 sub-cases, each injecting the sentinel into a different surface type (plain string, trace kind, trace payload value, trace JSON, ToolResult.Stdout, ToolResult JSON, IndeterminateRecord JSON, error string). All 8 fire.
+
+---
+
+## Learnings — Phase 1B Item 4: Synthetic Contract Proof (2026-08-17)
+
+### Implementation Complete (commit 5c0c002)
+
+**Files shipped:**
+- `cmd/tools/ops-mock/main.go` — deterministic native mock binary for ops-synthetic contract
+- `cmd/gert/synthetic_contract_integration_test.go` — CLI integration proof: --package-map + --profile together in runRun()
+- `internal/tool/synthetic_contract_proof_test.go` — mcp-http binding + 3 invariant tests
+- `internal/tool/auth_credential_leak_test.go` — extended with `TestCredentialLeak_SyntheticContract_MCPHTTPWithManagedIdentity`
+
+### Key Decisions
+
+1. **CLI test uses native binding; mcp-http tested at runtime layer.** The MCP-HTTP binding cannot be used through the full runRun() CLI path because ValidateTransportConfig requires HTTPS for the static YAML URL, and httptest.NewServer produces plain HTTP. The workaround (https://127.0.0.1/ as static URL + profile endpoint override to http://127.0.0.1:PORT) works at the runtime layer but not needed in CLI test. CLI test proves --package-map + --profile compose; internal/tool test proves mcp-http + managed-identity. Together both requirements are met without HTTPS complexity.
+
+2. **imdsHTTPClient seam used for MI proof.** ManagedIdentityAuthProvider.httpClient (package-private) is accessible in package tool tests; set it to route IMDS calls to a mock httptest.Server. This keeps tests offline and deterministic.
+
+3. **Both Action B outcomes exercised in both bindings.** Native: two pattern-search steps in the same runbook with FOUND: and non-FOUND: queries. MCP-HTTP: two separate transport.Invoke calls. Both pass.
+
+4. **PLAN-013 invariant test in cmd/gert.** The endpoint-outside-allowed_hosts check is a planner behavior, so it belongs in the CLI integration test package (not in internal/tool which would create an import cycle).
+
+5. **Absolute paths before chdirForTest.** A relative dir from makeWorkDir becomes invalid after Chdir. Fix: call filepath.Abs() to get absolute path before calling chdirForTest. This is the same pattern used in profile_tier0_integration_test.go.
+
+### Parity Harness Interface
+
+For Tess's fixture-agnostic harness in pkg/contractparity to compare the two bindings, it needs: (1) `writeOpsSyntheticNativePackage(t, root, opsMockBin)` to write the native package to a temp dir, (2) a function to construct an MCPHTTPTransport with a mock server for the mcp-http binding, (3) the action names "status-query" and "pattern-search" with the tool name "ops-synthetic", (4) test inputs: target="api-gateway" for status-query; "FOUND:pattern" and "no-match" for pattern-search. The parity harness should verify both bindings return the same JSON shape (not necessarily byte-identical values).
+
+---
+
+## Learnings — Phase 1B Item 4 Fix: Load-Bearing Flags (2026-08-17)
+
+### The Core Problem
+
+A "no-op flag" is structurally identical to a parsed-but-unreachable field — the flag appears in the test, the run succeeds, but removing the flag changes nothing. This is the same failure class the reachability gate was built to catch for YAML fields.
+
+### Lesson: Load-bearing requires an observable difference, not just flag presence
+
+The prior test had `--package-map` pointing to an identical package and `--profile` targeting a native binding that ignores auth. Both were no-ops. The fix required a design where removing either flag produces a different exit code:
+
+- `--package-map` load-bearing: project config has `requires: []`; without the flag the tool is not found (exit 2). A flag pointing at a different-but-equivalent package proves only that parsing works, not that resolution works.
+- `--profile` load-bearing: mcp-http static URL is a placeholder (`https://127.0.0.1/`); the profile overrides it to the live mock server. Without the flag, the TLS dial to port 443 fails (exit 1).
+
+### Lesson: CLI tests can use SetIMDSEndpointForTest via a production-code export seam
+
+`ManagedIdentityAuthProvider.httpClient` (package-private) is injectable only within `package tool`. But the IMDS endpoint can be redirected via an exported `SetIMDSEndpointForTest` function added to `auth_managed_identity.go` (not a test file). This allows `cmd/gert` integration tests to control IMDS without package-level access. The function uses a package-level string var; callers must not run in parallel.
+
+### Lesson: HTTPS-at-scan-time vs. HTTP-at-runtime is the right split
+
+`ValidateTransportConfig` checks HTTPS on the static YAML URL. Profile endpoint overrides are not subject to that check — they are validated only against `allowed_hosts` (host membership, not scheme). This means a plain HTTP `httptest.NewServer` URL can be used as a profile endpoint override in tests, with `https://127.0.0.1/` as the static placeholder.
+
+### Empirical Results (commit d53a45f)
+
+Before fix: removing either flag left `TestSyntheticContract_CLI_PackageMap_Profile_NativeBinding` green (no-ops confirmed).
+
+After fix (`TestSyntheticContract_CLI_PackageMap_Profile_MCPHTTPBinding`):
+- Without `--profile`: exit 1 (exitFailure) — TLS dial `https://127.0.0.1/` refused
+- Without `--package-map`: exit 2 (exitValidation) — PKG-011 tool not found
+

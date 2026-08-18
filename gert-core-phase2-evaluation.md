@@ -53,7 +53,7 @@ This is **core work** (Gert repo). The extension does its own normalization as a
 
 1. **Reachability registry extension.** `TestCLI_ReachabilityGate` already maintains a registry of entries that must be reachable. Add a **negative registry**: a test that enumerates all registered executor kinds that invoke tools and asserts each one passes through the `executeStep` classification injection. Concretely: a test that greps `engine.go` for `step.Kind ==` switch arms and asserts that every arm containing a tool invocation call (identified by function signature, not string matching) also contains the classification-injection block. This is fragile to refactoring but catches the exact error mode.
 
-2. **Preferred alternative — structural.** Extract the classification-injection + approval-gate logic from `executeStep` into a named function (e.g., `applyToolGovernance`) that is called unconditionally before any tool invocation. The tool invocation function signature should require a `*ToolClassification` parameter (non-pointer = compile-time enforcement that it was populated). A new transport arm that skips governance would fail to compile. This is the stronger mechanism and should be the Phase 2 implementation approach.
+2. **Preferred alternative — structural.** Extract the classification-injection + approval-gate logic from `executeStep` into a named function (e.g., `applyToolGovernance`). This makes omission visible and greppable: any tool invocation path that does not call `applyToolGovernance` is a findable defect. However, this alone is a **convention**, not a compile-time guarantee — a caller can simply not call the function. To make it fail closed: have `applyToolGovernance` return an unexported struct type (e.g., `type governanceProof struct{ ... }` with no exported fields and no public constructor) that the tool invocation function requires as a parameter. Because only `applyToolGovernance` can construct a `governanceProof`, a caller that skips governance cannot obtain one and will not compile. This is a real technique and it does fail closed — the Go type system enforces it, not convention. Pair this with a registry test (mechanism 1) as defense-in-depth, since the structural mechanism protects against bypass within Go code but not against an entirely new executor registered under a different step kind that never calls the tool invocation function at all.
 
 3. **Code review gate (minimum).** If neither structural mechanism ships in Phase 2, add an explicit `// GOVERNANCE: any executor kind that invokes a tool MUST pass through applyToolGovernance` comment and a review checklist item. This is the weakest option and I do not recommend it as the sole control.
 
@@ -125,8 +125,12 @@ The extension has only `node --test test/*.test.js` today. No `@vscode/test-elec
 
 | Deliverable | Notes |
 |---|---|
-| Nothing new | Their runbook and tool definitions are unchanged. Their acceptance criterion is a manual test in their environment. |
-| Verification | They run the unchanged `icm-tsg-router.runbook.yaml` in VS Code with their authenticated ICM MCP tool and confirm the end-to-end flow. |
+| `vscode-mcp` bindings for `icm.get-incident` and `tsg-recommendation.recommend` | See conflict note below |
+| Verification | Run the unchanged `icm-tsg-router.runbook.yaml` in VS Code with their authenticated ICM MCP tool and confirm end-to-end flow |
+
+**Ownership conflict — requires explicit resolution.** The consumer's Phase 2 scope point 2 asks us to "provide a contract-identical VS Code binding for `icm.get-incident` and `tsg-recommendation.recommend`." But in Phase 1B Rev 3 we ratified an ownership split where the consumer owns their specific action bindings and contract proofs, and Gert core owns only the mechanism and proves it on a synthetic contract. These two positions contradict on this specific item.
+
+**Proposed resolution (consistent with Rev 3):** Core owns the `vscode-mcp` transport mechanism and proves it works using a synthetic contract we own. The consumer authors the two `vscode-mcp` bindings for their own actions (`icm.get-incident` and `tsg-recommendation.recommend`) in their own tool definitions, using the mechanism we provide. This is the same split as Phase 1B: we proved managed-identity + mcp-http on `ops-synthetic`; they prove their exact contract in their repo. This requires their explicit confirmation — added to §8.
 
 **Note:** The consumer explicitly stated the runbook must not change. This is achievable because the transport binding is resolved at runtime from the profile + tool definition, not from the runbook. The runbook says `tool: icm` / `action: get-incident`; the transport mode comes from the tool definition (or profile override), not the runbook step.
 
@@ -139,9 +143,9 @@ The extension has only `node --test test/*.test.js` today. No `@vscode/test-elec
 **Impact:** Any process on the local network can send JSON-RPC commands to the Gert server while the graph preview is open. No authentication is required.
 
 **Recommendation:**
-1. Fix `serve` to default to `127.0.0.1:<port>` instead of `:<port>`. This is a one-line change in `internal/serve/server.go:165`.
+1. Change the flag default in `cmd/gert/serve.go:39` from `":7778"` to `"127.0.0.1:7778"`. The all-interfaces bind originates at the flag default (`addr := fs.String("addr", ":7778", ...)`), not at the `net.Listen` call in `internal/serve/server.go`, which faithfully binds whatever address it receives. Changing the Listen call would be the wrong fix — it would override a caller's explicit choice. Additionally, add validation that rejects or warns when a non-loopback bind address is specified.
 2. The extension should pass `--addr 127.0.0.1:<port>` explicitly regardless of the default.
-3. Enable auth (static bearer token or HMAC-SHA256 JWT) for all `serve` invocations from the extension, using a per-session random secret generated by the extension and passed to `gert serve --token <secret>`.
+3. Enable auth for all `serve` invocations from the extension, using a per-session random secret generated by the extension and passed via `--auth-token <secret>` (or `--auth-jwt-secret <secret>` for JWT-based auth; the two flags are mutually exclusive, per `cmd/gert/serve.go:42-44`).
 
 **This fix should ship before or with Phase 2, not after.** The Phase 2 bridge has a strict loopback + capability-secret requirement (scope point 7), and shipping that on top of a server that binds all interfaces with no auth would be contradictory.
 
@@ -160,6 +164,8 @@ The extension has only `node --test test/*.test.js` today. No `@vscode/test-elec
 | Loopback-only enforcement | **Partial.** `serve` binds all interfaces but extension talks to `localhost`. | Enforcement is trivial: `net.Listen("tcp", "127.0.0.1:<port>")`. The harder part is ensuring no configuration path can override this to a non-loopback address. |
 | Extension LM API integration | **No.** Zero usage of `vscode.lm` in the extension today. | Entirely new code. Requires understanding VS Code's `LanguageModelTool` interface, `ChatContext`, and the invocation result shape. |
 
+**Note on cancellation coverage:** Context-based cancellation is verified as honoured only for `mcp-http` (via `http.NewRequestWithContext`). For stdio-`mcp` and `native` transports, context is passed but honouring is unverified. This is not central to `vscode-mcp` if the bridge uses loopback HTTP (where cancellation is enforced by the HTTP request context), but it should not be assumed as verified coverage across all transports.
+
 ---
 
 ## 8. What We Need From the Consumer
@@ -170,9 +176,9 @@ We need:
 
 1. **Confirmation that the manual acceptance proof can use a mock/fake ICM MCP tool registered in VS Code** rather than requiring their production ICM credentials. If they require production ICM, the proof is gated on their credential provisioning (same blocker as Phase 1B Item 4). If they accept a fake MCP tool that returns the correct typed outputs, we can prove the flow end-to-end without their infrastructure.
 
-2. **The exact `engines.vscode` minimum version they are willing to accept.** Raising from 1.85 to 1.90+ drops support for ~6 months of VS Code releases. They may have constraints we don't know about.
+2. **The exact `engines.vscode` minimum version they are willing to accept.** Raising from 1.85 to a higher floor (sources indicate 1.90–1.91; exact version must be verified) drops support for ~6 months of VS Code releases. They may have constraints we don't know about.
 
-That is all.
+3. **Confirmation that they own the `vscode-mcp` bindings for their two actions.** Their Phase 2 scope point 2 asks us to "provide" the bindings for `icm.get-incident` and `tsg-recommendation.recommend`. Our ratified Phase 1B Rev 3 ownership split says the consumer owns their specific action bindings and Gert core owns only the mechanism. We propose the Rev 3 split applies here too: core proves the mechanism on a synthetic contract; they author the two `vscode-mcp` bindings in their tool definitions. If they disagree and want us to author the bindings, that is a dependency on their tool definitions that Rev 3 was designed to avoid, and we need to renegotiate the boundary.
 
 ---
 

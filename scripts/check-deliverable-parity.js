@@ -68,15 +68,36 @@ if (!fs.existsSync(deliverablesDir)) {
   process.exit(1);
 }
 
-const deliverables = fs.readdirSync(deliverablesDir)
-  .filter(f => f.endsWith('.vscode-mcp.tool.yaml'))
-  .sort();
+// ---------------------------------------------------------------------------
+// testdata files that are intentional synthetic-only fixtures.
+// These appear in gert's internal/tool/testdata/ for testing purposes but are
+// NOT deliverables and have no corresponding file in deliverables/phase2/.
+// Add an entry here ONLY when a file is deliberately testdata-only; do not
+// use this list to suppress genuine parity gaps.
+// ---------------------------------------------------------------------------
+const TESTDATA_SYNTHETIC_ONLY = new Set([
+  'vscode-mcp-ops-synthetic.tool.yaml',
+]);
 
-if (deliverables.length === 0) {
-  console.error('ERROR: no *.vscode-mcp.tool.yaml files found under deliverables/phase2/');
-  console.error('This is unexpected — the check cannot be vacuously empty.');
-  process.exit(1);
-}
+// ---------------------------------------------------------------------------
+// Collect file sets from both sides (general .tool.yaml suffix).
+// Matching on the general suffix rather than a specific infix (e.g.
+// .vscode-mcp.) means a renamed file keeps appearing in the comparison
+// instead of silently dropping out of coverage.
+// ---------------------------------------------------------------------------
+const delivSet = new Set(
+  fs.readdirSync(deliverablesDir).filter(f => f.endsWith('.tool.yaml')).sort()
+);
+const testSet = new Set(
+  fs.readdirSync(gertTestdata).filter(f => f.endsWith('.tool.yaml')).sort()
+);
+
+// Compute the union of both sides. Every file in the union must appear on
+// both sides (unless it is in TESTDATA_SYNTHETIC_ONLY). Any asymmetry is a
+// hard error — a rename on one side alone is caught here.
+const allFiles = [...new Set([...delivSet, ...testSet])].sort();
+
+const MIN_COMPARED = 2; // guard: the comparison is never vacuously empty
 
 // ---------------------------------------------------------------------------
 // Compare each deliverable against the gert fixture
@@ -88,22 +109,43 @@ function sha256(buf) {
 let drifted = 0;
 let matched = 0;
 
-console.log(`Comparing ${deliverables.length} deliverable(s):`);
+console.log(`Comparing tool contract files (bidirectional set check):`);
 console.log(`  deliverables : ${deliverablesDir}`);
 console.log(`  gert testdata: ${gertTestdata}`);
+console.log(`  union size: ${allFiles.length} file(s) (${TESTDATA_SYNTHETIC_ONLY.size} synthetic-only excluded)`);
 console.log('');
 
-for (const filename of deliverables) {
-  const deliverablePath = path.join(deliverablesDir, filename);
-  const fixturePath = path.join(gertTestdata, filename);
+for (const filename of allFiles) {
+  // Testdata-only synthetic fixtures are explicitly excluded from parity.
+  // They live in testdata for internal testing and have no deliverable mirror.
+  if (TESTDATA_SYNTHETIC_ONLY.has(filename)) {
+    console.log(`  SYNTHETIC ${filename} (testdata-only fixture, excluded from parity)`);
+    continue;
+  }
 
-  if (!fs.existsSync(fixturePath)) {
-    console.error(`  MISSING  ${filename}`);
-    console.error(`           deliverable exists but gert fixture not found at:`);
-    console.error(`           ${fixturePath}`);
+  const inDeliv = delivSet.has(filename);
+  const inTest  = testSet.has(filename);
+
+  if (inDeliv && !inTest) {
+    console.error(`  MISSING-TESTDATA  ${filename}`);
+    console.error(`    deliverable exists but gert fixture not found — add it to:`);
+    console.error(`    ${gertTestdata}`);
     drifted++;
     continue;
   }
+
+  if (inTest && !inDeliv) {
+    console.error(`  ORPHAN-TESTDATA   ${filename}`);
+    console.error(`    gert fixture exists but no corresponding deliverable — rename or`);
+    console.error(`    add to TESTDATA_SYNTHETIC_ONLY in check-deliverable-parity.js if intentional:`);
+    console.error(`    ${path.join(gertTestdata, filename)}`);
+    drifted++;
+    continue;
+  }
+
+  // Both sides have the file — compare byte-for-byte.
+  const deliverablePath = path.join(deliverablesDir, filename);
+  const fixturePath = path.join(gertTestdata, filename);
 
   const deliverableBuf = fs.readFileSync(deliverablePath);
   const fixtureBuf = fs.readFileSync(fixturePath);
@@ -118,7 +160,6 @@ for (const filename of deliverables) {
     console.error(`  DRIFTED  ${filename}`);
     console.error(`           deliverable: ${deliverableHash}`);
     console.error(`           gert fixture: ${fixtureHash}`);
-    // Show first differing line for diagnosability
     const deliverableLines = deliverableBuf.toString('utf8').split('\n');
     const fixtureLines = fixtureBuf.toString('utf8').split('\n');
     const maxLines = Math.max(deliverableLines.length, fixtureLines.length);
@@ -137,7 +178,14 @@ for (const filename of deliverables) {
 }
 
 console.log('');
-console.log(`Result: ${matched} matched, ${drifted} drifted`);
+console.log(`Result: ${matched} matched, ${drifted} drifted (${allFiles.length} files in union, ${TESTDATA_SYNTHETIC_ONLY.size} excluded)`);
+
+if (matched < MIN_COMPARED) {
+  console.error('');
+  console.error(`FAIL: only ${matched} file(s) compared — expected at least ${MIN_COMPARED}.`);
+  console.error('This guards against a vacuously-empty comparison (e.g. both directories emptied).');
+  process.exit(1);
+}
 
 if (drifted > 0) {
   console.error('');

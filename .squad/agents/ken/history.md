@@ -65,3 +65,59 @@ Tests importing from gitignored `out/` directory without auto-recompile invalida
 6. Non-vacuity controls mandatory in every redaction test.
 
 See history-archive.md for full session-by-session details, mutation tables, and test counts.
+
+---
+
+## Learnings - Petals Lifecycle Port (2026-08-19)
+
+### Stop-and-Reverse: Architectural Premise Was Wrong From Commit One
+
+The entire pump/runAuthenticated/nonce-handoff stack was invented to solve a problem Petals never had: the fear that invokeTool requires an active chat handler stack. Petals invokeMcpTool calls getToolToken() (possibly undefined) and invokes unconditionally. The pre-invoke gate was our addition, not a VS Code requirement. Reading the reference implementation first would have prevented three commits of work.
+
+Binding rule: Before adding a gate or refusal, verify the reference implementation actually has one.
+
+### Token Presence Is Dialog Suppression, Not Authorization
+
+Petals source comment (mcpBridge.ts:10): the token is "to avoid confirmation dialogs." It is NOT an authorization credential. invokeTool with toolInvocationToken: undefined is entirely valid -- VS Code may show a consent dialog but will not reject the call for lack of a token.
+
+### Two-Attempt Pattern Is Inline, Not a Separate Queue
+
+The Petals retry (Canceled + token present -> retry without token) is a two-line try/catch in the invocation path, not a pump, queue, or separate module. We overcomplicated it by building RunPump, RunLoop, RunClient for a problem that needed three lines.
+
+### Deletion Is Progress
+
+Removing 57 tests, 6 source files, 2100+ lines of code, and a user-facing command is unambiguously better than extending the wrong abstraction. Resistance to deletion is the anti-pattern.
+
+### Vacuous Proof Pattern (5th Occurrence -- Different Shape)
+
+INVTOKEN-1 tested that the bridge returned no_active_run and invokeCount === 0. When we removed the gate, INVTOKEN-1 would vacuously pass (it tested the thing we just deleted). Replaced with a spy-count assertion proving invokeTool IS called. Pattern: after removing a gate, tests that asserted the gate fired must be REPLACED, not merely deleted.
+
+### Test Count Accounting
+
+Before: 215. Removed 57 pump/handoff tests. Added 11 petalsLifecycle tests. Replaced 1 INVTOKEN-1 assertion. Net: 215 - 57 + 11 = 169. All pass.
+
+---
+
+## Architectural Record: VS Code toolInvocationToken Is NOT Authorization
+
+**Commit:** 742e368 (2026-08-19)  
+**Decision reference:** `.squad/decisions.md` — "Decision: Port Petals Invocation Lifecycle, Remove Pump/RunAuthenticated Stack"
+
+The VS Code toolInvocationToken serves ONE purpose: to suppress confirmation dialogs. It is not an authorization credential. Petals has no pre-invoke gate and never refuses invocation based on token presence.
+
+**Invariant:** McpBridge.handle() must:
+1. Read cachedToken (may be undefined)
+2. Invoke UNCONDITIONALLY with cachedToken
+3. If Canceled AND cachedToken !== undefined: retry with undefined
+4. Otherwise: classify error and return
+
+The bridge NEVER refuses to invoke due to missing token. Token absence means undefined is passed; VS Code may show a consent dialog, which is the designed behavior.
+
+**Consequences for Future Work:**
+- No pre-invoke gate exists. @gert /arm-mcp is optional dialog suppression only.
+- gert.runAuthenticated (deferred invocation via second action) was invented and is now removed.
+- The pump/queue pattern does not exist in Petals and should not be added to Gert.
+- Two-attempt retry (try with token, catch Canceled + token present -> retry undefined) is the only control flow.
+
+**For Ken's successors:** Read Petals mcpBridgeGeneric.ts:320-345 and mcpBridge.ts:10-22 before designing any token handling or tool invocation flow. If you want to add a gate or refusal, first show that Petals has one.
+

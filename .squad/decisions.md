@@ -3892,3 +3892,103 @@ open `<any>.runbook.yaml`, select **Run authenticated**, enter required inputs, 
 
 2. **`isPartialQuery: false` submission behavior.** Confirmed by GitHub issue documentation that `isPartialQuery: false` auto-submits, but actual keypress simulation in VS Code is not unit-testable.
 
+---
+
+# Decision: Port Petals Invocation Lifecycle, Remove Pump/RunAuthenticated Stack
+
+**Date:** 2026-08-19  
+**Author:** Ken (Core Dev)  
+**Branch:** ken/petals-lifecycle-port  
+**Commit:** 742e368  
+**Status:** Implemented, 169/169 tests passing. Live E2E pending (Cristiano).
+
+---
+
+## Context
+
+Commits 9dfd345, 4560d82, 4d5dbb9 built a pump/chat-handler architecture to hold a VS Code ChatRequestHandler open for MCP tool invocation tokens. This was based on the premise that invokeTool requires an active handler stack. Reading the Petals reference implementation disproved this premise.
+
+Petals (mcpBridgeGeneric.ts:320-345, mcpBridge.ts:10-22) calls invokeTool unconditionally, with whatever token is cached (possibly undefined). Token presence is dialog suppression only, not authorization. Petals has no pre-invoke gate.
+
+---
+
+## Decision
+
+Remove the pump/runAuthenticated/nonce-handoff stack entirely. Port the Petals invocation model faithfully.
+
+---
+
+## What Was Removed
+
+| Artefact | Reason |
+|---|---|
+| src/runPump.ts (RunPump class) | Pump is not Petals; invented to hold handler open |
+| src/runLoop.ts | Pure pump infrastructure |
+| src/runClient.ts | Only served the pump /run handler |
+| src/pendingRunStore.ts | Nonce handoff invented to avoid second action |
+| src/runHandoff.ts | Same |
+| src/runbookArgParse.ts | Only used by /run chat handler |
+| gert.runAuthenticated command | Forbidden second action per Cristiano |
+| editor/title and editor/context menu entries | Same |
+| no_active_run InvocationErrorCategory | Pre-invoke refusal is the removed gate |
+| hasActivePump from LmInterface | Gate implementation |
+| /run chat handler branch | Chat-mediated run path removed |
+
+57 tests deleted (pump, handoff, store, argparse).
+
+---
+
+## What Was Kept / Added
+
+| Artefact | Rationale |
+|---|---|
+| isCanceledError | Petals-derived (mcpBridgeGeneric.ts:330); inlined to mcpBridge.ts, exported |
+| Two-attempt retry in McpBridge.handle() | Direct Petals port: attempt with token, retry without on Canceled + token present |
+| @gert /arm-mcp chat command | Optional dialog suppression; arm-mcp is NOT a precondition |
+| gert.validateInputs (dry-run) | Non-MCP path, unchanged |
+| All other InvocationErrorCategories | Preserved verbatim |
+
+11 new tests in test/petalsLifecycle.test.js (C1-C5 per Cristiano's spec).
+
+---
+
+## Source Map: Petals -> Gert
+
+| Petals location | Gert location |
+|---|---|
+| extension.ts:350 setToolToken(request.toolInvocationToken) | extension.ts arm-mcp handler: setToolToken(request.toolInvocationToken) |
+| mcpBridge.ts:11-22 _toolToken / setToolToken / getToolToken | src/toolTokenStore.ts |
+| mcpBridgeGeneric.ts:320-345 invokeMcpTool() | McpBridge.handle() in src/mcpBridge.ts |
+| mcpBridgeGeneric.ts:330 Canceled retry | isCanceledError() + inline try/catch in McpBridge.handle() |
+| mcpBridge.ts:41-45 setInterval background driver | Gert Core (Go) HTTP calls to bridge; no interval needed |
+
+---
+
+## Invariant: No Pre-Invoke Refusal
+
+McpBridge.handle() now:
+1. Read cachedToken = lm.getToolInvocationToken() (may be undefined)
+2. Invoke with cachedToken
+3. If Canceled and cachedToken !== undefined: retry with undefined
+4. Otherwise: classify error and return
+
+The bridge NEVER refuses to invoke because no token is cached. Token absence means undefined is passed; VS Code may show a consent dialog.
+
+---
+
+## Test Mutation Table (Cristiano's C1-C5)
+
+| Mutation | Failing test |
+|---|---|
+| (a) Add a key to payload before invokeTool | C1: deepEqual fails on receivedInput vs SUBMITTED_ARGS |
+| (b) Make bridge refuse pre-invoke when no token | C4: invokeCount === 1 assertion fails (got 0) |
+| (c) Concatenate sentinel arg into log line | C3: sentinel found in logLines |
+| (d) Keep gert.runAuthenticated in package.json | C2: found !== undefined assertion fails |
+| (e) String-coerce incident_id before invokeTool | C1: strictEqual typeof 'string' fails |
+
+---
+
+## Pending
+
+Live end-to-end acceptance test (Cristiano's requirement 4): real VS Code session, SQL Live-Site router, real ICM incident. This requires Cristiano to run in a real VS Code session. NOT claimed complete.
+

@@ -1967,3 +1967,116 @@ Phase B merge order (pending Germán PR landing):
 
 Once PR #10 merges, Don can start **Phase C (GXL evaluator + stdlib, 92 tv-gxl-eval vectors)**.
 
+---
+
+## Decision: Remove /probe-token — Kills ICM MCP Session
+
+**Date:** 2026-08-19  
+**Author:** Ken (Backend Dev)  
+**Status:** Recommended — awaiting coordinator/Cristián approval to merge  
+**Severity:** High — currently in production extension; each invocation permanently disables ICM MCP for the VS Code session
+
+### Problem Statement
+
+After running `@gert /probe-token`, the ICM MCP server (`icm-mcp`) stops and cannot be restarted until a VS Code reload or machine reboot. The user correctly suspected the probe is doing something seriously wrong.
+
+### Root Cause (Evidence-Based)
+
+#### 1. Four unconditional `invokeTool` calls against a live remote MCP server
+
+`runProbe()` in `src/probeToken.ts` lines 305–315 executes T1, T2, T3, and T4 with **no early exit on failure**:
+
+```typescript
+// T1 — synchronous
+results.push(await runAttempt('T1-synchronous', invokeToolFn, token, ...));
+// T2 — after microtask
+await Promise.resolve();
+results.push(await runAttempt('T2-microtask', invokeToolFn, token, ...));
+// T3 — after 250ms setTimeout
+await new Promise<void>((r) => setTimeout(r, 250));
+results.push(await runAttempt('T3-macrotask', invokeToolFn, token, ...));
+// T4 — after loopback HTTP round-trip
+await loopbackRoundTrip();
+results.push(await runAttempt('T4-loopback', invokeToolFn, token, ...));
+```
+
+Each `runAttempt` calls `invokeToolFn` which calls `vscode.lm.invokeTool(toolName, ..., cancellation)`.
+
+#### 2. `icm-mcp` is a remote HTTP server — VS Code owns its session lifecycle
+
+`$APPDATA\Code\User\mcp.json`:
+```json
+"icm-mcp": {
+  "type": "http",
+  "url": "https://icm-mcp-prod.azure-api.net/v1/"
+}
+```
+
+This is not a local stdio process. VS Code's MCP client maintains an in-memory HTTP session for it. Every `invokeTool` failure that is a transport/session failure causes VS Code to attempt a reconnect. After repeated reconnect failures (4 in rapid succession from the probe), VS Code's MCP state machine for `icm-mcp` enters a permanently-disabled state for the current VS Code session.
+
+#### 3. The chat `_token` is passed as `cancellation` to every invokeTool call
+
+`extension.ts` lines 128–143:
+```typescript
+await handleProbeToken(
+  ...,
+  (name, options, cancellation) =>
+    vscode.lm.invokeTool(name, { ... }, cancellation as vscode.CancellationToken),
+  _token,  // <-- chat request CancellationToken
+  ...
+);
+```
+
+`handleProbeToken` captures this as `cancellation` and passes it to all 4 `invokeToolFn` calls (`probeToken.ts:413`). When the chat handler eventually returns, VS Code fires `_token` cancellation, potentially triggering additional MCP teardown.
+
+#### 4. The probe is marked THROWAWAY and its measurement is complete
+
+`src/probeToken.ts` line 1:
+```typescript
+// probeToken.ts — Throwaway diagnostic: does toolInvocationToken survive an await?
+```
+
+Per `history.md` (Probe Schema Diagnostics section): T1 fails identically to T2/T3/T4 (~5-7s). The measurement is done. The probe has no remaining diagnostic value.
+
+### Hypotheses (not VS Code-source-verified)
+
+- VS Code applies a crash-count gate or exponential back-off after N consecutive MCP failures and stops attempting reconnects for the session lifetime. The probe reliably triggers this by producing exactly 4 failures in rapid succession.
+- The `_token` cancellation callback may also signal VS Code to tear down any in-flight MCP state established during the handler.
+
+### Safe Immediate Recovery (no reboot required)
+
+**`Developer: Reload Window`** (`Ctrl+Shift+P` → type "Reload Window").
+
+This resets the VS Code extension host and all in-memory MCP client state. The ICM MCP server should reconnect on the next `invokeTool` call. Machine reboot is not required and should not be the recommended recovery.
+
+**Caveat:** If VS Code's MCP session failure also caused server-side auth token invalidation at `icm-mcp-prod.azure-api.net`, a fresh sign-in prompt may appear after reload. This is the designed behavior for authentication failure — not a sign that the reload failed.
+
+### Recommended Code Change
+
+Remove `/probe-token` entirely. It is complete, throwaway, and actively dangerous.
+
+**Files to change:**
+
+1. **`package.json`** — remove `probe-token` from `chatParticipants[0].commands` array. This makes the command inert without reinstalling the extension.
+
+2. **`src/extension.ts`** — remove the `probe-token` branch (lines ~125–144):
+   ```typescript
+   if (request.command === 'probe-token') { ... }
+   ```
+   Also remove the `handleProbeToken` import.
+
+3. **Delete `src/probeToken.ts`** — entire file. The `buildSchemaDump`/`schemaVerdict` helpers are unused outside this file.
+
+4. **Delete `test/probeToken.test.js`** — remove the associated test file.
+
+**Test count impact:** Will reduce test count by the number of probe-token tests. Run `npm test` to confirm clean pass after deletion.
+
+### Future Diagnostic Probes — Binding Rule
+
+Any future diagnostic that calls `vscode.lm.invokeTool` against a live MCP endpoint must:
+- Call at most once per invocation, OR
+- Stop on first failure (no unconditional multi-attempt loops), OR
+- Target a mock/stub, never a live MCP endpoint registered in `mcp.json`.
+
+Calling `invokeTool` N times unconditionally against a real remote MCP server in a production extension is not safe.
+

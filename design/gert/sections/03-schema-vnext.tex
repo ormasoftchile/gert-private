@@ -112,6 +112,18 @@ A breaking change is any of:
 Adding new optional fields, adding new enum values, and loosening existing
 constraints are \emph{not} breaking changes.
 
+\paragraph{Introducing an \texttt{enum} is narrowing.} Adding an \texttt{enum:}
+constraint to a previously unconstrained \texttt{type: string} declaration
+(\S\ref{subsec:inputs}, \S\ref{subsec:outputs}) \textbf{IS} a breaking change
+to that contract, even though the schema's own \texttt{apiVersion} does not
+bump (\S\ref{sec:tool-packages-compat}). It is the limiting case of
+``narrowing an existing enum'' above: a previously unconstrained string
+accepted every value, and constraining it to a finite member list rejects
+every value outside that list. Authors changing an existing, previously
+unconstrained input or output to add an \texttt{enum:} MUST treat this as a
+breaking change to callers of that runbook or tool action, in the same way
+removing a value from an existing \texttt{enum:} is.
+
 
 
 % ============================================================
@@ -170,22 +182,29 @@ includes it by id.
 \subsection{toolRefs}
 \label{subsec:toolrefs}
 
-\texttt{toolRefs} is a typed array that allows aliasing and explicit path
-overrides:
+\texttt{toolRefs} is a typed array that binds and narrows which tool names a
+runbook's \texttt{flow} may reference, and optionally pins where and from
+which package each name is bound (\S\ref{sec:tool-bindings}). It does not
+itself add packages to the catalog; that is the job of the canonical
+\texttt{requires:} key (\S\ref{sec:tool-bindings}).
 
 \begin{minted}{yaml}
 toolRefs:
   - name: curl
   - name: nslookup
   - name: k8s
-    path: ./tools/k8s.tool.yaml   # override default discovery
-    alias: kubectl-wrapper        # optional local alias
+    path: ./tools/k8s.tool.yaml   # direct path, resolved per \S\ref{sec:tool-secure-paths}
 \end{minted}
 
-The default discovery path for \texttt{name: foo} is \texttt{tools/foo.tool.yaml}
-relative to the runbook file.  The \texttt{path} field overrides this.
-The \texttt{alias} field lets the runbook reference the tool by a local name
-that differs from the tool's declared \texttt{meta.name}.
+There is no default, name-derived discovery path such as
+\texttt{tools/<name>.tool.yaml}: a bare \texttt{name} is resolved by lookup
+against the frozen catalog produced by Phase C
+(\S\ref{sec:tool-name-resolution}), not by deriving a path from the name. See
+\S\ref{sec:tool-bindings} for the full field disposition of \texttt{package},
+\texttt{version}, and \texttt{path}, and for the deprecated \texttt{source}
+and \texttt{actions} fields. An \texttt{alias} field is \textbf{not}
+part of this schema --- its presence is \texttt{PKG-021}, a hard parse-gate
+error detected before generic schema validation (\S\ref{sec:tool-bindings}).
 
 \subsection{Minimal Valid Runbook}
 \label{subsec:minimal-runbook}
@@ -246,7 +265,7 @@ outputs:
   health_status:
     type: string
     description: "Final health assessment"
-    from: captures.http_result
+    value: "captures.http_result"
 
 toolRefs:
   - name: curl
@@ -348,17 +367,22 @@ the \texttt{inputs} map is a top-level field (promoted from \texttt{meta.inputs}
 \begin{minted}{yaml}
 inputs:
   <name>:
-    type: string | number | boolean | secret
+    type: string | number | boolean | secret | array | object
     required: true | false          # default: true
     description: "..."
     default: "..."                  # valid only when required: false
     example: "..."
     pattern: "^[a-z]+"             # regex validation (string only)
     from: <binding>                 # resolution source
+    enum: ["<member1>", "<member2>"]  # value constraint (string only, S3)
 \end{minted}
 
 \paragraph{type field}
-The \texttt{type} field declares the value's type.  Supported values:
+\label{para:type-field}
+The \texttt{type} field declares the value's type. \texttt{type} is
+\textbf{REQUIRED} (\texttt{runbook.v1.schema.json} \texttt{\$defs.Input.required});
+an omitted \texttt{type} key is a structural schema error, not an enum or
+semantic error. Supported values:
 
 \begin{itemize}
   \item \texttt{string} — Default. UTF-8 text.
@@ -383,6 +407,150 @@ The \texttt{type} field declares the value's type.  Supported values:
         The resulting value in the execution context is a PJVM object and may be
         traversed with GCP dotted-path expressions (see \S\ref{sec:gcp}).
 \end{itemize}
+
+\paragraph{\texttt{enum}: value constraint (string only)}
+\label{para:enum-constraint}
+
+An input MAY declare \texttt{enum:}, a value-domain constraint valid only
+when the input resolves to \texttt{type: string} (see \S\ref{para:type-field}
+above). \texttt{type} is a required key on \texttt{Input}
+(\texttt{runbook.v1.schema.json} \texttt{\$defs.Input.required}); an omitted
+\texttt{type} is a structural schema error, never an \texttt{ENUM-*} code.
+\texttt{enum} is one of exactly four
+declaration sites at which this keyword is valid across the whole
+specification; the other three are the tool action \texttt{args.<name>} and
+\texttt{outputs.<name>} declarations
+(\texttt{design/gert/sections/06-tool-runtime.tex} \S Tool Definition
+Schema, \S Action Substitution) and the runbook \texttt{outputs.<name>}
+declaration below (\S\ref{subsec:outputs}). \texttt{enum} is \textbf{not}
+valid on \texttt{capture:}/\texttt{capture\_defaults:} entries, \texttt{vars:},
+step-level fields, \texttt{collector} fields, \texttt{toolRefs}, or
+\texttt{requires}; presence there is rejected by ordinary unknown-key
+(\texttt{additionalProperties: false}) validation, not a new error code.
+\texttt{enum} is a constraint, never a type: there is no ``enum type'', no
+change to the PJVM type set, and no interaction with GXL, GIS, or GCP
+grammars (\texttt{gxl.ebnf}, \texttt{gis.ebnf}, \texttt{gcp.ebnf} are
+unchanged).
+
+\begin{itemize}
+  \item \texttt{enum} on a non-string declaration, including
+        \texttt{type: secret}, is \texttt{ENUM-001}. A secret's value domain
+        \textbf{MUST NOT} be enumerable: an enum member list on a redacted
+        field is a value oracle that defeats the redaction it sits next to
+        (\S\ref{sec:credential-handling}).
+  \item \texttt{enum} \textbf{MUST} be a non-empty (\texttt{minItems: 1})
+        YAML sequence of scalars that each resolve to a string under the
+        YAML~1.2 core schema. A mapping, scalar, or \texttt{null} value for
+        \texttt{enum} itself, an empty sequence, a nested
+        sequence/mapping item, an explicitly tagged item, or a plain scalar
+        that resolves to boolean/int/float/null under the core schema
+        (e.g.\ unquoted \texttt{true}/\texttt{false}, \texttt{1.0},
+        \texttt{\textasciitilde}) is \texttt{ENUM-002}. There
+        is \textbf{no coercion}: authors quote ambiguous scalars. (Unquoted
+        \texttt{yes}/\texttt{no} resolve to strings under the YAML~1.2 core
+        schema and are therefore \textbf{not} an ENUM-002 case; the single
+        most likely real-world trap is \texttt{enum: [true, false]}, which
+        fails loudly.)
+  \item No member may be the empty string, whitespace-only, or carry
+        leading/trailing whitespace (\texttt{ENUM-003}): these are
+        indistinguishable from ``unset'' or introduce an invisible
+        distinction across \texttt{from: env}, \texttt{from: prompt}, and
+        CLI sourcing.
+  \item Members \textbf{MUST} be pairwise distinct after NFC normalisation
+        (\texttt{ENUM-004}); each MUST already be valid UTF-8, already in
+        NFC, and free of Unicode control characters (U+0000--U+001F,
+        U+007F) and bidi/format controls (U+200E, U+200F, U+202A--U+202E,
+        U+2066--U+2069) (\texttt{ENUM-005}).
+  \item \textbf{Comparison} is codepoint-wise equality on NFC forms: no case
+        folding, no locale collation, no confusable/skeleton analysis, no
+        comparison-time trimming. Normalisation is deliberately
+        \textbf{asymmetric}: declared members MUST already be NFC
+        (\texttt{ENUM-005} otherwise); candidate values from outside the
+        file (environment, prompt, provider, tool stdout, caller bindings)
+        \textbf{ARE} NFC-normalised before comparison, since the author
+        controls their own file but not what an external system returns.
+  \item Case-only-distinct members (\texttt{["Prod", "prod"]}) are legal and
+        match case-sensitively; a validator \textbf{MUST} emit
+        \texttt{ENUM-W001} (non-fatal) for such a pair.
+  \item \textbf{Two orderings are both normative and distinct.}
+        \emph{Declared order} --- the sequence as authored, preserved
+        verbatim --- is used for adapter/UI rendering, \texttt{--output=json}
+        metadata, and diagnostic ``permitted values'' lists.
+        \emph{Canonical order} --- ascending codepoint order of the NFC
+        forms --- is used for textual/byte comparison, deterministic
+        diagnostics, and cross-runtime parity. \textbf{Enum identity for
+        contract comparison (\texttt{PKG-013}) is SET equality,
+        order-insensitive}: reordering members is not a contract break.
+  \item If \texttt{default} is present alongside \texttt{enum}, the default
+        \textbf{MUST} be a declared member (exact match, NFC) or the
+        declaration is \texttt{ENUM-006} at plan time. \texttt{enum}
+        constrains values, not presence: it does not imply
+        \texttt{required: true}, and an optional, defaultless, unsupplied
+        input is \emph{absent}, never an enum violation. \texttt{null} is
+        never a member and cannot be added as one (\texttt{ENUM-002}
+        rejects the \texttt{null} scalar); an explicit \texttt{null} on an
+        optional input means absent.
+  \item \textbf{Plan time:} well-formedness (above) and any statically-known
+        literal bound to the input --- a runbook input \texttt{default}, or
+        a constant \texttt{step.tool.args} value with no GIS interpolation
+        --- is checked against the enum; a non-member literal is
+        \texttt{ENUM-007}. A value containing GIS interpolation is
+        \textbf{never} evaluated against an enum at plan time (no partial
+        evaluation, prefix analysis, or constant folding of
+        \texttt{\$\{...\}}); a runtime-only failure is a designed outcome.
+  \item \textbf{Runtime:} membership is checked at the moment of binding,
+        after existing type resolution/GIS coercion to string, after the
+        existing type check, and after NFC normalisation of the candidate.
+        A non-string value bound to an enum-constrained string input is
+        reported as the \textbf{type} error, never \texttt{ENUM-008}
+        (single-cause reporting). \texttt{\${count}} coercing to
+        \texttt{"2"} and matching a member \texttt{"2"} is a pass --- enum
+        operates on the post-coercion PJVM string. On failure
+        (\texttt{ENUM-008}) the binding does not occur: the value never
+        enters the execution context, is never passed to a tool, and is
+        never written to the trace as an accepted value; there is no
+        coercion, no nearest-match auto-correction, and no fallback to
+        \texttt{default}. This applies at every input-resolution site,
+        including \texttt{from: prompt} (the operator is re-prompted per
+        the existing collector retry contract where one applies; otherwise
+        the run fails), \texttt{from: env}, \texttt{from: <provider>.<field>},
+        and caller/context bindings.
+  \item Replay mode \textbf{does not} bypass enum validation: a value
+        answered from a scenario file is a bound value and is validated
+        identically (\texttt{design/gert/sections/13-evidence-tracing-resumption.tex}
+        \S Replay Semantics).
+  \item \texttt{enum} is \textbf{declaration-local and lexically scoped}: it
+        is never inherited, merged, intersected, or unioned across an
+        \texttt{include} boundary. If a parent and an included runbook both
+        declare the same variable name with different enums, each
+        declaration constrains only its own binding site --- this is not a
+        conflict and raises no error. For a lazily materialised include,
+        enum well-formedness is validated when that file is materialised,
+        consistent with existing lazy-include semantics; this creates no
+        late-binding hole, since an enum is inert file-local data with no
+        global namespace or catalog tier.
+  \item \texttt{enum} metadata (the member list) travels with the
+        \emph{declaration}, in the \texttt{ValidatedPlan}
+        (\texttt{design/gert/sections/03d-parse-time-enforcement.tex}
+        \S The \texttt{ValidatedPlan} Type Contract) and once per run in the
+        plan-validation trace record; it is \textbf{never} repeated
+        per-invocation and per-event payloads carry the bound value only.
+        For a redacted declaration (\texttt{redact: true},
+        \texttt{governance.sensitive\_inputs}, or a
+        \texttt{governance.redact} match), the member list \textbf{MUST}
+        be replaced with the literal string \texttt{"<redacted>"} plus a
+        \texttt{member\_count} integer everywhere it would otherwise be
+        emitted (\S\ref{sec:credential-handling}), and an
+        \texttt{ENUM-008} message for such a declaration \textbf{MUST NOT}
+        enumerate permitted values or echo the rejected value.
+\end{itemize}
+
+Adding an \texttt{enum:} constraint to a previously unconstrained
+\texttt{type: string} input is a breaking change to that input's contract
+(\S\ref{sec:schema-identity}); removing a valid member from an existing
+\texttt{enum:} is likewise breaking. Introducing \texttt{enum} on an
+existing declaration is therefore an authoring decision with caller impact,
+not merely additive schema evolution.
 
 \paragraph{from: binding syntax}
 
@@ -417,14 +585,53 @@ step type (future scope, isolated scope with explicit I/O mapping).
 \begin{minted}{yaml}
 outputs:
   <name>:
-    type: string | number | boolean | secret
+    type: string | number | integer | boolean | object | array
     description: "..."
-    from: captures.<captureName>    # must reference a capture variable
+    value: "captures.<captureName>"      # GCP path, resolved at runbook completion
+    enum: ["<member1>", "<member2>"]  # value constraint (string only, S4)
 \end{minted}
 
-The \texttt{from: captures.*} binding is the only supported form in the schema.
-The named capture must be written by at least one step in the runbook; the
-semantic validator checks this.
+\texttt{value:} is the sole supported binding form (\texttt{design/gert/schemas/runbook.v1.schema.json}
+\texttt{\$defs.Output}, \texttt{design/gert/grammar/gcp.ebnf} \S3.4a): a GCP
+path resolved against the runbook's final execution context at completion,
+exactly as consumed by the substitution output contract
+(\texttt{design/gert/sections/06-tool-runtime.tex} \S Action Substitution
+\S Output contract). An earlier draft of this section documented a
+\texttt{from: captures.<captureName>} binding form for this purpose; that
+form does not appear in the schema or in \S Action Substitution and is
+superseded by \texttt{value:} above --- \texttt{from: captures.*} MUST NOT be
+authored and is rejected as an unknown key. The path referenced by
+\texttt{value:} must resolve against a capture (or other context value)
+written by at least one step in the runbook; the semantic validator checks
+this.
+
+\paragraph{\texttt{enum}: value constraint (string only)}
+
+An output MAY declare \texttt{enum:}, valid only when the output resolves to
+\texttt{type: string}; this is the fourth and final of the four sites at
+which \texttt{enum} is valid (\S\ref{para:enum-constraint} above lists the
+other three and states the full well-formedness, Unicode, ordering,
+plan/runtime-timing, replay, include-scoping, and metadata/redaction rules,
+which apply identically here; the default-membership rule does not, since
+\texttt{\$defs.Output} has no \texttt{default} field --- see below). The one
+difference from an input declaration is \textbf{when} the check fires: an
+output's declared \texttt{value:} is
+checked against its \texttt{enum} at \textbf{production time} --- when the
+value resolves at runbook completion --- \textbf{before} it crosses the
+caller boundary, enters a substituting call site's \texttt{outputs.<name>}
+capture, is written to the trace, or reaches \texttt{--output=json}. A
+non-member output value is \texttt{ENUM-009}; an off-enum output
+\textbf{MUST NOT} be emitted with a warning in its place, since a contract
+declaring ``this output is one of these'' is meaningless if it can be
+silently violated. A runbook \texttt{Output} declaration
+(\texttt{\$defs.Output}) has no \texttt{default} field, so no
+default-membership obligation attaches here; the declared-default rule
+(\texttt{ENUM-006}) applies where a \texttt{default} field actually exists
+--- runbook \texttt{Input.default} (S3) and a substituted tool action's own
+declared \texttt{outputs.<name>.default} (S2, \texttt{06-tool-runtime.tex}
+\S Action Substitution \S Output contract, where the \texttt{PKG-027}
+producibility check and \texttt{ENUM-006} fire independently and both apply
+where applicable).
 
 \subsection{Expression Language}
 \label{subsec:expressions}
@@ -3173,7 +3380,7 @@ transport:
   # start: ["python", "mcp_server.py"]
 
 actions:
-  get-pods:
+  - name: get-pods
     description: List pods in a namespace
     argv: ["get", "pods", "-n", "{{ .namespace }}", "-o", "json"]
     args:
@@ -3294,7 +3501,7 @@ transport:
   command: ping
 
 actions:
-  check:
+  - name: check
     description: Ping a host with a fixed packet count
     argv:
       - "-c"
@@ -3312,7 +3519,7 @@ actions:
         description: Number of ICMP packets to send
     returns: text
 
-  check-timeout:
+  - name: check-timeout
     description: Ping a host with a deadline per packet
     argv:
       - "-c"
@@ -3479,6 +3686,14 @@ The \texttt{fields} map defines the provider's schema.  Each field name
 corresponds to a \texttt{from: <provider>.<field>} binding in a runbook input.
 The semantic validator checks that all \texttt{from: <provider>.*} bindings
 reference a field declared in a loaded provider definition.
+
+The \texttt{enum: [P1, P2, P3, P4]} shown on \texttt{severity} above is
+\textbf{informative prose describing the provider's own external schema}, not
+a GERT-validated construct: a provider's \texttt{fields:} map is not one of
+the four sites at which GERT's \texttt{enum} keyword is normatively defined
+(\S\ref{para:enum-constraint}), and no \texttt{ENUM-*} code is raised against
+it. A provider MAY use this shape to document its own field's value domain
+for human readers; GERT does not parse, validate, or enforce it.
 
 % ============================================================
 \section{Namespace Convention for Extensions}

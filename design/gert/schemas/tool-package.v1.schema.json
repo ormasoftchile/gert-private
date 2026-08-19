@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.gert.dev/tool-package/v1.json",
+  "title": "GERT Tool Package Manifest v1",
+  "description": "Structural contract for gert-package.yaml files with apiVersion: tool-package/v1. Declares a local, on-disk collection of exported tool definitions. Validates structure and types only. Hand-authored per Barbara's ruling (.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md), AR-TP-3 / §3.1. Non-tool assets (docs, dashboards, policy bundles, binaries-as-payload) are not describable by this schema in the MVP — see AR-TP §0.",
+  "type": "object",
+  "required": ["apiVersion", "meta", "exports"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional JSON Schema declaration for IDE tooling."
+    },
+    "apiVersion": {
+      "type": "string",
+      "const": "tool-package/v1",
+      "description": "API version discriminator. MUST be 'tool-package/v1'."
+    },
+    "meta": {
+      "$ref": "#/$defs/PackageMeta"
+    },
+    "exports": {
+      "$ref": "#/$defs/Exports"
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "Transitive package dependencies are out of scope in the MVP (AR-TP §0, non-goal). This field is schema-valid at any length so that a non-empty array is diagnosed with the intended, more specific error rather than a generic schema-validation failure: the resolver MUST raise PKG-016 for any non-empty array. An empty array or absent field is accepted with no error.",
+      "items": {}
+    }
+  },
+  "$defs": {
+    "PackageMeta": {
+      "type": "object",
+      "description": "Package identity. The package root is the directory containing gert-package.yaml.",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Reverse-DNS package name. URL-shaped names (e.g. 'github.com/acme/gert-tools') are rejected as PKG-004 — a name that looks like a location invites a remote fetch that the MVP does not perform.",
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+        },
+        "version": {
+          "type": "string",
+          "description": "Strict SemVer 2.0.0 (see design/gert/sections/06-tool-runtime.tex §Version Constraint Grammar). A leading 'v' is rejected, not stripped (PKG-025).",
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-((0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(\\.(0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\\+([0-9a-zA-Z-]+(\\.[0-9a-zA-Z-]+)*))?$"
+        },
+        "description": {
+          "type": "string",
+          "description": "Non-normative summary of the package's purpose."
+        },
+        "license": {
+          "type": "string",
+          "description": "SPDX license identifier (e.g. 'Apache-2.0')."
+        }
+      }
+    },
+    "Exports": {
+      "type": "object",
+      "description": "The package's public API surface. A .tool.yaml inside the package that is not listed here is invisible to consumers; referencing it is PKG-011. There is no implicit tools/ directory scan.",
+      "required": ["tools"],
+      "additionalProperties": false,
+      "properties": {
+        "tools": {
+          "type": "array",
+          "description": "Exported tool entries. Unique by both 'id' and 'path'.",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ToolExport" }
+        }
+      }
+    },
+    "ToolExport": {
+      "type": "object",
+      "description": "A single exported tool. The qualified catalog name for this export is '<meta.name>/<id>' (AR-TP §3.1).",
+      "required": ["id", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Bare tool name exported by the package. MUST equal the referenced .tool.yaml's meta.name (or name); a mismatch is PKG-023.",
+          "pattern": "^[a-z0-9]([a-z0-9_-]*[a-z0-9])?$"
+        },
+        "path": {
+          "type": "string",
+          "description": "Package-root-relative POSIX path to the .tool.yaml definition. Subject to the secure path rules in design/gert/sections/06-tool-runtime.tex §Secure Path Resolution: '/' separator only, no absolute path, no escape above the package root (PKG-007); a missing file is PKG-010."
+        }
+      }
+    }
+  }
+}

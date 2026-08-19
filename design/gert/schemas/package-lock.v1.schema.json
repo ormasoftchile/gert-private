@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.gert.dev/package-lock/v1.json",
+  "title": "GERT Package Lock v1",
+  "description": "Structural contract for .gert/packages.lock.json with apiVersion: package-lock/v1. This is a generated, committed, frozen integrity record — NOT a solver output (.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md, AR-TP-3 / §3.5). Lock presence is OPTIONAL for 'gert run'; when present, a digest mismatch is PKG-009. 'gert verify' extends to check this file.",
+  "type": "object",
+  "required": ["apiVersion", "generatedBy", "packages", "catalogDigest"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional JSON Schema declaration for IDE tooling."
+    },
+    "apiVersion": {
+      "type": "string",
+      "const": "package-lock/v1",
+      "description": "API version discriminator. MUST be 'package-lock/v1'."
+    },
+    "generatedBy": {
+      "type": "string",
+      "description": "Identifier of the tool version that generated this lock file, e.g. 'gert/2.3.1'."
+    },
+    "packages": {
+      "type": "array",
+      "description": "One entry per resolved package in the run's global package set (design/gert/sections/02-architecture.tex §Include/Import Graph). Sorted ascending by 'name' for determinism.",
+      "items": { "$ref": "#/$defs/LockedPackage" }
+    },
+    "catalogDigest": {
+      "type": "string",
+      "description": "The order-independent catalog digest (design/gert/sections/06-tool-runtime.tex §Digest, Evidence, Trace, Resume). 'sha256:' followed by 64 lowercase hex characters.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  },
+  "$defs": {
+    "LockedPackage": {
+      "type": "object",
+      "required": ["name", "version", "root", "digest", "exports"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Reverse-DNS package name.",
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+        },
+        "version": {
+          "type": "string",
+          "description": "The resolved package's strict SemVer 2.0.0 version, as declared in its gert-package.yaml meta.version. A leading 'v' is rejected, not stripped (PKG-025), matching PackageMeta.version in tool-package.v1.schema.json.",
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-((0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(\\.(0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\\+([0-9a-zA-Z-]+(\\.[0-9a-zA-Z-]+)*))?$"
+        },
+        "root": {
+          "type": "string",
+          "description": "Workspace-relative POSIX path to the package root. For packages resolved outside the workspace, this field takes the form 'external:sha256:<digest of the absolute realpath, UTF-8, NFC>' instead of a raw absolute path — raw absolute paths leak usernames and host layout into committed artefacts and traces. The first alternative is deliberately NOT '[^\\x00]+': it requires a relative, forward-slash POSIX path (no leading '/', no drive letter, no backslash, no '..' segment) so that a raw absolute path can never validate under either branch — the invariant is enforced structurally, not just by convention.",
+          "pattern": "^(([a-zA-Z0-9_.-]+(/[a-zA-Z0-9_.-]+)*)|external:sha256:[0-9a-f]{64})$"
+        },
+        "digest": {
+          "type": "string",
+          "description": "The package's deterministic, order-free content digest (§Digest, Evidence, Trace, Resume, 'Package digest').",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "exports": {
+          "type": "array",
+          "description": "Per-export digests, sorted ascending by 'id'.",
+          "items": { "$ref": "#/$defs/LockedExport" }
+        }
+      }
+    },
+    "LockedExport": {
+      "type": "object",
+      "required": ["id", "path", "digest"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Bare tool name, matching the package manifest's exports.tools[].id."
+        },
+        "path": {
+          "type": "string",
+          "description": "Package-root-relative POSIX path to the .tool.yaml, matching the package manifest's exports.tools[].path."
+        },
+        "digest": {
+          "type": "string",
+          "description": "The raw-byte SHA-256 file digest of the .tool.yaml at the time of locking.",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

@@ -289,6 +289,61 @@ wait loop. The adapter (or the \texttt{gert serve} session timer) is responsible
 the timeout to the approver.
 
 % ─────────────────────────────────────────────────────────────────────────────
+\section{Substitution Governance Composition}
+\label{sec:governance-substitution-composition}
+% ─────────────────────────────────────────────────────────────────────────────
+
+A tool action may be implemented by a GERT runbook instead of a process
+(``substitution'', \texttt{design/gert/sections/06-tool-runtime.tex}
+\S Action Substitution). Substitution \textbf{MUST NOT} be usable as a
+privilege-escalation path. This section is the normative invariant per
+Barbara's ruling
+\texttt{.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md}
+(AR-TP-5 §5.4, ratified 2026-08-09): the substitute's effective policy is
+\textbf{derived} from the caller's effective policy and the substitute's own
+declared policy --- it is never simply adopted from either side alone.
+
+\begin{center}
+\begin{tabular}{p{3.2cm}p{10.8cm}}
+\hline
+\textbf{Field} & \textbf{Composition} \\
+\hline
+\texttt{require\_approval} & Logical \textbf{OR} of caller-effective and substitute. \\
+\texttt{deny\_commands} & \textbf{Union}. \\
+\texttt{deny\_env\_vars} & \textbf{Union}. \\
+\texttt{allow\_commands} & \textbf{Intersection}. \\
+\texttt{redact} & \textbf{Union}. \\
+\texttt{rules} & Caller-effective rules evaluated first, then substitute rules; a substitute rule \textbf{MUST NOT} convert a \texttt{deny} into an \texttt{allow}. \\
+capabilities & Substitute's effective capability set = caller-effective $\cap$ tool \texttt{governance.requires-capabilities} closure; never a superset. \\
+\hline
+\end{tabular}
+\end{center}
+
+Any substitute construct whose composition would \textbf{widen} the
+caller's effective policy is \texttt{PKG-014}, raised \textbf{at plan time}
+by static comparison of the two policy sets --- never at runtime. Widening
+that is detectable only at runtime is treated as a design defect, which is
+precisely why \texttt{allow\_commands} is \textbf{intersected} rather than
+merged (a union would let a substitute add commands the caller never
+allowed) and why \texttt{require\_approval} is OR'd rather than AND'd (a
+substitute cannot use its own laxer default to bypass a caller-required
+approval gate).
+
+The tool's own \texttt{governance.allowed-environments} and
+\texttt{requires-approval} (\texttt{design/gert/sections/06-tool-runtime.tex}
+\S Tool Definition Schema) continue to gate the action exactly as for
+process-backed actions --- substitution changes \emph{how} the action
+executes, not whether the surrounding governance gate applies. A
+\texttt{dry-run} run \textbf{MUST NOT} execute a substitute's side-effecting
+steps, mirroring the dry-run contract for process-backed tools.
+
+The composed (effective) governance for each substitution frame is recorded
+verbatim in the \texttt{tool/substituted} trace event
+(\texttt{design/gert/sections/07-runtime-events.tex}
+\S Package and Substitution Events), because ``what policy actually
+applied'' is the audit question this composition rule exists to answer.
+
+% ─────────────────────────────────────────────────────────────────────────────
 \section{Policy-as-Code Direction}
 % ─────────────────────────────────────────────────────────────────────────────
 

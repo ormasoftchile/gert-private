@@ -54,7 +54,7 @@ The \texttt{sequence} field provides a total order over events in a single run. 
 
 \subsection{Event Type Catalogue}
 
-The following event kinds are normative in the schema. All user-supplied string fields (command arguments, outputs, prompt responses) pass through the redaction pipeline before being written.
+The following event kinds are normative in the schema. All user-supplied string fields (command arguments, outputs, prompt responses) pass through the redaction pipeline before being written. Enum-constrained declarations (tool action \texttt{args.<name>}/\texttt{outputs.<name>}, runbook \texttt{inputs.<name>}/\texttt{outputs.<name>}, design/gert/sections/03-schema-vnext.tex \S\ref{para:enum-constraint}) carry their member list once per run, in the \texttt{plan.validated} record described in design/gert/sections/03d-parse-time-enforcement.tex \S The \texttt{ValidatedPlan} Type Contract; no other event in this catalogue --- including \texttt{tool/invoked} and \texttt{tool/completed} below --- repeats it. A redacted declaration's member list is replaced with the literal string \texttt{"<redacted>"} plus a \texttt{member\_count} integer wherever it would otherwise be emitted (design/gert/sections/03d-parse-time-enforcement.tex \S The \texttt{ValidatedPlan} Type Contract).
 
 \subsubsection{\texttt{run/started}}
 \label{sec:run-started-event-client-field}
@@ -412,6 +412,35 @@ The state required to resume a run from step $N$ is exactly the snapshot at \tex
 
 The runbook YAML itself is not stored in the snapshot; it is re-read from \texttt{RunbookPath} at resume time. Operators must not modify the runbook between the original run and resumption.
 
+\subsection{Package Map in the Run Manifest}
+\label{sec:package-resumption-manifest}
+
+Per Barbara's ruling
+\texttt{.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md}
+(AR-TP-7 §7.4--7.5, ratified 2026-08-09), the completion/run manifest
+(\texttt{run.yaml}, \S\ref{sec:trace-file-format}) additionally records the
+frozen package map produced at plan time
+(\texttt{design/gert/sections/06-tool-runtime.tex} \S Tool Packages,
+\S Digest, Evidence, Trace, Resume):
+
+\begin{minted}{yaml}
+# run.yaml (excerpt)
+packages:
+  - name: acme.incident-tools
+    version: "1.4.2"
+    root: vendor/acme-incident-tools
+    digest: "sha256:9f2e1a..."
+catalogDigest: "sha256:7bd4c2..."
+\end{minted}
+
+This is covered by the same HMAC trace chaining as every other manifest
+field (\texttt{design/gert/sections/08-security-and-trust.tex}
+\S Trace File Integrity). Package roots and digests are therefore part of
+the \textbf{Minimum Resumption State} in exactly the same sense as
+\texttt{Vars} and \texttt{Captures} above: resuming a run means resuming
+against the same tool universe it originally planned against, not merely
+the same step cursor.
+
 % ------------------------------------------------------------------ %
 \section{Run Resumption}
 % ------------------------------------------------------------------ %
@@ -435,6 +464,42 @@ The runtime executes the following recovery sequence:
 \end{enumerate}
 
 The resumption does \emph{not} re-execute any step recorded in \texttt{History}. It continues from the step \emph{after} the last checkpoint.
+
+\subsection{Package Resumption Contract}
+\label{sec:package-resumption-contract}
+
+Immediately after step 6 (rebuilding the governance engine) and before step
+7 (resuming the execution loop), \texttt{gert exec --resume} performs the
+following package-integrity sequence (AR-TP-7 §7.5):
+
+\begin{enumerate}
+  \item Recompute every package digest and the catalog digest from the
+        current filesystem, using the construction in
+        \texttt{design/gert/sections/06-tool-runtime.tex} \S Digest,
+        Evidence, Trace, Resume.
+  \item Compare the recomputed digests against the values recorded in the
+        run manifest's package map (\S\ref{sec:package-resumption-manifest}).
+  \item \textbf{Mismatch is a hard refusal} --- \texttt{PKG-009} --- and the
+        run \textbf{stays resumable}. It does \textbf{not} partially resume,
+        and it does \textbf{not} silently re-plan. Resuming a run against
+        changed tool definitions would invalidate the evidence chain, which
+        is the entire point of the trace.
+  \item \texttt{--allow-package-drift} overrides the refusal. When used, the
+        runtime \textbf{MUST} emit a \texttt{governance/packageDriftAccepted}
+        trace event recording both digests and the operator identity
+        (\texttt{design/gert/sections/07-runtime-events.tex}
+        \S Package and Substitution Events). Drift acceptance is an
+        auditable act, not a silent bypass.
+  \item Missing packages on resume are \texttt{PKG-001}, never a fallback to
+        a different tier.
+\end{enumerate}
+
+\subsubsection{Replay mode is non-fatal}
+
+Replay mode (\S\ref{sec:replay-mode}) does not invoke tools, so package
+digests are \textbf{recorded and compared but non-fatal}: a mismatch emits a
+\texttt{replay/packageDrift} warning event and replay proceeds. Replay
+determinism is defined by the scenario file, not by the on-disk catalog.
 
 \subsection{Resumability by Step Type}
 
@@ -470,6 +535,7 @@ If a \texttt{tool/invoked} event has no matching \texttt{tool/responded} event, 
 
 % ------------------------------------------------------------------ %
 \section{Replay Mode}
+\label{sec:replay-mode}
 % ------------------------------------------------------------------ %
 
 \subsection{Overview}
@@ -515,7 +581,9 @@ In replay mode:
   \item \texttt{manual} steps — the evidence collector returns the pre-recorded evidence values instead of prompting the operator.
   \item \texttt{tool} steps — tool invocations are intercepted; if a matching recorded response exists, it is returned. Otherwise the step fails.
   \item \texttt{invoke} steps — the child runbook is executed in replay mode using the same scenario (or a nested scenario file if \texttt{scenario\_file:} is specified on the invoke step).
+  \item \texttt{tool} steps whose action is implemented by \emph{substitution} (\texttt{execute.kind: runbook}, design/gert/sections/06-tool-runtime.tex \S Action Substitution \S Replay semantics, \S\ref{sec:tool-substitution-replay}) are replayed like an \texttt{invoke} step, not like a process-backed \texttt{tool} step: the substitute runbook is executed in replay mode against the \emph{same} scenario, and each of its own \texttt{cli}/\texttt{tool} steps is matched individually against that scenario's \texttt{commands:} list. A single recorded response is not attached to the substituted action as a whole, because the action has no process-shaped invocation of its own to match.
   \item Governance rules — evaluated normally; replay does not bypass governance.
+  \item \texttt{enum} validation (design/gert/sections/03-schema-vnext.tex \S\ref{para:enum-constraint}) — evaluated normally; replay does not bypass it. Any argument or output value answered from the scenario is a bound value and is checked against its declared \texttt{enum} identically to a live run; a scenario recording an off-enum value fails replay with the same \texttt{ENUM-008}/\texttt{ENUM-009} the live path would raise.
   \item Trace events — written normally; the replay trace can be compared against a golden trace for regression testing.
 \end{itemize}
 

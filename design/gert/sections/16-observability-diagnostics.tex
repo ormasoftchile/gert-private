@@ -935,6 +935,15 @@ On completion, emits a JSON summary to \texttt{stdout}:
   \item 3 if \texttt{outcome == "cancelled"}
 \end{itemize}
 
+The run summary object above is \textbf{unchanged} by the enum constraint
+MVP (design/gert/sections/03-schema-vnext.tex \S\ref{para:enum-constraint}):
+it carries no enum metadata. An enum violation surfaces as an
+\texttt{ENUM-007}/\texttt{ENUM-008}/\texttt{ENUM-009} error object using the
+existing structured error envelope (design/gert/sections/03d-parse-time-enforcement.tex
+\S Error Message Format), subject to the redaction rules of
+design/gert/sections/08-security-and-trust.tex \S Secret Resolution and
+Redaction for any declaration carrying a sensitivity marking.
+
 \subsection{GitHub Actions Example}
 
 \begin{minted}{yaml}

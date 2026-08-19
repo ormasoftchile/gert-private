@@ -1,0 +1,423 @@
+diff --git a/cmd/gert/run.go b/cmd/gert/run.go
+index 5ac4582..e6dbcba 100644
+--- a/cmd/gert/run.go
++++ b/cmd/gert/run.go
+@@ -10,9 +10,11 @@ import (
+ 	"os/signal"
+ 	"path/filepath"
+ 	"strings"
++	"sync"
+ 	"syscall"
+ 	"time"
+ 
++	"github.com/google/uuid"
+ 	"github.com/ormasoftchile/gert/internal/adapter"
+ 	internalengine "github.com/ormasoftchile/gert/internal/engine"
+ 	internalexecutor "github.com/ormasoftchile/gert/internal/executor"
+@@ -23,12 +25,11 @@ import (
+ 	"github.com/ormasoftchile/gert/pkg/errkit"
+ 	"github.com/ormasoftchile/gert/pkg/expand"
+ 	"github.com/ormasoftchile/gert/pkg/parser"
++	"github.com/ormasoftchile/gert/pkg/pkgcatalog"
+ 	plannerpkg "github.com/ormasoftchile/gert/pkg/planner"
+ 	"github.com/ormasoftchile/gert/pkg/platform"
+-	"github.com/ormasoftchile/gert/pkg/pkgcatalog"
+ 	"github.com/ormasoftchile/gert/pkg/schema"
+ 	toolpkg "github.com/ormasoftchile/gert/pkg/tool"
+-	"github.com/google/uuid"
+ )
+ 
+ const (
+@@ -538,7 +539,7 @@ func splitRunArgs(args []string) ([]string, string, []string) {
+ 		if strings.HasPrefix(arg, "-") {
+ 			flagArgs = append(flagArgs, arg)
+ 			if arg == "--trace" || arg == "--output" || arg == "--var" || arg == "--resume" ||
+-					arg == "--otel-endpoint" || arg == "--otel-service" || arg == "--package-map" || arg == "--profile" {
++				arg == "--otel-endpoint" || arg == "--otel-service" || arg == "--package-map" || arg == "--profile" {
+ 				if i+1 < len(args) {
+ 					flagArgs = append(flagArgs, args[i+1])
+ 					i++
+@@ -628,6 +629,7 @@ func (l *fileRunbookLoader) Load(ctx context.Context, path string) (*parser.Pars
+ }
+ 
+ type plannerToolRegistry struct {
++	mu    sync.RWMutex
+ 	tools map[string]*schema.ToolDef
+ }
+ 
+@@ -653,6 +655,8 @@ func newToolRegistry(dir string) (*plannerToolRegistry, error) {
+ 
+ func (r *plannerToolRegistry) Lookup(ctx context.Context, name string, action string) (*schema.ToolDef, error) {
+ 	_ = ctx
++	r.mu.RLock()
++	defer r.mu.RUnlock()
+ 	key := name + "/" + action
+ 	if tool, ok := r.tools[key]; ok {
+ 		return tool, nil
+@@ -665,6 +669,15 @@ func (r *plannerToolRegistry) Lookup(ctx context.Context, name string, action st
+ 	return nil, plannerpkg.ErrToolNotFound
+ }
+ 
++func (r *plannerToolRegistry) Override(def toolpkg.ToolDef) {
++	schemaDef := schemaToolDefFromRuntime(def)
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	for action := range schemaDef.Actions {
++		r.tools[schemaDef.Name+"/"+action] = schemaDef
++	}
++}
++
+ type stepSummary struct {
+ 	StepID      string         `json:"step_id"`
+ 	Kind        string         `json:"kind"`
+diff --git a/cmd/gert/serve.go b/cmd/gert/serve.go
+index 2ae9c21..25bb0cc 100644
+--- a/cmd/gert/serve.go
++++ b/cmd/gert/serve.go
+@@ -8,6 +8,7 @@ import (
+ 	"net"
+ 	"os"
+ 	"os/signal"
++	"path/filepath"
+ 	"strings"
+ 	"syscall"
+ 
+@@ -17,7 +18,10 @@ import (
+ 	internalplanner "github.com/ormasoftchile/gert/internal/planner"
+ 	internalserve "github.com/ormasoftchile/gert/internal/serve"
+ 	internaltool "github.com/ormasoftchile/gert/internal/tool"
++	enginepkg "github.com/ormasoftchile/gert/pkg/engine"
++	"github.com/ormasoftchile/gert/pkg/errkit"
+ 	"github.com/ormasoftchile/gert/pkg/expand"
++	"github.com/ormasoftchile/gert/pkg/parser"
+ 	plannerpkg "github.com/ormasoftchile/gert/pkg/planner"
+ 	"github.com/ormasoftchile/gert/pkg/platform"
+ 	"github.com/ormasoftchile/gert/pkg/schema"
+@@ -48,6 +52,7 @@ func runServe(args []string) int {
+ 	trustProxyHeaders := fs.Bool("trust-proxy-headers", false,
+ 		"Trust X-Forwarded-For for rate-limit IP extraction (only safe behind a reverse proxy)")
+ 	expandMode := fs.String("expand", "", "Default expansion mode for include sites: eager, lazy, or auto (overridden by per-runbook and per-include `expand:`)")
++	packageMapPath := fs.String("package-map", "", "Path to a package-map file (config/v1) overriding project package bindings")
+ 
+ 	if err := fs.Parse(args); err != nil {
+ 		if err == flag.ErrHelp {
+@@ -111,7 +116,13 @@ func runServe(args []string) int {
+ 		return exitFailure
+ 	}
+ 
+-	toolRegistry, err := newServingToolRegistry(".")
++	workspaceRoot, err := os.Getwd()
++	if err != nil {
++		fmt.Fprintf(os.Stderr, "serve: workspace root: %v\n", err)
++		return exitFailure
++	}
++
++	toolRegistry, err := newServingToolRegistry(workspaceRoot)
+ 	if err != nil {
+ 		fmt.Fprintf(os.Stderr, "serve: tool registry: %v\n", err)
+ 		return exitFailure
+@@ -144,6 +155,19 @@ func runServe(args []string) int {
+ 	}
+ 	defer shutdown()
+ 
++	runtimeRegistry := engineCfg.ToolRuntime.(*internaltool.DefaultToolRuntime).Registry()
++	overlayRegistry, ok := runtimeRegistry.(*internaltool.OverlayRegistry)
++	if !ok {
++		fmt.Fprintln(os.Stderr, "serve: engine tool registry does not support package binding overrides")
++		return exitFailure
++	}
++	binder, err := newServingPackageBinder(workspaceRoot, *packageMapPath, toolRegistry, overlayRegistry)
++	if err != nil {
++		fmt.Fprintf(os.Stderr, "serve: package map: %v\n", err)
++		return exitValidation
++	}
++	plannerImpl = newPackageBoundPlanner(plannerImpl, binder)
++
+ 	cfg := servepkg.ServerConfig{
+ 		Addr:              *addr,
+ 		Engine:            internalengine.New(engineCfg),
+@@ -172,6 +196,112 @@ func runServe(args []string) int {
+ 	return exitSuccess
+ }
+ 
++// servingPackageBinder applies the same project-config/package-map merge as
++// run and plan. It writes catalog-resolved definitions into both registries so
++// planning and invocation cannot disagree about which package binding won.
++type servingPackageBinder struct {
++	workspaceRoot    string
++	projectRequires  []*schema.PackageRequirement
++	projectToolPaths []string
++	plannerRegistry  *plannerToolRegistry
++	runtimeRegistry  *internaltool.OverlayRegistry
++}
++
++func newServingPackageBinder(
++	workspaceRoot string,
++	packageMapPath string,
++	plannerRegistry *plannerToolRegistry,
++	runtimeRegistry *internaltool.OverlayRegistry,
++) (*servingPackageBinder, error) {
++	projectConfig, err := loadProjectConfig(workspaceRoot)
++	if err != nil {
++		return nil, err
++	}
++
++	var projectRequires []*schema.PackageRequirement
++	var projectToolPaths []string
++	if projectConfig != nil {
++		projectRequires = projectConfig.Requires
++		projectToolPaths = projectConfig.ToolPaths
++	}
++
++	var overrideRequires []*schema.PackageRequirement
++	var overrideToolPaths []string
++	if packageMapPath != "" {
++		if !filepath.IsAbs(packageMapPath) {
++			packageMapPath = filepath.Join(workspaceRoot, packageMapPath)
++		}
++		packageMap, mapErr := loadPackageMap(packageMapPath)
++		if mapErr != nil {
++			return nil, mapErr
++		}
++		if packageMap != nil {
++			overrideRequires = packageMap.Requires
++			overrideToolPaths = packageMap.ToolPaths
++		}
++	}
++
++	mergedRequires, _ := mergePackageBindings(projectRequires, overrideRequires)
++	return &servingPackageBinder{
++		workspaceRoot:    workspaceRoot,
++		projectRequires:  mergedRequires,
++		projectToolPaths: mergeToolPaths(projectToolPaths, overrideToolPaths),
++		plannerRegistry:  plannerRegistry,
++		runtimeRegistry:  runtimeRegistry,
++	}, nil
++}
++
++func (b *servingPackageBinder) bind(runbook *parser.ParsedRunbook) error {
++	if runbook == nil || runbook.Runbook == nil || len(runbook.Runbook.ToolRefs) == 0 {
++		return nil
++	}
++
++	catalog, catalogErrs := adapter.BuildPackageCatalog(adapter.PackageCatalogOptions{
++		WorkspaceRoot:    b.workspaceRoot,
++		Builtins:         internaltool.NewBuiltinRegistry().All(),
++		ProjectRequires:  b.projectRequires,
++		ProjectToolPaths: b.projectToolPaths,
++	}, runbook.Source, runbook.Runbook.Requires)
++	fatalCatalog, catalogWarnings := errkit.SplitWarnings(catalogErrs)
++	if len(fatalCatalog) > 0 {
++		return fmt.Errorf("build package catalog: %v", fatalCatalog)
++	}
++	for _, warning := range catalogWarnings {
++		fmt.Fprintf(os.Stderr, "gert serve: warning: %v\n", warning)
++	}
++
++	defs, bindErrs := adapter.ResolveToolRefsViaCatalog(catalog, runbook.Source, runbook.Runbook.ToolRefs)
++	fatalBindings, bindingWarnings := errkit.SplitWarnings(bindErrs)
++	if len(fatalBindings) > 0 {
++		return fmt.Errorf("resolve package bindings: %v", fatalBindings)
++	}
++	for _, warning := range bindingWarnings {
++		fmt.Fprintf(os.Stderr, "gert serve: warning: %v\n", warning)
++	}
++
++	for _, def := range defs {
++		b.runtimeRegistry.Override(def)
++		b.plannerRegistry.Override(def)
++	}
++	return nil
++}
++
++type packageBoundPlanner struct {
++	delegate plannerpkg.Planner
++	binder   *servingPackageBinder
++}
++
++func newPackageBoundPlanner(delegate plannerpkg.Planner, binder *servingPackageBinder) *packageBoundPlanner {
++	return &packageBoundPlanner{delegate: delegate, binder: binder}
++}
++
++func (p *packageBoundPlanner) Plan(ctx context.Context, runbook *parser.ParsedRunbook) (*enginepkg.ExecutionPlan, error) {
++	if err := p.binder.bind(runbook); err != nil {
++		return nil, err
++	}
++	return p.delegate.Plan(ctx, runbook)
++}
++
+ func newServingToolRegistry(dir string) (*plannerToolRegistry, error) {
+ 	defs, err := internaltool.ScanSchemaDirWithoutTests(dir)
+ 	if err != nil {
+diff --git a/cmd/gert/serve_test.go b/cmd/gert/serve_test.go
+index 2184dcc..21139b9 100644
+--- a/cmd/gert/serve_test.go
++++ b/cmd/gert/serve_test.go
+@@ -1,6 +1,9 @@
+ package main
+ 
+ import (
++	"bytes"
++	"os"
++	"path/filepath"
+ 	"testing"
+ )
+ 
+@@ -11,6 +14,7 @@ func TestServeFlags_CorsOrigin_Repeatable(t *testing.T) {
+ 	if err := f.Set("https://app.example.com"); err != nil {
+ 		t.Fatalf("Set A: %v", err)
+ 	}
++
+ 	if err := f.Set("https://staging.example.com"); err != nil {
+ 		t.Fatalf("Set B: %v", err)
+ 	}
+@@ -25,3 +29,25 @@ func TestServeFlags_CorsOrigin_Repeatable(t *testing.T) {
+ 		t.Errorf("origins[1]: expected https://staging.example.com, got %s", origins[1])
+ 	}
+ }
++
++func TestServePackageMapFlagLoadsConfiguredFile(t *testing.T) {
++	dir := makeWorkDir(t)
++	cwd, err := os.Getwd()
++	if err != nil {
++		t.Fatalf("Getwd: %v", err)
++	}
++	if err := os.Chdir(dir); err != nil {
++		t.Fatalf("Chdir: %v", err)
++	}
++	t.Cleanup(func() { _ = os.Chdir(cwd) })
++
++	stderr := captureStderr(t, func() int {
++		return runServe([]string{"--package-map", "missing.package-map.yaml"})
++	})
++	if runLast != exitValidation {
++		t.Fatalf("serve exit code = %d, want %d; stderr: %s", runLast, exitValidation, stderr)
++	}
++	if !bytes.Contains([]byte(stderr), []byte(filepath.Join(dir, "missing.package-map.yaml"))) {
++		t.Fatalf("missing package-map path was not loaded relative to workspace root: %s", stderr)
++	}
++}
+diff --git a/internal/engine/engine.go b/internal/engine/engine.go
+index 98034f9..efc66f0 100644
+--- a/internal/engine/engine.go
++++ b/internal/engine/engine.go
+@@ -846,16 +846,15 @@ func (h *runHandle) executeStep(ctx context.Context, step enginepkg.ResolvedStep
+ 	if result.Status == enginepkg.StepStatusFailed {
+ 		h.executeCompensations(ctx, step.ID)
+ 
+-		// Handle on_error routing
+-		// Precedence: on_error > continue_on_fail > default (continue for backward compat)
++		// Handle modeled error recovery. An unhandled failure is terminal;
++		// continuation requires an explicit on_error or continue_on_fail.
++		// Precedence: on_error > continue_on_fail > default stop.
+ 		onError := step.OnError
+ 		if onError == "" && step.ContinueOnFail {
+ 			onError = "continue"
+ 		}
+ 		if onError == "" {
+-			// Default: continue (backward compatible behavior)
+-			// In v3, this will change to "stop"
+-			onError = "continue"
++			onError = "stop"
+ 		}
+ 
+ 		switch {
+@@ -867,8 +866,10 @@ func (h *runHandle) executeStep(ctx context.Context, step enginepkg.ResolvedStep
+ 			// The run will continue but the step is marked as failed
+ 
+ 		case onError == "stop":
+-			// Explicit stop
+-			return h.failRun(ctx, step.ID, fmt.Errorf("step %s failed", step.ID))
++			// Preserve the failed step result for the caller while making the
++			// run terminal so automatic server advancement cannot continue.
++			_, failErr := h.failRun(ctx, step.ID, fmt.Errorf("step %s failed", step.ID))
++			return result, failErr
+ 
+ 		case strings.HasPrefix(onError, "goto:"):
+ 			// Jump to error handler step
+@@ -1839,6 +1840,12 @@ func (bh *branchHandle) executeSteps(ctx context.Context, steps []enginepkg.Reso
+ 		}
+ 		results = append(results, result)
+ 		if result.Status == enginepkg.StepStatusFailed {
++			// Nested branch/iterate execution has no top-level cursor for
++			// goto routing, but it must honor the explicit continuation
++			// semantics that the runbook language models.
++			if step.OnError == "continue" || (step.OnError == "" && step.ContinueOnFail) {
++				continue
++			}
+ 			return results, result.Error
+ 		}
+ 	}
+diff --git a/internal/tool/scan.go b/internal/tool/scan.go
+index c171e0d..bfdfc22 100644
+--- a/internal/tool/scan.go
++++ b/internal/tool/scan.go
+@@ -130,6 +130,9 @@ func ParseToolFile(path string) (*schema.ToolDef, error) {
+ 	if err := ValidateVSCodeToolActions(def.Transport, def.Actions); err != nil {
+ 		return nil, fmt.Errorf("%s: %w", path, err)
+ 	}
++	if err := ValidateVSCodeInputAdapters(def.Transport, def.Actions); err != nil {
++		return nil, fmt.Errorf("%s: %w", path, err)
++	}
+ 	return &def, nil
+ }
+ 
+diff --git a/internal/tool/validate_transport.go b/internal/tool/validate_transport.go
+index a9d9641..ea1e23f 100644
+--- a/internal/tool/validate_transport.go
++++ b/internal/tool/validate_transport.go
+@@ -159,3 +159,38 @@ func ValidateVSCodeToolActions(transport schema.TransportConfig, actions map[str
+ 	}
+ 	return nil
+ }
++
++// ValidateVSCodeInputAdapters ensures provider-parameter mappings are only
++// declared for the VS Code bridge and refer to a typed logical action input.
++func ValidateVSCodeInputAdapters(transport schema.TransportConfig, actions map[string]*schema.ToolAction) error {
++	for actionName, action := range actions {
++		if action == nil || len(action.VSCodeInputAdapter) == 0 {
++			continue
++		}
++		if transport.Type != schema.TransportVSCodeMCP {
++			return fmt.Errorf("action %q: vscode_input_adapter is only valid for transport mode vscode-mcp (VSCODE-002)", actionName)
++		}
++		for providerParameter, binding := range action.VSCodeInputAdapter {
++			if providerParameter == "" {
++				return fmt.Errorf("action %q: vscode_input_adapter provider parameter must not be empty (VSCODE-002)", actionName)
++			}
++			if binding == nil || binding.From == "" {
++				return fmt.Errorf("action %q: vscode_input_adapter.%s.from is required (VSCODE-002)", actionName, providerParameter)
++			}
++			source, ok := action.Args[binding.From]
++			if !ok || source == nil {
++				return fmt.Errorf("action %q: vscode_input_adapter.%s.from %q is not a declared action argument (VSCODE-002)", actionName, providerParameter, binding.From)
++			}
++			switch binding.Coerce {
++			case "":
++			case "integer":
++				if source.Type != "string" {
++					return fmt.Errorf("action %q: vscode_input_adapter.%s integer coercion requires string source argument %q (VSCODE-002)", actionName, providerParameter, binding.From)
++				}
++			default:
++				return fmt.Errorf("action %q: vscode_input_adapter.%s.coerce %q is unsupported (VSCODE-002)", actionName, providerParameter, binding.Coerce)
++			}
++		}
++	}
++	return nil
++}
+diff --git a/pkg/schema/tool.go b/pkg/schema/tool.go
+index cc35185..d912ee4 100644
+--- a/pkg/schema/tool.go
++++ b/pkg/schema/tool.go
+@@ -258,6 +258,11 @@ type ToolAction struct {
+ 	// Use schema.ResolveVSCodeToolName to apply the full resolution order.
+ 	// Only valid when the resolved transport mode is vscode-mcp (VSCODE-001).
+ 	VscodeTool *string `yaml:"vscode_tool,omitempty" json:"vscode_tool,omitempty"`
++
++	// VSCodeInputAdapter maps provider parameter names to logical action
++	// arguments for vscode-mcp actions. It is rejected for every other
++	// transport because no other runtime consumes this binding metadata.
++	VSCodeInputAdapter map[string]*VSCodeInputBinding `yaml:"vscode_input_adapter,omitempty" json:"vscode_input_adapter,omitempty"`
+ }
+ 
+ // ArgDef defines a single argument for a tool action. The same shape is

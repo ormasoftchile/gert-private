@@ -1,0 +1,51 @@
+diff --git a/internal/engine/engine.go b/internal/engine/engine.go
+index 98034f9..efc66f0 100644
+--- a/internal/engine/engine.go
++++ b/internal/engine/engine.go
+@@ -846,16 +846,15 @@ func (h *runHandle) executeStep(ctx context.Context, step enginepkg.ResolvedStep
+ 	if result.Status == enginepkg.StepStatusFailed {
+ 		h.executeCompensations(ctx, step.ID)
+ 
+-		// Handle on_error routing
+-		// Precedence: on_error > continue_on_fail > default (continue for backward compat)
++		// Handle modeled error recovery. An unhandled failure is terminal;
++		// continuation requires an explicit on_error or continue_on_fail.
++		// Precedence: on_error > continue_on_fail > default stop.
+ 		onError := step.OnError
+ 		if onError == "" && step.ContinueOnFail {
+ 			onError = "continue"
+ 		}
+ 		if onError == "" {
+-			// Default: continue (backward compatible behavior)
+-			// In v3, this will change to "stop"
+-			onError = "continue"
++			onError = "stop"
+ 		}
+ 
+ 		switch {
+@@ -867,8 +866,10 @@ func (h *runHandle) executeStep(ctx context.Context, step enginepkg.ResolvedStep
+ 			// The run will continue but the step is marked as failed
+ 
+ 		case onError == "stop":
+-			// Explicit stop
+-			return h.failRun(ctx, step.ID, fmt.Errorf("step %s failed", step.ID))
++			// Preserve the failed step result for the caller while making the
++			// run terminal so automatic server advancement cannot continue.
++			_, failErr := h.failRun(ctx, step.ID, fmt.Errorf("step %s failed", step.ID))
++			return result, failErr
+ 
+ 		case strings.HasPrefix(onError, "goto:"):
+ 			// Jump to error handler step
+@@ -1839,6 +1840,12 @@ func (bh *branchHandle) executeSteps(ctx context.Context, steps []enginepkg.Reso
+ 		}
+ 		results = append(results, result)
+ 		if result.Status == enginepkg.StepStatusFailed {
++			// Nested branch/iterate execution has no top-level cursor for
++			// goto routing, but it must honor the explicit continuation
++			// semantics that the runbook language models.
++			if step.OnError == "continue" || (step.OnError == "" && step.ContinueOnFail) {
++				continue
++			}
+ 			return results, result.Error
+ 		}
+ 	}

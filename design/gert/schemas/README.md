@@ -19,9 +19,19 @@ The architectural decision to place schemas here (and not in `gert/pkg/schema/` 
 | File | Version | Validates | Status |
 |---|---|---|---|
 | `runbook.v1.schema.json` | runbook/v1 | `*.runbook.yaml` runbook documents | ✅ Active |
+| `tool-package.v1.schema.json` | tool-package/v1 | `gert-package.yaml` tool package manifests | ✅ Active |
+| `project-config.v1.schema.json` | config/v1 | `.gert/config.yaml` project configuration | ✅ Active |
+| `package-lock.v1.schema.json` | package-lock/v1 | `.gert/packages.lock.json` generated lock files | ✅ Active |
+
+The three tool-package schemas were added per Barbara's ruling
+`.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md` (AR-TP-3, ratified
+2026-08-09) and are normatively described in
+`design/gert/sections/06-tool-runtime.tex` §Tool Packages. `runbook.v1.schema.json` gained
+the top-level `requires` field and the `ToolRef.package`/`ToolRef.version` fields from the same
+ruling — it remains schema version `v1` (additive-only change, AR-TP-10 §5).
 
 **Not in this directory:**  
-`design/gert/conformance/schema.json` — validates `tv-*.yaml` conformance test vectors (Tess's artifact). It is a sibling, not a runbook schema. Do not confuse the two.
+`design/gert/conformance/vector.schema.json` — validates `tv-*.yaml` conformance test vectors (Tess's artifact). It is a sibling, not a runbook schema. Do not confuse the two.
 
 ---
 
@@ -108,6 +118,7 @@ When the Go structs change, the **spec sections are updated first** (in `gert-pr
 | New top-level runbook field added | Add to root `properties`; check `required` list |
 | Field renamed or removed | Update `properties`; bump consumers' drift check |
 | New `kind`, `source`, or other enum value | Add to the relevant `enum` array |
+| New value-constraint keyword | Structural array shape only (e.g. `minItems`, `uniqueItems`, per-item `pattern`); NFC normalisation, Unicode control/bidi rejection, and type-linkage rules are semantic/runtime, not schema-enforced — see the `enum` keyword's own split (`design/gert/sections/03-schema-vnext.tex` §Input/§Output Declarations, `design/gert/sections/03d-parse-time-enforcement.tex` §Enum Constraint Error Codes) as the worked example |
 | New spec section (03d, 04a, etc.) | Review for structural implications; Edith assesses |
 
 **Review gate:** Any PR touching `design/gert/schemas/` MUST have Barbara's approval.

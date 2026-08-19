@@ -50,9 +50,14 @@
       "description": "Named output declarations. Values are GCP paths resolved against the execution context at runbook completion.",
       "additionalProperties": { "$ref": "#/$defs/Output" }
     },
+    "requires": {
+      "type": "array",
+      "description": "Package dependencies declared at runbook scope (design/gert/sections/06-tool-runtime.tex §Tool Packages). Contributes tier-1 tools to the catalog, in addition to any project-level 'requires:' in .gert/config.yaml. A 'toolPackages:' key anywhere in this document is REJECTED with PKG-020 (unsupported key: use requires:) — there is no alias and no dual-read.",
+      "items": { "$ref": "#/$defs/PackageRequirement" }
+    },
     "toolRefs": {
       "type": "array",
-      "description": "External tool references available to 'tool' steps in this runbook.",
+      "description": "Declares which tool names this runbook file's 'flow' may reference, and optionally binds/narrows where each name is supplied from. Does not itself add packages to the catalog — that is the job of 'requires:'. Binding is lexically scoped to this file; an included child runbook does not inherit these entries (design/gert/sections/02-architecture.tex §Include/Import Graph).",
       "items": { "$ref": "#/$defs/ToolRef" }
     },
     "extensions": {
@@ -740,12 +745,23 @@
           "description": "Human-readable description of the input's purpose."
         },
         "default": {
-          "description": "Default value when the input is not provided. Type SHOULD match the declared 'type'."
+          "description": "Default value when the input is not provided. Type SHOULD match the declared 'type'. When 'enum' is also present, 'default' MUST be a declared member (ENUM-006)."
         },
         "from": {
           "type": "string",
           "description": "Input source: 'prompt' (operator-supplied at runtime), 'env' (environment variable), 'context' (caller-provided binding).",
           "enum": ["prompt", "env", "context"]
+        },
+        "enum": {
+          "type": "array",
+          "description": "OPTIONAL value-domain constraint. Valid only when 'type' is 'string'; ENUM-001 otherwise. 'type' is REQUIRED on Input (see 'required' above) so an omitted 'type' is a structural schema error, never ENUM-001. Structural layer only here: this array shape enforces non-empty, unique-as-written, non-empty-string members. NFC normalisation, Unicode control/bidi rejection (ENUM-005), NFC-duplicate detection (ENUM-004), and the type-linkage rule (ENUM-001) are semantic/runtime checks layered on top of this structural gate (design/gert/sections/03-schema-vnext.tex §Input Declarations, design/gert/sections/03d-parse-time-enforcement.tex §Enum Constraint Error Codes).",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(.*\\S)?$"
+          }
         }
       }
     },
@@ -767,37 +783,75 @@
         },
         "value": {
           "type": "string",
-          "description": "GCP path resolved against the final execution context. Evaluated as GCP at runtime; structural validation only at parse time."
+          "description": "GCP path resolved against the final execution context. Evaluated as GCP at runtime; structural validation only at parse time. This is the sole supported binding form; an earlier 'from: captures.<name>' prose form documented elsewhere has been corrected to match this field (design/gert/sections/03-schema-vnext.tex §Output Declarations, drift D1)."
+        },
+        "enum": {
+          "type": "array",
+          "description": "OPTIONAL value-domain constraint. Valid only when 'type' is 'string'; ENUM-001 otherwise. Checked at production time, when 'value' resolves at runbook completion (ENUM-009), not at parse time. Same structural shape and semantic layering as Input.enum above.",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(.*\\S)?$"
+          }
+        }
+      }
+    },
+
+    "PackageRequirement": {
+      "type": "object",
+      "description": "A single package dependency declared by this runbook (design/gert/sections/06-tool-runtime.tex §Tool Packages, AR-TP-3 §3.3). If 'path' is omitted here, a project-level .gert/config.yaml 'requires:' entry for the same 'package' name MUST supply it (PKG-001 otherwise). If both are present and disagree, the project-level entry is authoritative and the mismatch is PKG-024, not a silent override. Duplicate 'package' names within one requires: list are PKG-005; the same package name declared at both project and runbook scope is legal and the constraints are intersected (empty intersection is PKG-002).",
+      "required": ["package", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "package": {
+          "type": "string",
+          "description": "Reverse-DNS package name. URL-shaped names are PKG-004.",
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+        },
+        "version": {
+          "type": "string",
+          "description": "Version constraint in the MVP grammar (§Version Constraint Grammar). Malformed constraints are PKG-003."
+        },
+        "path": {
+          "type": "string",
+          "description": "OPTIONAL here; if omitted, MUST be supplied by the project-level config for the same package name."
         }
       }
     },
 
     "ToolRef": {
       "type": "object",
-      "description": "Reference to an external tool made available to 'tool' steps in this runbook.",
+      "description": "Binds a tool name usable in this runbook's 'tool' steps to a catalog entry, and optionally narrows it. 'package' and 'path' are mutually exclusive: a ref supplying both is a schema-valid but semantically rejected document (PKG-029). Tier-3 (extension/MCP) entries are pinned exclusively via a qualified 'name' (e.g. 'acme-mcp/get-nodes' or 'acme.pd-lookup/lookup') — 'package' is reverse-DNS-patterned for tier-1 packages and MUST NOT be used to pin a tier-3 supplier whose identifier has no dot (design/gert/sections/05-extension-runtime.tex §Extension Discovery). A 'name' that resolves to no catalog entry at all is PKG-030 (distinct from PKG-011, which is a name that resolves to a package that does not export it).",
       "required": ["name"],
       "additionalProperties": false,
       "properties": {
         "name": {
           "type": "string",
-          "description": "Tool name used in tool step 'tool.name' fields."
+          "description": "The name used in this runbook's 'tool.name' fields. Bare for tiers 0/1/2/4; MUST be the fully-qualified '<extension>/<tool>' or '<server>/<tool>' form to reference a tier-3 entry, since tier-3 contributions never bind a bare name. A name with no matching catalog entry is PKG-030."
+        },
+        "package": {
+          "type": "string",
+          "description": "Reverse-DNS package name that MUST have supplied this tool. Pins the tier and the supplier, making a same-tier or cross-tier collision impossible by construction. Mutually exclusive with 'path' (PKG-029 if both are present). Applies to tier-1 packages only; tier-3 (extension/MCP) suppliers are pinned via the qualified 'name' instead, since their identifiers are not required to be reverse-DNS.",
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+        },
+        "version": {
+          "type": "string",
+          "description": "Version constraint (design/gert/sections/06-tool-runtime.tex §Version Constraint Grammar) checked against the resolved tool definition's meta.version at plan time. Malformed constraints are PKG-003; an unsatisfied constraint is PKG-002. Intersected with any 'requires[].version' constraint on the same package (empty intersection is PKG-002) and with the deprecated, equivalent 'ToolInvocation.version' constraint on the same tool (see §ToolInvocation.version below) — all three are evaluated under the same grammar and composed by intersection, never independently."
         },
         "path": {
           "type": "string",
-          "description": "Filesystem path to the .tool.yaml definition file."
-        },
-        "alias": {
-          "type": "string",
-          "description": "Alternative name by which this tool is referenced in steps."
+          "description": "Direct path to a .tool.yaml, resolved per the secure path rules (§Secure Path Resolution). This is the highest-precedence tier (tier 4). Mutually exclusive with 'package' (PKG-029 if both are present)."
         },
         "source": {
           "type": "string",
-          "description": "URI or registry reference for tools loaded from a remote registry."
+          "description": "DEPRECATED. Opaque provenance string. MUST NOT participate in resolution; superseded by 'package'. Presence emits warning PKG-W002. Retained only because fixtures r01/r05 use it; scheduled for removal in the first release after the fixture corpus is migrated (design/gert/sections/06-tool-runtime.tex §Tool Packages, deprecation D-001)."
         },
         "actions": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Explicit allowlist of action names available from this tool ref. Empty means all actions are available."
+          "description": "DEPRECATED. Documentation and a plan-time reachability assertion ONLY: every listed name MUST exist on the resolved tool (PKG-012 if not). This is NOT an allowlist and MUST NOT gate invocation. Presence emits warning PKG-W001. Retained only because fixtures r01/r05 use it; scheduled for removal in the first release after the fixture corpus is migrated (design/gert/sections/06-tool-runtime.tex §Tool Packages, deprecation D-002)."
         }
       }
     },
@@ -1019,7 +1073,7 @@
         },
         "version": {
           "type": "string",
-          "description": "Tool version constraint. Runtime enforces semver compatibility with the declared version."
+          "description": "DEPRECATED. A per-invocation version constraint in the same grammar as 'toolRefs[].version' and 'requires[].version' (design/gert/sections/06-tool-runtime.tex §Version Constraint Grammar). This is NOT a fourth, independent constraint site: it is evaluated at PLAN TIME (not at runtime, correcting the prior 'runtime enforces' text, which duplicated and contradicted the plan-time-predicate model of §Tool Discovery) and is intersected with any 'toolRefs[].version' constraint on the same 'name' before the tool is bound; an empty intersection is PKG-002. Malformed constraints are PKG-003. New authoring should prefer 'toolRefs[].version'; this field is retained for existing fixtures and carries no separate enforcement path."
         }
       }
     },

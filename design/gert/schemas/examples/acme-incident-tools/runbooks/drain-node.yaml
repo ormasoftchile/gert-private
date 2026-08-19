@@ -1,0 +1,119 @@
+# Reference example: the runbook that implements kubectl's "drain-node"
+# action via substitution (AR-TP-5). Declared by
+# ../tools/kubectl.tool.yaml action "drain-node" as
+# `execute: { kind: runbook, path: ../runbooks/drain-node.yaml }`, resolved
+# relative to that .tool.yaml's own directory (tools/) --- i.e. it resolves
+# to <packageRoot>/runbooks/drain-node.yaml, which is inside the package
+# root and therefore not a PKG-007 escape (design/gert/sections/06-tool-runtime.tex
+# §Resolution base per path kind).
+#
+# Input/output contract (design/gert/sections/06-tool-runtime.tex
+# §Action Substitution): this runbook's inputs/outputs are an exact,
+# superset-free match by name and type with the action's declared
+# `args: { node: ... }` / `outputs: { drained: ... }` (PKG-013 otherwise).
+# Inputs use `from: context` only (never prompt/env, PKG-026): the caller
+# binds `node` positionally-by-name after evaluating its own GIS
+# expressions, so this file never sees the caller's variable scope.
+$schema: "https://schemas.gert.dev/runbook/v1.json"
+apiVersion: runbook/v1
+id: acme.incident-tools/drain-node
+name: Drain Kubernetes Node (Substitute)
+description: |
+  Cordons and drains a Kubernetes node. Implements the "drain-node" action
+  of the kubectl tool exported by the acme.incident-tools package.
+
+inputs:
+  node:
+    type: string
+    required: true
+    from: context
+    description: Name of the node to cordon and drain.
+  strategy:
+    type: string
+    required: false
+    from: context
+    default: graceful
+    # enum member SET matches ../tools/kubectl.tool.yaml action "drain-node"
+    # args.strategy exactly (AR-ENUM-8, PKG-013): both sides declare
+    # ["graceful", "force"]. Order is not significant for this comparison
+    # (declared order here only affects UI/diagnostic rendering, AR-ENUM-5);
+    # a reordering of either list would still pass.
+    enum: ["graceful", "force"]
+    description: Drain strategy passed through to the underlying command.
+
+outputs:
+  drained:
+    type: boolean
+    # `value:` is a GCP path resolved against the FINAL execution context
+    # (design/gert/schemas/runbook.v1.schema.json, $defs/Output.value),
+    # never a literal and never a GIS `${...}` template. The only GCP form
+    # that reaches a specific step's output from the runbook-level
+    # `outputs:` block is the cross-step 'step.{id}.*' form
+    # (design/gert/grammar/gcp.ebnf §3.1). Here it navigates into the
+    # `drain` step's JSON stdout to the `drained` key, which the step's own
+    # process genuinely emits as a JSON boolean --- so the declared boolean
+    # output is produced by an actual GCP path over real step output, not a
+    # capture of the literal string "true" (which is what the prior,
+    # rejected revision of this file did).
+    value: "step.drain.json.drained"
+
+# This file is a package-internal substitute runbook, not a
+# top-level/directly-run runbook: it declares its own toolRefs (lexically
+# scoped to this file, per design/gert/sections/02-architecture.tex
+# §Lexical Tool-Name Scoping) rather than inheriting the caller's. Because
+# this file lives inside the acme.incident-tools package, its own
+# toolRefs[].path is package-internal (§Includes, Lexical Scoping, and
+# Global Package Set: "packages MUST NOT contain runbooks that include
+# files outside the package root") and is resolved and containment-checked
+# against the PACKAGE root, not the workspace root that applies to an
+# ordinary top-level runbook's toolRefs[].path. A self-referential
+# `requires:` entry naming this file's own package is unnecessary and is
+# deliberately omitted: the sibling tool is bound directly via `path`.
+toolRefs:
+  - name: kubectl
+    path: ../tools/kubectl.tool.yaml   # sibling export within this same
+                                       # package; relative to this file's
+                                       # own directory (runbooks/),
+                                       # resolving to
+                                       # <packageRoot>/tools/kubectl.tool.yaml.
+
+flow:
+  # Genuine nested tool call: reuses the package's own process-backed
+  # "get-nodes" action to demonstrate that a substitute may call back into
+  # the tools its own package exports.
+  - step:
+      id: cordon
+      type: tool
+      title: Cordon node before drain
+      tool:
+        name: kubectl
+        action: get-nodes
+        args: {}
+      capture:
+        cordon_result: json
+
+  # The actual drain step. In this reference/documentation example the
+  # underlying drain command is stood in with a deterministic JSON emitter
+  # (as r22-evidence-replay's evidence-capture step also does) so the
+  # fixture is executable without a live cluster; a real package would
+  # invoke `kubectl drain <node> ... -o json` here. What matters
+  # normatively is that stdout is genuine JSON containing the boolean
+  # `drained` field the runbook-level `outputs:` block above captures.
+  - step:
+      id: drain
+      type: cli
+      title: Drain the node
+      command: bash
+      args:
+        - "-c"
+        - "echo '{\"drained\": true, \"strategy\": \"${strategy}\"}'"
+      capture:
+        drain_stdout: json
+
+  - step:
+      id: set_drained
+      type: end
+      title: Node drained
+      outcome:
+        category: success
+        code: node_drained

@@ -9,7 +9,7 @@ import yaml
 def main() -> int:
     design_dir = pathlib.Path(__file__).resolve().parents[1]
     root = design_dir / "conformance"
-    schema = json.loads((root / "schema.json").read_text(encoding="utf-8"))
+    schema = json.loads((root / "vector.schema.json").read_text(encoding="utf-8"))
     validator = jsonschema.Draft202012Validator(schema)
 
     errs = 0

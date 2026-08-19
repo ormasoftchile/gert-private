@@ -850,6 +850,60 @@ explicit input/output mapping, analogous to a function call. This pattern is def
 future; \texttt{type: include} covers the primary composition use case for the 
 release.
 
+\subsubsection*{Lexical Tool-Name Scoping}
+\label{sec:include-tool-scoping}
+
+Unlike variable scope (which is shared across an include boundary, per the
+Key Architectural Properties above), \textbf{tool name binding is lexically
+scoped to the runbook file that declares it}
+(\texttt{.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md},
+AR-TP-8 §8.1, ratified 2026-08-09). An included child runbook does
+\textbf{NOT} inherit the parent's \texttt{toolRefs}. If a child runbook's
+\texttt{flow} uses \texttt{kubectl}, the child \textbf{MUST} declare
+\texttt{kubectl} in its own \texttt{toolRefs}; a \texttt{step.tool.name}
+without a same-file \texttt{toolRefs} binding is \texttt{PLAN-010}
+(\texttt{design/gert/sections/03d-parse-time-enforcement.tex}
+\S Error Code Catalog).
+
+This is a decisive, intentional call, and it is asymmetric with variable
+scoping by design: dynamic (inherited) tool-name scoping would make a child
+runbook's meaning depend on \emph{who included it}, which destroys both
+composability (a child runbook could resolve to a different tool depending
+on caller context) and static reachability analysis (the Planner could not
+determine, from the child file alone, which tool a step invokes). Variable
+scope sharing is safe because captured values are data; tool-name binding
+determines \emph{code identity} and must not vary with the call site.
+
+Packages themselves are resolved once, globally, per run
+(\texttt{design/gert/sections/06-tool-runtime.tex}
+\S Includes, Lexical Scoping, and Global Package Set): the effective package
+set is the union of every runbook's \texttt{requires:} in the include
+closure, computed at plan time, with intersected version constraints. Only
+the \emph{binding} of a bare tool name to a catalog entry
+(\texttt{toolRefs:}) is file-local; the underlying catalog is shared.
+
+\subsubsection*{Plan-Time Package Analysis of Lazy Includes}
+\label{sec:include-lazy-package-analysis}
+
+The include closure \textbf{MUST} be fully enumerable at plan time even when
+individual edges are \texttt{expand: lazy}
+(\S\ref{para:planner-expand}). A lazy include is still \emph{resolved and
+package-analysed} at plan time: the Planner loads the child runbook far
+enough to read its \texttt{requires:} and \texttt{toolRefs:} declarations
+and fold them into the global package set and catalog construction
+(Phase C, \texttt{design/gert/sections/06-tool-runtime.tex}
+\S Tool Discovery and Catalog Construction), even though the child's
+\emph{steps} are only expanded into the execution queue at run time.
+
+A runtime \textbf{MUST NOT} perform catalog mutation after Phase C
+completes. A lazily-expanded include that would introduce a package not
+already in the frozen package set is therefore \texttt{PKG-017} (late
+package binding after catalog freeze) --- the same code used for any other
+attempt to contribute a package after the freeze. This closes the gap that
+would otherwise exist between ``lazy for execution'' and ``lazy for
+planning'': the two are deliberately decoupled, and only the former is
+permitted.
+
 \subsubsection*{Step Post-flight (all step types)}
 \begin{enumerate}
   \item Apply outcome evaluation: test \texttt{when:} expressions; record \texttt{OutcomeRecord}.

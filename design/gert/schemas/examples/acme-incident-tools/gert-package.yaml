@@ -1,0 +1,25 @@
+# Reference example: a Tool Package manifest (AR-TP-3 §3.1).
+#
+# This is the normative example referenced by
+# design/gert/sections/06-tool-runtime.tex §Tool Packages, and by the r23
+# conformance fixture (design/gert/testdata/runbooks/r23-tool-package). It
+# demonstrates the minimum shape required by
+# design/gert/schemas/tool-package.v1.schema.json: package identity,
+# license, and an explicit exports list (no implicit tools/ directory
+# scan --- an unexported .tool.yaml is invisible to consumers, PKG-011).
+$schema: "https://schemas.gert.dev/tool-package/v1.json"
+apiVersion: tool-package/v1
+
+meta:
+  name: acme.incident-tools
+  version: "1.2.0"
+  description: >
+    Reference kubectl tooling for incident-response runbooks, including a
+    runbook-implemented drain-node action used to demonstrate action
+    substitution (AR-TP-5).
+  license: Apache-2.0
+
+exports:
+  tools:
+    - id: kubectl
+      path: tools/kubectl.tool.yaml

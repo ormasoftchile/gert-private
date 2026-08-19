@@ -1,0 +1,66 @@
+# Reference example: an exported tool definition with a runbook-substituted
+# action (AR-TP-5). Path is package-root-relative: tools/kubectl.tool.yaml,
+# exported as "kubectl" by ../gert-package.yaml.
+#
+# Referenced by design/gert/sections/06-tool-runtime.tex §Tool Packages and
+# §Action Substitution, and by the r23 conformance fixture
+# (design/gert/testdata/runbooks/r23-tool-package).
+apiVersion: tool/v1
+
+meta:
+  name: kubectl
+  version: "1.29.2"
+  description: "Reference kubectl tool with a runbook-substituted drain action"
+  binary: kubectl
+
+transport:
+  mode: stdio
+
+governance:
+  requires-capabilities: ["capability/kubernetes"]
+  allowed-environments: ["real", "dry-run", "replay"]
+  requires-approval: false
+
+actions:
+  # A process-backed action: standard stdio invocation of the kubectl binary.
+  - name: get-nodes
+    argv: ["get", "nodes", "-o", "json"]
+    timeout: "30s"
+    args: {}
+    output:
+      format: json
+    capture:
+      stdout:
+        format: json
+
+  # A runbook-substituted action (AR-TP-5 §5.1). The caller sees only
+  # `action: drain-node` with `node` in, `drained` out --- how it is
+  # implemented (a nested runbook rather than a process) is invisible and
+  # MUST NOT be overridable by the caller. `execute:` (not `impl:` ---
+  # `impl:` at the top level of this file is the unrelated mobile
+  # per-platform dispatch block; see design/gert/sections/06-tool-runtime.tex
+  # §Action Substitution, §Declaration for the disambiguation) selects the
+  # implementation kind for this action only.
+  - name: drain-node
+    execute:
+      kind: runbook
+      path: ../runbooks/drain-node.yaml   # relative to THIS file's own
+                                           # directory (tools/); resolves to
+                                           # <packageRoot>/runbooks/drain-node.yaml,
+                                           # which is inside the package root
+                                           # and therefore not PKG-007 (see
+                                           # §Resolution base per path kind).
+    args:
+      node: { type: string, required: true }
+      # enum-constrained arg (AR-ENUM-1, S1): a value-domain constraint on
+      # a plain string argument. The substitute's own `inputs.strategy` in
+      # ../runbooks/drain-node.yaml MUST declare the identical enum member
+      # SET (order-insensitive) or fail PKG-013 (§Action Substitution
+      # §Input contract, AR-ENUM-8) --- no variance in either direction.
+      strategy:
+        type: string
+        required: false
+        default: graceful
+        enum: ["graceful", "force"]
+    outputs:
+      drained: { type: boolean }

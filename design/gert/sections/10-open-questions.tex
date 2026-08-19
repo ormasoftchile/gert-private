@@ -186,3 +186,81 @@ before core contract freeze.
     available to alert escalation targets (stdout, webhook, or an extension-contributed notifier).
 
 \end{enumerate}
+
+\section{Closed: Tool Packages MVP}
+\label{sec:closed-tool-packages}
+
+The tool-package open questions raised during Stream F planning are \textbf{CLOSED} per Barbara's
+ratified ruling
+\texttt{.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md} (2026-08-09). The
+binding decisions are authored normatively in
+\texttt{design/gert/sections/06-tool-runtime.tex} (\S Tool Discovery and Catalog Construction
+through \S Tool Versioning), \texttt{design/gert/sections/05-extension-runtime.tex}
+(\S Extension Discovery), \texttt{design/gert/sections/03d-parse-time-enforcement.tex} (the
+\texttt{PKG-*} error catalog and \texttt{PLAN-010}), \texttt{design/gert/sections/07-runtime-events.tex}
+(\S Package and Substitution Events), \texttt{design/gert/sections/08-security-and-trust.tex}
+(\S Tool Package Digests and Lock File), \texttt{design/gert/sections/12-governance-policy.tex}
+(\S Substitution Governance Composition), \texttt{design/gert/sections/13-evidence-tracing-resumption.tex}
+(\S Package Resumption Contract), and \texttt{design/gert/sections/02-architecture.tex}
+(\S Lexical Tool-Name Scoping). This section records only the closure and the items explicitly
+deferred past the MVP.
+
+\begin{itemize}
+  \item \textbf{\texttt{toolPackages:} vs \texttt{requires:} vs \texttt{toolRefs:}} --- CLOSED.
+        \texttt{requires:} is canonical; \texttt{toolPackages:} is rejected outright
+        (\texttt{PKG-020}, no alias, no dual-read, no deprecation window); \texttt{toolRefs:} binds
+        and narrows only, and may never widen what \texttt{requires:} supplied.
+  \item \textbf{Deterministic resolution and collision} --- CLOSED. Two-phase catalog
+        construction/binding, five deterministic tiers, same-tier collisions are a hard error
+        (\texttt{PKG-006}), undeclared cross-tier shadowing is a hard error (\texttt{PKG-022}), and
+        enumeration order is fully specified for byte-identical catalog digests across runs.
+  \item \textbf{Version constraints} --- CLOSED. Strict SemVer 2.0.0 with a small conjunctive
+        (AND-only) constraint grammar; validation only, no dependency solving, exactly one candidate
+        per package in the MVP.
+  \item \textbf{Runbook-relative action substitution} --- CLOSED. Declared in the \texttt{.tool.yaml},
+        resolved relative to the declaring file, exact input/output signature match, governance
+        composed by the ruled invariant table (never adopted, never widened), maximum substitution
+        depth 4.
+  \item \textbf{Secure path resolution} --- CLOSED. POSIX-only authored paths, realpath containment
+        after link resolution, symlinks/junctions/reparse points resolved and bounded at 8 hops,
+        reserved-name and case/NFC-collision rejection.
+  \item \textbf{Digests, trace, resume/replay} --- CLOSED. Raw-byte SHA-256, order-independent
+        \texttt{sha256sum}-style package and catalog digests, resume is a hard refusal on drift
+        (overridable with an auditable event), replay is non-fatal on drift.
+  \item \textbf{Include/import scoping} --- CLOSED. Tool-name binding is lexically scoped per file
+        (no inheritance across includes); the package set is global per run, computed over the
+        entire include closure including lazily-expanded edges.
+\end{itemize}
+
+\subsection{Explicit Non-Goals (Deferred Past the MVP)}
+\label{sec:tool-packages-open-nongoals}
+
+The following are recorded as explicit non-goals with rationale, not as open questions --- they are
+not undecided; they are decided \emph{out of scope} for this MVP (AR-TP §0, AR-TP-10):
+
+\begin{itemize}
+  \item \textbf{Remote catalogs and registries.} Deferred because GERT is pre-1.0 with no external
+        consumers (ratified OQ-M4, ``just ship''); the MVP needs to pin determinism and safety, not
+        build a distribution network. The project-config schema's \texttt{requires[].path} is
+        REQUIRED today specifically so that its later relaxation to OPTIONAL --- meaning ``resolve
+        from catalog'' --- is additive, not a breaking schema change.
+  \item \textbf{Transitive package dependencies.} Deferred because dependency resolution without a
+        registry is scope creep with no proportionate benefit; a package's \texttt{dependencies:}
+        field must be empty in the MVP (\texttt{PKG-016}), and consumers flatten indirect
+        dependencies into their own \texttt{requires:}.
+  \item \textbf{Tool aliases.} Deferred (removed, in fact) because \texttt{toolRefs[].alias}
+        duplicated \texttt{package}/\texttt{path} disambiguation without adding expressiveness, and
+        aliasing is exactly the kind of indirection that undermines static reachability analysis.
+  \item \textbf{Action allowlists as an enforcement mechanism.} Deferred because
+        \texttt{toolRefs[].actions} was never a security boundary in practice (the process/tool
+        governance layer already gates invocation); keeping it as a documentation-only reachability
+        assertion avoids the false sense of security a non-enforcing allowlist would otherwise
+        create.
+  \item \textbf{Packaging of non-tool assets.} Deferred because docs, dashboards, and policy bundles
+        have no runtime consumption model yet; describing them in \texttt{gert-package.yaml} ahead
+        of that model would freeze a shape that is likely wrong.
+  \item \textbf{Multi-version coexistence.} Deferred because it requires a tier-aware qualified
+        namespace beyond \texttt{<package>/<tool>}, and the single-version-per-run restriction is
+        simple to reason about, simple to digest, and sufficient for the MVP's local, single-run
+        use case.
+\end{itemize}

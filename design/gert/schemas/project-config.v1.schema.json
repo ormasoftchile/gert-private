@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.gert.dev/config/v1.json",
+  "title": "GERT Project Configuration v1",
+  "description": "Structural contract for .gert/config.yaml with apiVersion: config/v1. Covers only the fields touched by the tool-packages MVP (.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md, AR-TP-3 / §3.2); other existing keys (defaults, tools.mcp-servers) are carried over as free-form objects pending their own normative schema pass. Validates structure and types only.",
+  "type": "object",
+  "required": ["apiVersion"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional JSON Schema declaration for IDE tooling."
+    },
+    "apiVersion": {
+      "type": "string",
+      "const": "config/v1",
+      "description": "API version discriminator. MUST be 'config/v1'."
+    },
+    "requires": {
+      "type": "array",
+      "description": "Project-level package requirements. Contributes tier-1 tools to the catalog (design/gert/sections/06-tool-runtime.tex §Tool Discovery). Processed in declaration order; project-level entries precede runbook-level entries for the same run. Duplicate 'package' names in this list are PKG-005.",
+      "items": { "$ref": "#/$defs/PackageRequirement" }
+    },
+    "tool-paths": {
+      "type": "array",
+      "description": "Directories scanned (recursively, for *.tool.yaml) in declaration order for tier-2 project tools, before the conventional <workspace>/tools/ location.",
+      "items": { "type": "string" }
+    },
+    "defaults": {
+      "type": "object",
+      "description": "Default step settings applied workspace-wide. Not schema-constrained by this document; see design/gert/sections/03-schema-vnext.tex.",
+      "additionalProperties": true
+    },
+    "tools": {
+      "type": "object",
+      "description": "Legacy tool-related configuration, including 'mcp-servers'. Not schema-constrained by this document; see design/gert/sections/06-tool-runtime.tex §MCP Tool Integration.",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "PackageRequirement": {
+      "type": "object",
+      "description": "A single project-level package requirement.",
+      "required": ["package", "version", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "package": {
+          "type": "string",
+          "description": "Reverse-DNS package name. URL-shaped names are PKG-004.",
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+        },
+        "version": {
+          "type": "string",
+          "description": "Version constraint in the MVP grammar (design/gert/sections/06-tool-runtime.tex §Version Constraint Grammar). Malformed constraints are PKG-003."
+        },
+        "path": {
+          "type": "string",
+          "description": "REQUIRED in the MVP because there is no remote catalog: MUST point at a directory containing gert-package.yaml. Absolute paths are permitted here (workspace-level operator configuration) but are subject to symlink/containment rules and are recorded as an external root when they resolve outside the workspace (PKG-W003). When remote catalogs are introduced post-MVP, this field becomes optional and its absence will mean 'resolve from catalog' — a forward-compatible, non-breaking extension point."
+        }
+      }
+    }
+  }
+}

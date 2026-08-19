@@ -1,0 +1,171 @@
+$schema: "https://schemas.gert.dev/runbook/v2.json"
+apiVersion: runbook/v2
+id: r23-tool-package
+name: r23 Tool Package Consumption and Substitution
+description: |
+  Exercises the Tool Packages MVP end-to-end (AR-TP-1 through AR-TP-5,
+  .squad/decisions/archive/barbara-tool-packages-architecture-ruling.md):
+  declares a `requires:` on the reference example package
+  (design/gert/schemas/examples/acme-incident-tools), narrows the bare
+  name `kubectl` to that package via `toolRefs:` (package + version, no
+  `path`/`source`/`alias`), and invokes an action that is implemented by
+  substitution (a nested runbook, not a process). Also demonstrates that
+  a bare-name `requires:`-only reference with no matching project-level
+  entry and no `path` here would be PKG-001 --- this fixture supplies
+  `path` locally instead, so it resolves standalone without a
+  `.gert/config.yaml`.
+
+  MODE ACCEPTANCE SCENARIO (Barbara's gate review R15
+  .squad/decisions/inbox/barbara-tool-packages-gate-review.md): this
+  runbook runs UNCHANGED across all three declared run modes --- it
+  contains no mode-conditional flow, and the reference tool's
+  `allowed-environments: ["real", "dry-run", "replay"]`
+  (design/gert/schemas/examples/acme-incident-tools/tools/kubectl.tool.yaml)
+  covers all three, including `replay`, which was previously omitted.
+
+  1. REAL mode: `gert exec schema.yaml --var node_name=node-7`. Both tool
+     steps genuinely invoke `kubectl` (list_nodes: `kubectl get nodes -o
+     json`; drain's nested substitute cordon step: the same `get-nodes`
+     action; drain's nested substitute drain step:
+     `bash -c "echo '{\"drained\": true}'"`, the documented stand-in for a
+     real drain command described in
+     design/gert/schemas/examples/acme-incident-tools/runbooks/drain-node.yaml).
+  2. DRY-RUN mode: `gert exec schema.yaml --mode dry-run --var
+     node_name=node-7`. Per §Action Substitution, a dry-run run MUST NOT
+     execute a substitute's side-effecting steps; the `drain` step's
+     underlying substitute is skipped and `node_drained` is not produced.
+     This flow has no `when:` guard on `assert_drained`, so in dry-run mode
+     that step is still reached and evaluates an unproduced
+     `outputs.drained` capture; the general question of what a downstream
+     step does when an upstream tool step was mode-skipped is
+     pre-existing and under-specified spec-wide (mirroring the existing
+     `allowed-environments` skip-with-warning contract,
+     design/gert/sections/06-tool-runtime.tex §MCP Tool Integration /
+     §Invocation Context). Real and replay modes, demonstrated below, are
+     the two modes this fixture actually exercises end-to-end.
+  3. REPLAY mode: `gert exec schema.yaml --mode replay --scenario
+     scenario.yaml`, with a scenario file recording exactly the two
+     underlying process invocations below as an override map (§Scenario
+     File Format, design/gert/sections/13-evidence-tracing-resumption.tex)
+     --- the same runbook, unchanged, replays deterministically because
+     both the top-level and the nested substitute's process-shaped steps
+     are matched by argv:
+
+     ```yaml
+     commands:
+       - argv: ["kubectl", "get", "nodes", "-o", "json"]
+         stdout: '{"items": [{"metadata": {"name": "node-7"}}]}'
+         stderr: ""
+         exit_code: 0
+       - argv: ["bash", "-c", "echo '{\"drained\": true}'"]
+         stdout: '{"drained": true}'
+         stderr: ""
+         exit_code: 0
+     ```
+
+     Replay proceeds even if the on-disk package/tool digests have since
+     changed: per §Digest, Evidence, Trace, Resume (AR-TP §7.6), a package
+     digest mismatch in replay mode is non-fatal (`replay/packageDrift`),
+     because replay determinism is defined by the scenario file above, not
+     by the on-disk catalog --- and, per §Action Substitution
+     §Replay semantics (R11), the substitute is not re-executed from the
+     historical trace in the adapter/audit trace-replay sense; in
+     execution-mode replay (this scenario), the substitute's own nested
+     steps are matched against the same scenario exactly like an
+     `invoke` step's child runbook, which is why both process invocations
+     above --- the top-level one and the one nested inside the
+     substitute --- must be present in a single override map for the
+     unchanged runbook to replay successfully.
+
+inputs:
+  node_name:
+    type: string
+    description: Node to drain
+    default: "node-7"
+
+requires:
+  - package: acme.incident-tools
+    version: "^1.2.0"
+    path: ../../../schemas/examples/acme-incident-tools
+
+toolRefs:
+  - name: kubectl
+    package: acme.incident-tools
+    version: "^1.2.0"
+
+flow:
+  # Tier-1 (package) tool, bound by name via toolRefs above. Resolves the
+  # process-backed "get-nodes" action.
+  - step:
+      id: list_nodes
+      type: tool
+      title: List cluster nodes before drain
+      tool:
+        name: kubectl
+        action: get-nodes
+        args: {}
+      capture:
+        nodes_json: json
+
+  # Invokes the substituted action: "drain-node" is implemented by
+  # ../../../schemas/examples/acme-incident-tools/runbooks/drain-node.yaml
+  # per that package's tools/kubectl.tool.yaml. The caller cannot see or
+  # override this: it looks like any other tool action call. The capture
+  # path is `outputs.drained` --- the dedicated caller-visible capture
+  # namespace for substituted-action outputs (design/gert/grammar/gcp.ebnf
+  # §3.4a; design/gert/sections/06-tool-runtime.tex §Output contract), NOT
+  # a process-shaped path like `json.drained` or `stdout`: this action
+  # never produces stdout or an exit code.
+  - step:
+      id: drain
+      type: tool
+      title: Drain the target node (substituted action)
+      tool:
+        name: kubectl
+        action: drain-node
+        args:
+          node: "${node_name}"
+          # Literal, statically-known value bound to an enum-constrained
+          # arg (../../../schemas/examples/acme-incident-tools/tools/kubectl.tool.yaml
+          # action "drain-node" args.strategy: enum ["graceful", "force"]).
+          # Being a constant with no GIS interpolation, this is checked at
+          # PLAN time (AR-ENUM-7, P4): a non-member literal here would be
+          # ENUM-007, not a runtime failure.
+          strategy: "graceful"
+      capture:
+        node_drained: outputs.drained
+
+  - step:
+      id: assert_drained
+      type: assert
+      title: Verify node was drained via substitution
+      assert:
+        # `node_drained` is a genuine PJVM boolean (captured via
+        # `outputs.drained`, itself sourced from the substitute's own
+        # `step.drain.json.drained` GCP path over real JSON stdout ---
+        # design/gert/schemas/examples/acme-incident-tools/runbooks/drain-node.yaml).
+        # `Assertion.subject`/`.expected` are schema-typed as GIS-template
+        # strings (design/gert/schemas/runbook.v1.schema.json,
+        # $defs/Assertion) and are ALWAYS rendered through PJVM coercion
+        # before comparison (design/gert/grammar/gis.ebnf §GIS-TYPE-001;
+        # design/gert/proposals/gis-optional-chaining.md: boolean `false`
+        # renders as `"false"` per PJVM coercion, so `true` renders as
+        # `"true"`) --- so `expected: "true"` (a string, matching the
+        # schema) is the CORRECT comparison target for the coerced
+        # boolean `true`, not a type mismatch. The prior, rejected
+        # revision's defect was not this string/string comparison; it was
+        # that `node_drained` was never a real captured value at all
+        # (`capture: {drain_ok: "true"}` supplied an invalid literal where
+        # a GCP path is required, GCP-PARSE-001) --- now fixed by
+        # capturing a genuine boolean via `outputs.drained` above.
+        - type: eq
+          subject: "${node_drained}"
+          expected: "true"
+
+  - step:
+      id: complete
+      type: end
+      title: Tool package + substitution test complete
+      outcome:
+        category: success
+        code: tool_package_test_passed

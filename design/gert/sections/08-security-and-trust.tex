@@ -318,7 +318,7 @@ Tool action definitions declare which input parameters accept sensitive data via
 \begin{minted}{yaml}
 # my-tool.tool.yaml
 actions:
-  deploy:
+  - name: deploy
     args:
       api_key:
         type: string
@@ -338,6 +338,33 @@ the string \texttt{<redacted>}.
 In addition, the runbook's \texttt{governance.redact} block defines regex
 patterns applied to all captured output (stdout, stderr, JSON responses) before
 storage.  See §11 for the full redaction specification.
+
+\paragraph{Redacted \texttt{enum} member lists (C1).}
+\texttt{enum} (design/gert/sections/03-schema-vnext.tex \S\ref{para:enum-constraint})
+is \textbf{forbidden} on \texttt{type: secret} (\texttt{ENUM-001}): a secret's
+value domain MUST NOT be enumerable, full stop. For every other declaration
+that carries a sensitivity marking --- a tool \texttt{args:} entry with
+\texttt{redact: true}, a name listed in \texttt{governance.sensitive\_inputs},
+or a field matched by a \texttt{governance.redact} rule --- \texttt{enum} MAY
+still be declared, but the following is normative and non-negotiable:
+
+\begin{itemize}
+  \item The member list \textbf{MUST NOT} appear in cleartext in any trace
+        event, \texttt{--output=json} payload, \texttt{ValidatedPlan}
+        record, or diagnostic. Every surface that would otherwise emit the
+        member list emits the literal string \texttt{"<redacted>"} together
+        with a \texttt{member\_count} integer instead.
+  \item An \texttt{ENUM-008} (or \texttt{ENUM-009}) message for a redacted
+        declaration \textbf{MUST NOT} enumerate permitted values and
+        \textbf{MUST NOT} echo the rejected value; it MAY state only the
+        declaration name and the fact that the value did not match one of
+        \texttt{member\_count} permitted members. The rejected value itself
+        is redacted per the ordinary rules above regardless of \texttt{enum}.
+  \item This trades diagnostic quality on secret-adjacent fields for
+        closing an oracle: an enum member list next to a redacted value is
+        equivalent to publishing that value's entire domain, which defeats
+        the redaction it sits beside.
+\end{itemize}
 
 \subsection{Secret Storage Policy}
 
@@ -692,10 +719,41 @@ Before invoking the tool, the host:
         \texttt{governance/toolChecksumMismatch} trace event.
 \end{enumerate}
 
+\subsection{Tool Package Digests and Lock File}
+\label{sec:supply-chain-package-digests}
+
+In addition to the per-binary checksum above, tool \textbf{packages}
+(directories bundling \texttt{.tool.yaml} definitions behind
+\texttt{gert-package.yaml}, \texttt{design/gert/sections/06-tool-runtime.tex}
+\S Tool Packages) are integrity-protected at the package level:
+
+\begin{itemize}
+  \item Every package has a deterministic, order-free \textbf{package
+        digest} computed over its exported API surface (manifest, exported
+        tool files, and everything transitively reachable via
+        \texttt{impl.path} and package-internal includes) --- see
+        \S Digest, Evidence, Trace, Resume in the tool runtime chapter for
+        the exact construction.
+  \item The full package set for a run has a single \textbf{catalog digest}
+        that proves two runs saw the same tool universe.
+  \item \texttt{.gert/packages.lock.json}
+        (\texttt{design/gert/schemas/package-lock.v1.schema.json},
+        \texttt{apiVersion: package-lock/v1}) is a generated, committed,
+        frozen integrity record of both --- not a dependency solver output.
+        Lock presence is optional for \texttt{gert run}; when present, a
+        mismatch is \texttt{PKG-009}.
+  \item On \texttt{gert exec --resume}, package/catalog digest mismatch is a
+        hard refusal (\texttt{PKG-009}), overridable only via
+        \texttt{--allow-package-drift}, which emits an auditable
+        \texttt{governance/packageDriftAccepted} trace event --- see
+        \texttt{design/gert/sections/13-evidence-tracing-resumption.tex}
+        \S Package Resumption Contract.
+\end{itemize}
+
 \subsection{\texttt{gert verify} Command}
 
-The \texttt{gert verify} command validates all tools and extensions in the
-workspace before execution:
+The \texttt{gert verify} command validates all tools, packages, and
+extensions in the workspace before execution:
 
 \begin{minted}{bash}
 $ gert verify --workspace .
@@ -704,15 +762,49 @@ Verifying tools...
   ✓ curl: no checksum declared (skipped)
   ✗ jq: checksum mismatch (expected sha256:abc123, got sha256:def456)
 
+Verifying packages...
+  ✓ acme.incident-tools@1.4.2: package digest matches lock (sha256:9f2e1a...)
+  ⚠ acme.audit-pack@0.3.0: external root (vendor path resolves outside workspace)
+  ✗ acme.legacy-tools@2.0.0: package digest mismatch (lock sha256:aa11.., disk sha256:bb22..)
+
 Verifying extensions...
   ✓ acme.incident-pack: signature valid (ed25519, expires 2025-01-01)
   ✗ debug-tools: no signature (required for remote extensions)
 
-Verification: FAILED (2 errors)
+Verification: FAILED (2 errors, 1 warning)
 \end{minted}
 
 This command should be run in CI/CD pipelines before deploying runbooks to
 production.
+
+\subsubsection{Package verification}
+\label{sec:supply-chain-packages}
+
+Per Barbara's ruling
+\texttt{.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md}
+(AR-TP-6, AR-TP-7, ratified 2026-08-09), \texttt{gert verify} additionally:
+
+\begin{enumerate}
+  \item Recomputes every package digest and the catalog digest from the
+        current filesystem, using the raw-byte SHA-256 construction in
+        \texttt{design/gert/sections/06-tool-runtime.tex} \S Digest,
+        Evidence, Trace, Resume.
+  \item If \texttt{.gert/packages.lock.json} is present, compares every
+        recomputed digest against the corresponding \texttt{packages[].digest},
+        \texttt{packages[].exports[].digest}, and \texttt{catalogDigest}
+        entries. Any mismatch is reported as a distinct \texttt{PKG-009}
+        finding; the lock file itself is validated against
+        \texttt{design/gert/schemas/package-lock.v1.schema.json}.
+  \item Reports every package whose root resolves outside the workspace
+        (\S Secure Path Resolution, \texttt{PKG-W003}) as a distinct
+        ``external root'' finding --- a warning, not a failure, but one that
+        \textbf{MUST} be surfaced so operators can audit what is being
+        loaded from outside the workspace tree.
+  \item Applies the same symlink/junction/reparse-point resolution and
+        containment rules used at plan time (\S Secure Path Resolution
+        \S Symlinks, junctions, reparse points); an escaping link is
+        \texttt{PKG-008}.
+\end{enumerate}
 
 \subsection{Extension Signature Verification}
 

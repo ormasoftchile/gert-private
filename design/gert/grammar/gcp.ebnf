@@ -232,6 +232,7 @@ EventHeader    = "headers" "." HEADER_NAME ;
 LocalCapture   = LocalScalar
                | LocalText
                | LocalStructured
+               | LocalOutputs
                ;
 
 LocalScalar    = "exit_code" ;
@@ -246,6 +247,37 @@ LocalStructured = ( "json" | "yaml" ) [ GDP ] ;
                      GDP is OPTIONAL (ratified OI-GCP-02). When GDP is
                      absent, the entire parsed root is captured (bare-root).
                      'json' and 'yaml' parse stdout as the named format. *)
+
+(* --- 3.4a Substituted Tool Action Output Capture ---
+   Added per Barbara's tool-packages gate review R3
+   (.squad/decisions/inbox/barbara-tool-packages-gate-review.md) and
+   design/gert/sections/06-tool-runtime.tex §Action Substitution,
+   §Output contract. A tool step whose bound action is
+   'execute.kind: runbook' (a substituted action) never produces stdout,
+   stderr, or an exit code -- 'exit_code'/'stdout'/'stderr'/'json'/'yaml'
+   MUST NOT be used in a capture: block attached to such a step
+   (GCP-PARSE-001: the source does not exist for that step). Instead, the
+   action's declared 'outputs:' map crosses the caller boundary under this
+   dedicated root.
+
+   Examples:
+     outputs.drained                → the substitute's declared boolean
+                                       output 'drained'
+*)
+LocalOutputs   = "outputs" "." OutputName ;
+OutputName     = IDENT ;
+                 (* MUST be one of the resolved action's declared 'outputs:'
+                    key names (design/gert/sections/06-tool-runtime.tex
+                    §Output contract). Any other name is GCP-RESOLVE-002
+                    (path segment not found). No GDP suffix is permitted
+                    beyond the output name in the MVP: substituted outputs
+                    are declared as scalar PJVM types
+                    (design/gert/sections/06-tool-runtime.tex
+                    §Action Substitution). Valid ONLY for a 'tool' step
+                    whose bound action is 'execute.kind: runbook'; using it
+                    against a process-backed action's step is
+                    GCP-PARSE-001 (the 'outputs' source does not exist for
+                    that step). *)
 
 
 (* ============================================================
@@ -501,6 +533,9 @@ IndexSegment   = "[" INTEGER "]" ;
    │ json.{gdp}                    │ PJVM       │ cli, tool steps    │
    │ yaml                          │ PJVM root  │ cli, tool steps    │
    │ yaml.{gdp}                    │ PJVM       │ cli, tool steps    │
+   │ outputs.{name}                │ per action │ tool steps only,   │
+   │                               │ 'outputs'  │ execute.kind:      │
+   │                               │ decl.      │ runbook (§3.4a)    │
    ├───────────────────────────────┼────────────┼────────────────────┤
    │ step.{id}.exit_code           │ number     │ any step type      │
    │ step.{id}.stdout              │ string     │ any step type      │

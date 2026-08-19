@@ -25,6 +25,13 @@ inputs:
     description: Alert description from SIEM
     from: webhook.description
 
+# NOTE (Tool Packages MVP, AR-TP-1): every `source:` field below is
+# DEPRECATED (D-001, PKG-W002) and every `actions:` field below is
+# DEPRECATED (D-002, PKG-W001) --- see
+# design/gert/sections/06-tool-runtime.tex \S Runbook Tool Bindings.
+# Both remain schema-valid but carry no resolution or enforcement power;
+# `actions:` is a documentation-only reachability assertion. Prefer
+# `package:`/`version:` for new toolRefs.
 toolRefs:
   - name: aws
     source: builtin://aws

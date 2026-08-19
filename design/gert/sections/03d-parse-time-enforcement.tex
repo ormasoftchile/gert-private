@@ -140,6 +140,25 @@ before any step event.  The event payload \textbf{MUST} include at minimum:
     \texttt{ValidatedPlan}~(\S\ref{sec:parse-gate:validated-plan}).
   \item \texttt{validated\_at} timestamp.
   \item \texttt{expression\_count} summary (GXL, GIS, GCP expression counts).
+  \item \texttt{enum\_constraints}: for every \texttt{enum}-constrained
+    declaration validated in this plan (tool action \texttt{args.<name>},
+    tool action \texttt{outputs.<name>}, runbook \texttt{inputs.<name>},
+    runbook \texttt{outputs.<name>} --- the four sites of
+    \texttt{design/gert/sections/03-schema-vnext.tex}
+    \S\ref{subsec:inputs}/\S\ref{subsec:outputs} and
+    \texttt{design/gert/sections/06-tool-runtime.tex}
+    \S\ref{sec:tool-definition-schema}/\S\ref{sec:tool-substitution}), the
+    declaration's site, name, and its \texttt{enum} member list in
+    \textbf{declared order}. This is emitted \textbf{once per run}, here,
+    and \textbf{MUST NOT} be repeated in \texttt{tool/invoked},
+    \texttt{tool/completed}, \texttt{step/started}, or
+    \texttt{step/completed} payloads (those carry the bound \emph{value}
+    only). For a declaration that is redacted (\texttt{type: secret} is
+    never enum-constrained --- \texttt{ENUM-001}; a \texttt{redact: true}
+    tool arg, a \texttt{governance.sensitive\_inputs} entry, or a
+    \texttt{governance.redact}-matched field), the member list \textbf{MUST}
+    be replaced with the literal string \texttt{"<redacted>"} and the entry
+    \textbf{MUST} instead carry a \texttt{member\_count} integer.
 \end{itemize}
 
 The trace event schema for \texttt{plan.validated} is defined in
@@ -177,10 +196,20 @@ be equivalent):
 \quad\texttt{.gxl}        & int       & Number of GXL expression fields \\
 \quad\texttt{.gis}        & int       & Number of GIS template fields \\
 \quad\texttt{.gcp}        & int       & Number of GCP capture paths \\
+\texttt{enum\_constraints}& list      & Per enum-constrained declaration: site, name, and member list in \textbf{declared order} (\texttt{"<redacted>"} + \texttt{member\_count} for a redacted declaration) \\
 \texttt{errors}           & list      & \textbf{MUST} be empty (see below) \\
 \hline
 \end{tabular}
 \end{center}
+
+The \texttt{enum\_constraints} field makes a stored plan self-describing:
+re-validation on resume can compare a re-derived enum set against the one
+carried in the stored plan without re-reading every file in the closure. It
+is populated during the semantic validation stage (\S\ref{sec:parse-gate:contract}
+step 5) from the four declaration sites named in
+\texttt{design/gert/sections/03-schema-vnext.tex} \S\ref{subsec:inputs},
+\S\ref{subsec:outputs} and \texttt{design/gert/sections/06-tool-runtime.tex}
+\S\ref{sec:tool-definition-schema}, \S\ref{sec:tool-substitution}.
 
 The \texttt{errors} field \textbf{MUST} be empty for any \texttt{ValidatedPlan}
 that is accepted by the runtime.  A plan with a non-empty \texttt{errors} list
@@ -321,6 +350,7 @@ here as normative.
 \texttt{PLAN-007} & Planner & Grammar version mismatch: recorded \texttt{grammar\_versions} in a stored plan are incompatible with the validating runtime's grammar versions & Re-validate the runbook against the current grammar \\
 \texttt{PLAN-008} & Planner & Keyword used as a capture variable name (e.g., \texttt{capture: and: ...}) & Rename the capture variable (\texttt{GXL-PARSE-010} for GXL context) \\
 \texttt{PLAN-009} & Planner & Runbook references a \texttt{step.X.*} capture path where step~X is not statically reachable from the declaring step (conditional branch exclusion) & Re-order steps or use \texttt{when:} guard \\
+\texttt{PLAN-010} & Planner & \texttt{step.tool.name} has no \texttt{toolRefs} binding in the declaring runbook file (tool-name binding is lexically scoped per file; see \S\ref{sec:tool-discovery}) & Add a \texttt{toolRefs} entry in the same file \\
 \hline
 \end{tabular}
 \end{center}
@@ -328,6 +358,221 @@ here as normative.
 \noindent\textit{Note:} \texttt{PLAN-004}, \texttt{PLAN-005}, and
 \texttt{PLAN-006} are defensive parse-gate codes that reject unsupported
 syntax before execution.
+
+\subsubsection{Tool Package Error Codes}
+\label{sec:parse-gate:error-codes:pkg}
+
+The following codes are raised by the \textbf{Resolver}, \textbf{Catalog},
+\textbf{Path}, \textbf{Binding}, \textbf{Substitution}, and
+\textbf{Verify/Resume} subsystems described in
+\texttt{design/gert/sections/06-tool-runtime.tex} (\S Tool Packages,
+\S Version Constraint Grammar, \S Action Substitution, \S Secure Path
+Resolution) and \texttt{design/gert/sections/08-security-and-trust.tex}
+(\S Supply Chain Security). They are \emph{new per Barbara's ruling}
+\texttt{.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md}
+(AR-TP-9, ratified 2026-08-09) and are normative. All codes and warnings in
+this subsection are \textbf{permanent} once shipped: they are never
+renumbered or reused. \texttt{PKG-019} is reserved and intentionally
+unassigned to make that policy visible.
+
+\paragraph{Parse-gate pre-check for \texttt{PKG-020}/\texttt{PKG-021}.}
+\texttt{runbook.v1.schema.json} is \texttt{additionalProperties: false} at
+the document root and on \texttt{ToolRef}, so a document containing a
+top-level \texttt{toolPackages:} key or a \texttt{toolRefs[].alias} key
+would otherwise fail generic structural validation with an undifferentiated
+unknown-key schema error, defeating the entire purpose of having a
+diagnosable code. This subsection is therefore normative about ordering,
+not just content: before a runbook or tool-package document is handed to
+generic JSON-Schema structural validation, the parse gate \textbf{MUST}
+perform a targeted pre-check, walking the raw parsed YAML/JSON document
+(not the schema-validated form) for exactly two conditions, in this order:
+
+\begin{enumerate}
+  \item A top-level key literally named \texttt{toolPackages} anywhere the
+        document root's own keys are enumerated \textbf{MUST} raise
+        \texttt{PKG-020} and halt before schema validation runs.
+  \item Any entry in a \texttt{toolRefs:} array (if present) carrying a key
+        literally named \texttt{alias} \textbf{MUST} raise \texttt{PKG-021}
+        and halt before schema validation runs.
+\end{enumerate}
+
+Only after both checks pass does the document proceed to generic
+\texttt{additionalProperties: false} structural validation
+(\S\ref{sec:parse-gate:contract}). This ordering is required precisely
+because both keys are, by construction, never present in the schema's
+\texttt{properties} — the generic validator has no way to tell
+\texttt{toolPackages:} apart from any other unknown key, and diagnosing the
+specific, anticipated authoring mistake is the entire stated rationale for
+these two codes (\S\ref{sec:parse-gate:error-codes:pkg} preamble, AR-TP-1).
+An implementation MAY perform this pre-check as a single linear scan of the
+raw document tree; it MUST NOT rely on schema validation error messages to
+distinguish these two cases from an arbitrary unknown key.
+
+\begin{center}\small
+\begin{tabular}{p{2.3cm}p{1.9cm}p{6.3cm}p{3.6cm}}
+\hline
+\textbf{Code} & \textbf{Raised By} & \textbf{Condition} & \textbf{Remediation} \\
+\hline
+\texttt{PKG-001} & Resolver & Required package not resolvable (no path, missing root, missing manifest) & Declare \texttt{path} or install the package \\
+\texttt{PKG-002} & Resolver & Version constraint unsatisfied, or empty constraint intersection & Align the constraint with the resolved version \\
+\texttt{PKG-003} & Resolver & Malformed version constraint (grammar \S Version Constraint Grammar \S4.2) & Use a supported comparator form \\
+\texttt{PKG-004} & Resolver & Package manifest fails schema validation (includes URL-shaped package names) & Fix \texttt{gert-package.yaml} \\
+\texttt{PKG-005} & Resolver & Duplicate package name in one \texttt{requires:} list & Remove the duplicate entry \\
+\texttt{PKG-006} & Catalog & Same-tier tool name collision & Rename, or bind via \texttt{toolRefs[].package} \\
+\texttt{PKG-007} & Path & Unsafe path syntax (any kind), or containment escape of a \textit{package-internal} kind; \textbf{never} a workspace-root escape by a workspace-level kind (that is \texttt{PKG-W003}) & Use a package-root-relative POSIX path \\
+\texttt{PKG-008} & Path & Symlink/junction escape, cycle, or hop limit exceeded & Remove the link or move the target inside the root \\
+\texttt{PKG-009} & Verify/Resume & Package or catalog digest mismatch & Re-verify, or resume with \texttt{--allow-package-drift} \\
+\texttt{PKG-010} & Resolver & Export references a missing file & Fix \texttt{exports.tools[].path} \\
+\texttt{PKG-011} & Binding & Referenced tool is not exported by the package & Add it to \texttt{exports.tools} \\
+\texttt{PKG-012} & Binding & Action not declared by the resolved tool (incl. \texttt{toolRefs[].actions} entries) & Correct the action name \\
+\texttt{PKG-013} & Substitution & Substitute runbook input/output signature mismatch, including \texttt{enum} set inequality: for any \texttt{args.<name>}/\texttt{outputs.<name>} shared between an action and its \texttt{execute.kind: runbook} substitute, one side declaring \texttt{enum} while the other does not, or both declaring \texttt{enum} with unequal member \textbf{sets} (order-insensitive; \S\ref{sec:parse-gate:error-codes:enum}), is this code --- \textbf{not} a new \texttt{ENUM-*} code. No variance: neither a narrower nor a wider substitute enum passes & Align \texttt{inputs}/\texttt{outputs}, including \texttt{enum} member sets, with the action \\
+\texttt{PKG-014} & Substitution & Substitute would widen effective governance & Narrow the substitute's policy \\
+\texttt{PKG-015} & Substitution & Substitution cycle & Break the \texttt{(package,tool,action)} cycle \\
+\texttt{PKG-016} & Resolver & Non-empty \texttt{dependencies:} (transitive deps out of MVP) & Flatten dependencies into \texttt{requires:} \\
+\texttt{PKG-017} & Catalog & Late package binding after catalog freeze (incl. lazy include) & Declare the package at the root \\
+\texttt{PKG-018} & Path & Reserved name, case-only or NFC-only collision, trailing dot/space & Rename the file \\
+\texttt{PKG-019} & \textit{(reserved)} & --- & --- \\
+\texttt{PKG-020} & Parser & \texttt{toolPackages:} key present & Use \texttt{requires:} \\
+\texttt{PKG-021} & Parser & \texttt{toolRefs[].alias} present & Remove; aliases are out of MVP \\
+\texttt{PKG-022} & Catalog & Undeclared cross-tier shadowing of a bare tool name & Declare \texttt{toolRefs[].package} or \texttt{.path} \\
+\texttt{PKG-023} & Resolver & Export \texttt{id} $\neq$ tool definition \texttt{name} & Make them identical \\
+\texttt{PKG-024} & Resolver & Runbook \texttt{requires[].path} conflicts with project binding & Remove the runbook-level \texttt{path} \\
+\texttt{PKG-025} & Resolver & Version is not strict SemVer 2.0.0 & Use \texttt{MAJOR.MINOR.PATCH} \\
+\texttt{PKG-026} & Substitution & Substitute declares \texttt{from: prompt} or \texttt{from: env} & Pass the value as an action input \\
+\texttt{PKG-027} & Substitution & Declared substitute output not produced on all terminal paths & Produce it or give it a default \\
+\texttt{PKG-028} & Substitution & Substitution depth $>$ 4 & Flatten the substitution chain \\
+\texttt{PKG-029} & Binding & \texttt{toolRefs[].package} and \texttt{toolRefs[].path} both present on the same entry & Remove one; they are mutually exclusive \\
+\texttt{PKG-030} & Binding & \texttt{toolRefs[].name} (or a bare/qualified name used as \texttt{step.tool.name}) resolves to no catalog entry at all & Correct the name, or add the supplying \texttt{requires:}/\texttt{tool-paths}/extension/MCP entry \\
+\hline
+\end{tabular}
+\end{center}
+
+\texttt{PKG-030} is distinct from \texttt{PKG-011}: \texttt{PKG-011} fires
+when a name resolves to a specific package that exists but does not export
+that tool; \texttt{PKG-030} fires when no catalog entry --- from any tier ---
+matches the name at all. Both are Binding-phase codes, checked after Phase C
+catalog construction and before Phase B completes.
+
+\paragraph{Warnings.} The following are non-fatal; they \textbf{MUST} appear
+in the plan report and in the trace but do not block a run.
+
+\begin{center}\small
+\begin{tabular}{p{2.8cm}p{10.5cm}}
+\hline
+\textbf{Code} & \textbf{Condition} \\
+\hline
+\texttt{PKG-W001} & \texttt{toolRefs[].actions} present --- documentation-only in the MVP, not an allowlist \\
+\texttt{PKG-W002} & \texttt{toolRefs[].source} present --- deprecated, superseded by \texttt{package} \\
+\texttt{PKG-W003} & A workspace-level path (\texttt{requires[].path}, ordinary-runbook \texttt{toolRefs[].path}, \texttt{tool-paths[]}) resolves outside the workspace (external root) --- reported, never rejected \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsubsection{Enum Constraint Error Codes}
+\label{sec:parse-gate:error-codes:enum}
+
+The following codes are raised by the enum-constraint validation described
+in \texttt{design/gert/sections/03-schema-vnext.tex}
+\S\ref{subsec:inputs}/\S\ref{subsec:outputs} and
+\texttt{design/gert/sections/06-tool-runtime.tex}
+\S\ref{sec:tool-definition-schema}/\S\ref{sec:tool-substitution}. They are
+\emph{new per Barbara's ruling}
+\texttt{.squad/decisions/inbox/barbara-enum-constraint-mvp-architecture-ruling.md}
+(AR-ENUM-1 through AR-ENUM-15, ratified 2026-08-10) and are normative. All
+codes and warnings in this subsection are \textbf{permanent} once shipped:
+they are never renumbered or reused.
+
+\texttt{enum} is a per-declaration value constraint valid at exactly four
+sites: tool action \texttt{args.<name>}, tool action \texttt{outputs.<name>}
+(substituted actions), runbook \texttt{inputs.<name>}, and runbook
+\texttt{outputs.<name>}. It is valid only when the declaration resolves to
+\texttt{type: string}. A substitution signature mismatch on an
+\texttt{enum}-constrained \texttt{args.<name>}/\texttt{outputs.<name>} is
+\texttt{PKG-013}, not an \texttt{ENUM-*} code
+(\S\ref{sec:parse-gate:error-codes:pkg}); this family covers only the
+single-declaration well-formedness, default, plan-time-literal, and
+runtime-binding checks.
+
+\begin{center}\small
+\begin{tabular}{p{2.3cm}p{1.9cm}p{6.3cm}p{3.6cm}}
+\hline
+\textbf{Code} & \textbf{Raised By} & \textbf{Condition} & \textbf{Remediation} \\
+\hline
+\texttt{ENUM-001} & Parser/Schema & \texttt{enum} on a non-string declaration, including \texttt{type: secret} & Remove \texttt{enum}, or declare \texttt{type: string} \\
+\texttt{ENUM-002} & Parser/Schema & \texttt{enum} is not a YAML sequence, is empty (\texttt{minItems: 1} violated), or contains a scalar that does not resolve to a string under the YAML~1.2 core schema (e.g.\ unquoted \texttt{true}/\texttt{false}, \texttt{1.0}, \texttt{\textasciitilde} --- unquoted \texttt{yes}/\texttt{no} resolve to strings under the core schema and are not affected), a nested sequence/mapping, or an explicitly tagged item. No coercion & Quote members; use a non-empty flat list of strings \\
+\texttt{ENUM-003} & Parser/Schema & A member is the empty string, whitespace-only, or has leading/trailing whitespace & Remove the member or trim it \\
+\texttt{ENUM-004} & Parser/Schema & Duplicate members after NFC normalisation & Remove the duplicate \\
+\texttt{ENUM-005} & Parser/Schema & A member is invalid UTF-8, is not already in NFC, or contains a Unicode control character (U+0000--U+001F, U+007F) or bidi/format control (U+200E, U+200F, U+202A--U+202E, U+2066--U+2069) & Normalise to NFC; remove control characters \\
+\texttt{ENUM-006} & Planner & \texttt{default} is not a declared member (exact match, NFC) & Use a declared member as the default \\
+\texttt{ENUM-007} & Planner & A statically-known literal bound to an enum-constrained declaration at plan time (a constant \texttt{step.tool.args} value with no GIS interpolation, or a runbook input \texttt{default}) is not a member & Use a declared member \\
+\texttt{ENUM-008} & Runtime & A materialised bound value (post GIS coercion-to-string, post type check, post NFC normalisation of the candidate) is not a member at the moment of binding & Supply a declared member \\
+\texttt{ENUM-009} & Runtime & A declared output value (\texttt{outputs.<name>} at S2/S4) is not a member at production time, before it crosses the caller boundary, enters \texttt{outputs.<name>} capture, is written to the trace, or reaches \texttt{--output=json} & Fix the producing step, or widen the contract deliberately \\
+\hline
+\end{tabular}
+\end{center}
+
+All \texttt{ENUM-*} messages and member lists in the table above are subject
+to the same redaction rule as every other diagnostic surface: a redacted
+declaration's member list \textbf{MUST} be replaced with
+\texttt{"<redacted>"} plus a \texttt{member\_count} integer wherever it
+would otherwise be emitted
+(\texttt{design/gert/sections/08-security-and-trust.tex} \S Secret
+Resolution and Redaction).
+
+\paragraph{Ordering and precedence.} Runtime membership checking occurs, in
+this exact order, at the moment of binding: (1) existing type
+resolution/GIS coercion to string; (2) existing type check; (3) NFC
+normalisation of the candidate; (4) enum membership. A non-string value
+bound to an enum-constrained string declaration is reported as the
+\textbf{type} error, never \texttt{ENUM-008} --- single-cause reporting. On
+an \texttt{ENUM-008}/\texttt{ENUM-009} failure the binding does not occur:
+the value never enters the execution context, is never passed to a tool,
+and is never written to the trace as an accepted value. There is no
+coercion, no nearest-match auto-correction, and no fallback to
+\texttt{default}.
+
+\paragraph{Plan-time vs.\ runtime.} \texttt{ENUM-001} through
+\texttt{ENUM-006} are checked unconditionally on every declaration in the
+include and package closure, reachable or not. \texttt{ENUM-007} is checked
+only against statically-known literals; a value containing GIS
+interpolation is \textbf{never} evaluated against an enum at plan
+time --- there is no partial evaluation, prefix analysis, or constant
+folding of \texttt{\$\{...\}} in this MVP, and a runtime-only enum failure
+(\texttt{ENUM-008}) is an accepted, designed outcome, not a defect.
+
+\paragraph{Replay does not bypass enum validation.} A value answered from a
+scenario file (design/gert/sections/13-evidence-tracing-resumption.tex \S
+Replay Mode) is a bound value and is validated identically to a live
+binding; a scenario recording an off-enum value fails --- that is the
+scenario's bug, not a reason to skip the check.
+
+\paragraph{Package mocks (C2 --- conformance obligation, not a runtime
+check).} Enum validation is \textbf{binding-independent}: the same
+enum-constrained usage in a runbook is validated against whichever tool
+definition is bound (real package or \texttt{--package-map}/mock
+override), and this \textbf{MUST NOT} be weakened, skipped, or
+short-circuited under any override or in any non-\texttt{real} environment.
+A mock package declaring a different enum set than the real package for
+the same action is an authoring error detectable only by running both
+bindings; it is enforced by the required \texttt{ENUM-MOCK} conformance
+vector class (design/gert/conformance/tv-enum.yaml), \textbf{not} by a
+runtime signature comparison or a new package-lock field. When a package
+lock entry is present, an enum edit inside the package already changes the
+export digest and is already \texttt{PKG-009}; there is no new digest
+machinery for enums.
+
+\paragraph{Warning.} The following is non-fatal; it \textbf{MUST} appear in
+the validation report but does not block a run.
+
+\begin{center}\small
+\begin{tabular}{p{2.8cm}p{10.5cm}}
+\hline
+\textbf{Code} & \textbf{Condition} \\
+\hline
+\texttt{ENUM-W001} & \texttt{enum} contains case-only-distinct members (e.g.\ \texttt{Prod} / \texttt{prod}) --- legal, case-sensitive, and matched exactly; the warning exists because such pairs are a common authoring mistake \\
+\hline
+\end{tabular}
+\end{center}
 
 % ─────────────────────────────────────────────────────────────────────────────
 \subsection{Error Message Format}
@@ -346,7 +591,7 @@ unstructured string messages as the primary error representation.
 \texttt{code}     & string  & Error code from the catalog in~\S\ref{sec:parse-gate:error-codes} \\
 \texttt{message}  & string  & Human-readable description in English \\
 \texttt{location} & struct  & Source location of the offending token or field \\
-\quad\texttt{.file}       & string & Runbook or tool file path (relative to runbook root) \\
+\quad\texttt{.file}       & string & Runbook or tool file path (relative to runbook root). For all \texttt{PKG-*} codes raised inside a package, this is workspace-relative in the form \texttt{<packageRoot>/<relpath>} (\S\ref{sec:parse-gate:error-codes:pkg}). \\
 \quad\texttt{.line}       & int    & 1-based line number \\
 \quad\texttt{.column}     & int    & 1-based column (code-point offset, not byte offset) \\
 \quad\texttt{.span\_length} & int  & Length in code points of the highlighted span \\

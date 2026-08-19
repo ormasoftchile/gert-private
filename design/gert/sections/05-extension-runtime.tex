@@ -167,8 +167,7 @@ rejected before any subprocess is created.
 \section{Extension Discovery}
 \label{sec:ext-discovery}
 
-The host discovers extensions using the following resolution order, with later
-entries taking precedence:
+The host discovers extensions using the following resolution order:
 
 \begin{enumerate}
   \item \textbf{Built-in extensions}: compiled into the host binary; always
@@ -180,6 +179,35 @@ entries taking precedence:
   \item \textbf{CLI override}: \texttt{--extension <path>} flags provided at
         invocation time.
 \end{enumerate}
+
+Precedence follows the same uniform rule stated for tool discovery in
+\texttt{design/gert/sections/06-tool-runtime.tex}
+\S\ref{sec:tool-precedence} (\textbf{higher precedence wins; ties are
+errors}) rather than a ``later entries take precedence'' rule: CLI override
+is the highest-precedence source, followed by runbook declaration, then
+workspace config, then built-ins. This corrects a prior inconsistency
+between this section and \S\ref{sec:tool-discovery} of the tool runtime
+chapter --- both described their respective precedence in
+mutually-incompatible language (``later wins'' here,
+``first match wins'' there); that inconsistency was a spec defect, not an
+intentional subsystem difference, and both are now stated identically.
+
+Tools contributed by an extension (\texttt{capability/tool-registration}) are
+always tier~3 in the tool catalog (\texttt{design/gert/sections/06-tool-runtime.tex}
+\S\ref{sec:tool-tiers}) and are \textbf{always qualified} as
+\texttt{<extension>/<tool>}. An extension-contributed tool never binds a
+bare name and therefore can never silently shadow a built-in, project, or
+package tool; any runbook that wants to use it must reference the qualified
+name via \texttt{toolRefs[].name} (e.g. \texttt{name: acme.incident-pack/pd-lookup}
+or, for an MCP-contributed tool, \texttt{name: acme-mcp/get-nodes}). Tier-3
+entries \textbf{MUST NOT} be pinned via \texttt{toolRefs[].package}: that
+field is reverse-DNS-patterned for tier-1 packages
+(\texttt{design/gert/sections/06-tool-runtime.tex}
+\S\ref{sec:tool-runbook-binding}) and is unusable for an MCP server name or
+any other single-label extension identifier with no dot. The qualified
+\texttt{name} is the only, and sufficient, addressing mechanism for tier 3:
+because tier-3 entries never bind a bare name, no other runbook-level
+disambiguation is needed to make them unambiguous.
 
 The \texttt{.gert/extensions.yaml} workspace config format:
 
@@ -201,9 +229,41 @@ extensions:
 \end{minted}
 
 When the same extension appears in multiple discovery sources, the host
-deduplicates by \texttt{meta.name}.  If two distinct extensions share the same
-name, the one with the higher resolution precedence wins; the lower one is
-logged as a warning and skipped.
+deduplicates by \texttt{meta.name}: this is not a collision, it is the same
+extension found twice, and the higher-precedence source's manifest is used.
+If two \textbf{distinct} extensions (different manifests, e.g. different
+\texttt{entry-point.executable} or different declaring path) share the same
+\texttt{meta.name}, the two cases are:
+
+\begin{itemize}
+  \item \textbf{Cross-source:} the two manifests are discovered from two
+        different sources in the resolution order above (e.g. one from
+        \texttt{.gert/extensions.yaml}, one from the runbook's
+        \texttt{extensions:} field). This is \textbf{not} a same-tier
+        collision --- the uniform precedence rule
+        (design/gert/sections/06-tool-runtime.tex \S\ref{sec:tool-precedence})
+        applies exactly as it does for tools: the higher-precedence source
+        wins silently, and the lower-precedence one is logged as a warning
+        and skipped. There is no ``first match'' or ``later entries''
+        ambiguity --- CLI override always outranks runbook declaration,
+        which always outranks workspace config, which always outranks
+        built-ins.
+  \item \textbf{Same-source tie:} two entries with the same \texttt{meta.name}
+        appear within \textbf{one} discovery source (e.g. two \texttt{path:}
+        entries in a single \texttt{.gert/extensions.yaml} whose manifests
+        both declare \texttt{meta.name: acme.incident-pack}). This is a
+        genuine same-tier collision, and per the uniform rule
+        (``higher tier wins, ties are errors'') it \textbf{MUST} be a hard
+        error at discovery time, not a warning-and-skip: the host refuses to
+        start either extension and reports both declaring paths.
+\end{itemize}
+
+The previous text describing any name reuse as ``a same-tier collision
+under the uniform precedence rule'' resolved by precedence-with-a-warning
+was itself a contradiction of the uniform rule --- a cross-source name
+match is not a tie (the two are naturally ordered by source precedence),
+and a genuine same-source tie was left unspecified. Both cases are now
+stated explicitly above.
 
 \section{Handshake and Lifecycle Protocol}
 \label{sec:ext-handshake}

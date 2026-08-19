@@ -441,6 +441,12 @@ All governance events are normatively defined in §11. The following is a summar
 
 \textbf{Required:} MAY be emitted. Recommended for observability.
 
+Per-event payloads carry the bound argument \emph{values} only; enum-constrained
+\texttt{args.<name>} declarations never repeat their member list here. Enum
+metadata is carried once per run in the \texttt{plan.validated} record
+(design/gert/sections/03d-parse-time-enforcement.tex \S The
+\texttt{ValidatedPlan} Type Contract).
+
 % ──────────────────────────────────────────────────────────────────────────────
 
 \subsubsection{\texttt{tool/completed}}
@@ -459,6 +465,144 @@ All governance events are normatively defined in §11. The following is a summar
 \end{minted}
 
 \textbf{Required:} MAY be emitted.
+
+Likewise, per-event payloads here carry the produced output \emph{value}
+only; enum-constrained \texttt{outputs.<name>} declarations never repeat
+their member list in this event.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsection{Package and Substitution Events}
+\label{sec:pkg-events}
+
+The following events are new per Barbara's ruling
+\texttt{.squad/decisions/archive/barbara-tool-packages-architecture-ruling.md}
+(AR-TP-7 §7.4, ratified 2026-08-09). They record the plan-time catalog
+construction and any runbook-backed action substitution defined in
+\texttt{design/gert/sections/06-tool-runtime.tex}
+\S Tool Packages / \S Action Substitution.
+
+\subsubsection{\texttt{package/resolved}}
+
+\textbf{Emitted:} One per resolved package, at plan time, \textbf{before}
+\texttt{run/started} side effects.
+
+\textbf{Payload:}
+\begin{minted}{json}
+{
+  "name":              <string>,   // reverse-DNS package name
+  "version":           <string>,   // strict SemVer 2.0.0
+  "digest":            <string>,   // "sha256:<64 hex>", package digest
+  "root":              <string>,   // workspace-relative POSIX path, or
+                                    // "external:sha256:<...>" (§Secure Path
+                                    // Resolution / §Digest, Evidence, Trace,
+                                    // Resume)
+  "external":          <bool>,     // true if root resolves outside the workspace
+  "constraintSources":  [<string>] // declaration sites that contributed to
+                                    // the intersected constraint
+}
+\end{minted}
+
+\textbf{Required:} MUST be emitted for every package in the frozen package
+set (design/gert/sections/06-tool-runtime.tex §Includes, Lexical Scoping,
+and Global Package Set).
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{catalog/frozen}}
+
+\textbf{Emitted:} Once per run, immediately after Phase C (catalog
+construction) completes and before Phase B (binding) begins.
+
+\textbf{Payload:}
+\begin{minted}{json}
+{
+  "catalogDigest": <string>,          // "sha256:<64 hex>"
+  "toolCount":     <int>,
+  "tiers": {
+    "0": <int>, "1": <int>, "2": <int>, "3": <int>, "4": <int>
+  }
+}
+\end{minted}
+
+\textbf{Required:} MUST be emitted exactly once per run.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{tool/substituted}}
+
+\textbf{Emitted:} When a \texttt{kind: runbook} action is entered
+(design/gert/sections/06-tool-runtime.tex §Action Substitution).
+
+\textbf{Payload:}
+\begin{minted}{json}
+{
+  "tool":                <string>,  // qualified tool name
+  "action":              <string>,
+  "substituteDigest":    <string>,  // "sha256:<64 hex>" of the substitute runbook
+  "depth":               <int>,     // 1-based substitution frame depth (max 4)
+  "effectiveGovernance": {
+    "require_approval": <bool>,
+    "deny_commands":    [<string>],
+    "deny_env_vars":    [<string>],
+    "allow_commands":   [<string>],
+    "redact":           [<string>],
+    "capabilities":     [<string>]
+  }
+}
+\end{minted}
+
+The composed governance is recorded explicitly, because ``what policy
+actually applied'' is the audit question. Substitute steps appear in the
+trace as nested spans with an \texttt{Origin} breadcrumb
+\texttt{[substituted from: <package>/<tool>\#<action>]}, mirroring the
+existing include breadcrumb (design/gert/sections/02-architecture.tex
+§Include Step Executor Contract). They are \textbf{not} hidden: an audit
+trail that omits executed steps is not an audit trail.
+
+\textbf{Required:} MUST be emitted for every substitution frame entered.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{governance/packageDriftAccepted}}
+
+\textbf{Emitted:} When \texttt{gert exec --resume --allow-package-drift} is
+used and a package or catalog digest mismatch was detected
+(design/gert/sections/13-evidence-tracing-resumption.tex §Package
+Resumption Contract).
+
+\textbf{Payload:}
+\begin{minted}{json}
+{
+  "expectedCatalogDigest": <string>,
+  "actualCatalogDigest":   <string>,
+  "operator":              <string>  // identity that accepted the drift
+}
+\end{minted}
+
+\textbf{Required:} MUST be emitted whenever the override is used. Drift
+acceptance is an auditable act.
+
+% ──────────────────────────────────────────────────────────────────────────────
+
+\subsubsection{\texttt{replay/packageDrift}}
+
+\textbf{Emitted:} During replay mode (§Determinism and Replay Semantics)
+when a recorded package or catalog digest does not match the current
+filesystem.
+
+\textbf{Payload:}
+\begin{minted}{json}
+{
+  "name":                  <string>,  // package name, or "*" for catalogDigest
+  "expectedDigest":        <string>,
+  "actualDigest":          <string>
+}
+\end{minted}
+
+\textbf{Required:} MUST be emitted on mismatch. Non-fatal: replay proceeds
+because replay determinism is defined by the scenario file, not by the
+on-disk catalog.
 
 % ──────────────────────────────────────────────────────────────────────────────
 
@@ -688,6 +832,11 @@ The following table classifies every event as REQUIRED (MUST be emitted) or OPTI
 \texttt{extension/unloaded} & OPTIONAL & Debugging \\
 \texttt{tool/invoked} & OPTIONAL & Observability \\
 \texttt{tool/completed} & OPTIONAL & Observability \\
+\texttt{package/resolved} & REQUIRED & One per resolved package, before \texttt{run/started} side effects \\
+\texttt{catalog/frozen} & REQUIRED & Once per run, after Phase C completes \\
+\texttt{tool/substituted} & REQUIRED & If any runbook-backed action substitution is entered \\
+\texttt{governance/packageDriftAccepted} & REQUIRED & If \texttt{--allow-package-drift} is used on resume \\
+\texttt{replay/packageDrift} & OPTIONAL & Replay-mode only; emitted on digest mismatch \\
 \texttt{input/prompted} & REQUIRED & For manual steps \\
 \texttt{input/received} & REQUIRED & For manual steps \\
 \texttt{saga/compensation\_triggered} & REQUIRED & + if saga used \\

@@ -30,19 +30,24 @@ inputs:
     description: Alert severity from monitoring
     from: webhook.severity
 
+# NOTE (Tool Packages MVP, AR-TP-1): `source:` and `actions:` below are
+# DEPRECATED (D-001/D-002, design/gert/sections/06-tool-runtime.tex
+# \S Runbook Tool Bindings). They remain schema-valid but now emit
+# PKG-W002 (source) / PKG-W001 (actions) warnings and carry no resolution
+# or enforcement power. Prefer `package:`/`version:` for new toolRefs.
 toolRefs:
   - name: kubectl
   - name: git
   - name: prometheus
   - name: slack-notify
-    source: builtin://slack
-    actions: [send-message]
+    source: builtin://slack # deprecated: PKG-W002, no resolution effect
+    actions: [send-message] # deprecated: PKG-W001, reachability assertion only
   - name: pagerduty-notify
-    source: builtin://pagerduty
-    actions: [trigger-alert, resolve-alert]
+    source: builtin://pagerduty # deprecated: PKG-W002, no resolution effect
+    actions: [trigger-alert, resolve-alert] # deprecated: PKG-W001, reachability assertion only
   - name: alertmanager-notify
-    source: builtin://alertmanager
-    actions: [resolve-alert]
+    source: builtin://alertmanager # deprecated: PKG-W002, no resolution effect
+    actions: [resolve-alert] # deprecated: PKG-W001, reachability assertion only
 
 governance:
   rules:

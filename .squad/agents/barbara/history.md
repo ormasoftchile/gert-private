@@ -93,3 +93,16 @@ Detailed entries from 2026-08-17 (Phase 1B planning and execution) archived to h
 - Mutation testing is used as primary verification
 
 **For architecture review:** Mutation-testing evidence is load-bearing on this engagement. Any claim that a test validates a commit must explicitly state whether the build artifact was regenerated after the source edit. Unmarked or ambiguous evidence should be questioned.
+---
+
+## 2026-08-19 — Systemic Bug Class #16: Chat Command with No Handler Body (5th Occurrence)
+
+**Defect:** The /run chat command was declared in package.json but had no handler implementation in src/extension.ts. The manifest entry remained in place, so VS Code routed all @gert /run requests to the extension, but the handler body fell through isArmCommand() to "Unknown command" for every invocation since the Petals lifecycle port (commit 742e368).
+
+**Why it shipped:** All 169 unit tests passed before this discovery. None exercise the extension.ts handler body, which requires a live VS Code host to invoke. The handler absence was therefore invisible to the test suite.
+
+**Discovery:** Ken's root-cause analysis during the ICM MCP blocker investigation (2026-08-19).
+
+**Impact:** The single most important code path (@gert /run) was non-functional for every user since the Petals port. This is the **5th occurrence** of the vacuity defect class on this engagement — a pattern indicating systematic test-harness/coverage gaps in the extension layer.
+
+**Lesson for future designs:** Chat commands declared in package.json require end-to-end tests that actually invoke the VS Code host, not just unit tests of the handler function in isolation. Manifest declarations are not a substitute for handler-path coverage.

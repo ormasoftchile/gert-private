@@ -4386,3 +4386,144 @@ This command is a throwaway diagnostic. After Cristiano reports live results:
 - If the finding is definitive: remove `src/probeToken.ts`, `test/probeToken.test.js`, and the manifest entry.
 - If further probing is needed: extend this file with a new scheduling tier or a different tool.
 
+
+
+---
+
+## 2026-08-19: Ken — ICM MCP Live Blocker Root Cause Analysis
+
+# Ken Root-Cause Analysis: ICM MCP Live Blocker
+
+**Author:** Ken (Backend Dev)  
+**Date:** 2026-08-19  
+**Commit examined:** `e395bf8` + unstaged probe-token removal + /run handler fix  
+**Status:** Two separate problems cleanly separated; provider recovery steps provided
+
+---
+
+## The Two Questions, Cleanly Separated
+
+**(a) Is `icm-mcp` running and authenticated in VS Code at all?**  
+**Answer: No.** Live evidence (T2 from probe session): `"MCP server could not be started: 401 status sending message to https://icm-mcp-prod.azure-api.net/v1/:"`. VS Code's MCP client cannot start the ICM server because it gets a 401 from the provider. This is upstream of ALL gert code. This is Cristián's actual blocker right now.
+
+**(b) Given a healthy provider, does gert's invocation path actually work?**  
+**Answer: Unknown — it has never been tested against a healthy provider.** The `/run` handler was also absent until this session (now fixed). Once the provider is healthy, question (b) gets its first real test.
+
+---
+
+## Does gert Report (a) Correctly?
+
+**Yes — verified by existing tests, no fix needed.**
+
+The `classifyInvocationError` function in `e395bf8` matches the exact T2 live string:
+```
+MCP server could not be started: 401 status sending message to https://icm-mcp-prod.azure-api.net/v1/:
+```
+→ `provider_unavailable` ✅ (regex `MCP server could not be started` matches before `401` can match `authorization_unavailable`)
+
+`extractProviderHint` produces: `"MCP server could not be started; HTTP 401; https://icm-mcp-prod.azure-api.net"` — no path, no arbitrary text.
+
+The operator-facing bridge message: `"the MCP provider is not running (MCP server could not be started; HTTP 401; https://icm-mcp-prod.azure-api.net). Check 'MCP: List Servers' in VS Code and re-authenticate the provider."`
+
+The F4 test in `test/mcpBridge.test.js` asserts on this exact T2 string and verifies `"MCP: List Servers"` and `"re-authenticate"` appear in the message. Already tested. No code change needed.
+
+---
+
+## Provider Recovery Procedure (Zero Invoke Budget — Do This First)
+
+**These steps cost nothing. Do them in order before spending any live gert attempt.**
+
+### Step 1 — Inspect `icm-mcp` status
+Open Command Palette (`Ctrl+Shift+P`) → `MCP: List Servers`. Look for `icm-mcp` in the list. Note its status:
+- **"Running"** → skip to Step 4 (provider is already healthy)
+- **"Stopped" / "Error" / "Failed" / not listed** → continue to Step 2
+
+### Step 2 — Re-authenticate the provider
+In `MCP: List Servers`, there should be a sign-in or restart option for `icm-mcp`. Use it. VS Code's MCP UI will prompt for Azure credentials or an auth token. Complete the flow.
+
+After signing in: check `MCP: List Servers` again. If `icm-mcp` shows "Running" → skip to Step 4.
+
+### Step 3 — Reload Window (free, but unconfirmed)
+`Ctrl+Shift+P` → `Developer: Reload Window`.
+
+**Honest caveat:** The probe-token removal decision claimed Reload Window is sufficient. Cristián's own empirical evidence (decisions.md ~line 4001) says it did NOT recover `icm-mcp` — only a machine reboot worked. Reload Window is worth trying because it costs nothing and resets VS Code's in-memory MCP session state. But if the result is still "Stopped" in `MCP: List Servers` after reload + re-auth attempt: proceed to Step 3b.
+
+### Step 3b — Machine reboot (if Reload Window failed)
+The only empirically proven recovery from probe-caused MCP session damage. After reboot, repeat Steps 1–2.
+
+### Step 4 — Confirm healthy
+After authentication:
+- `MCP: List Servers` shows `icm-mcp` as **Running**
+- Run `@gert /arm-mcp` in VS Code chat — the response now lists `vscode.lm.tools` names. Confirm an ICM tool appears (e.g. `mcp_icm_mcp_serve_get_incident_details_by_id`). If the list is empty, wait 60s and run `/arm-mcp` again.
+
+---
+
+## Only After the Provider Is Confirmed Healthy: One Live gert Attempt
+
+**What to run:**
+```
+@gert /run <path/to/runbook.yaml>
+```
+
+**What to watch:**
+- **Chat response** — success shows gert stdout; failure shows "gert run failed"
+- **`gert` output channel** (View → Output → select "gert") — this is where the bridge logs the exact error code if anything fails
+
+**What each outcome proves:**
+- ✅ Response shows runbook output → gert's full invocation path works end-to-end for the first time
+- ❌ `provider_unavailable` in output channel → provider went down again mid-run; back to Step 1
+- ❌ `tool_unavailable: ... available: [...]` in output channel → tool name in the YAML's `vscode_tool` field doesn't match what VS Code registered; compare the available list against the YAML
+- ❌ `tool_not_found` → bridge registry empty (refreshBridgeRegistry failed to find YAML files); check the runbook path and folder structure
+- ❌ `input_validation_error` → gert-core is sending args that don't match the tool's live `inputSchema`; check the YAML action spec
+
+---
+
+## gert-Side Status: What Has and Has Not Been Proven
+
+**Fixed this session:**
+- `/run` handler added to `extension.ts` (was completely absent after Petals port)
+- `/arm-mcp` extended to dump `vscode.lm.tools` names (zero-budget diagnostic)
+- `INVTOKEN-M-03` manifest test added
+- `npm compile` ✅ 0 errors. `npm test` ✅ 186/186 pass.
+
+**Proven by tests:**
+- Bridge correctly classifies T1/T2 live strings as `provider_unavailable`
+- Bridge message includes `"MCP: List Servers"` and `"re-authenticate"` guidance
+- Petals two-attempt retry (Canceled + token → retry without token) works correctly
+- Token redaction (invocation token never in HTTP response, logs, child env)
+- Manifest declares both `arm-mcp` and `run` commands
+
+**Never proven in a live VS Code session against a healthy provider:**
+- The complete path from `@gert /run` → gert binary → bridge HTTP → `vscode.lm.invokeTool` → ICM MCP tool → result returned to chat
+- Whether `vscode.lm.tools` actually lists ICM tools after `/arm-mcp`
+- Whether gert-core's `tool/action` key matches the YAML registry's `registeredName`
+- Whether gert-core's arg shapes match the live `inputSchema`
+
+186 green unit tests are real and non-vacuous, but they test against mocks, not a live VS Code + MCP provider. They do not imply live success.
+
+
+---
+
+## 2026-08-19: CORRECTION — Reload Window Recovery Theory vs. Empirical Evidence
+
+**Date recorded:** 2026-08-19  
+**Corrects:** Decision from ~2026-08-18 (decisions.md line ~4139)  
+**Basis:** Cristián's live empirical evidence (decisions.md line ~4001) supersedes prior theory.
+
+### The Theory vs. The Evidence
+
+**Original theory (2026-08-18):** After @gert /probe-token damages the ICM MCP session, running Developer: Reload Window is sufficient recovery. Full machine reboot is not required.
+
+**Live empirical evidence (Cristián, documented 2026-08-19):** Developer: Reload Window was attempted and FAILED to recover icm-mcp. The MCP server remained stopped. A full machine reboot was the only action that recovered it.
+
+### Correction
+
+**The live evidence takes precedence.** The reload-window claim contradicts documented user experience on this engagement. 
+
+**Revised recovery sequence:**
+
+1. Run Developer: Reload Window first (free, resets extension host state).
+2. If MCP: List Servers still shows icm-mcp as "Stopped" after reload + re-auth attempt: proceed to machine reboot.
+3. Machine reboot is the empirically proven recovery path when reload fails.
+
+**Note:** The exact conditions under which reload succeeds vs. fails have not been characterized. The ICM MCP server's authentication token state and VS Code's crash-count gate are both possible factors. Future work: add diagnostic telemetry to quantify this before claiming narrower recovery paths.

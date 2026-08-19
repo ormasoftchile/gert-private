@@ -3539,3 +3539,118 @@ CI works correctly (`npm ci → npm run compile → npm test → npm run package
 - Mutation testing is used as primary verification.
 
 **Evidence:** Commit f667f0a verified mutation-testing correctness in both directions (forward: 152/1 fail, revert: 153/153) only after adding the pretest hook. Prior runs with stale `out/` showed contradictory results.
+
+
+---
+
+# Decision: Chat-Mediated MCP Execution Architecture (gert-vscode, commits 9dfd345 / 4560d82)
+
+**Date:** 2026-08-18
+**Author:** Ken (VS Code Extension Developer)
+**Commits:** 9dfd345 → 4560d82 (`gert-vscode` main)
+**Status:** Implemented, pending live VS Code validation
+
+## Context
+
+A live-site test on 2026-08-18 proved that `vscode.lm.invokeTool()` with a cached token fails after the chat request handler has returned. The original architecture (`/arm-mcp` captures token → bridge stores it → bridge calls `invokeTool` from loopback HTTP handler) produces an opaque `Error` safely classified as `invocation_error`.
+
+Petals (`mcpBridgeGeneric.ts`) provided the corrective model: it calls MCP tools *immediately inside the active chat handler*, then retries with `token=undefined` on a `Canceled`-class error.
+
+## Key Finding: toolInvocationToken is Not an Authorization Credential
+
+The tool invocation token is **not an authorization credential**. Petals' own source comments it as a means "to avoid confirmation dialogs." The pre-invoke `invocation_token_unavailable` gate rested on a false premise — token possession does not equal authorization to call `invokeTool`. The gate was replaced by `no_active_run`.
+
+## `POST /runs` Does Not Hold the Handler Open
+
+`POST /runs` in Gert Core returns 201 immediately; the run is driven by a background goroutine. Awaiting the POST alone does not hold a chat handler open. The handler must be held via `Promise.race([terminal, cancel, deadline])`.
+
+## Empirically Unproven: Call-Context Enforcement
+
+Whether VS Code accepts `vscode.lm.invokeTool()` from an awaited continuation inside the handler (pump processor), versus requiring a strictly synchronous handler stack, is **still empirically unproven**. Only a live VS Code session settles this. The failure mode, if real, is named: `invocation_error` in the output channel.
+
+## Decision
+
+### 1. `@gert /run` command
+
+Holds the handler open via `Promise.race([terminal, cancel, deadline])`. The handler returns only when the run reaches terminal state, the VS Code cancellation token fires, or the deadline expires. Accessing `request.toolInvocationToken` triggers MCP server auto-discovery (~60s first-use latency).
+
+### 2. In-handler invocation pump (`RunPump`)
+
+`vscode.lm.invokeTool()` is called only from within the live handler's execution context. The bridge's `lm.invokeTool()` adapter enqueues a `PendingInvocation` into the `RunPump`; the handler's concurrent pump-processor drains items and calls the real VS Code API.
+
+### 3. Two-attempt invocation (Petals-derived)
+
+`invokeWithTwoAttempts`: attempt 1 with `handlerToken`; attempt 2 only on Canceled-class error with `token=undefined`. Predicate: `/\bCanceled\b/.test(msg) || /\bcancelled\b/i.test(msg)` — word-boundary, not naive substring.
+
+### 4. Gate change: `invocation_token_unavailable` → `no_active_run`
+
+Old gate: `if (getToolInvocationToken() === undefined) return invocation_token_unavailable` — false premise. New gate: `if (this.lm.hasActivePump?.() === false) return no_active_run`. `invocation_token_unavailable` retained in the enum for actual VS Code token-rejection errors during real invocations.
+
+### 5. `/arm-mcp` demoted to diagnostic
+
+No longer authorizes deferred runs. Retained for MCP server discovery (~60s latency). Response now states explicitly: "Diagnostic only — this token does not authorize deferred runs."
+
+## Test evidence (164/164/0/0 at 4560d82)
+
+| Test | What it covers |
+|------|---------------|
+| PUMP-1 | Pump resolves enqueued item when handler calls `item.resolve` |
+| PUMP-2 | `no_active_run` gate fires when `hasActivePump()` returns false |
+| PUMP-3 | Canceled retry: attempt 1 fails Canceled → attempt 2 with undefined succeeds |
+| PUMP-4 | Non-Canceled failure: single attempt only, no retry |
+| PUMP-5 | Handler does not return before terminal state arrives |
+| PUMP-6 | Cancellation calls `deleteRun` and closes pump |
+| PUMP-7 | Pump closed on all exit paths (terminal / cancelled / deadline) |
+| PUMP-8a | No token leak on attempt-1 success path |
+| PUMP-8b | No token leak on non-Canceled failure path |
+| PUMP-8c | No token leak on Canceled retry success path |
+| PUMP-8d | No token leak on Canceled retry failure path |
+
+Coordinator independently verified 4560d82: detached worktree, `npm ci`, 164/164/0/0.
+
+---
+
+# Decision: Mutation Evidence Requires Bounded Named Failure
+
+**Date:** 2026-08-18
+**Author:** Ken / Coordinator
+**Status:** Binding rule
+
+## Finding
+
+Mutation #7 (remove `pump.close()` from the finally block) caused the test suite to hang indefinitely rather than producing a named failure. There was no test timeout set. On CI, this is a frozen runner — it does not exit 1, does not name a failed test, and does not constitute evidence that the mutation is detected.
+
+## Decision
+
+**A mutation that causes the suite to hang is not evidence.** Evidence requires:
+1. A bounded, named test failure (test name visible in output).
+2. A non-zero exit code from the test runner.
+
+`--test-timeout=5000` was added to npm test in gert-vscode (commit 4560d82). The slowest legitimate test measured 95.8ms; 5000ms = ~52× headroom. Re-confirmed: mutation #7 now fails PUMP-5/6/7 at 5001–5006ms, wall clock 18.8s, exit code 1.
+
+**Binding rule:** Every test suite exercising async code must have a per-test timeout. Measure the slowest legitimate test before choosing the value.
+
+---
+
+# Decision: Vacuity in Redaction Proofs — Third Occurrence (PUMP-8)
+
+**Date:** 2026-08-18
+**Author:** Ken / Coordinator
+**Status:** Binding rule (third occurrence)
+
+## Finding
+
+PUMP-8 (original) forced attempt 1 to throw `Canceled`, so it only exercised the retry path. A token leak injected on the attempt-1-success path produced 161/161/0/0 — the test was completely blind to it.
+
+The "non-vacuity control" in the old test asserted that a crafted string contains the token — proving the scanner's `includes()` works, not that the scanner ever sees the leaking lines. Those are different claims.
+
+This is the **third occurrence** of a mutation proof targeting the wrong layer on this engagement.
+
+## Decision (Binding Rule)
+
+A redaction test must exercise **every** code path that could leak, not only the error path:
+- For any function with N distinct execution paths, write N explicit redaction assertions — one per path.
+- Each assertion must have a non-vacuity guard confirming that at least one real log line was produced (not a crafted string).
+- A canary over a crafted string proves the scanner function works; it does not prove the scanner observes the leaking lines.
+
+PUMP-8 was split into PUMP-8a/8b/8c/8d, each covering one of: attempt-1 success, non-Canceled failure, Canceled retry success, Canceled retry failure. Each confirmed as 163/164 (targeted kill) before being accepted.

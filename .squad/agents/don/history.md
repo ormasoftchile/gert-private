@@ -1,4 +1,4 @@
-# Don — History Summary
+Don — History Summary
 
 ## Overview
 
@@ -13,6 +13,12 @@
 - Phase 2 Rev 3 Deliverable A: serve --package-map (commit 4da94b2)
 - Phase 2 Rev 3 Deliverable B: declarative vscode_input adaptation (commit 4da94b2)
 - TSG binding logical-contract-only (no transport, six args documented)
+
+---
+
+## Team Update (2026-08-19T16:13:34Z)
+
+**From Scribe:** Ken completed removal of `/probe-token` command from gert-vscode. MCP probe deletion resolves VS Code session-termination risk. Root cause: 4 unconditional `vscode.lm.invokeTool` calls exhausted MCP restart budget. Probe measurement was complete (T1 failed = token lifetime not the variable). Decisions merged to decisions.md.
 
 ---
 

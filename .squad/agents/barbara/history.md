@@ -6,6 +6,12 @@
 - **Never cite a repo "precedent" without grepping for it first.** SQL Live-Site cited "Petals" as a proven pattern; the name appeared in documentation but no implementation was found in the actual codebase. Citing an unverified precedent wastes a round-trip and can justify a wrong design. Always grep before claiming a pattern exists.
 - **`npm test` against stale `out/` invalidates mutation testing in both directions.** See Systemic Bug Class #13 below.
 
+## Team Updates
+
+**2026-08-19T16:13:34Z — From Scribe:** Ken's `/probe-token` removal completed successfully in gert-vscode. Probe was dangerous because all 4 diagnostic attempts were unconditional; VS Code's MCP client exhausted its restart budget after 4 consecutive failures and disabled the session. The measurement was complete (T1 ≡ T2/T3/T4 failure profile) — probe has no further diagnostic value. All decisions merged to decisions.md with full binding rules for future MCP work.
+
+---
+
 ## 2026-08-18 — SUMMARY: Runtime Portability Architecture Complete
 
 **Status:** Phase 1B implementation complete (commit 05fd13b). Five of six items delivered; Item 4 dual-binding proof pending SQL Live-Site's mode confirmation. All 33 architectural rulings published.

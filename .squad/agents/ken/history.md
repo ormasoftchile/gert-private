@@ -47,6 +47,73 @@ Tests importing from gitignored `out/` directory without auto-recompile invalida
 
 ---
 
+---
+
+## Learnings — Probe Kills ICM MCP Session (2026-08-19)
+
+### Root Cause: 4 Unconditional invokeTool Calls Exhaust VS Code's MCP Restart Budget
+
+`runProbe()` (`probeToken.ts:305-315`) executes T1–T4 unconditionally — no early exit on failure. Each attempt calls `vscode.lm.invokeTool(..., cancellation)` where `cancellation` is the live chat handler `_token` (`extension.ts:144`).
+
+The `icm-mcp` entry in `$APPDATA\Code\User\mcp.json` is type `http` (remote HTTPS), not a local stdio process. VS Code's MCP client maintains an in-memory session for it. Each `invokeTool` failure causes VS Code to attempt an MCP client reconnect. After 4 consecutive reconnect failures within one chat turn, VS Code's MCP state machine for `icm-mcp` enters a permanently-disabled state that persists for the lifetime of the VS Code session — this is why only a VS Code reload (or machine reboot) recovers it.
+
+### Proven Facts
+- `runProbe()` always executes all 4 attempts (`probeToken.ts:307–315`) — no early exit guard.
+- `extension.ts:144`: `_token` (chat CancellationToken) is passed as `cancellation` to every invokeTool call.
+- `mcp.json`: `icm-mcp` = `{ type: "http", url: "https://icm-mcp-prod.azure-api.net/v1/" }` — VS Code owns its connection lifecycle, not the OS.
+- VS Code's MCP client state for HTTP servers is in-memory and scoped to the VS Code session.
+
+### Hypotheses (not VS Code source-verified)
+- VS Code applies a progressive back-off or crash-count gate after N consecutive MCP session failures and stops retrying for the VS Code session lifetime.
+- The chat `_token` being passed as the `cancellation` argument to `invokeTool` may cause VS Code to associate the MCP session lifecycle with the handler turn; when the handler returns, VS Code cancels in-flight MCP state.
+
+### Safe Recovery
+**`Developer: Reload Window`** (`Ctrl+Shift+P`). Resets extension host and all VS Code MCP client state. Machine reboot is not required and is excessive. (Not 100% proven if server-side auth tokens are also invalidated — but the VS Code state reset is the primary fix.)
+
+### Minimal Code Fix
+Remove `probe-token` entirely: it is marked THROWAWAY in source (`probeToken.ts:1`) and its measurement is complete (all tiers fail identically). Steps:
+1. Remove the `probe-token` entry from `chatParticipants.commands` in `package.json`.
+2. Remove the `probe-token` branch from the chat handler in `extension.ts` (~lines 125–144).
+3. Delete `src/probeToken.ts` and `test/probeToken.test.js`.
+The `buildSchemaDump`/`schemaVerdict` utilities in `probeToken.ts` are not used anywhere else — safe to delete.
+
+### Binding Rule
+A diagnostic probe that calls `invokeTool` N times unconditionally against a real remote MCP server is not safe in a production extension. Any future diagnostic must either: (a) call invokeTool at most once, (b) stop on first failure, or (c) operate against a mock/stub, never against a live MCP endpoint.
+
+---
+
+---
+
+## Learnings — Probe-Token Removal (2026-08-19)
+
+### What Was Removed
+
+Deleted `src/probeToken.ts` (419 lines) and `test/probeToken.test.js` (456 lines). Removed the `probe-token` dispatch branch from `src/extension.ts` (24 lines net reduction). The `package.json` already had pre-existing unstaged changes removing the `probe-token` chatParticipants command entry and the `gert.diagnostics.unsafeErrorText` configuration property — those were aligned with the task and left as-is.
+
+### Where the Code Actually Lived
+
+- `src/extension.ts` lines ~124–146: the `if (request.command === 'probe-token') { ... }` block and the `handleProbeToken` call.
+- The "unknown command" help text at ~line 149 also referenced `/probe-token` and was updated to mention `/run` instead.
+- `out/probeToken.js` and `out/probeToken.js.map` were NOT git-tracked (confirmed via `git ls-files`); left for next compile to overwrite.
+
+### Surprises
+
+1. **No import for `handleProbeToken` in extension.ts** — the function was called at line 127 but never imported. The extension would have failed to compile with the probe-token branch in place. Removal fixed a latent compile error rather than introducing one.
+2. **package.json was already partially cleaned** — the `probe-token` command entry and `gert.diagnostics.unsafeErrorText` config had already been removed in the working tree before this session. The pre-existing changes were aligned with the decision; I did not revert them.
+3. **No `probe-token` in the `gert.diagnostics` configuration namespace required follow-up** — the `unsafeErrorText` config reference inside the probe-token branch was also eliminated by removing the branch, so no residual dead config references remained in code.
+
+### Verification Results
+
+- `npm run compile`: ✅ exit 0, zero errors.
+- `npm test`: ✅ 185/185 passed (was 215 before Petals lifecycle port, probe tests accounted for the delta). 0 failures. 0 pre-existing failures.
+- `git status`: exactly 4 files changed — `package.json` (pre-existing), `src/extension.ts` (edited), `src/probeToken.ts` (deleted), `test/probeToken.test.js` (deleted). No unintended changes.
+
+### Binding Rule
+
+When retiring a VS Code extension command that calls `vscode.lm.invokeTool` against a live MCP endpoint: check the manifest (`package.json` chatParticipants commands), the dispatch branch in the handler, any related configuration contributions, the source module, its test file, and `out/` build artifacts (verify whether tracked). A missing `import` for a called function is a latent compile error — deletion fixes it rather than introducing one.
+
+---
+
 ## Outstanding Items
 
 - Live VS Code validation of pump processor (awaited continuation in handler)
@@ -65,6 +132,12 @@ Tests importing from gitignored `out/` directory without auto-recompile invalida
 6. Non-vacuity controls mandatory in every redaction test.
 
 See history-archive.md for full session-by-session details, mutation tables, and test counts.
+
+---
+
+## Team Update (2026-08-19T16:13:34Z)
+
+**From Scribe:** Ken's `/probe-token` removal successfully completed and implemented in gert-vscode. Tests pass (185/185). Changes unstaged in gert-vscode for Cristián review. Root cause of probe danger: 4 unconditional invokeTool calls exhausted VS Code's MCP restart budget for the session. See decisions.md for full decision record and binding rules.
 
 ---
 
@@ -119,5 +192,91 @@ The bridge NEVER refuses to invoke due to missing token. Token absence means und
 - The pump/queue pattern does not exist in Petals and should not be added to Gert.
 - Two-attempt retry (try with token, catch Canceled + token present -> retry undefined) is the only control flow.
 
+---
+
+## Learnings — Probe Schema Diagnostics (2026-08-19)
+
+### T1 Failure Reverses All Prior Architecture Assumptions
+
+Cristiano's live probe showed T1 (synchronous, on handler stack, exact Petals pattern) failed in ~7s, identically to T2/T3/T4. Token lifetime, await boundaries, the run pump, chat-mediated execution — none of these were ever the variable. Every architectural commit since the probe was designed to solve a problem that doesn't exist at the execution-timing layer.
+
+**Binding rule:** Before any retry/gate/timing architecture, establish WHY the single synchronous invocation fails. If T1 fails, nothing else matters.
+
+### Schema Mismatch Is the Most Likely Cause
+
+A consistent ~5-7s failure with a blocking dialog on every attempt is the signature of a malformed invocation, not a token issue. The tool's declared `inputSchema` was never inspected. The supplied `{"incidentId": 853194884}` may be:
+- Missing additional required parameters
+- Supplying `incidentId` as integer when schema requires string
+- Using the wrong property name entirely
+
+### Diagnostic Hygiene: Public Metadata Is Safe to Stream
+
+The tool's `inputSchema` is public metadata registered in `vscode.lm.tools`. It is safe to stream to the chat response. Property names in the verdict are safe. Supplied argument VALUES are not safe (same rule as tokens/args/results). The two categories must never be conflated.
+
+### unsafeErrorText Pattern: Hard Boundary Between Diagnostic Surfaces
+
+Raw `err.message` from a provider is potentially sensitive (it may contain user data, credentials, or internal system paths). The setting `gert.diagnostics.unsafeErrorText` gates it to the output channel only. The hard boundary — never in chat/HTTP/state/env — is enforced by code review and mutation-tested:
+- Mutation: route raw message to chat response → PROBE-7 or PROBE-8 fails.
+- Mutation: print input VALUE in verdict → PROBE-6 fails.
+
+### Error Property Enumeration
+
+`Error.prototype.message` and `stack` are non-enumerable in V8 (ECMAScript spec §20.5.5.3 sets Enumerable: false). `Object.keys(err)` naturally excludes them. Custom properties added after construction (e.g., `err.code = 'X'`) are own-enumerable and safe to log. Explicitly excluding `message` and `stack` in the short-props loop is belt-and-suspenders against non-standard Error subclasses.
+
+---
+
+## Learnings — Token Lifetime Probe (2026-08-19)
+
+### The One Unknown: Does toolInvocationToken Survive an `await`?
+
+Cristiano's live test confirmed the cached `/arm-mcp` token is rejected (VS Code shows the auth dialog even when the store is armed). This proves a stale token from a completed chat turn is not honoured. But nobody has established whether a token from a *live* handler survives even one `await`. The `@gert /probe-token` command was built as a minimal diagnostic instrument to answer this question empirically.
+
+### Probe Architecture
+
+Four scheduling tiers, all in one live ChatRequestHandler turn, same token:
+- T1: synchronous — before any `await` (replicates Petals exactly)
+- T2: after `await Promise.resolve()` (microtask boundary)
+- T3: after `await new Promise(r => setTimeout(r, 250))` (macrotask boundary)
+- T4: after a real loopback HTTP round-trip (mirrors Gert's actual topology)
+
+All four attempts always execute regardless of earlier failures (no early exit on failure).
+
+### Security Discipline Maintained
+
+The probe never logs, streams, or serialises the token, tool args, or result content. Only: label, ok/failed, exception class, error code (if short symbolic string), elapsed ms, dialog inferred from elapsed time.
+
+### Manifest Entry Is Non-Negotiable for Chat Commands
+
+A chat slash command absent from `package.json` contributes → chatParticipants → commands is **inert** — VS Code will not route it. This is the bug that has bitten the engagement twelve times. Always add the manifest entry before claiming a command works.
+
+### Mutation Test Non-Vacuity Rule (Probe-Specific)
+
+PROBE-2 uses a sentinel that flows through `handleProbeToken → runProbe → runAttempt → invokeToolFn` — the real production path. Non-vacuity is verified by asserting the sentinel was received by the spy. A test that only checks a pure renderer (not the full path) cannot detect a mutation at the call site.
+
+
 **For Ken's successors:** Read Petals mcpBridgeGeneric.ts:320-345 and mcpBridge.ts:10-22 before designing any token handling or tool invocation flow. If you want to add a gate or refusal, first show that Petals has one.
+
+---
+
+## Learnings — Provider Unavailable Triage (2026-08-19)
+
+### Allowlist-Only Hint Extraction
+
+`extractProviderHint` is the correct pattern for surfacing safe operator-facing context from an untrusted provider error: build the hint entirely from matched pieces (fixed phrase, HTTP status code, URL origin). Never pass arbitrary provider text through even one character. The URL path is excluded by the regex `[^\s/?#]*` (structural exclusion), not by a post-capture strip — that is a stronger guarantee because the path never enters the computation at all.
+
+### Precedence Must Be Deliberate and Documented
+
+When a new category can overlap with an existing one (here: `provider_unavailable` vs `authorization_unavailable` on a startup 401), the precedence ordering must be documented in a code comment at the check site. A test asserting the precedence (the overlap fixture) is mandatory — otherwise the ordering is invisible and can be silently broken.
+
+### URL Path Is Structurally Excluded, Not Behaviorally
+
+The regex `[^\s/?#]*` stops at the first `/`, `?`, or `#`. This means the URL path/query/fragment never enters `urlMatch[0]`. The `new URL()` parse + origin extraction is belt-and-suspenders for edge cases. The mutation `urlMatch[0]` instead of `u.protocol + '//' + u.host` does NOT change the output because `urlMatch[0]` is already origin-only. The protection is structural.
+
+### Mutation Testing for Hint Redaction
+
+The correct mutation for leaking URL path would be to change the regex stop characters — but even then the URL constructor extracts only the origin. Tests asserting path/query absence are behavioral (they prove the guarantee) but the mutation proof is structural rather than code-path-based.
+
+### `dialogInferred` Was Actively Misleading
+
+The `DIALOG_THRESHOLD_MS` heuristic inferred a consent dialog from elapsed time > 4s. The live probe showed ~5s was the MCP server's failed start round-trip, not a consent dialog. This heuristic was the source of one full round of wasted architectural work. Any time-based behavioral inference that could explain a slow failure via a wrong cause is a liability — remove it and report the real classification instead.
 

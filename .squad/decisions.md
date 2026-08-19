@@ -3345,3 +3345,197 @@ Mutation applied: remove `var resolvedActionDef`, `resolvedActionDef = actionDef
 
 None. All 82 packages passed without test changes. The 0 existing tools that declare `outputs:` on non-substituted actions take the unconstrained path — no behavioral change.
 
+
+---
+
+# Decision: Closed-enum invocation error classifier for mcpBridge
+
+**Date:** 2026-08-18  
+**Author:** Ken (VS Code Extension Developer)  
+**Status:** Implemented — commit 93214d0
+
+## Context
+
+The bridge's `invokeTool` catch block collapsed all provider exceptions into one of two undifferentiated categories: `authorization_unavailable` (crude auth-regex hit) or `invocation_error` (everything else). SQL Live-Site is hitting `invocation_error` on a real ICM invocation and cannot determine the failing stage.
+
+## Decision
+
+Replace the regex-split with a closed-enum classifier function `classifyInvocationError()` that:
+1. Reads the exception message to select from an allowlisted set of categories.
+2. Drops the message after classification — it never reaches the bridge response, run state, or trace.
+3. Logs only safe metadata (exception class name, chosen category, request ID) to the output channel.
+
+## Allowlisted categories
+
+| Category | Meaning |
+|---|---|
+| `invocation_token_unavailable` | VS Code rejected the call because `toolInvocationToken` was not provided. Fires when bridge calls outside a chat-participant handler (the only possible call site). |
+| `authorization_unavailable` | Auth/credential/forbidden failure from the provider or VS Code auth layer. Preserves the prior category's meaning exactly. |
+| `provider_input_rejected` | The MCP server's own input-validation rejected the arguments (distinct from the pre-call `input_validation_error` guard which fires first). |
+| `invocation_error` | Conservative fallback for unrecognised or ambiguous exceptions. |
+
+## toolInvocationToken finding
+
+`extension.ts:68` hard-codes `toolInvocationToken: undefined`. This is the only option: VS Code provides this token exclusively inside `ChatRequestHandler`; there is no API to obtain one in a non-chat context. Some providers (built-in Copilot tools) require a non-null token and will throw. The new category surfaces this precisely. **The root cause cannot be fixed** without making the bridge a chat participant, which is out of scope. The category gives the live operator the information needed to escalate.
+
+## tool-name-list interpolation judgement
+
+The `tool_unavailable` error path (lines ~471–478 in mcpBridge.ts) interpolates the full list of `vscode.lm.tools` names into the error message. **Accepted as-is.** Tool names are capability metadata — not credentials, tokens, arguments, or provider result content. The interpolation aids diagnosis (operator can see which tools are registered) without violating the redaction invariant.
+
+## Alternatives rejected
+
+- **Passthrough the exception message:** Violates the security invariant; provider error text may contain tokens, incident IDs, or internal service names.
+- **Regex passthrough with growing allowlist:** Allowlist of safe substrings grows unboundedly and is hard to audit. A closed category set is auditable.
+- **Single generic `invocation_error` for everything:** Does not satisfy the diagnostic requirement from the live session.
+
+## Verification
+
+- 143/143 tests pass in a clean `git worktree add --detach 93214d0` environment.
+- Mutation 1 (collapse classifier): 5 tests fail — proves per-category tests are load-bearing.
+- Mutation 2 (forward raw message to response): 3 redaction tests fail — proves redaction assertions scan a real body.
+- Non-vacuity control: proves the scanner detects a deliberately injected secret.
+
+---
+
+# Decision: toolInvocationToken Architecture — Extract-to-Pure Gate Pattern
+
+**Date:** 2026-08-18  
+**Author:** Ken (VS Code Extension Developer)  
+**Status:** IMPLEMENTED, verified from detached worktree
+
+## Context
+
+The Gert VS Code extension's loopback MCP bridge was calling `vscode.lm.invokeTool()` with `toolInvocationToken: undefined`. In authenticated VS Code sessions this produces an opaque API `Error`. The `toolInvocationToken` is obtainable ONLY from a `ChatRequestHandler` — there is no activation-time API for it.
+
+SQL Live-Site referenced the Petals extension as a proven implementation pattern.
+
+## Decision
+
+### 1. Pure token store (toolTokenStore.ts)
+
+The captured token lives in extension-host memory only. No `vscode` import — fully testable by `node --test`. Functions: `setToolToken / getToolToken / clearToolToken / isArmed / _resetForTest`. Cleared on deactivation and on VS Code token rejection.
+
+**Rationale:** A pure module creates a unit-testable seam for ALL five SQL Live-Site test requirements without a VS Code host. Any alternative (e.g., storing the token on McpBridge itself, or in a closure inside extension.ts) would require either a vscode mock or end-to-end infrastructure.
+
+### 2. LmInterface extended with getToolInvocationToken / onTokenRejected
+
+The bridge's `LmInterface` gains `getToolInvocationToken(): unknown` (required) and `onTokenRejected?(): void` (optional). The bridge pre-checks the return value before calling `invokeTool`; if undefined, returns `invocation_token_unavailable` immediately (spy call-count = 0). On catch with that category, calls `onTokenRejected?.()`.
+
+**Rationale:** This keeps the bridge's own code free of `vscode` imports while providing a clean seam for test stubs. The bridge never needs to know about `toolTokenStore` directly — it only needs a way to ask "do you have a token?" and "should I clear yours?".
+
+**Token rejection rule:** `classifyInvocationError` returns `invocation_token_unavailable` when the error message matches `/invocation.?token|toolInvocationToken|no.*token.*invocation|token.*required/i`. This is the same classifier used elsewhere; no new regex or special case added.
+
+### 3. Extract-to-pure gate: chatParticipantGate.ts
+
+The `isArmCommand(command)` check (`command === 'arm-mcp'`) lives in a separate pure module instead of inline in the extension.ts participant handler. 
+
+**Rationale:** If the gate were inline in extension.ts, mutation 2 ("arm on any command") would require patching the compiled extension.ts adapter, which test INVTOKEN-5 never imports (vscode boundary). By extracting the gate, INVTOKEN-5 imports `isArmCommand` directly and the mutation IS tested. This pattern is the same as `serverLaunch.ts` / `makeScopedGetter` for the getConfiguration scoping fix.
+
+### 4. Manifest wiring is mandatory
+
+`vscode.chat.createChatParticipant('gert.chat', ...)` is silently inert if `package.json` does not declare it under `contributes.chatParticipants`. Added INVTOKEN-M-01 and INVTOKEN-M-02 manifest tests to assert the id matches and the arm-mcp command is declared.
+
+**Rationale:** This is the exact bug class that has bitten this engagement 12 times. A code guard is not sufficient — the manifest test is the only way to detect activation failure without a live VS Code session.
+
+## Uncoverable adapter line
+
+The line `request.toolInvocationToken` in the `vscode.chat.createChatParticipant` handler cannot be reached by `node --test` — VS Code provides `ChatRequest` only inside a real chat session. This is explicitly acceptable because:
+
+1. The manifest test proves the participant is declared and reachable.
+2. `isArmCommand` test (INVTOKEN-5) proves the gate logic is correct.
+3. TypeScript strict mode ensures the adapter implements `LmInterface`.
+4. `clearToolToken()` call in `deactivate()` is compile-time guaranteed.
+
+The one untestable step is the VS Code host wiring call itself — `request.toolInvocationToken` is passed to `setToolToken`. This is analogous to the `getConfiguration` call sites that are guarded by rule7, not directly testable.
+
+## Security invariants enforced
+
+- Token never serialized, logged, exposed in HTTP responses, error text, or child-process environment.
+- Bridge capability secret (`GERT_VSCODE_BRIDGE_TOKEN`) and invocation token are separate: `setBridgeEnv` only receives bridge URL and capability secret; toolTokenStore is never passed to ServerManager.
+- `clearToolToken()` called on deactivation (INVTOKEN-3 test verifies the rejection path; deactivation is compiler-guaranteed).
+
+## What Cristiano must do
+
+1. Open VS Code with the updated extension installed (or `F5` reload in the extension dev host).
+2. Open Copilot Chat (Ctrl+Shift+I).
+3. Type: `@gert /arm-mcp`
+4. Confirm the response is: `✅ Gert MCP bridge armed. The bridge will use this token...`
+5. Open a `.runbook.yaml` file and run `gert: Open Runbook Graph (React Flow)`.
+6. The router should now call the registered MCP tool successfully.
+
+**Failure still looks like:** If the extension is not reloaded, the old `toolInvocationToken: undefined` code runs. `@gert` will not appear in Copilot Chat until the extension is activated. If the manifest is wrong the participant won't appear.
+
+**Still-failing case:** If the toolInvocationToken from this chat session doesn't satisfy the MCP tool's auth requirement (e.g., the tool needs a specific auth scope not granted to this participant), the error will be `authorization_unavailable`, not `invocation_token_unavailable`. That's a separate auth configuration issue, not a bridge issue.
+
+---
+
+# Decision: Add pretest to compile before npm test
+
+**Date:** 2026-08-18  
+**Author:** Ken  
+**Commit:** f667f0a (gert-vscode, branch main)
+
+## Context
+
+`npm test` ran `node --test test/*.test.js` directly against `out/` without compiling first. The tests import from the compiled `out/` directory (gitignored). A developer or agent could mutate a `.ts` source file, run the suite, see a result, revert, re-run — and get misleading results in both directions because `out/` was never refreshed.
+
+This silently invalidates mutation testing, which is the primary verification technique on this engagement.
+
+## Decision
+
+Add `"pretest": "npm run compile"` to `package.json`.
+
+npm's standard lifecycle hook `pretest` fires automatically before `test` for every `npm test` invocation. No change to the `test` script shape, so repoBoundary rules 5 and 6 continue to parse and enforce it identically.
+
+## Alternatives considered
+
+1. **Fold compile into test script** (`"test": "npm run compile && node --test test/*.test.js"`): Changes the shape of the `test` script. Rule 5's `extractTestGlobs()` parser uses `node --test <glob>` to find globs and rule 6 checks for `npm test` in CI. Both still work since the pattern is still present, but the shape change is unnecessary when npm's built-in lifecycle does the job cleanly.
+
+2. **Pretest only** (chosen): Standard npm idiom, zero shape change, zero rule impact. The only downside is one redundant tsc pass in CI (pretest fires before the already-compiled test step). This is the honest tradeoff.
+
+## Load-bearing proof
+
+- Rules 5 and 6 still pass in a clean worktree (153/153/0/0).
+- Mutation direction 1: always-true `isArmCommand` in `chatParticipantGate.ts` + `npm test` without manual recompile → **152/1 fail** (INVTOKEN-5). Before this fix, stale `out/` would have returned 153/0 (false green).
+- Mutation direction 2: revert + `npm test` without manual recompile → **153/153/0/0**. Before this fix, stale `out/` would have returned 152/1 (false red).
+
+---
+
+# Decision: SYSTEMIC BUG CLASS #13 — Stale Build Artifacts in Mutation Testing
+
+**Date:** 2026-08-18  
+**Author:** Ken  
+**Status:** Binding rule documented
+
+## Context
+
+On 2026-08-18, during verification of commits 93214d0, d173ad7+130b81e, and f667f0a in gert-vscode, mutation testing exposed a critical systemic bug:
+
+**The problem:** The test suite runs `node --test test/*.test.js` against a gitignored `out/` directory. A source file is mutated (.ts), tests are run without recompiling, and the test result reflects the *stale* compiled code, not the mutation. This invalidates mutation testing in both directions:
+
+- **Stale mutation (no recompile after source edit):** Tests run against unchanged `out/` → false green (mutation appears to have no effect).
+- **Stale revert (no recompile after git revert):** Tests run against unchanged `out/` → false red (revert appears to break tests).
+
+The coordinator encountered the stale revert condition live: clean worktree, `git status` empty, but mutation tests reported 152/153 instead of 153/153. This was caught only because a deliberate non-mutation ran before it, establishing a baseline.
+
+## Root cause
+
+CI works correctly (`npm ci → npm run compile → npm test → npm run package`). Local developers running `npm test` do NOT automatically recompile if `.ts` sources changed. The gtignored `out/` persists across source edits and git reverts. This is the 13th distinct bug class in this engagement where stale or untracked build artifacts cause spurious failures.
+
+## Binding rule: Regenerate build artifacts after every source mutation
+
+**For this engagement:** Any mutation-testing evidence (pass/fail result, test count delta, or behavioral claim) is ONLY valid if:
+
+1. The source file(s) involved in the mutation are identified.
+2. The build artifact is regenerated AFTER the source edit (e.g., `npm run compile` in gert-vscode).
+3. The test suite is run AFTER artifact regeneration.
+4. Any revert of the source is followed by artifact regeneration and re-test before trusting the result.
+
+**Implementation:** Commit f667f0a added `"pretest": "npm run compile"` to `package.json`, making this automatic. Any agent running `npm test` on gert-vscode AFTER 2026-08-18 will automatically recompile. For other repositories without this lifecycle hook, agents must manually invoke the build step (e.g., `tsc`, `cargo build`, `make`) between mutation and test.
+
+**Scope:** This rule applies to any repository where:
+- Tests import from a gitignored build output directory (e.g., `out/`, `dist/`, `build/`, `target/`).
+- The build artifact is NOT automatically regenerated before tests.
+- Mutation testing is used as primary verification.
+
+**Evidence:** Commit f667f0a verified mutation-testing correctness in both directions (forward: 152/1 fail, revert: 153/153) only after adding the pretest hook. Prior runs with stale `out/` showed contradictory results.

@@ -1,5 +1,11 @@
 # barbara
 
+## Critical Lessons (must re-read every spawn)
+
+- **Mutation proofs must target the production wiring, not a pure helper.** This mistake has happened twice on this engagement: a test mutated a standalone helper function and declared the behavior covered, but the call site in the production path was never exercised. Mutation evidence is only load-bearing when the mutated path is the one actually exercised by the running system.
+- **Never cite a repo "precedent" without grepping for it first.** SQL Live-Site cited "Petals" as a proven pattern; the name appeared in documentation but no implementation was found in the actual codebase. Citing an unverified precedent wastes a round-trip and can justify a wrong design. Always grep before claiming a pattern exists.
+- **`npm test` against stale `out/` invalidates mutation testing in both directions.** See Systemic Bug Class #13 below.
+
 ## 2026-08-18 — SUMMARY: Runtime Portability Architecture Complete
 
 **Status:** Phase 1B implementation complete (commit 05fd13b). Five of six items delivered; Item 4 dual-binding proof pending SQL Live-Site's mode confirmation. All 33 architectural rulings published.

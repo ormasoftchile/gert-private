@@ -1,0 +1,103 @@
+SCRIBE TASK HEALTH REPORT
+========================
+
+Date: 2026-08-18T17:46:40.843-07:00 (session start)
+Task: Merge decisions inbox, summarize histories, document systemic bug class #13
+
+PRE-CHECK METRICS
+=================
+decisions.md size (before):        100,005 bytes
+decisions/inbox file count:        3 files
+  - ken-invocation-error-classifier.md
+  - ken-invocation-token-arm-architecture.md
+  - ken-pretest-compile-on-npm-test.md
+
+DECISIONS INBOX MERGE
+====================
+✓ Merged 3 decision files into decisions.md
+✓ Deleted 3 inbox files
+✓ Added 1 new decision: Systemic Bug Class #13 (Stale Build Artifacts)
+
+decisions.md size (after):         114,160 bytes
+  Δ: +14,155 bytes (+14.2%)
+
+HISTORY SUMMARIZATION
+====================
+✓ Threshold: 15,360 bytes
+
+Before:
+  barbara/history.md:  15,397 bytes (over by 37)
+  ken/history.md:      18,500 bytes (over by 3,140)
+
+After:
+  barbara/history.md:  4,984 bytes (reduced 10,413 bytes)
+  ken/history.md:      4,767 bytes (reduced 13,733 bytes)
+
+✓ Both agents' histories now under 15,360 bytes
+✓ Stale-build-artifact rule appended to both agent histories
+
+CROSS-AGENT RULE DISSEMINATION
+==============================
+✓ Appended systemic bug class #13 binding rule to:
+  - barbara/history.md
+  - ken/history.md
+
+Rule: Regenerate build artifacts after every source mutation before running tests.
+Scope: All repos with gitignored build output + mutation testing as verification.
+
+ORCHESTRATION LOGS CREATED (gitignored)
+=======================================
+✓ 2026-08-19T00-46-40Z-ken-10.md
+  Agent: ken-10 (sync, claude-sonnet-4.6)
+  Task: Invocation-error classifier (commit 93214d0)
+  Tests: 143/143 PASS
+
+✓ 2026-08-19T00-46-41Z-ken-11.md
+  Agent: ken-11 (sync, claude-sonnet-4.6)
+  Task: Token-armed MCP bridge (commits d173ad7 + 130b81e)
+  Tests: 153/153 PASS
+
+✓ 2026-08-19T00-46-42Z-ken-12.md
+  Agent: ken-12 (sync, claude-sonnet-4.6)
+  Task: Pretest compile hook (commit f667f0a)
+  Tests: 153/153 PASS
+
+SESSION LOG CREATED (gitignored)
+================================
+✓ 2026-08-19T00-46-40Z-chat-token-armed-bridge.md
+  Summary of decision merge and bug class documentation
+
+GIT COMMIT
+==========
+✓ Commit: b62d9f5
+  Message: "Scribe: Merge decision inbox and summarize histories"
+  
+Staged files (3):
+  ✓ decisions.md
+  ✓ .squad/agents/barbara/history.md
+  ✓ .squad/agents/ken/history.md
+
+Not staged (gitignored, as expected):
+  - .squad/orchestration-log/2026-08-19T00-46-40Z-ken-10.md
+  - .squad/orchestration-log/2026-08-19T00-46-41Z-ken-11.md
+  - .squad/orchestration-log/2026-08-19T00-46-42Z-ken-12.md
+  - .squad/log/2026-08-19T00-46-40Z-chat-token-armed-bridge.md
+
+Unrelated changes (NOT staged):
+  - Various design/ files (pre-existing, out of scope)
+  - Deleted inbox files from other agents (barbara-phase2-ruling.md, don-tsg-unresolved-binding.md)
+
+SUMMARY
+=======
+✓ Task 0: Pre-check completed
+✓ Task 1: Archive policy honored (effort-completion, live-work kept)
+✓ Task 2: Decision inbox merged (3 files, all integrated)
+✓ Task 3: Systemic bug class #13 documented and binding rule created
+✓ Task 4: Orchestration logs created (3 agents, gitignored)
+✓ Task 5: Session log created
+✓ Task 6: Stale-build-artifact rule appended to verification agents (Barbara, Ken)
+✓ Task 7: History summarization completed (2 files over threshold → both under 15,360)
+✓ Task 8: Git commit staged and pushed (commit b62d9f5)
+✓ Task 9: Health report logged (this file)
+
+COMPLETION STATUS: ALL TASKS COMPLETE

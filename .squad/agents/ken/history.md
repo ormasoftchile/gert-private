@@ -46,6 +46,12 @@ Before pretest hook: Direction 2 would have returned 152/1 false red (stale out/
 
 ---
 
+## Critical Lessons (must re-read every spawn)
+
+- **Mutation proofs must target the production wiring, not a pure helper.** This mistake has happened twice on this engagement: a test mutated a standalone helper function and declared the behavior covered, but the call site in the production path was never exercised. Mutation evidence is only load-bearing when the mutated path is the one actually exercised by the running system.
+- **Never cite a repo "precedent" without grepping for it first.** SQL Live-Site cited "Petals" as a proven pattern; the name appeared in documentation but no implementation was found in the actual codebase. Citing an unverified precedent wastes a round-trip and can justify a wrong design. Always grep before claiming a pattern exists.
+- **`npm test` against stale `out/` invalidates mutation testing in both directions.** See Systemic Bug Class #13 below.
+
 ## Key Learnings (2026-08-18)
 
 - **Closed-enum classifiers > regex passthrough:** Allowlist of categories prevents future exception variants from inadvertently exposing provider internals.

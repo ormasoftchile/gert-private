@@ -3654,3 +3654,241 @@ A redaction test must exercise **every** code path that could leak, not only the
 - A canary over a crafted string proves the scanner function works; it does not prove the scanner observes the leaking lines.
 
 PUMP-8 was split into PUMP-8a/8b/8c/8d, each covering one of: attempt-1 success, non-Canceled failure, Canceled retry success, Canceled retry failure. Each confirmed as 163/164 (targeted kill) before being accepted.
+
+
+---
+
+# ken-layered-mcp-invocation-model.md
+
+## Architecture Decision: Layered MCP Invocation Model (Regression Fix)
+
+**Date:** 2026-08-18  
+**Author:** Ken (VS Code Extension Developer)  
+**Commit:** d98cc8b  
+**Status:** Delivered; folded into the Usable Chat Run UX round
+
+---
+
+## Context
+
+A prior fix (commit 4560d82, 2026-08-18) replaced the old token-presence gate in `mcpBridge.ts`'s `handle()` method with an exclusive pump gate:
+
+```typescript
+// Old gate (incorrect premise):
+if (this.lm.hasActivePump?.() === false) {
+  return this.errorResponse(req.request_id, 'no_active_run', safeMessage['no_active_run']);
+}
+```
+
+This gate fired as the first check, before consulting `getToolInvocationToken()`. The cached token stored by `/arm-mcp` was never reached. Two consequences:
+
+1. **`/arm-mcp` became dead code.** The token was stored, returned by `getToolInvocationToken()`, but never used.
+2. **`gert.previewGraph` regressed.** The pre-existing webview path, which previously attempted MCP tool calls via the cached token (sometimes successfully), now received `no_active_run` on every call.
+
+The defect was that the live-site evidence (the cached-token path failing in a specific scenario) was read as proof that the path should be *forbidden*. The correct reading is that it is *unreliable* — those are different claims and only one justifies a hard pre-emptive refusal.
+
+---
+
+## Decision: Restore Petals' Layered Model
+
+**Three-layer precedence (best to worst):**
+
+| Layer | Condition | Mechanism |
+|---|---|---|
+| 1 (preferred) | `hasActivePump?.() !== false` | Direct `lm.invokeTool`; pump routes to live handler token |
+| 2 (best-effort) | `hasActivePump?.() === false && getToolInvocationToken() !== undefined` | `invokeWithTwoAttempts` with cached token |
+| 3 (floor) | Neither pump nor cached token | `no_active_run` error |
+
+**Layer 2 reuses `invokeWithTwoAttempts`** (imported from `runPump.ts`) to avoid a second drift-prone invocation path. The two-attempt retry semantics (Canceled → retry with undefined) are identical to the pump path.
+
+**`no_active_run` is now the floor**, not the first gate. It fires only when both pump and cached token are absent.
+
+**Failure modes for layer 2:** If VS Code declines the cached token, `classifyInvocationError` produces a named category (`invocation_token_unavailable`, `authorization_unavailable`, etc.) rather than `no_active_run`. The distinction is critical: `no_active_run` means "never attempted"; a named category means "attempted and failed". Conflating them hides the fact that an invocation was made.
+
+---
+
+## `/arm-mcp` Response Text
+
+Updated from "diagnostic only" to describe best-effort layer 2. Key points:
+- Armed token enables layer-2 deferred invocations.
+- The path is unreliable (live-site evidence stands).
+- `@gert /run` is the reliable path.
+- Token cleared on rejection; re-arm with `/arm-mcp`.
+
+---
+
+## What Remains Unverified
+
+Layer 2 is not exercised in a live VS Code session. Whether VS Code accepts or rejects a cached `toolInvocationToken` for deferred invocations depends on session state and VS Code's internal enforcement. The failure mode is named and observable: `invocation_token_unavailable` in the output channel.
+
+
+---
+
+# ken-runhandoff-extraction.md
+
+**Date:** 2026-08-18  
+**Author:** Ken  
+**Status:** Implemented (commit 0cde638, gert-vscode origin/main)
+
+---
+
+## Decision: Extract runAuthenticated handoff sequence into src/runHandoff.ts
+
+### Problem
+
+The security-critical sequence of `runAuthenticated()` — collect required inputs, stash
+them (inputs may be secrets), build a chat query containing only the nonce, open chat —
+lived entirely inside `extension.ts` which imports `vscode` and cannot be unit-tested
+without a VS Code runtime.
+
+All prior redaction tests (QBLD-1/2/3) targeted `buildRunChatQuery()`, whose signature
+**cannot receive raw input values** — making every assertion vacuous. Cristiano confirmed
+this by applying the mutation
+
+```ts
+const query = buildRunChatQuery(nonce, runbookPath)
+            + ' ' + Object.entries(collectedInputs).map(([k,v])=>k+'='+v).join(' ');
+```
+
+at the production call site in `runAuthenticated()` and observing 208/208/0/0 — the
+entire test suite green while a real secret-input leak would ship silently.
+
+### Decision
+
+Extract steps 3-5 of `runAuthenticated()` into `src/runHandoff.ts`:
+
+- **Pure module** — no `vscode` import, testable with plain `node --test`.
+- **Dependency-injected collaborators** (`RunHandoffDeps` interface):
+  - `promptForInput` — operator prompting
+  - `stashPendingRun` — pending-run store (real production implementation in tests, not a stub)
+  - `buildRunChatQuery` — query builder (real production implementation in tests)
+  - `executeCommand` — VS Code command bridge
+- **Returns `RunHandoffResult`** — exposes `query`, `nonce`, and `collectedInputs` so tests
+  can assert on the exact values that reach the chat-open call.
+- `runAuthenticated()` in `extension.ts` becomes a thin wiring shim; the only untested
+  residue is the wiring, not the redaction logic.
+
+### Why real collaborators (not stubs) for stashPendingRun and buildRunChatQuery
+
+Using stubs would recreate the vacuity problem. If `buildRunChatQuery` is stubbed to return
+a fixed string, the test can never detect a mutation that appends secrets. By injecting the
+real implementations, HANDOFF-3 exercises the actual production sequence end-to-end.
+
+### Non-vacuity requirement
+
+Every redaction test MUST have a paired non-vacuity control proving the data actually flowed
+through before the redaction assertion is made. HANDOFF-4 is the model: it claims the pending
+entry by nonce after `performRunHandoff()` and asserts the secret is present in the store.
+This proves the result is not achieved by silently discarding inputs.
+
+### Tests added (HANDOFF-1..7)
+
+| Test | Assertion |
+|------|-----------|
+| HANDOFF-1 | Chat query contains the nonce |
+| HANDOFF-2 | Chat query contains the runbook path |
+| HANDOFF-3 | Chat query does NOT contain any collected input value (primary leak guard) |
+| HANDOFF-4 | Pending store received the exact input values (non-vacuity) |
+| HANDOFF-5 | executeCommand called with workbench.action.chat.open and the exact query |
+| HANDOFF-6 | Cancel → undefined returned, no command executed |
+| HANDOFF-7 | formatRunStartLog does not include input values (log-line guard) |
+
+### Mutation table
+
+| Mutation | Description | Test that fails |
+|----------|-------------|-----------------|
+| M0 (Cristiano) | Append `collectedInputs` as `k=v` pairs to query at call site | HANDOFF-3 |
+| M2 | Pass `{}` instead of `collectedInputs` to `stashPendingRun` | HANDOFF-4 |
+| M3 | Suppress `executeCommand` call | HANDOFF-5 |
+
+### Files changed
+
+- `src/runHandoff.ts` — new pure module (performRunHandoff + RunHandoffDeps + RunHandoffResult)
+- `src/extension.ts` — runAuthenticated() refactored to thin shim; imports performRunHandoff
+- `test/runHandoff.test.js` — 7 new tests HANDOFF-1..7
+
+### Counts
+
+208 → 215 tests. 215/215/0/0. repoBoundary rules 1-7 pass. `git grep -in "tsg" -- src test` returns nothing.
+
+
+---
+
+# ken-usable-chat-run-ux.md
+
+## Architecture Decision: Usable Chat Run UX
+
+**Date:** 2026-08-18  
+**Author:** Ken (VS Code Extension Developer)  
+**Commit:** 4d5dbb9  
+**Status:** Delivered, 202/202/0/0 tests
+
+---
+
+## Context
+
+`@gert /run` required a user-supplied runbook path. The acceptance scenario is:
+open `<any>.runbook.yaml`, select **Run authenticated**, enter required inputs, observe run start through the chat-mediated MCP path.
+
+---
+
+## Decision 1: Pending-Run Store for Secret Handoff
+
+**Problem:** A plain VS Code command (`gert.runAuthenticated`) must collect inputs (including secrets) before the chat handler exists. Passing values through the chat query string exposes them in the user's visible chat history — exactly what `collectInputs`/`promptForInput` redact-on-screen was designed to prevent.
+
+**Decision:** Module `src/pendingRunStore.ts` stashes `{ runbookPath, inputs }` in extension-host memory, keyed by a short nonce. Only the nonce is passed through the chat query (`@gert /run <path> _nonce=<nonce>`). The handler calls `claimPendingRun(nonce)` which removes the entry immediately (single-use). Entries expire after 30 s.
+
+**Why single-use:** Prevents replay. An entry that has been claimed must never be claimable again, even if the nonce leaks from a log line (it should not, but defense-in-depth applies). The store removes the entry BEFORE checking expiry so expiry cannot be used to observe whether a nonce existed.
+
+**Why 30 s TTL:** The `workbench.action.chat.open` call is synchronous from the user's perspective. 30 s is sufficient for VS Code to open the chat panel and the handler to fire. An unclaimed entry after 30 s is likely from a failed chat open; it should not be usable.
+
+**No logging of values:** `pendingRunStore.ts` has no `appendLine` or `console.*` calls. Enforced by static scan test `STORE-log`.
+
+---
+
+## Decision 2: Chat Open Command — `workbench.action.chat.open`
+
+**Problem:** A plain VS Code command cannot obtain a `toolInvocationToken`. The command must initiate the chat handler, not execute the run itself.
+
+**Decision:** Use `vscode.commands.executeCommand('workbench.action.chat.open', { query: '@gert /run <path> _nonce=<nonce>', isPartialQuery: false })`.
+
+**Source:** Command ID exported as `CHAT_OPEN_ACTION_ID = 'workbench.action.chat.open'` from VS Code source file `src/vs/workbench/contrib/chat/browser/actions/chatActions.ts` (microsoft/vscode, main branch, 2026-08-18). Argument shape confirmed as `IChatViewOpenOptions { query: string; isPartialQuery?: boolean; ... }`. Additionally confirmed by GitHub issue microsoft/vscode#210819 which documents the `query` and `isPartialQuery` fields explicitly.
+
+**`isPartialQuery: false`:** Causes VS Code to submit the prompt immediately without waiting for the user to press Enter. This is the correct mode for the "Run authenticated" workflow where the user has already confirmed their intent by selecting the command.
+
+**Unverified:** This command ID is not in `@types/vscode/index.d.ts` and cannot be tested without a live VS Code session. If VS Code changes the command ID or argument shape, the failure mode is: chat panel opens but the query is empty or malformed. This is non-silent (the user sees an empty chat) and does not expose secrets.
+
+---
+
+## Decision 3: Required-Only Input Prompting
+
+**Decision:** `filterRequiredInputs(decls)` filters to `required === true` only. Optional inputs (false/absent) are not prompted — the run proceeds without them (they use engine defaults or are omitted from the inputs map).
+
+**Rationale:** The acceptance scenario ("enter an ICM ID when prompted") implies exactly one required input per run type. Prompting for optional inputs every time clutters the UX for the common case.
+
+**Note:** `filterRequiredInputs` operates before `collectInputs`. If the operator needs to supply an optional input, they can append `key=value` to the chat prompt after the nonce is submitted.
+
+---
+
+## Decision 4: Multi-Root QuickPick
+
+**Decision:** `vscode.workspace.findFiles('**/*.runbook.yaml', '**/node_modules/**')` is used for the picker. Labels are computed as the shortest workspace-relative path across ALL workspace folders.
+
+**Rationale:** `findFiles` is inherently multi-root — it searches all workspace folders. No `workspaceFolders[0]` bias. The label computation loops through all folders (`vscode.workspace.workspaceFolders ?? []`) and picks the shortest relative path, avoiding absolute-path clutter. Enforced by `repoBoundary/rule7` (existing) and `MULTI-1` static scan test (new).
+
+---
+
+## Decision 5: Arg Parse Replacement
+
+**Decision:** Replaced `parts[0].includes('=')` positional heuristic with explicit `parseRunArgs(prompt: string): ParsedRunArgs`. The function classifies each whitespace-delimited token: no `=` at position > 0 → positional path; `key=value` → input; `_nonce=<nonce>` → nonce. Value may contain `=` (only the first `=` is the key/value separator).
+
+**Edge cases tested:** bare prompt, path only, kv only, path+kv, value-contains-=, nonce extraction.
+
+---
+
+## What Remains Unverified
+
+1. **Acceptance scenario in a live VS Code session.** `workbench.action.chat.open` with `{ query, isPartialQuery: false }` is confirmed by VS Code source code and community issue, but has not been exercised in an actual VS Code process on this engagement. The awaited-continuation question (whether `vscode.lm.invokeTool` called from the pump processor is accepted by VS Code) also remains empirically unconfirmed.
+
+2. **`isPartialQuery: false` submission behavior.** Confirmed by GitHub issue documentation that `isPartialQuery: false` auto-submits, but actual keypress simulation in VS Code is not unit-testable.
+

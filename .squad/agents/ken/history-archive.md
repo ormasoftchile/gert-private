@@ -1,301 +1,232 @@
-﻿# ken — History Archive
+# ken
 
-**Archived:** 2026-08-15T16:27:17.3698403-07:00
-**Size:** 24755 bytes
+## 2026-08-18 — Layered MCP Model Regression Fix (commit d98cc8b)
+
+**Sprint:** Folded into the usable-chat-run-UX round per Cristiano's stoppage.
+
+**Defect:** The exclusive `hasActivePump?.() === false` gate made `/arm-mcp` dead code. When no pump was active but a cached token was armed, `no_active_run` fired immediately. This regressed `gert.previewGraph` (pre-existing webview path) and misread "unreliable" as "forbidden".
+
+**Fix:** Restored Petals' layered model. Layer 2 reuses `invokeWithTwoAttempts` — same retry semantics, no drift. `/arm-mcp` response text updated to describe best-effort layer 2.
+
+**Tests:** 208/208/0/0 (was 202/202/0/0). 6 new tests: LAYER-1, LAYER-2, LAYER-2b, LAYER-4, LAYER-5a, LAYER-5b. PUMP-2 updated (unarmed case now tests true floor).
+
+**Mutations killed:** LAYER-1 (precedence inversion), LAYER-2/2b/4/5a/5b (layer-2 deletion), LAYER-4 (no_active_run conflation), LAYER-5a (token logged in retry line).
 
 ---
 
-# Ken — History
+## 2026-08-18 — Usable Chat Run UX (commit 4d5dbb9)
 
-## Seed Context (2026-06-05)
+**Sprint:** Usable Chat Run UX — @gert /run active-editor default, picker, pending-run store, arg parse.
 
-- **Project:** GERT — Governed Executable Runbook Technology
-- **Owner / User:** ormasoftchile (Germán)
-- **Squad home:** `gert-private` (this repo). The squad is single and serves all repos. Runtime work happens in `ormasoftchile/gert`, but squad memory stays here.
-- **My role:** Second Backend Dev, paired with Don
-- **Why I was hired:** OQ-M5 of the Runtime Migration Plan (ratified 2026-06-05, commit 541d194) called for a pair to run Streams E (GIS) and F (GCP) in parallel with Don's critical path on Streams A–D, G, H. Target wallclock: 10–15 days vs. 12–18 solo.
+**Status:** ACCEPTED. 202/202/0/0 tests. 8 files changed (874 insertions, 16 deletions). SHA 4d5dbb9.
 
-## Project Snapshot at Hire
+**Items delivered:**
+- Active editor default: bare `@gert /run` auto-uses active `*.runbook.yaml`
+- QuickPick picker: multi-root safe via `vscode.workspace.findFiles`, readable labels
+- Required input collection: `filterRequiredInputs` prompts only `required===true` inputs
+- `gert.runAuthenticated` editor-title/context command; opens chat with nonce handoff
+- Pending-run store: single-use, 30s TTL, secrets never in query or logs
+- Explicit `parseRunArgs` replaces positional `parts[0].includes('=')` heuristic
+- `formatRunStartLog` extracted pure for path-B redaction proof
+- Run document link on terminal completion: `[Open run document](${base}/runs/${id}/document)`
 
-- **Tech Stack:** Go (runtime), Azure (Functions, Service Bus, Container Apps, Static Web Apps, Entra ID), TypeScript (web/extensions)
-- **Phase 1 of GXL/GIS/GCP design:** complete in `gert-private`. 208 conformance vectors, full spec sections 03a–03d, parse-gate, three EBNF grammars, fixture migration done, `gert migrate-expr` tool scaffolded.
-- **Phase 2 sketch:** Don wrote a working GXL evaluator + parser + stdlib (commits `97ce48b..5c550c0`) in this repo. Stripped per scope correction; designated as cherry-pick source for the runtime migration (OQ-M2).
-- **My first assignment (likely):** Phase A of the Runtime Migration in `ormasoftchile/gert` — pair with Don on PJVM + Clock + harness + DRIFT-DETECTION-001 (vector sync script + `make verify-vectors` CI gate). Then split: Don takes Streams B–D (critical path), I take Streams E and F in parallel.
+**Mutations killed (6):**
+- PARSE-5: lastIndexOf mutation on value split
+- STORE-2/2b: remove `_store.delete(nonce)` (single-use)
+- STORE-3: remove TTL expiry check
+- RRES-2: remove `.runbook.yaml` check on active editor
+- QBLD-redact-path-A: store-embedded nonce proves buildRunChatQuery never leaks inputs
+- QBLD-redact-path-B: embed-secret mutation proves formatRunStartLog never leaks inputs
 
-## Key Decisions to Respect
+---
 
-Read `.squad/decisions.md` in full at first spawn. Highlights:
-- **OQ-M1:** Vendored vectors + DRIFT-DETECTION-001 sync infrastructure (NEW Phase A scope item)
-- **OQ-M2:** Cherry-pick sketch `97ce48b..5c550c0`, treat as unreviewed
-- **OQ-M3:** Build tag `//go:build gxl` for the entire migration window
-- **OQ-M4:** Hard cutover at Phase H, CHANGELOG only (pre-1.0)
-- **OQ-M5:** Pair model — Ken (me) + Don, both in this squad, both working in gert repo
-- **Single-squad directive (2026-06-05):** Never create a parallel squad in the runtime repo. Squad memory lives in `gert-private`.
+## Learnings (2026-08-18 — ken-14, commit 4d5dbb9)
+
+**Two redaction paths, not one.** The ask explicitly requires injection on each path that could leak: (A) the chat query string and (B) the output-channel log line. Covering only path A again produces a vacuous proof for path B. Fix: extract `formatRunStartLog` as a pure function so path B is testable without a VS Code host. Both paths now have a live mutation proof.
+
+**workbench.action.chat.open: source confirmed.** Command ID is `CHAT_OPEN_ACTION_ID = 'workbench.action.chat.open'` exported from VS Code source `src/vs/workbench/contrib/chat/browser/actions/chatActions.ts` (main branch). Argument shape is `IChatViewOpenOptions { query: string; isPartialQuery?: boolean }`. Confirmed additionally by GitHub issue microsoft/vscode#210819 and a direct web fetch of the source file. The `isPartialQuery: false` flag causes VS Code to submit the prompt immediately rather than staging it for user review.
+
+**Pending-run store single-use is security-critical, not just an optimization.** An unclaimed entry after TTL is inert. But more importantly, `claimPendingRun` removes the entry BEFORE checking expiry — so even an expired entry is consumed on the first claim attempt. This prevents a race where two rapid claims both get `undefined` but the entry stays in the store.
+
+**PowerShell string replacement is unreliable for complex patterns.** The RRES-2 mutation revert using `-replace` incorrectly reassembled the condition, leaving a regression that only showed up on the next test run. Lesson: prefer `edit` tool for reverts; use PowerShell replacement only for simple, unambiguous substitutions and verify with `view` immediately after.
+
+
+
+**Current sprint:** Three commits (93214d0, d173ad7+130b81e, f667f0a) all ACCEPTED and deployed to gert-vscode.
+
+**Status:**
+- Closed-enum invocation error classifier: 143/143 tests, 3 mutation proofs
+- toolInvocationToken extract-to-pure architecture: 153/153 tests, 6 mutation proofs
+- npm pretest hook (automatic recompilation): 153/153 tests, 2 mutation directions validated
+- Systemic bug class #13 (stale build artifacts) identified, documented, fixed, and binding rule applied to all verification work on this engagement
+
+**Prior 2026-08-15–2026-08-17 work:** 13 completed features archived (dynamic runbook includes, runtime portability Phase 1, reachability gate, skip-defect regression guard, gert-vscode reproducibility, Phase 2 prep, Gert reproducibility). Full records in decisions-archive.md and .squad/log/2026-08-18T22-23-36Z-vscode-live-blockers.md.
+
+**SQL Live-Site blockers:** Config scoping (multi-root workspace) and registry parser (meta.Name + transport.mode / transport.type) fixed in commit 1cd7542 (127/127 tests); static source guard (repoBoundary/rule7) added in commit 08de611 (130/130 tests) to prevent regression.
+
+---
+
+## 2026-08-18 — Stale Build Artifacts: Systemic Bug Class #13
+
+**Alert:** All mutation testing on this engagement requires build artifact regeneration after source mutations.
+
+**Finding:** npm test on gert-vscode runs against gitignored out/ directory. Stale out/ after source edit invalidates mutation testing in both directions:
+- **False green:** mutate source, skip recompile → npm test runs old out/; mutation appears harmless.
+- **False red:** revert source, skip recompile → npm test runs mutated out/; clean tree appears broken.
+
+**Root cause:** No automatic recompilation before npm test.
+
+**Fix:** Added "pretest": "npm run compile" to package.json (commit f667f0a). npm lifecycle hook fires automatically before every 
+pm test invocation.
+
+**Binding rule (all verification agents):**
+1. After source edit (mutation or revert), regenerate build artifact (tsc, cargo build, npm run compile, make, etc.).
+2. Run test suite AFTER artifact regeneration.
+3. Trust test results only with this ordering.
+
+**Scope:** All repos with tests importing gitignored build output + no auto-recompile + mutation testing as primary verification.
+
+**Proof:** Mutation worktree _ken_v6:
+- Direction 1: mutate chatParticipantGate.ts, 
+pm test without manual compile → 152/1 fail (pretest compiled automatically, mutation caught).
+- Direction 2: revert source, 
+pm test without manual compile → 153/153 pass (pretest recompiled, clean state verified).
+
+Before pretest hook: Direction 2 would have returned 152/1 false red (stale out/ from mutation still present).
+
+---
+
+## Critical Lessons (must re-read every spawn)
+
+- **Mutation proofs must target the production wiring, not a pure helper.** This mistake has happened twice on this engagement: a test mutated a standalone helper function and declared the behavior covered, but the call site in the production path was never exercised. Mutation evidence is only load-bearing when the mutated path is the one actually exercised by the running system.
+- **Never cite a repo "precedent" without grepping for it first.** SQL Live-Site cited "Petals" as a proven pattern; the name appeared in documentation but no implementation was found in the actual codebase. Citing an unverified precedent wastes a round-trip and can justify a wrong design. Always grep before claiming a pattern exists.
+- **`npm test` against stale `out/` invalidates mutation testing in both directions.** See Systemic Bug Class #13 below.
+
+## 2026-08-18 — Vacuity in redaction proofs; bounded deadlock detection
+
+**Defect: A redaction test that only exercises one path through a function does not prove the other paths are safe.** PUMP-8 forced `Canceled` on attempt 1, so it only exercised the retry path. A token leak injected on the attempt-1-success path (the most common path) produced 161/161/0/0 — the test was completely blind to it. This is the third time a proof has targeted the wrong layer on this engagement.
+
+**Pattern to prevent this:** For any function with N distinct execution paths, write N explicit redaction assertions — one per path — and confirm each assertion has a non-vacuity guard (at least one log line was produced). The "non-vacuity control" canary in the old test proved only that the scanner's `includes()` works on a crafted string; it said nothing about whether real log lines were seen. Those are different claims.
+
+**Defect: A hung test suite is not a mutation kill.** Mutation #7 (remove `pump.close()` from the finally block) caused an infinite hang rather than a named test failure. No timeout was set, so the CI runner would have burned until the job-level limit. A deadlock must fail with a bounded, named message. Fixed by adding `--test-timeout=5000` to npm test (slowest legitimate test measured at 95.8ms; 5000ms = ~52x headroom). Re-confirmed: mutation #7 now fails at 5001–5006ms with PUMP-5/6/7 named.
+
+**Binding rule:** Every test suite that exercises async code must have a bounded per-test timeout. Measure the slowest legitimate test before choosing the value; do not guess.
+
+---
+
+## Learnings (2026-08-18 — In-Handler Invocation Pump, commit 9dfd345)
+
+**Central finding:** Token capture alone does not authorize `vscode.lm.invokeTool()` after the chat request returns. The old `invocation_token_unavailable` pre-invoke gate was built on a false premise. VS Code enforces *execution lifetime*, not token possession.
+
+**Petals is the correct reference, but only its synchronous-handler path is proven.** The `invokeMcpTool` function in Petals invokes tools *immediately inside the active chat handler*, then retries with `token=undefined` on Canceled. Background-path invocations in Petals are not reliably authenticated — Petals itself acknowledges this via its fallback.
+
+**Two-attempt invocation predicate must be word-boundary, not substring.** Matching `/\bCanceled\b/` rather than `includes("cancel")` avoids false positives on unrelated messages. The named failure mode (`invocation_error` in the output channel) makes VS Code string changes observable rather than silent.
+
+**The pre-invoke gate should check run state, not token state.** `hasActivePump?.() === false` correctly rejects tool calls that arrive with no active `/run` handler. When the method is absent (undefined), the gate does not fire — backward-compatible for existing stubs.
+
+**`await pumpTask` in finally is mandatory.** Removing `pump.close()` from the finally block causes the pump processor's `while (!pump.closed)` to hang forever; `await pumpTask` then deadlocks. Mutation 7 confirmed this as an infinite hang (test suite kill), not a mere assertion failure.
+
+**`POST /runs` returns 201 before any tool call.** The handler must be held open by `Promise.race([terminal, cancel, deadline])`, not by awaiting the HTTP POST. The run runs in a background goroutine in Gert Core; the extension must poll or SSE to learn terminal state.
+
+**Empirically unproven:** Whether VS Code accepts `vscode.lm.invokeTool()` called from an awaited continuation (pump processor) inside the handler, versus requiring synchronous handler stack context. Only a live VS Code session settles this. The failure mode, if real, is named: `invocation_error` in the output channel.
+
+**`/arm-mcp` is retired to diagnostic.** The stored token is irrelevant for run invocations. The command remains accessible as a diagnostic to force MCP server discovery (~60s latency on first use), but its response now explicitly states it does not authorize deferred runs.
+
+- **Closed-enum classifiers > regex passthrough:** Allowlist of categories prevents future exception variants from inadvertently exposing provider internals.
+- **Extract-to-pure seams for wiring tests:** Host-provided APIs cannot be called in unit tests. Extract the call into a pure function with callback-shaped parameters; test with spies.
+- **Static source scans complement runtime mocking:** A spy test proves the helper works, but direct call sites remain unguarded. Reproboundary/rule7 scans source at test-run time to flag unscoped getConfiguration calls.
+- **Scoping decisions must be explicit:** Every runtime configuration read is either folder-scoped (context-aware) or window-scoped (global). Document both.
+- **Mutation 2 shows self-healing behavior:** The existing redact() call correctly strips the capability secret even when the full raw message is forwarded. Other secrets (bearer token, tool args) still leak and tests still fail — the pattern is working.
+- **Non-vacuity guards are critical:** A redaction test that asserts a secret is absent from an empty response always passes. Non-vacuity control proved the scanner inspects a non-empty body.
+- **Consumer contracts accumulate silently:** tsg-recommendation appeared in 8 places across 3 files. Full-repo grep required before declaring fixtures clean.
+- **toolInvocationToken unavailable outside ChatRequestHandler:** No VS Code API to obtain this token in non-chat context. Bridges calling invokeTool with undefined should classify failures as invocation_token_unavailable, not invocation_error.
+- **Reproducibility proof: worktree at commit, not working tree:** Mutation tests must verify in a clean worktree at the target commit to avoid confounding with untracked files.
+- **Stale build artifacts corrupt evidence in both directions:** This is the 13th distinct bug class on this engagement. The binding rule applies to all future mutation testing.
+
+## Learnings (2026-08-18 — ken-13, commit 4560d82 — Third Vacuity Occurrence)
+
+**PUMP-8 was vacuous. Forcing one branch means the other branches are untested.**
+
+PUMP-8 (original) forced attempt 1 to throw `Canceled`. That means the only path executed was the Canceled retry path. The attempt-1-success path, the non-Canceled failure path, and the Canceled-retry-failure path were never exercised. A token leak injected on the attempt-1-success path produced 161/161/0/0 — the test could not see it.
+
+**The canary distinction: proving the scanner versus proving observation.**
+
+The "non-vacuity control" in the old test asserted that a crafted string `"token=abc123"` contains `"abc123"`. That proves `includes()` works. It does not prove the scanner ever received a real log line from the leaking path. Those are different claims. A canary over a crafted string is not a substitute for real log output from the path under test.
+
+**Corrective pattern (binding):**
+
+For any function with N distinct execution paths, write N path-specific redaction assertions. Each must:
+1. Exercise exactly one path through the function.
+2. Assert the token is absent from real output produced by that path.
+3. Include a non-vacuity guard that confirms at least one log line was produced (from real execution, not a crafted string).
+
+PUMP-8 was split into PUMP-8a (attempt-1 success), PUMP-8b (non-Canceled failure), PUMP-8c (Canceled retry success), PUMP-8d (Canceled retry failure). Each confirmed as 163/164 before acceptance.
+
+This is the **third occurrence** of a proof targeting the wrong layer on this engagement. See also: closed-enum classifier (first), toolInvocationToken extract-to-pure (second).
+
+## Learnings (2026-08-18 — Layered MCP fix + Usable Chat Run UX, commits 4d5dbb9 + d98cc8b)
+
+**Unreliable ≠ forbidden.** The live-site failure of the cached-token path was treated as proof that the path should be hard-forbidden. The correct reading is that it is unreliable — those are different claims and only one justifies a hard refusal. The fix is to attempt the call, classify the failure with a named category, and surface it — not to refuse pre-emptively and make the armed token dead code.
+
+**Layer-ordering proofs require exercising each layer separately.** LAYER-1 proves layer 1 is selected when pump is active. LAYER-2 proves layer 2 is selected when armed and no pump. PUMP-2 proves layer 3 (no_active_run) fires only when unarmed. The three tests together cover every state combination; any one test alone would miss two states.
+
+**Two redaction paths, not one.** For any feature that handles secrets, identify all paths through which a secret could escape (chat query, log lines, HTTP body, etc.) and inject a real leak on each. Covering only path A (chat query via buildRunChatQuery) left path B (log lines via formatRunStartLog) unproved until the second round. Both now have live mutation proofs.
+
+**workbench.action.chat.open confirmed from VS Code source.** Command ID `'workbench.action.chat.open'` sourced from `CHAT_OPEN_ACTION_ID` exported in `src/vs/workbench/contrib/chat/browser/actions/chatActions.ts` (microsoft/vscode, main branch). Argument shape `IChatViewOpenOptions { query: string; isPartialQuery?: boolean }`. Corroborated by GitHub issue microsoft/vscode#210819. Not in `@types/vscode` — must be sourced from VS Code internals.
+
+**PowerShell `-replace` is unreliable for mutations with backtick-interpolated strings.** Use the `edit` tool for all source mutations and reverts. PowerShell `-replace` with special characters (backticks, `${}`) can silently fail or partially apply, corrupting the test tree. Discovered when the RRES-2 revert partially applied, leaving a residual bug caught only on the next run.
+
+
+
+---
+
+## 2026-08-18 — Run Authenticated handoff extraction (commit 0cde638)
+
+**Sprint:** Security-critical redaction proof was vacuous — all QBLD tests operated on `buildRunChatQuery` which cannot receive raw inputs by signature. The production call site (`runAuthenticated()` in extension.ts) was completely uncovered: Cristiano's mutation leaked `collectedInputs` into the chat query and 208/208 tests still passed.
+
+**Fix:** Extracted steps 3-5 of `runAuthenticated()` into `src/runHandoff.ts` — a pure, vscode-free module with injected collaborators for prompting, stashing, query building, and command execution. `runAuthenticated()` becomes a thin wiring shim supplying the real vscode implementations. The security-critical redaction logic now has direct test coverage without requiring a VS Code runtime.
+
+**Tests:** 215/215/0/0 (was 208/208/0/0). 7 new tests: HANDOFF-1..7.
+- HANDOFF-3 is the primary leak guard: asserts the chat query does not contain the sentinel secret value.
+- HANDOFF-4 is the non-vacuity control: proves inputs flow correctly INTO the store (redaction is not achieved by silently dropping data).
+- HANDOFF-5 proves executeCommand is called with the correct command and query.
+All tests use the real production `stashPendingRun` and `buildRunChatQuery` collaborators.
+
+**Mutations killed:**
+- Cristiano's mutation (leak collectedInputs into query at call site) → HANDOFF-3 fails
+- M2: stash `{}` instead of collectedInputs → HANDOFF-4 fails
+- M3: suppress executeCommand call → HANDOFF-5 fails
 
 ## Learnings
 
-### 2026-06-05 — gert repo conventions (from Phase A / DRIFT-DETECTION-001)
-
-- **No Makefile existed** in `ormasoftchile/gert` — created from scratch. Pattern: `.PHONY` targets, `help` as default goal, `SHELL := /usr/bin/env bash`.
-- **No `scripts/` directory existed** — created. Convention: executable bash scripts go here.
-- **No `testdata/` directory existed** — created. `testdata/vectors/` is the first entry; this is the canonical path for vendored conformance vectors per OQ-M1.
-- **CI framework:** GitHub Actions. Existing workflow at `.github/workflows/e2e.yml` uses `actions/checkout@v4`, `ubuntu-latest`, `actions/setup-go@v5` with `go-version: '1.21'`.
-- **Temp dirs in Makefile:** `.gitignore` lists `tmp/` and `.temp/`. I used `.verify-vectors-tmp/` as verify scratch — always cleaned up by the target, no .gitignore entry needed.
-- **Both repos in same org:** `ormasoftchile/gert` + `ormasoftchile/gert-private`. `GITHUB_TOKEN` likely covers cross-repo reads within the org — relevant for the CI Option A/B decision.
-- **gert-private is read-only** from the runtime repo perspective — never commit to it from a gert worktree task.
-- **Worktree pattern:** Phase A uses dedicated worktrees (`gert-phase-a-drift`, `gert-phase-a-pjvm`) branched from main. Don't `cd` to main repo for edits; the worktree IS the working directory.
-
-## 2026-06-05 Phase 1 Complete
-
-Phase 1 closed before my first session. TESS-AMBIG-3..6 resolved:
-- **GXL-TYPE-005:** Boolean ordered comparison forbidden
-- **GXL-TYPE-001:** Extended to forbid list/object equality (scalars+null only)
-- **GXL-PATH-004:** Field access on non-object/null
-- **Corpus:** 211 GXL vectors, 0 TBD (83 parse + 92 eval + 36 path)
-- **Dogfood:** All 22 runbook fixtures clean (P1–P5 all zero)
-
-Don + I cleared to start Phase A in `ormasoftchile/gert`. PJVM + Clock + harness + DRIFT-DETECTION-001 are first deliverables.
-
-## 2026-06-05 — Phase A: DRIFT-DETECTION-001 Shipped (PR #8, First Shipment)
-
-**Worktree:** `gert-phase-a-drift`  
-**PR:** https://github.com/ormasoftchile/gert/pull/8 (draft, awaiting merge)  
-**Status:** First ever shipment (pre-Phase-B)
-
-**Shipped:**
-- `scripts/sync-vectors.sh` — syncs tv-*.yaml + schema.json from gert-private; writes `VECTORS_SHA` (pinned to 3ce53431)
-- `Makefile` — `sync-vectors` + `verify-vectors` targets (no prior Makefile in repo)
-- `.github/workflows/verify-vectors.yml` — CI gate (PR + main + weekly cron)
-- `testdata/vectors/README.md` — runbook (sync flow, drift detection, upgrade path)
-
-**Option Chosen: A (best-effort).** GITHUB_TOKEN + sentinel-SHA fallback. Rationale: immediate within org; upgradeable to Option B (deploy-key) if token insufficient. Local `make verify-vectors` always fully enforced (dev gate during active dev).
-
-**Test Loop Verified:** sync ✅ → verify-clean ✅ → hand-edit + verify-drift ✅ → restore + verify-clean ✅
-
-**Env Contract:** `GERT_PRIVATE_PATH` (default: `../gert-private`)
-
-**Learnings
-
-## 2026-06-06 — Phase E + F Shipped (PR #13 + #14) — 56/56 PASS
-
-**Status:** Two parallel shipments — GIS (Phase E, 15 vectors) + GCP (Phase F, 41 vectors) — both 100% conformance.
-
-**PRs:** ormasoftchile/gert#13 (phase-e-gis) + #14 (phase-f-gcp), both draft, stacked on phase-a-pjvm (PR #9).
-
-**My Track Record:**
-- **Phase A (PR #8):** DRIFT-DETECTION-001 (sync-vectors.sh + verify-vectors CI gate) ✅
-- **Phase E (PR #13):** GIS path resolver (internal/eval/gis/, 15/15 vectors) ✅
-- **Phase F (PR #14):** GCP capture engine (internal/eval/gcp/, 41/41 vectors) ✅
-
-Total: 3 shipments, 56 conformance vectors, zero defects.
-
-### Key Design Pattern: Three Separate Packages, Single Shared Foundation
-
-**Architecture:** gxl, gis, gcp are three independent evaluators, each in its own package:
-- `internal/eval/gxl/` — variable bindings + operator precedence + stdlib
-- `internal/eval/gis/` — optional chaining + null-as-miss semantics
-- `internal/eval/gcp/` — four source prefixes + GDP traversal + §6 default policy
-
-**Why separate?** Each has fundamentally different resolution semantics. Sharing would require abstraction layers that obfuscate the logic. Attempting to fork a "generic resolver" across all three creates coupling and refactor overhead without benefit. Keep each self-contained.
-
-**Only shared layer:** `internal/eval/core` (PJVM value model, `FromYAML`, `core.Value` interface). This is the right level of abstraction — the common representation, not the traversal logic.
-
-**Implication for future work:** Don't expect GIS/GCP to reuse GXL path logic. When Phase G integrates all three into the request/response flow, each stays independent, each gets its own harness runner entry point.
-
-### Implementation Notes
-
-**GIS (Phase E):**
-- Two-level parser: outer template string layer, inner GIS expression tokenizer
-- Lexer uses longest-match for `?.` and `?.[` to avoid ambiguity
-- Eval implements null coercion (null-as-miss) + short-circuit semantics per optional-chaining design
-- Falsy values (`""`, `false`, `0`, `[]`) correctly treated as **present** values, not misses
-- Stdlib integration: str functions (toLower, toUpper, trim, etc.) receive optional results and propagate `""` on miss
-
-**GCP (Phase F):**
-- Four source prefixes (local/http/event/step) parsed uniformly but resolved differently per source
-- HTTP/event headers resolve to soft-null (absent header → null, not error) per RFC 7230 case-insensitivity
-- YAML timestamp handling: yaml.v3 tags dates as `!!timestamp`, but spec (OI-GCP-06) requires YAML 1.2 strings. Implemented local YAML converter (`gcpFromYAML`) to map timestamp tags back to strings
-- §6 default policy: post-resolution check (`checkDefaultPolicy`) handles both GCP-DEFAULT-SUBTREE (object/array capture with default) and GCP-TYPE-001 (scalar type mismatch with default)
-- GDP traversal implemented locally in `traverseGDP` — different semantics than GXL (GCP uses single error code for both non-array and out-of-bounds)
-
-### Learnings for Phase G
-
-1. **Separate-package pattern scales.** When Don integrates all three engines into the request/response flow, he won't be juggling a monolithic resolver or a tangle of conditional branches. Three independent entry points, three independent error code sets, three independent unit test suites.
-
-2. **Build tag discipline holds.** All files `//go:build gxl`. The tag stays until Phase H cutover. Once old engine is deleted, tags come off and we run both systems side-by-side in CI to verify behavior parity.
-
-3. **Error code pre-ratification critical.** All 56 vectors passed without corpus bugs or spec gaps. This happened because Barbara's Phase 1 arbitrations (TESS-AMBIG-3..6) locked down all error codes upfront. Phase G can proceed without returning to Spec.
-
-4. **No handoff surprises.** Barbara: no action. Tess: no action. Each phase just ships. This is what pre-ratification looks like.
-
-### Next: Phase G + H (Don)
-
-Don takes integration (Phase G) and cutover (Phase H). My assignment (Phases E–F) closes once #9 merges and my PRs (#13/#14) pass final review. Wallclock on Phases A–F: ~6 days (2026-06-01 to 2026-06-06). Target was 10–15 days total with parallel streams; we're on track.
-
-## 2026-08-10 — Enum-Constrained Runtime MVP: Independent Revision of Don's Rejected Gate
-
-**Context:** Barbara rejected Don's implementation report (`don-enum-mvp-implementation-report.md`)
-against the ratified `barbara-enum-mvp-implementation-gate.md` — five runtime blockers (R1–R5).
-Don was locked out as the original author; I was brought in independently to re-resolve all five
-from scratch, without reusing Don's rejected work. Full report:
-`.squad/decisions/inbox/ken-enum-mvp-implementation-revision.md`.
-
-**Outcome:** All five blockers resolved and regression-tested. R1 (ENUM-008 on every
-caller-binding path incl. `--var`), R3 (enum metadata once in `plan/validated`, declared order,
-C1-safe), R4 (ENUM-W001 surfaced non-fatally), and R5 (replay retains enum checks at the stable
-boundary) were the more contained fixes. R2 — a faithful, data-driven conformance harness over all
-58 `tv-enum.yaml` vectors — was the bulk of the work and the highest-value output: building a
-harness that actually runs the real CLI against real fixtures (no dry-run shortcuts, no mocked
-executors) surfaced **ten distinct genuine runtime bugs**, several of which were silently
-defeating enum enforcement for entire fixture families (not edge cases). Final report: 58/58
-vectors accounted for — 48 passed, 10 named/cited skips (5 pre-existing ticketed gaps, 5 newly
-diagnosed corpus-fixture inconsistencies verified against the ratified architecture ruling), 0
-failed, 0 silently dropped. Full `go build ./... && go test ./...`: clean across all 61 tested
-packages.
-
-### Key Learning: A Synthetic/Mocked Conformance Harness Hides Bugs a Real One Finds
-
-The single biggest lesson from this session: earlier attempts (implicitly, Don's rejected report)
-likely leaned on dry-run mode or a subset of vectors to claim conformance. Dry-run
-(`internal/adapter.DryRunExecutorRegistry`) fakes success for every step — it never exercises real
-tool-arg binding, real GCP capture resolution, or real ENUM-007/008/009 evaluation. Building the
-harness to actually shell out to a real `gert.exe` against materialized fixtures (Git Bash
-subprocess steps, real package/catalog resolution, real substitution) is what surfaced:
-- a tool-arg output resolution bug (`executeSubstitution` using the wrong evaluator for GCP Capture
-  Paths vs. `${...}` templates — two genuinely different grammars, `pkg/gcp/parser` vs.
-  `internal/expr`),
-- a **silent field-drop bug** in the catalog→planner tool-def conversion that defeated ENUM-006/007
-  for every `requires:`/`toolRefs:`-resolved tool (the corpus's dominant shape) — the kind of bug
-  that "passes" a shallow/synthetic conformance run because the checks it defeats never get a
-  chance to even fire, so there's no crash, just silent under-enforcement,
-- a missing plan-time check (S2 output defaults) that AR-ENUM-6 explicitly required,
-- two separate "capture attempted after a failed result masks the real error" bugs (one in the
-  executor, one — more consequential — in the engine's own generic post-execution capture path,
-  which aborted the *entire run* via a different code path and hid the original failure behind an
-  unrelated one),
-- a schema/struct drift bug (`expand:` supported in Go structs and a real feature `pkg/expand`, but
-  never added to the JSON Schema used for structural validation — so any runbook using it was
-  rejected outright),
-- an `imports:` alias-resolution gap (a documented include-aliasing idiom that the include-walking
-  code never actually implemented — treated the alias name as a literal file path),
-- and a genuine validation-ordering defect (`cmd/gert/run.go` short-circuited on B1's substitution
-  check before `Plan()` ever ran, so a real finding on one declaration could mask a real,
-  unrelated finding on another).
-
-**Pattern for future conformance work:** when asked to build/validate a "faithful" harness against
-a frozen vector corpus, resist any temptation to special-case or mock around real CLI execution —
-that convenience is exactly what hides silent, high-blast-radius bugs. Also: not every vector
-"failure" is a runtime defect. Five of the ten skips this session were genuine corpus-fixture
-authoring inconsistencies (verified by re-deriving the expected behavior directly from the ratified
-architecture ruling's unconditional rules, e.g. AR-ENUM-6's default-must-be-member and AR-ENUM-8's
-"no variance" PKG-013 rule) — the discipline of checking the *ruling*, not just the vector's own
-prose `note:`, before "fixing" the runtime to match a vector is what separates a real fix from
-weakening a correctly-enforced rule to force a pass.
-
-
-
-## Learnings: 2026-08-15 — Dynamic Include Stream 1 (Schema + Parser + Errkit)
-
-### errkit structure
-- **Sentinel pattern:** every code gets a module-level `var Err<Name> = &Error{code, class}`. Class is derived by `ClassForCode(code)` at call site via `Wrap()`/`New()`, so the sentinel var's class must match `ClassForCode`'s output — enforced by `TestSentinelsExposeClassAndCode`.
-- **Warning classes use `-W` suffix** (e.g. `PKG-W`, `DINC-W`). `IsWarning` was hard-coded to `class == "PKG-W"` — I generalized it to `strings.HasSuffix(class, "-W")` to cover all warning classes.
-- **Three registries to update:** `codeOrder` (for `Codes()`), `sentinels` map (for `Sentinel(code)`), `classSentinels` map (for `ClassSentinel(class)`). Miss one and the existing `TestSentinelsExposeClassAndCode` / `TestDeclaredClassesCovered` tests fail.
-
-### JSON Schema oneOf with additionalProperties
-- The `oneOf` + `additionalProperties: false` pattern correctly enforces mutual exclusion between static (`runbook`) and dynamic (`runbook_ref`) include arms.
-- Each arm's `additionalProperties: false` rejects the OTHER arm's fields, so both arms fail when both fields are present — `oneOf` fails cleanly.
-- `expand` intentionally absent from the dynamic arm per Barbara's contract.
-
-### parser/validate_semantic.go conventions
-- Step-type-specific semantic validation lives in a `switch s.Type` block inside `validateStep`. Adding a new `case schema.StepTypeInclude` there is the correct extension point.
-- The JSON Schema structural pass runs first and rejects most structural errors; the semantic validator adds belt-and-suspenders cross-field checks with developer-friendly error messages.
-- `verr(code, field, message)` is the internal constructor for `*ValidationError`.
-
-### ValidateRenderedRef placement decision
-- Belongs in `pkg/pkgcatalog/` (next to catalog lookup methods) not in `internal/parser/` — it is catalog-reference syntax, not runbook-document syntax.
-- Stream 3 (executor) can import it from `pkg/pkgcatalog` without any new import cycles.
-
-### DINC-007 class inconsistency in Barbara's contract
-- Barbara's §11 table says DINC-007 is a "Warning" but her explicit Go code block says `class: "DINC"`.
-- Implemented as the code block specifies to avoid breaking `TestSentinelsExposeClassAndCode`.
-- Documented the discrepancy in `ken-dynamic-include-stream1.md` for Barbara's arbitration.
-
-### 2026-08-15 Addendum — Barbara's B-6/B-14 Delta
-
-- **DINC-013** added: catalog lookup succeeded but file vanished from disk. Distinct from DINC-002 (identity not in catalog). `on_not_found: continue` does NOT suppress DINC-013 — it is an infrastructure failure, not a missing identity.
-- **B-14 (expand):** The dynamic arm's `additionalProperties: false` already excluded `expand` without an explicit schema change. Belt-and-suspenders semantic check added to catch it on unmarshal-only paths. Comment-only edit to `pkg/schema/steps.go` per scope constraints.
-- **B-5 (on_not_found scope):** Only DINC-002 is suppressible by `on_not_found: continue`. DINC-003 (ambiguous), DINC-013 (file missing), and all others always fatal — noted for Stream 3 executor implementation.
-
-## Learnings: 2026-08-15 — DEF-003 Governance Enforcement
-
-### Root cause pattern: composed-but-not-enforced
-`ComposeGovernance` in `dynamic_resolver.go` correctly computes the effective governance — but the sub-engine created by `runSubSteps` in `pkg/run/run.go` has no `GovernanceEvaluator`. The context value (`dynGovKey`) was always there; nothing read it for enforcement. This is a recurring "the composition is right but the enforcement is missing" pattern — watch for it in other composite executors (branch, iterate, parallel).
-
-### Static includes have the same gap
-The static include path (eager + lazy) runs child steps through the same `runSubSteps` sub-engine without a `GovernanceEvaluator`. Governance is not enforced for any child steps today. This was reported (not fixed silently) in `ken-dynamic-include-governance.md`.
-
-### Where to enforce without touching pkg/run
-`pkg/run/run.go` was out of scope. The fix stays in `internal/executor/`:
-1. **include.go**: enforce `require_approval` before calling the runner; build a compiled `governance.GovernancePolicy` from `effectiveGov` and store it in `childCtx` via `withGovPolicy`
-2. **cli.go**: read `govPolicyFromCtx(ctx)` and call `pol.CheckCommand(command)` before `platform.Exec`
-This is a "push policy into context, check at leaf executor" pattern — works without touching the sub-engine or the runner.
-
-### Conversion: EffectiveGovernancePayload → schema.GovernanceConfig
-`internal/governance.BuildPolicy` takes `*schema.GovernanceConfig`. `EffectiveGovernancePayload` (trace pkg) is the composed result. Added `effectiveGovToSchemaConfig` in `dynamic_resolver.go` to project the common fields. `Capabilities` is NOT in `GovernanceConfig` — this blocks TV-DYN-GOV-015.
-
-### ApprovalGate wiring
-Added `approvalGate` field to `IncludeExecutor` with a fluent `WithApprovalGate` setter (avoids changing `newIncludeExecutorFull` signature and the 20 existing test call sites). `NewDefaultRegistry` calls `.WithApprovalGate(cfg.ApprovalGate)` — the gate is already in `RegistryConfig`.
-
-### TV-DYN-GOV-005 New Failure (Tess's Concurrent Work)
-
-Tess removed TV-DYN-GOV-005 from the conformance skip list. This vector tests `run: "rm -rf ..."` with `deny_commands: ["rm -rf *"]`. My deny_commands enforcement checks `argv[0]` (the shell binary, e.g. `sh`), not script content — documented limitation in this file. TV-DYN-GOV-005 requires governance enforcement on `run:` script content, which is a separate gap. This failure is Tess's concurrent change, not a DEF-005 regression.
-
-## Learnings: 2026-08-15 — DEF-005 Empty Ref / DINC-002 Fix
-
-**Problem pattern**: `hasDynamic := inc.RunbookRef != ""` is the wrong test when the user explicitly writes `runbook_ref: ""`. An empty string and an absent field are indistinguishable in a Go struct without pointer types. The fix uses companion fields (`resolve_from`, `on_not_found`) as dynamic-intent signals.
-
-**`ValidateRenderedRef` was orphaned**: Written in Stream 1 for Stream 3 to call, but `executeDynamic` (Stream 3's executor) never wired it in. Always check that shared validators are actually called at the right call site.
-
-**conformance test unskipping race**: Tess can unskip vectors concurrently. When full-suite tests show a new failure in `internal/conformance/`, check whether the vector was recently unskipped before investigating whether my changes caused it.
-`CheckCommand` sees `argv[0]`. For `run:` specs, `argv[0]` is the shell (`sh`, `pwsh`). A deny pattern like `"rm -rf *"` doesn't match `"sh"`. TV-DYN-GOV-005 uses `run:` and will not be satisfied by this enforcement. Documented in governance findings file.
-
-### TV-DYN-GOV-015 conflict
-`schema.GovernanceConfig` has no `Capabilities` field — capabilities declared in child YAML are silently dropped. `ComposeGovernance` already hardcodes `nil` for child capabilities. The vector expects `DYN-015` (fatal) but Barbara's §6.4 says non-fatal warning. Both the schema gap and the Barbara/vector conflict are documented in `ken-dynamic-include-governance.md`.
-
-## Learnings: 2026-08-15 — `run:` Script Governance Fix
-
-**`path.Match`'s `*` does not cross `/`**: This is the core gotcha for deny-command patterns. Operators write `"rm -rf *"` expecting it to match anything starting with `"rm -rf "`. `path.Match` returns false for `"rm -rf /tmp/scratch"` because `*` stops at the first `/`. The fix: `scriptMatchPattern` tries `path.Match` first, then falls back to `strings.HasPrefix(script, prefix)` when the pattern ends in `*`. This is sound for command patterns — operators don't use `/`-sensitive path patterns in deny lists.
-
-**Optional interface pattern for governance extension**: The public `GovernancePolicy` interface (`pkg/governance/policy.go`) must not be changed — other packages implement it and breaking that interface would cascade. Adding `CheckScript` only to the concrete `*policy` struct (in `internal/governance/builder.go`) and using a local `ScriptChecker` interface in `cli.go` for a type-assertion is the right way to extend without breaking. This pattern is reusable whenever you need to add optional capabilities to a sealed interface.
-
-**Incomplete DEF-003 fix**: DEF-003 established enforcement for `command:` specs only. `run:` scripts were visible in the same `CLIExecutor.Execute` function but overlooked. The lesson: when adding a governance check at a seam, enumerate ALL execution paths through that seam, not just the one the failing test exercises.
-
-**DEF-006 is a distinct root cause**: Even with correct `CheckScript` for `run:` scripts, TV-DYN-GOV-005 remains SKIPPED in the conformance harness because the entry runbook's static governance block is never seeded into `dynGov` context. The executor can only enforce a policy it was given; if the planner/engine never calls `withDynGov` with the top-level runbook's governance, `dynGovFromCtx` returns nil and `ComposeGovernance` gets an empty parent. This is a seeding gap, not an enforcement gap.
-
-**TV-DYN-COMPAT-001 failure is pre-existing FlowNode schema gap**: `FlowNode.oneOf` in `schemas/runbook.schema.json` only lists `step`, `iterate`, `parallel`. Tess added a vector using `branch:` at the flow level per B-19 ruling, but the FlowNode schema was never updated. This has nothing to do with IncludeConfig changes.
-
+- **Vacuous tests are worse than no tests.** If the function under test cannot receive the sensitive data at all by its signature, testing "it doesn't leak" proves nothing. The test must exercise the actual call site.
+- **Non-vacuity controls are mandatory.** Every redaction test needs a paired proof that the data actually flows through (so the redaction isn't achieved by dropping it). HANDOFF-4 is the model: it claims the pending entry via the nonce and asserts the secret is there.
+- **DI enables precise surgical testing.** By injecting stashPendingRun and buildRunChatQuery as real collaborators (not stubs), the test exercises the actual production sequence while remaining vscode-free. Stubs would recreate the vacuity problem.
+- **Async wrappers fix Thenable/Promise mismatch.** vscode.commands.executeCommand returns Thenable<T>, not Promise<T>. Wrapping with `async (cmd, opts) => { await ... }` at the shim site avoids TS2739 without weakening the interface type.
 
 ---
 
-## Session: Dynamic Runbook Includes — Phase 4 Wrap-up (2026-08-15)
+## 2026-08-19 — Runhandoff Extraction (commit 0cde638, follow-up)
 
-**Agents:** Barbara (arch), Tess (test), Ken (stream1), Don (streams2-3), David (stream4)
+**Context:** Ken's security-critical extraction (HANDOFF-1..7 tests, 215/215/0/0) addressed the fourth occurrence of the vacuous-mutation defect class. The original redaction tests (QBLD-1/2/3) targeted `buildRunChatQuery()` whose signature *cannot* receive raw input values. Every assertion was vacuous.
 
-**Outcome:** Feature complete, approved, ready for merge (APPROVE WITH CONDITIONS, all conditions satisfied)
+**Coordinator verification from detached worktree at 0cde638:**
+- Zero untracked files (including generated files)
+- `npm ci` clean
+- `npm test` → 215/215/0/0
+- Reachability gate: TestCLI_ReachabilityGate passes
+- Mutation #1 (Cristiano's original leak at call site): HANDOFF-3 fails as expected
+- Mutation #2 (stash `{}` instead of inputs): HANDOFF-4 fails as expected
 
-**Key achievements:**
-- 5 defects found and fixed (DEF-001..006 via Tess real-CLI exercise + implementation streams)
-- 21 architecture rulings (B-1..B-21) issued and enforced
-- 3 deferred items formally captured (B-18, B-19/B-20, B-21)
-- 26/29 conformance vectors pass; 3 skips permanent with ruling
-- Cross-repo coordination: design repo (spec authority) ↔ runtime repo (implementation)
+**Key design judgment verified:** Using REAL production collaborators (stashPendingRun, buildRunChatQuery) not stubs is what makes the test load-bearing. A stub would recreate the vacuity problem — it would return a fixed string regardless of inputs, and the mutation proof would be invisible again.
 
-**Coordination patterns that worked:**
-- Conformance corpus authored before implementation as specification
-- Real CLI exercise (not hand-reading) revealed every gap
-- Plausible descriptions can be materially wrong; rely on code review
-- Formal deferral of gaps better than hidden work
+**Systemic learning recorded:** This is the **fourth occurrence** of the vacuous-mutation defect class on this engagement:
+1. Classification validation (Go side, Tess) — unit test on ParseToolFile returns error; endpoint reachable from CLI?
+2. AllowedEnvironments ghost field (David) — schema field exists, Tier 0 check passes in unit tests; is the check wired to run.go?
+3. vscode-mcp transport classification injection (Ken, Phase 2 prep) — helper function receives classification, never tested at engine.go invocation site
+4. runAuthenticated() redaction (Ken, this session) — buildRunChatQuery signature cannot receive secrets; production call site never tested
 
-**Status:** This session's work fully merged into .squad/decisions.md. Five orchestration logs recorded. Session log captures defining lesson: real verification beats narrative.
+**Remedy adopted:** Extract call-site logic into a vscode-free DI module and inject REAL collaborators in tests. The extraction pattern makes the sensitive data flow observable and testable without requiring a VS Code runtime.
 
+**Future prevention:** Before marking a redaction proof complete, ask: "Where does the actual production call to this function live? Is that call site tested?" If the function's signature structurally prevents it from receiving the sensitive data, the call site is untested and the proof is vacuous.
 

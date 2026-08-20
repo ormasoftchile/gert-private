@@ -1,17 +1,33 @@
 ---
-updated_at: 2026-08-19T11:54:46-07:00
-focus_area: gert-vscode — live ICM MCP execution blocker
+updated_at: 2026-08-19T16:57:48-07:00
+focus_area: gert-vscode — first live ICM MCP run (unblocked, new machine)
 active_issues: []
 ---
 
 # ACTIVE FOCUS (2026-08-19) — Live ICM MCP execution from gert-vscode
 
-> ⚠️ Cristián rebooted to recover the `icm-mcp` MCP server. Resume here.
+> ✅ **UNBLOCKED.** New machine (`CPC-crist-LKO5U`). `icm-mcp` **starts here.**
 
 **The goal:** Cristián runs a SQL Live-Site runbook from VS Code using his
 already-authenticated ICM MCP tool. This has **never once succeeded live.**
 
-## State at reboot
+## Machine change (2026-08-19 16:57) — READ FIRST
+
+The previous machine is **broken and retired**. Live evidence: the ICM
+test/diagnostic invocations **corrupted the identity broker** on that box.
+Not a session-scoped restart-budget problem as previously recorded — it was
+unrecoverable by Reload Window *and* by reboot, and cost the machine.
+
+Consequences:
+- The `401 ... icm-mcp-prod.azure-api.net/v1/` blocker was **machine-local to
+  the retired box.** It is NOT an active blocker. Do not chase it.
+- The standing "never burn live invokes on diagnostics" rule is now a hard
+  law with a known price tag. `/arm-mcp` (zero invoke budget) or mocks only.
+- `/probe-token` stays deleted, permanently. Its removal rationale in
+  `decisions.md` understates the blast radius — see the inbox entry
+  `coordinator-icm-identity-broker-corruption.md`.
+
+## Code state (carried over — unchanged, still valid)
 
 **Code — DONE and committed.** `gert-vscode` `ffce6da` on `main`, clean tree,
 `npm run compile` 0, `npm test` 186/186.
@@ -27,42 +43,52 @@ already-authenticated ICM MCP tool. This has **never once succeeded live.**
   the session. Deleting it also fixed a latent compile error
   (`handleProbeToken` was called with no import).
 
-**Blocker — provider-side, NOT gert.** VS Code cannot start `icm-mcp`:
-`401 status sending message to https://icm-mcp-prod.azure-api.net/v1/`.
-No gert code executes until the provider is healthy. Gert already classifies
-this correctly as `provider_unavailable` (fixtures T1/T2 in
-`test/mcpBridge.test.js` F4); no change needed there.
+**Blocker — RESOLVED by machine replacement.** The `401` from
+`icm-mcp-prod.azure-api.net` was a symptom of the retired machine's corrupted
+identity broker. `icm-mcp` starts on the new machine. Gert's
+`provider_unavailable` classification (fixtures T1/T2 in
+`test/mcpBridge.test.js` F4) was correct and needs no change.
 
-## Next steps, in order — DO NOT skip to /run
+## Next steps, in order — ONE live run, deliberately
 
-1. `MCP: List Servers` → is `icm-mcp` **Running**?
-2. If not: re-authenticate there → `Developer: Reload Window`.
-   ⚠️ Cristián's LIVE evidence is that Reload Window alone did NOT recover it
-   after the probe incident; a reboot was required. Live evidence beats the
-   theory recorded in the probe-removal decision.
-3. Once Running: `@gert /arm-mcp` — **zero invoke budget**, dumps
-   `vscode.lm.tools`. Confirm an ICM tool name appears
-   (e.g. `mcp_icm_mcp_serve_get_incident_details_by_id`).
-4. Then ONE `@gert /run <runbook.yaml>`. Watch **View → Output → "gert"**,
+1. `MCP: List Servers` → confirm `icm-mcp` is **Running** on this machine.
+2. `@gert /arm-mcp` — **zero invoke budget**, dumps `vscode.lm.tools`. Confirm
+   an ICM tool name appears (e.g.
+   `mcp_icm_mcp_serve_get_incident_details_by_id`).
+3. Then **ONE** `@gert /run <runbook.yaml>`. Watch **View → Output → "gert"**,
    not the chat. Error codes: `tool_unavailable` = name mismatch vs the YAML
    `vscode_tool` field · `tool_not_found` = registry didn't load ·
    `input_validation_error` = arg shape mismatch · clean output = **first live
    success**.
+4. If it fails: **stop.** Diagnose from the gert Output channel and unit
+   tests. Do not re-invoke to "see if it was a fluke."
 
 ## Standing rules for this effort
 
-- Never burn live invoke attempts on diagnostics. Stop-on-first-failure or mocks.
+- **Never burn live invoke attempts on diagnostics.** Established cost of
+  violation: one development machine. Zero-invoke paths or mocks only.
 - Green unit tests are NOT evidence the live path works. Say so plainly.
 - Watch for vacuous tests: assert against real mutations at the production
   call site, not on pure helpers whose signature proves they never see the data.
 
 ## Open (non-blocking) — `gert-private` working tree
 
-~20 modified `design/gert/` files (schemas, LaTeX, EBNF) plus untracked
-`analysis/`, new schema files, conformance vectors, and root-level debris
-(`gert-core-*.md`, `*.jsonl`, `history-sizes.json`). Never triaged —
-Cristián declined a Barbara triage pass on 2026-08-19. Real spec work is
-likely mixed in with scratch output.
+✅ **The design work SURVIVED the machine loss.** Commit `3bef9e2 protect` is
+pushed to `origin/main` and captured everything before the old box died: the
+`design/gert/` schema/LaTeX/EBNF changes, `tv-enum.yaml` + `tv-pkg-resolve.yaml`
+conformance corpora, `analysis/` (including `tracked-modifications.patch` files
+holding uncommitted work from the sibling `gert` and `gert-vscode` repos), and
+the GCP grammar additions.
+
+Consequence: `3bef9e2` is a **snapshot, not a curated commit.** Real spec work
+is mixed with scratch output and rejected patches. It still needs a triage pass
+to separate normative artifacts from debris — Cristián declined that pass on
+2026-08-19. The `analysis/*/tracked-modifications.patch` files are the recovery
+path for any sibling-repo work that was in-flight when the machine failed.
+
+The current dirty working tree on this machine is a **Squad upgrade**
+(`.github/skills/`, `.mcp.json`, ~40 modified templates, Rai + Fact Checker
+agents, 7 new workflows) — unrelated to gert design work, also untriaged.
 
 ---
 

@@ -21,3 +21,9 @@ Ken (Core Dev) focused on Phase 2 VS Code extension work, with emphasis on secur
 ---
 
 ## Key Learnings
+
+### 2026-08-19 — ICM MCP incident severity corrected
+
+The previous model for the `/probe-token` incident understated the failure mode. Cristián reported that live ICM MCP test/diagnostic invocations corrupted the identity broker on the previous machine; the machine is now broken and retired. This was not just VS Code MCP restart-budget exhaustion and was not recoverable by Reload Window or reboot.
+
+Work moved to `CPC-crist-LKO5U`, where `icm-mcp` starts. The prior `401 status sending message to https://icm-mcp-prod.azure-api.net/v1/` blocker was machine-local to the retired box and is no longer active. Treat "never burn live ICM invoke attempts on diagnostics" as hard law: zero-invoke paths (`/arm-mcp`) or mocks only; stop on first failure.

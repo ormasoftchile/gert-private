@@ -2,6 +2,23 @@
 
 **Purpose:** Document the correct procedure for archiving agent history files when they exceed size thresholds.
 
+## Decisions Ledger Archive Gate — Honest Reporting Rule
+
+The canonical decisions ledger is `.squad/decisions.md`. Its own Archive Policy is authoritative: decisions are archived **by effort completion**, not by file size. Size thresholds are therefore a **WARN-and-escalate signal**, not automatic permission to move content.
+
+When `.squad/decisions.md` is over a size threshold, Scribe must measure the visibility of any date-based scan before reporting the result:
+
+1. Count candidate entry headings (`##` and `###`, excluding structural headings such as Archive Policy / Archive Index).
+2. Count how many candidate entries carry a parseable `YYYY-MM-DD` or ISO-8601 date in the heading.
+3. Report the dated-entry fraction in the health report, e.g. `12/403 headings (2.98%)`.
+4. If the file is over threshold but the dated-entry fraction is low, or the scan matches few/no entries, **do not report a clean/no-op archive result.** Emit an explicit warning such as:
+
+   > WARNING: `.squad/decisions.md` is 250,237 bytes over threshold, but only 12/403 candidate entries carry parseable dates. Date-based archival cannot see most of this file; escalating for effort-completion review.
+
+5. Do **not** archive, move, or delete ledger content based only on file size when the ledger policy says effort-completion controls archival. Wait for an explicit effort-completion ruling (for example from Barbara) and then execute that ruling precisely.
+
+This rule exists because a prior date-heading scan produced a false-clean result: the ledger was far over threshold, but most entries used undated topic headings (`### Approval Gate Precedence Table`, `### Tiered Preflight Design`, etc.), so the scan saw almost none of the data it claimed to evaluate.
+
 ## Archival vs. Summarization
 
 These are NOT the same operation:
@@ -36,6 +53,16 @@ Example:
 If gap > 5% of removed bytes: **STOP and investigate. Missing bytes = missing content.**
 
 Recover lost content via git show HEAD^:path/to/file and append to archive as a new generation.
+
+## Archive File Create vs. Append Path
+
+`history-archive.md` may not exist the first time an agent crosses the summarization gate. The create path is the same append-only operation with an empty prior archive:
+
+1. If `history-archive.md` is missing, create it with **Generation 1** and the full original `history.md` content verbatim after the generation header.
+2. If `history-archive.md` exists, scan existing `## Generation N` headers, choose `max(N)+1`, and append the new generation to the end.
+3. Never open an existing archive in truncate/overwrite mode. Use append semantics only. If the available file API cannot append, read the existing archive, concatenate `existing + new_generation`, and verify the previous bytes are an unchanged prefix before writing.
+4. After either branch, verify the archived payload contains the exact full original `history.md` bytes for that generation before replacing live `history.md` with the summary.
+5. A second archival after a first-time create must produce **Generation 2** and preserve Generation 1 byte-for-byte.
 
 ## Generation Headers
 

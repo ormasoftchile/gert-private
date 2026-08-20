@@ -49,9 +49,12 @@ $size = (Get-Item $canonical | Measure-Object -Property Length).Sum
 Get-Item "C:\One\OpenSource\gert-private\.squad\decisions\decisions.md"
 ```
 
-**Archiving thresholds (task 1 HARD GATE):**
-- If canonical `decisions.md` >= 20,480 bytes: archive entries older than 30 days
-- If canonical `decisions.md` >= 51,200 bytes: archive entries older than 7 days
+**Archiving thresholds (task 1 HARD GATE) — corrected interpretation:**
+- The ledger's own Archive Policy is authoritative: archive decisions by effort completion, not by file size.
+- Size thresholds are a WARN-and-escalate signal, not automatic permission to move content.
+- When canonical `decisions.md` is over threshold, measure and report dated-scan coverage: candidate entry headings vs headings with parseable dates.
+- If the file is over threshold but dated-scan coverage is low or the scan matches few/no entries, do **not** report a clean/no-op result. Warn explicitly that date-based archival cannot see most of the ledger and escalate for effort-completion review.
+- Do not archive, move, or delete canonical ledger content until an explicit effort-completion ruling identifies safe blocks.
 
 ---
 

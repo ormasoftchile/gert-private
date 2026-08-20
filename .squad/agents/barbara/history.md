@@ -8,6 +8,8 @@
 
 ## Team Updates
 
+**2026-08-19T17:03:22-07:00 — Ledger archival gate ruling:** Issued Barbara ruling to archive completed effort bodies, not dated headings. Safe blocks: lines 29–1338, 1339–2309, and 2512–3350. Keep active VS Code MCP bridge/live ICM execution material live, especially lines 2310–2511 and 3351–4560. Governing rule: effort-completion is authoritative; size thresholds trigger review/stop-merge, not automatic archival.
+
 **2026-08-19T16:13:34Z — From Scribe:** Ken's `/probe-token` removal completed successfully in gert-vscode. Probe was dangerous because all 4 diagnostic attempts were unconditional; VS Code's MCP client exhausted its restart budget after 4 consecutive failures and disabled the session. The measurement was complete (T1 ≡ T2/T3/T4 failure profile) — probe has no further diagnostic value. All decisions merged to decisions.md with full binding rules for future MCP work.
 
 ---

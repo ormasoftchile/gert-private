@@ -8,6 +8,8 @@
 
 ## Team Updates
 
+**2026-08-19T17:32:28-07:00 — serve/requires package-map contract ruling:** Issued Barbara ruling in `.squad/decisions/inbox/barbara-serve-requires-contract-ruling.md`. Verdict: current `serve` rejection of package-map `requires:` is deliberate implementation guard, but durable dialect split is a contract/spec defect. `tool-paths:` cannot preserve `^1.0.0` package constraints; Don's conversion is a temporary live-fire unblock only. Long-term target: serve parity with run/plan package catalog resolution, or a formally distinct serve-only schema with conformance vectors until parity lands.
+
 **2026-08-19T17:03:22-07:00 — Ledger archival gate ruling:** Issued Barbara ruling to archive completed effort bodies, not dated headings. Safe blocks: lines 29–1338, 1339–2309, and 2512–3350. Keep active VS Code MCP bridge/live ICM execution material live, especially lines 2310–2511 and 3351–4560. Governing rule: effort-completion is authoritative; size thresholds trigger review/stop-merge, not automatic archival.
 
 **2026-08-19T16:13:34Z — From Scribe:** Ken's `/probe-token` removal completed successfully in gert-vscode. Probe was dangerous because all 4 diagnostic attempts were unconditional; VS Code's MCP client exhausted its restart budget after 4 consecutive failures and disabled the session. The measurement was complete (T1 ≡ T2/T3/T4 failure profile) — probe has no further diagnostic value. All decisions merged to decisions.md with full binding rules for future MCP work.
@@ -108,3 +110,10 @@ Detailed entries from 2026-08-17 (Phase 1B planning and execution) archived to h
 **Impact:** The single most important code path (@gert /run) was non-functional for every user since the Petals port. This is the **5th occurrence** of the vacuity defect class on this engagement — a pattern indicating systematic test-harness/coverage gaps in the extension layer.
 
 **Lesson for future designs:** Chat commands declared in package.json require end-to-end tests that actually invoke the VS Code host, not just unit tests of the handler function in isolation. Manifest declarations are not a substitute for handler-path coverage.
+
+
+## 2026-08-19 — serve/requires contract ruling
+
+Barbara ruled that `gert serve` rejecting package-map `requires:` is a deliberate implementation guard, but the durable `run`/`plan`/`serve` dialect split is a contract and spec defect. `tool-paths:` cannot preserve package version constraints, identity, provenance, export surface, or digest semantics; the tactical serve map is an emergency unblock only.
+
+Required design follow-up: specify serve package-map semantics in `gert-private`, preferably parity with run/plan per-run catalog resolution; otherwise formally name and constrain a serve-only restricted dialect and add schema/conformance vectors. This also reinforces the engagement's false-green/vacuity pattern: success must prove the load-bearing path, not just a nearby startup condition.

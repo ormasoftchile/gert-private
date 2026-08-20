@@ -1651,3 +1651,188 @@ This is the minimum change that makes the archive gate honest: it gives the scan
 #### Execution Instructions to Scribe
 
 Do not archive by individual dated heading. Archive only the approved contiguous effort blocks above, as whole units, and leave live capsules plus archive index rows. Do not touch the current ICM MCP live-run region. If preserving line ranges in the archive file, include the source line range in the archive header because future line numbers in `decisions.md` will change after compaction.
+
+---
+
+## 2026-08-19 — gert-vscode-f5-bootstrap: F5 debug bootstrap is self-contained from clean clone [effort:live-icm-mcp-run] [status:active]
+
+**Author:** Ken  
+**Merged by:** Scribe  
+**Source inbox:** `.squad/decisions/inbox/ken-f5-bootstrap.md`  
+**Summary:** F5 now prepares extension dependencies, compiles TypeScript, and builds the sibling gert CLI with Go resolution resilient to stale process environments.
+
+### Full source entry
+
+##### 2026-08-19: VS Code F5 bootstrap uses conditional npm ci and resolved Go
+**By:** Ken
+**What:** `gert-vscode` debug preparation now installs extension dependencies only when `node_modules` is missing or older than `package.json`/`package-lock.json`, then compiles TypeScript. The CLI build task invokes a committed PowerShell script that verifies the sibling `..\gert` repo, resolves Go from PATH first and then common Windows install locations, and emits actionable install/clone errors if prerequisites are missing.
+**Why:** F5 must work from a clean clone without manual README archaeology, but running full `npm ci` on every launch is unnecessary once the lockfile-installed dependency tree is current. Go fallback resolution is for stale inherited process environments after in-session Go installs, and for genuinely missing Go on contributor machines; it is not a permanent PATH edit or a machine-specific fix. VS Code tasks cannot express this branching clearly, so small scripts keep task wiring declarative while making failure modes explicit.
+
+---
+
+## 2026-08-19 — serve-requires-contract-ruling: serve/requires package-map dialect is a contract defect [effort:serve-package-map-parity] [status:active]
+
+**Author:** Barbara  
+**Merged by:** Scribe  
+**Source inbox:** `.squad/decisions/inbox/barbara-serve-requires-contract-ruling.md`  
+**Summary:** Current serve rejection of requires is deliberate, but the durable run/plan/serve asymmetry is unacceptable for live-site use and requires spec plus conformance coverage.
+
+### Full source entry
+
+##### 2026-08-19: serve/requires package-map contract ruling
+**By:** Barbara
+**What:** `gert serve` rejecting package-map `requires:` is a deliberate implementation guard, but the `serve`/`run`/`plan` dialect split is a contract defect and a design-spec defect. The long-term product contract should be parity: `serve` must resolve `requires:` with the same package/version/digest semantics as `run` and `plan`, or the schema must explicitly distinguish a serve-only tool-path map from a run/plan package map until parity ships.
+**Why:** Source review shows `cmd/gert/serve.go` loads `--package-map` at startup, rejects non-empty `Requires`, and wires one `EngineConfig`/tool runtime before any runbook request. Tests in `cmd/gert/serve_package_map_test.go` and `cmd/gert/reachability_probes_test.go` intentionally lock that startup rejection. By contrast, `cmd/gert/run.go` and `cmd/gert/plan.go` parse the requested runbook, merge project and package-map `requires:`, build a package catalog, enforce SemVer constraints via `pkg/pkgcatalog`, and bind toolRefs through that frozen catalog. `internal/serve` does parse and plan per request, so the one-engine startup model is real in the current wiring but is not an architectural law: serving can be changed to create per-run catalog-bound runtime state, or a per-run engine, at the cost of startup simplicity and registry reuse.
+
+###### Answers
+
+1. **Defect vs boundary.** Current behavior is a deliberate boundary in the Go implementation, not an accidental missing `if`: the flag help, startup rejection, and tests all say `serve` only honors `tool-paths:`. Architecturally, however, it is an implementation shortcut hardened into a contract. The GERT spec defines Phase C catalog construction as per-run and as a function of `requires:`; `serve` starts runs from requested runbooks and therefore has a runbook-specific planning seam where catalog resolution belongs.
+
+2. **Divergence acceptability.** The divergence is tolerable only as a short-lived compatibility brake because it fails loudly before listener startup. It is not acceptable as the durable user contract while the same `apiVersion: config/v1` file is called a package-map for all commands. If it remains temporarily, it must be documented in CLI help and user docs, validated by a serve-specific lint/schema rule, and covered by a conformance vector. The current situation is a usability trap: a map valid for `gert run`/`gert plan` fails under the VS Code path that uses `serve`.
+
+3. **Long-term resolution.** Recommended: teach `serve` to resolve `requires:` at run start with the same catalog machinery as `run`/`plan`, then execute against per-run catalog-bound runtime state. Do not merely translate `requires:` into `tool-paths:`. The tradeoff is more implementation complexity and likely abandoning a single immutable process-wide tool registry for package-bound tools. The gain is contract parity, package version enforcement, digest evidence, and removal of the VS Code-only trap. If parity cannot ship immediately, formally split the schema/CLI terminology so `serve` accepts a `serve-tool-map`/tool-path-only shape, not a misleading `config/v1` package-map.
+
+4. **Semantic loss.** `tool-paths:` cannot express `requires[].version` constraints such as `^1.0.0`. Source confirms version constraints are parsed and enforced only through `PackageRequirement`/`pkgcatalog.loadPackage`: it loads `gert-package.yaml`, parses the package manifest version, and raises `PKG-002` if the resolved package does not satisfy the effective constraint. `tool-paths:` only scans `.tool.yaml` directories as tier-2 project tools; it carries no package identity, no package SemVer constraint, no export surface, and no package digest semantics. For a live-site incident-response tool, that loss is unacceptable as anything but an emergency manual unblock. Don's `tool-paths:` conversion is therefore a temporary tactical workaround; retire it once serve parity or a version-preserving serve map exists.
+
+5. **Design-repo implication.** This is a spec defect owned by `gert-private`, not merely a Go defect. `design/gert/schemas/project-config.v1.schema.json` defines one `config/v1` shape containing both `requires` and `tool-paths`; the normative text says `requires:` is canonical and `tool-paths:` is tier-2 discovery. There is no normative distinction between run/plan-valid and serve-valid package maps, and no conformance vector pinning either serve rejection or serve parity. The design repo should add a spec section and conformance vectors before or with any runtime patch.
+
+###### Required follow-up
+
+- Add normative language for `serve` package-map semantics: preferred target is parity with `run`/`plan` `requires:` resolution; temporary state must be named as a serve-only restricted dialect.
+- Add JSON schema coverage for the temporary restricted serve map or remove the dialect split by implementing parity.
+- Add conformance vectors covering: `serve` rejects or accepts `requires:` according to the chosen contract; `tool-paths:` cannot satisfy a package version constraint; `requires:` version mismatch remains `PKG-002` on the served/VS Code path.
+- Do not block Don's live-fire unblock. Treat it as operator-owned, temporary, and semantically weaker than the authored `requires:` map.
+
+---
+
+## 2026-08-19 — serve-package-map-unblock-and-diagnostics: tactical serve package-map unblock plus loud catalog diagnostics [effort:live-icm-mcp-run] [status:active]
+
+**Author:** Don  
+**Merged by:** Scribe  
+**Source inbox:** `.squad/decisions/inbox/don-serve-package-map-unblock.md`  
+**Summary:** A serve-compatible tool-paths map unblocks listener startup, and SERVE-W001/DINC-002 diagnostics make catalog gaps loud instead of false-green.
+
+### Full source entry
+
+### Don — serve package-map unblock for first live ICM MCP run
+
+Date: 2026-08-19T17:32:28-07:00
+
+#### Decision
+
+Create a serve-specific package-map in `C:\One\gert-sqllivesite\packages\incident-routing.vscode-mcp.serve-package-map.yaml` and keep the existing `requires:` map unchanged.
+
+#### Root cause
+
+`gert serve --package-map` rejects non-empty `requires:` because serve prebuilds one engine at startup and only applies `tool-paths:` extra scan directories.
+
+#### Source-grounded contract
+
+From `C:\One\OpenSource\gert\pkg\schema\projectconfig.go`, `tool-paths` is `[]string` (`yaml:"tool-paths"`). From `C:\One\OpenSource\gert\cmd\gert\serve.go`, serve loads the map, rejects `Requires`, then passes `pmCfg.ToolPaths` directly to `newServingToolRegistry(".", pmExtraToolPaths...)` and `adapter.WireOptions.ExtraToolScanPaths`. The scanners receive each authored path directly; for relative paths this means process cwd, not the package-map file directory. The extension's current cwd is `c:\One\gert-sqllivesite`, so the correct relative path is `./packages/incident-routing-vscode-mcp`.
+
+#### Semantic impact
+
+This is not semantically equivalent to the two original `requires:` entries. Lost semantics:
+
+- Package version constraints (`^1.0.0`) are not expressible in `tool-paths:`.
+- Package identity/provenance is not expressible in `tool-paths:`.
+- `sql-livesite-tsgs` exports runbooks only (`exports.runbooks`) and no `.tool.yaml`; `tool-paths:` scans tool definitions only, so it cannot bind the TSG runbook catalog.
+
+What it does preserve for the immediate live serve path: the target runbook's bare tools `icm/get-incident` and `tsg-recommendation/recommend` are both defined under `packages/incident-routing-vscode-mcp/tools`, and scanning that directory makes them available to serve.
+
+#### Verification
+
+Command run from cwd `C:\One\gert-sqllivesite`:
+
+```powershell
+C:\One\OpenSource\gert\gert.exe serve --addr 127.0.0.1:65123 --package-map C:\One\gert-sqllivesite\packages\incident-routing.vscode-mcp.serve-package-map.yaml
+```
+
+Observed startup output:
+
+```text
+gert serve: listening on 127.0.0.1:65123
+```
+
+The process was still running after 3 seconds, proving it no longer exits code 2 at startup with the package-map.
+
+#### Extension handoff
+
+Ken should change the VS Code extension's spawned `--package-map` argument from:
+
+`c:\One\gert-sqllivesite\packages\incident-routing.vscode-mcp.package-map.yaml`
+
+To:
+
+`c:\One\gert-sqllivesite\packages\incident-routing.vscode-mcp.serve-package-map.yaml`
+
+No changes were made in `C:\One\OpenSource\gert-vscode`.
+
+#### Not verified
+
+No ICM tools were invoked. This proves only that `serve` starts and stays up with the serve-compatible map; it does not prove live VS Code MCP tool authorization, ICM transport execution, or catalog dynamic include behavior.
+
+---
+
+#### Follow-up: make the catalog gap loud, not silent
+
+Date: 2026-08-19T17:38:04-07:00
+
+##### Startup/request-time feasibility
+
+A pure startup preflight cannot honestly validate "runbooks serve may execute" because `gert serve` is a server: it knows cwd, the optional package-map, and its process-wide tool registry at startup, but it does not know which runbook path the client will request until `run.start` / `POST /runs`. It could scan every runbook under cwd, but that would be heuristic, incomplete for arbitrary client paths, and prone to false positives. The honest seam is request-time parse/plan (`internal/serve.loadPlanAndSeed`), where serve has the actual runbook.
+
+##### Important correction
+
+Current `serve` does not wire `DynamicIncludeResolver` at all (`cmd/gert/serve.go` leaves `WireOptions.DynamicIncludeResolver` nil). Therefore a `resolve_from: catalog` include that is actually reached under served execution will not successfully resolve against a partial/empty catalog. If a suggested TSG path is reached today, the include executor returns `dynamic include: step invoke_suggested_tsg: no DynamicIncludeResolver configured`, which fails the run. That is bad contract parity, but it is not the silent `on_not_found: continue` false-green path.
+
+The silent-continue risk still exists in catalog-wired execution when a resolver returns DINC-002 and the runbook declares `on_not_found: continue`. That path already emitted `include/notFound` trace and `runbook_found=false`, but the step output was otherwise empty.
+
+##### Runtime patch made in `C:\One\OpenSource\gert`
+
+Changed:
+
+- `internal/serve/rpc.go`: `loadPlanAndSeed` appends `SERVE-W001` whenever a served runbook declares `requires:`. The warning says serve does not resolve requires package catalogs today, so package versions, package identity, and exported package runbooks are unavailable and `resolve_from: catalog` dynamic includes cannot be proven by this served run.
+- `internal/executor/include.go`: when `on_not_found: continue` handles DINC-002, the completed include step now has loud output: `output.warning`, `output.stderr`, `vars.runbook_found=false`, and `vars.runbook_skipped_reason`.
+- Tests added/updated in `internal/serve/rpc_warnings_test.go` and `internal/executor/dynamic_include_test.go`.
+
+Validation:
+
+```text
+ok  	github.com/ormasoftchile/gert/internal/executor	4.396s
+ok  	github.com/ormasoftchile/gert/internal/serve	4.445s
+```
+
+Rebuilt `C:\One\OpenSource\gert\gert.exe` and verified the tactical map still starts serve:
+
+```text
+gert serve: listening on 127.0.0.1:65124
+```
+
+##### Today's live-run interpretation
+
+Under the tactical serve map, a run can prove only the parts reachable before catalog include:
+
+- `get_icm_incident`: the live VS Code MCP ICM retrieval path, if Cristián chooses to run it and authorizes it.
+- `recommend_tsg`: the local/native `tsg-recommendation` path from `packages/incident-routing-vscode-mcp`; its current package runbook returns `no-suggestion`.
+
+It will not prove `sql-livesite-tsgs` package catalog export resolution or execution of `GEODR0001`. With the current recommendation implementation (`no-suggestion`), `invoke_suggested_tsg` is not reached. If a future recommendation returns `suggested` and the user confirms under current `serve`, `invoke_suggested_tsg` should fail because no catalog resolver is configured; it should not be read as a successful TSG execution.
+
+---
+
+## 2026-08-19 — gert-vscode-serve-package-map-setting: VS Code extension points serve at the serve-compatible package map [effort:live-icm-mcp-run] [status:active]
+
+**Author:** Ken  
+**Merged by:** Scribe  
+**Source inbox:** `.squad/decisions/inbox/ken-serve-package-map-arg.md`  
+**Summary:** The extension uses the folder-scoped gert.packageMap setting; SQL Live-Site must set it to the serve-compatible map for the current serve path.
+
+### Full source entry
+
+##### 2026-08-19: VS Code serve package-map must be explicitly configured to the serve-compatible map
+**By:** Ken
+**What:** The extension constructs `gert serve --package-map` from the folder-scoped `gert.packageMap` VS Code setting, resolved against the active runbook project root; it does not glob for package maps. SQL Live-Site must set `gert.packageMap` to `packages/incident-routing.vscode-mcp.serve-package-map.yaml` for serve startup while preserving the separate `requires:` map for `gert run`/`gert plan`.
+**Why:** `gert serve` rejects `requires:` package-map bindings because it builds one engine at startup. The serve-compatible map unblocks server startup only; it does not prove the live run is end-to-end sound, and the known catalog include no-op remains Don's active work.
+
+---
+

@@ -1,94 +1,47 @@
 ---
-updated_at: 2026-08-19T16:57:48-07:00
-focus_area: gert-vscode — first live ICM MCP run (unblocked, new machine)
-active_issues: []
+updated_at: 2026-08-19T17:44:46-07:00
+focus_area: gert-vscode — first live ICM MCP run (serve starts; catalog contract gap remains)
+active_issues:
+  - serve/requires catalog parity spec defect
 ---
 
 # ACTIVE FOCUS (2026-08-19) — Live ICM MCP execution from gert-vscode
 
-> ✅ **UNBLOCKED.** New machine (`CPC-crist-LKO5U`). `icm-mcp` **starts here.**
+> ✅ **F5 works.** ✅ **`gert serve` starts.** ⚠️ Remaining gap: `serve` does not resolve `requires:` catalogs, so the tactical live run cannot prove package-exported TSG execution.
 
-**The goal:** Cristián runs a SQL Live-Site runbook from VS Code using his
-already-authenticated ICM MCP tool. This has **never once succeeded live.**
+## Current state — read first
 
-## Machine change (2026-08-19 16:57) — READ FIRST
+- Work is on new machine `CPC-crist-LKO5U`; `icm-mcp` starts here. The old-machine `401` identity-broker blocker is retired and must not be chased.
+- F5 now works from a clean clone. Coordinator verified after deleting `out/extension.js` and `gert.exe`; TypeScript and Go artifacts rebuilt. Go fallback handled a stale inherited process environment where `go` was absent from PATH even though `C:\Program Files\Go\bin` was already on Machine PATH. No PATH edit was made.
+- `gert serve` starts with the serve-compatible SQL Live-Site map. Coordinator verified `gert serve: listening on 127.0.0.1:65191`.
+- The extension setting `gert.packageMap` in `C:\One\gert-sqllivesite\.vscode\settings.json` points to `packages/incident-routing.vscode-mcp.serve-package-map.yaml`.
 
-The previous machine is **broken and retired**. Live evidence: the ICM
-test/diagnostic invocations **corrupted the identity broker** on that box.
-Not a session-scoped restart-budget problem as previously recorded — it was
-unrecoverable by Reload Window *and* by reboot, and cost the machine.
+## Remaining contract defect
 
-Consequences:
-- The `401 ... icm-mcp-prod.azure-api.net/v1/` blocker was **machine-local to
-  the retired box.** It is NOT an active blocker. Do not chase it.
-- The standing "never burn live invokes on diagnostics" rule is now a hard
-  law with a known price tag. `/arm-mcp` (zero invoke budget) or mocks only.
-- `/probe-token` stays deleted, permanently. Its removal rationale in
-  `decisions.md` understates the blast radius — see the inbox entry
-  `coordinator-icm-identity-broker-corruption.md`.
+Barbara ruled the current `serve` rejection of `requires:` is a deliberate implementation guard, but the durable dialect split is a **gert-private spec defect**. `tool-paths:` cannot carry package version constraints, package identity/provenance, package digest semantics, or exported runbooks from `sql-livesite-tsgs`. Long-term fix: teach `serve` to resolve `requires:` per run with run/plan catalog semantics, or formally specify a serve-only restricted dialect with schema and conformance coverage.
 
-## Code state (carried over — unchanged, still valid)
+Don made the gap loud in the Go runtime: SERVE-W001 warns when served runbooks declare `requires:`; DINC-002 continued dynamic-include misses now emit explicit warning/stderr and skipped-reason output. This prevents another false-green where `icm-tsg-routing-complete` appears without executing the TSG.
 
-**Code — DONE and committed.** `gert-vscode` `ffce6da` on `main`, clean tree,
-`npm run compile` 0, `npm test` 186/186.
-- Restored the `/run` chat handler. It had been **completely absent** since the
-  Petals lifecycle port (`742e368`) deleted the pump-based implementation
-  without adding a replacement. `package.json` still declared `run`, so VS Code
-  routed it, but the handler fell through `isArmCommand()` to "Unknown command"
-  for every `@gert /run` since. 169 tests passed over a dead code path because
-  none exercise the `extension.ts` handler body (needs a VS Code host).
-  **5th occurrence of the vacuity defect class on this engagement.**
-- Removed `/probe-token` entirely. Its 4 unconditional `invokeTool` calls
-  exhaust VS Code's MCP restart budget and permanently disable `icm-mcp` for
-  the session. Deleting it also fixed a latent compile error
-  (`handleProbeToken` was called with no import).
+## What a live run today can prove
 
-**Blocker — RESOLVED by machine replacement.** The `401` from
-`icm-mcp-prod.azure-api.net` was a symptom of the retired machine's corrupted
-identity broker. `icm-mcp` starts on the new machine. Gert's
-`provider_unavailable` classification (fixtures T1/T2 in
-`test/mcpBridge.test.js` F4) was correct and needs no change.
+A deliberate single `@gert /run <runbook.yaml>` today can prove:
 
-## Next steps, in order — ONE live run, deliberately
+- VS Code extension F5/debug host path starts.
+- `gert serve` starts and the extension can talk to it.
+- The live VS Code MCP ICM retrieval path works if `get_icm_incident` is reached and authorized.
+- The local/native `tsg-recommendation` path works from `packages/incident-routing-vscode-mcp` (currently expected to return `no-suggestion`).
 
-1. `MCP: List Servers` → confirm `icm-mcp` is **Running** on this machine.
-2. `@gert /arm-mcp` — **zero invoke budget**, dumps `vscode.lm.tools`. Confirm
-   an ICM tool name appears (e.g.
-   `mcp_icm_mcp_serve_get_incident_details_by_id`).
-3. Then **ONE** `@gert /run <runbook.yaml>`. Watch **View → Output → "gert"**,
-   not the chat. Error codes: `tool_unavailable` = name mismatch vs the YAML
-   `vscode_tool` field · `tool_not_found` = registry didn't load ·
-   `input_validation_error` = arg shape mismatch · clean output = **first live
-   success**.
-4. If it fails: **stop.** Diagnose from the gert Output channel and unit
-   tests. Do not re-invoke to "see if it was a fluke."
+It **will not prove**:
+
+- `sql-livesite-tsgs` package catalog export resolution.
+- Execution of GEODR0001 through `resolve_from: catalog`.
+- Full run/plan/serve package-map parity.
 
 ## Standing rules for this effort
 
-- **Never burn live invoke attempts on diagnostics.** Established cost of
-  violation: one development machine. Zero-invoke paths or mocks only.
-- Green unit tests are NOT evidence the live path works. Say so plainly.
-- Watch for vacuous tests: assert against real mutations at the production
-  call site, not on pure helpers whose signature proves they never see the data.
-
-## Open (non-blocking) — `gert-private` working tree
-
-✅ **The design work SURVIVED the machine loss.** Commit `3bef9e2 protect` is
-pushed to `origin/main` and captured everything before the old box died: the
-`design/gert/` schema/LaTeX/EBNF changes, `tv-enum.yaml` + `tv-pkg-resolve.yaml`
-conformance corpora, `analysis/` (including `tracked-modifications.patch` files
-holding uncommitted work from the sibling `gert` and `gert-vscode` repos), and
-the GCP grammar additions.
-
-Consequence: `3bef9e2` is a **snapshot, not a curated commit.** Real spec work
-is mixed with scratch output and rejected patches. It still needs a triage pass
-to separate normative artifacts from debris — Cristián declined that pass on
-2026-08-19. The `analysis/*/tracked-modifications.patch` files are the recovery
-path for any sibling-repo work that was in-flight when the machine failed.
-
-The current dirty working tree on this machine is a **Squad upgrade**
-(`.github/skills/`, `.mcp.json`, ~40 modified templates, Rai + Fact Checker
-agents, 7 new workflows) — unrelated to gert design work, also untriaged.
+- **Never burn live invoke attempts on diagnostics.** Established cost of violation: one development machine. Zero-invoke paths or mocks only.
+- Stop after one live run attempt. Diagnose from the gert Output channel and unit tests; do not re-invoke to see if it was a fluke.
+- Treat false-green/vacuity as the defining defect class of this engagement. Current count: sixth in the runtime/extension path, plus Barbara's independent seventh in Squad archival tooling. Every success claim must identify the load-bearing path it actually exercised.
 
 ---
 
